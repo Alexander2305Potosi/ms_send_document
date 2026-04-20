@@ -45,23 +45,41 @@ class FileUploadIntegrationTest {
         mockWebServer.shutdown();
     }
 
+    private String createSuccessResponse() {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
+            " xmlns:file=\"http://example.com/fileservice\">" +
+            "<soap:Header/>" +
+            "<soap:Body>" +
+            "<file:UploadFileResponse>" +
+            "<file:status>SUCCESS</file:status>" +
+            "<file:message>File uploaded successfully</file:message>" +
+            "<file:correlationId>int-123-456</file:correlationId>" +
+            "<file:processedAt>" + Instant.now().toString() + "</file:processedAt>" +
+            "<file:externalReference>ext-ref-123</file:externalReference>" +
+            "</file:UploadFileResponse>" +
+            "</soap:Body>" +
+            "</soap:Envelope>";
+    }
+
+    private String createError500Response() {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">" +
+            "<soap:Header/>" +
+            "<soap:Body>" +
+            "<soap:Fault>" +
+            "<faultcode>soap:Server</faultcode>" +
+            "<faultstring>Internal Server Error</faultstring>" +
+            "</soap:Fault>" +
+            "</soap:Body>" +
+            "</soap:Envelope>";
+    }
+
     @Test
     void uploadFile_shouldReturnSuccess_whenSoapReturnsSuccess() {
-        String responseXml = "<?xml version=\"1.0\"?\u003e" +
-            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"\u003e" +
-            "<soap:Body\u003e" +
-            "<response\u003e" +
-            "<status\u003eSUCCESS</status\u003e" +
-            "<message\u003eFile uploaded successfully</message\u003e" +
-            "<correlationId\u003eint-123-456</correlationId\u003e" +
-            "<processedAt\u003e" + Instant.now().toString() + "</processedAt\u003e" +
-            "</response\u003e" +
-            "</soap:Body\u003e" +
-            "</soap:Envelope\u003e";
-
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(200)
-            .setBody(responseXml)
+            .setBody(createSuccessResponse())
             .addHeader("Content-Type", "text/xml"));
 
         MultiValueMap<String, HttpEntity<?>> parts = new LinkedMultiValueMap<>();
@@ -91,7 +109,8 @@ class FileUploadIntegrationTest {
     void uploadFile_shouldReturnBadGateway_whenSoapReturns500() {
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
-            .setBody("<?xml version=\"1.0\"?\u003e\u003csoap:Fault\u003eInternal Error\u003c/soap:Fault\u003e"));
+            .setBody(createError500Response())
+            .addHeader("Content-Type", "text/xml"));
 
         MultiValueMap<String, HttpEntity<?>> parts = new LinkedMultiValueMap<>();
         HttpHeaders fileHeaders = new HttpHeaders();
@@ -116,6 +135,8 @@ class FileUploadIntegrationTest {
 
     @Test
     void uploadFile_shouldReturnBadRequest_whenInvalidFileType() {
+        // No need mock server for this test - validation happens before SOAP call
+
         MultiValueMap<String, HttpEntity<?>> parts = new LinkedMultiValueMap<>();
         HttpHeaders fileHeaders = new HttpHeaders();
         fileHeaders.setContentDisposition(ContentDisposition.builder("form-data")

@@ -102,9 +102,6 @@ public class FileController {
             .map(fileDtoMapper::toDomain)
             .flatMap(fileData -> processFileUseCase.execute(fileData)
                 .map(ResponseEntity::ok))
-            .doOnError(error -> log.error("Error processing upload: {}", error.getMessage()))
-            .onErrorResume(error -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new FileUploadResponseDto("ERROR", error.getMessage(), traceId, null, null, null, false))))
             .doFinally(signal -> MDC.remove("traceId"));
     }
 }

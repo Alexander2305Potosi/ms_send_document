@@ -7,7 +7,13 @@
       "Bash(chmod +x *)",
       "Bash(./gradlew clean *)",
       "Bash(/Users/alexander2305/Downloads/file-processor-service/test-curl.sh)",
-      "Bash(./gradlew compileJava compileTestJava)"
+      "Bash(./gradlew compileJava compileTestJava)",
+      "Bash(./gradlew test *)",
+      "Bash(/usr/libexec/java_home)",
+      "Bash(export JAVA_HOME=$\\(/usr/libexec/java_home 2>/dev/null || echo \"/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home\"\\))",
+      "Bash(/usr/bin/java *)",
+      "Read(//Users/alexander2305/.sdkman/candidates/**)",
+      "Read(//usr/local/opt/**)"
     ]
   }
 }

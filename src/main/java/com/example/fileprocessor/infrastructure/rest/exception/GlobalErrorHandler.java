@@ -60,6 +60,18 @@ public class GlobalErrorHandler {
         return Mono.just(ResponseEntity.badRequest().body(error));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleIllegalArgumentException(IllegalArgumentException ex) {
+        log.warn("Invalid argument: {}", ex.getMessage());
+
+        Map<String, Object> error = createErrorResponse(
+            HttpStatus.BAD_REQUEST,
+            ex.getMessage(),
+            "INVALID_ARGUMENT"
+        );
+        return Mono.just(ResponseEntity.badRequest().body(error));
+    }
+
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<Map<String, Object>>> handleGenericException(Exception ex) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);

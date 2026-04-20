@@ -5,6 +5,7 @@ import com.example.fileprocessor.infrastructure.soap.adapter.ExternalSoapGateway
 import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.mapper.SoapMapper;
+import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -17,6 +18,7 @@ import reactor.test.StepVerifier;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExternalSoapGatewayImplTest {
@@ -28,6 +30,8 @@ class ExternalSoapGatewayImplTest {
     @BeforeEach
     void setUp() throws Exception {
         mockWebServer = new MockWebServer();
+        mockWebServer.start();
+
         SoapEnvelopeWrapper envelopeWrapper = new SoapEnvelopeWrapper();
         soapMapper = new SoapMapper(envelopeWrapper);
 
@@ -52,17 +56,20 @@ class ExternalSoapGatewayImplTest {
 
     @Test
     void sendFile_shouldReturnResponse_whenSuccess() {
-        String responseXml = "<?xml version=\"1.0\"?\u003e" +
-            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"\u003e" +
-            "<soap:Body\u003e" +
-            "<response\u003e" +
-            "<status\u003eSUCCESS</status\u003e" +
-            "<message\u003eFile uploaded</message\u003e" +
-            "<correlationId\u003e123-abc</correlationId\u003e" +
-            "<processedAt\u003e" + Instant.now().toString() + "</processedAt\u003e" +
-            "</response\u003e" +
-            "</soap:Body\u003e" +
-            "</soap:Envelope\u003e";
+        String responseXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
+            " xmlns:file=\"http://example.com/fileservice\">" +
+            "<soap:Header/>" +
+            "<soap:Body>" +
+            "<file:UploadFileResponse>" +
+            "<file:status>SUCCESS</file:status>" +
+            "<file:message>File uploaded</file:message>" +
+            "<file:correlationId>123-abc</file:correlationId>" +
+            "<file:processedAt>" + Instant.now().toString() + "</file:processedAt>" +
+            "<file:externalReference>ext-ref-123</file:externalReference>" +
+            "</file:UploadFileResponse>" +
+            "</soap:Body>" +
+            "</soap:Envelope>";
 
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(200)
@@ -81,7 +88,7 @@ class ExternalSoapGatewayImplTest {
         StepVerifier.create(gateway.sendFile(request))
             .assertNext(response -> {
                 assertTrue(response.isSuccess());
-                assertTrue(response.correlationId().equals("123-abc"));
+                assertEquals("123-abc", response.correlationId());
             })
             .verifyComplete();
     }
@@ -90,7 +97,7 @@ class ExternalSoapGatewayImplTest {
     void sendFile_shouldReturnError_whenServerError() {
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
-            .setBody("<?xml version=\"1.0\"?\u003e\u003csoap:Fault\u003e\u003c/faultstring\u003eServer Error\u003c/faultstring\u003e\u003c/soap:Fault\u003e"));
+            .setBody("<?xml version=\"1.0\"?><soap:Fault></faultstring>Server Error</faultstring></soap:Fault>"));
 
         SoapRequest request = new SoapRequest(
             "base64content",
