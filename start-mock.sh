@@ -59,7 +59,12 @@ echo "Compilando..."
 # Compilar
 javac -d build/classes/java/test src/test/java/com/example/fileprocessor/mock/SimpleSoapMock.java 2>/dev/null || {
     echo "Compilando con gradle..."
-    ./gradlew testClasses --quiet
+    # Detectar si estamos en Windows (Git Bash, Cygwin, MSYS)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+        ./gradlew.bat testClasses --quiet 2>/dev/null || gradlew.bat testClasses --quiet
+    else
+        ./gradlew testClasses --quiet
+    fi
 }
 
 echo "Iniciando servidor..."
@@ -73,7 +78,10 @@ echo $NEW_PID > .mock.pid
 sleep 2
 
 # Verificar que realmente está corriendo
-if kill -0 $NEW_PID 2>/dev/null && lsof -ti:8081 >/dev/null 2>&1; then
+sleep 3
+PID_CHECK=$(lsof -ti:8081 2>/dev/null || netstat -ano 2>/dev/null | grep ":8081" | awk '{print $5}' | head -1)
+
+if [ -n "$PID_CHECK" ] || kill -0 $NEW_PID 2>/dev/null; then
     echo ""
     echo "========================================"
     echo "Mock iniciado correctamente!"
@@ -84,6 +92,7 @@ if kill -0 $NEW_PID 2>/dev/null && lsof -ti:8081 >/dev/null 2>&1; then
     echo "Para detenerlo: ./stop-mock.sh"
 else
     echo "ERROR: El mock no pudo iniciar correctamente."
+    echo "Verifica que Java esté instalado y disponible."
     rm -f .mock.pid
     exit 1
 fi
