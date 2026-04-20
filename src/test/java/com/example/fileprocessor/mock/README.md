@@ -134,22 +134,49 @@ Thread.sleep(2000); // 2 segundos antes de cada respuesta
 
 ## Solución de Problemas
 
-### Error "Address already in use: 8081"
-**Causa:** El puerto 8081 está ocupado (otro mock, SoapUI, etc.)
+### Error "Address already in use: 8081" / "Address already in use: bind"
 
-**Solución:**
+**Causa:** El puerto 8081 está ocupado por un proceso Java anterior (mock, SoapUI, IDE, etc.)
+
+**Solución con scripts (recomendada):**
 ```bash
-# Linux/macOS - usar el script de detención
-./stop-mock.sh
-
-# O manualmente
-lsof -ti:8081 | xargs kill -9
+# Linux/macOS
+./stop-mock.sh   # Espera confirmación de liberación
+./start-mock.sh  # Detecta y libera el puerto automáticamente
 
 # Windows
-taskkill /F /IM java.exe
-# o
 stop-mock.bat
+start-mock.bat
 ```
+
+**Solución manual Linux/macOS:**
+```bash
+# Paso 1: Encontrar el proceso que usa el puerto
+lsof -i :8081
+# Output: COMMAND  PID   USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+#         java    1234   user  123u  IPv6 0x...      0t0  TCP *:sunproxyadmin (LISTEN)
+
+# Paso 2: Matar el proceso específico
+kill -9 1234  # Reemplaza 1234 con el PID real
+
+# Paso 3: Verificar que se liberó
+lsof -i :8081  # No debe mostrar nada
+```
+
+**Solución manual Windows:**
+```cmd
+:: Paso 1: Encontrar el proceso
+netstat -ano | findstr :8081
+:: Output: TCP    0.0.0.0:8081    0.0.0.0:0    LISTENING    1234
+
+:: Paso 2: Matar el proceso
+taskkill /F /PID 1234  :: Reemplaza 1234 con el PID real
+
+:: Paso 3: Verificar
+netstat -ano | findstr :8081  :: No debe mostrar nada
+```
+
+**Si nada funciona:** Reinicia la computadora para limpiar procesos zombie.
 
 ### Error "Connection refused" al subir archivo
 **Causa:** El mock no está corriendo o está en otro puerto

@@ -305,11 +305,12 @@ runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.4")
 
 ## Changelog
 
-### 2025-04-20 - Scripts de Mock Mejorados
-- **Agregado:** Scripts `stop-mock.sh` y `stop-mock.bat` para detener el mock SOAP fácilmente
-- **Agregado:** `start-mock.sh` ahora guarda el PID para facilitar la detención
+### 2025-04-20 - Scripts de Mock Mejorados (v2)
+- **Mejorado:** Scripts ahora verifican que el puerto realmente se libere antes de reportar éxito
+- **Agregado:** `start-mock.sh` detecta si el puerto está ocupado e intenta liberarlo automáticamente
+- **Agregado:** `stop-mock.sh` espera y verifica que el proceso realmente haya terminado
+- **Agregado:** Scripts `stop-mock.sh` y `stop-mock.bat` para detener el mock SOAP
 - **Actualizado:** Documentación con instrucciones para Windows y Linux/macOS
-- **Agregado:** Sección de troubleshooting con errores comunes (puerto ocupado, 404, timeout)
 
 ### 2025-04-20 - Refactor de Código
 - **Eliminado:** Imports sin usar en `FileControllerTest.java`, `ExternalSoapGatewayImplTest.java` y `GlobalErrorHandler.java`

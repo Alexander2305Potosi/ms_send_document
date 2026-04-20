@@ -89,6 +89,37 @@ El problema es la configuración de Postman. Sigue estos pasos:
 - En Windows: Configura la variable en Propiedades del Sistema → Variables de entorno
 
 ### Error "Address already in use: 8081"
-- El puerto 8081 está ocupado (posiblemente por SoapUI u otra instancia del mock)
-- Detén el mock anterior: `./stop-mock.sh` (Linux/Mac) o `stop-mock.bat` (Windows)
-- O cambia el puerto en `application.yml`
+
+El puerto 8081 está ocupado por un proceso Java anterior que no se cerró correctamente.
+
+**Solución automática (intentada por los scripts):**
+```bash
+./stop-mock.sh
+# Espera a que confirme que el puerto está libre
+
+./start-mock.sh
+# El script detectará el puerto ocupado y lo liberará automáticamente
+```
+
+**Solución manual Linux/Mac:**
+```bash
+# Encontrar el proceso
+lsof -i :8081
+
+# Matar el proceso (reemplaza <PID> con el número mostrado)
+kill -9 <PID>
+
+# Verificar que se liberó
+lsof -i :8081  # No debe mostrar nada
+```
+
+**Solución manual Windows:**
+```cmd
+# Encontrar el proceso
+netstat -ano | findstr :8081
+
+# Matar el proceso (reemplaza <PID>)
+taskkill /F /PID <PID>
+```
+
+**Si el problema persiste:** Reinicia la computadora para limpiar todos los procesos zombie.
