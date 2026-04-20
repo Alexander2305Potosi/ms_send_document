@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew compileJava --no-daemon)",
+      "Read(//Library/Java/JavaVirtualMachines/**)",
+      "Read(//usr/lib/**)",
+      "Bash(chmod +x *)",
+      "Bash(./gradlew clean *)",
+      "Bash(/Users/alexander2305/Downloads/file-processor-service/test-curl.sh)"
+    ]
+  }
+}

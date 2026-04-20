@@ -1,0 +1,12 @@
+logging:
+  level:
+    com.example.fileprocessor: DEBUG
+    org.springframework.web.reactive: DEBUG
+    reactor.netty: DEBUG
+
+app:
+  soap:
+    endpoint: http://localhost:8081/soap/fileservice
+    timeout-seconds: 5
+    retry-attempts: 1
+    retry-backoff-millis: 500

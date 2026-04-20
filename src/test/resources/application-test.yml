@@ -1,0 +1,19 @@
+spring:
+  main:
+    web-application-type: reactive
+
+app:
+  file:
+    max-size: 10485760
+    allowed-types: pdf,docx,txt
+    max-filename-length: 255
+  soap:
+    endpoint: ${SOAP_ENDPOINT:http://localhost:8888/soap/fileservice}
+    timeout-seconds: 5
+    retry-attempts: 0
+    retry-backoff-millis: 100
+
+logging:
+  level:
+    com.example.fileprocessor: DEBUG
+    okhttp3.mockwebserver: WARN

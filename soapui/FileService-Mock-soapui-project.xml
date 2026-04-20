@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<con:soapui-project id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" activeEnvironment="Default" name="FileService SOAP Mock" resourceRoot="" soapui-version="5.7.0" abortOnError="false" runType="SEQUENTIAL" xmlns:con="http://eviware.com/soapui/config">
+  <con:settings/>
+  <con:properties>
+    <con:property>
+      <con:name>mockPort</con:name>
+      <con:value>8081</con:value>
+    </con:property>
+  </con:properties>
+
+  <con:interface xsi:type="con:WsdlInterface" id="interface-1" wsaVersion="NONE"
+                 name="FileServiceSoapBinding" type="wsdl"
+                 bindingName="{http://example.com/fileservice}FileServiceSoapBinding"
+                 soapVersion="1_1" anonymous="optional"
+                 definition=""
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <con:settings/>
+
+    <con:definitionCache type="TEXT" rootPart="FileService.wsdl">
+      <con:part>
+        <con:url>FileService.wsdl</con:url>
+        <con:content><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+                  xmlns:tns="http://example.com/fileservice"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                  targetNamespace="http://example.com/fileservice"
+                  name="FileService">
+
+  <wsdl:types>
+    <xsd:schema targetNamespace="http://example.com/fileservice">
+      <xsd:element name="UploadFileRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="content" type="xsd:string"/>
+            <xsd:element name="filename" type="xsd:string"/>
+            <xsd:element name="contentType" type="xsd:string"/>
+            <xsd:element name="fileSize" type="xsd:long"/>
+            <xsd:element name="traceId" type="xsd:string"/>
+            <xsd:element name="timestamp" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="UploadFileResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="status" type="xsd:string"/>
+            <xsd:element name="message" type="xsd:string"/>
+            <xsd:element name="correlationId" type="xsd:string"/>
+            <xsd:element name="processedAt" type="xsd:string" minOccurs="0"/>
+            <xsd:element name="externalReference" type="xsd:string" minOccurs="0"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </wsdl:types>
+
+  <wsdl:message name="UploadFileRequestMessage">
+    <wsdl:part name="parameters" element="tns:UploadFileRequest"/>
+  </wsdl:message>
+
+  <wsdl:message name="UploadFileResponseMessage">
+    <wsdl:part name="parameters" element="tns:UploadFileResponse"/>
+  </wsdl:message>
+
+  <wsdl:portType name="FileServicePortType">
+    <wsdl:operation name="UploadFile">
+      <wsdl:input message="tns:UploadFileRequestMessage"/>
+      <wsdl:output message="tns:UploadFileResponseMessage"/>
+    </wsdl:operation>
+  </wsdl:portType>
+
+  <wsdl:binding name="FileServiceSoapBinding" type="tns:FileServicePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="UploadFile">
+      <soap:operation soapAction="http://example.com/fileservice/UploadFile"/>
+      <wsdl:input>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+
+  <wsdl:service name="FileService">
+    <wsdl:port name="FileServicePort" binding="tns:FileServiceSoapBinding">
+      <soap:address location="http://localhost:8081/soap/fileservice"/>
+    </wsdl:port>
+  </wsdl:service>
+
+</wsdl:definitions>]]></con:content>
+        <con:type>http://schemas.xmlsoap.org/wsdl/</con:type>
+      </con:part>
+    </con:definitionCache>
+
+    <con:endpoints>
+      <con:endpoint>http://localhost:8081/soap/fileservice</con:endpoint>
+    </con:endpoints>
+
+    <con:operation id="operation-1" isOneWay="false"
+                   action="http://example.com/fileservice/UploadFile"
+                   name="UploadFile" bindingOperationName="UploadFile"
+                   type="Request-Response" outputName="UploadFileResponse"
+                   inputName="UploadFileRequest"
+                   receivesAttachments="false" sendsAttachments="false"
+                   anonymous="optional">
+      <con:settings/>
+    </con:operation>
+  </con:interface>
+
+  <con:mockService id="mockservice-1" port="8081" path="/soap/fileservice"
+                   host="localhost" name="FileService Mock"
+                   bindToHostOnly="false" docroot="">
+    <con:settings>
+      <con:setting id="com.eviware.soapui.impl.wsdl.mock.WsdlMockService@require-soap-action">false</con:setting>
+    </con:settings>
+
+    <con:mockOperation name="UploadFile" id="mockoperation-1"
+                       interface="FileServiceSoapBinding"
+                       operation="UploadFile">
+      <con:settings/>
+      <con:dispatchStyle>SEQUENCE</con:dispatchStyle>
+
+      <con:mockResponse id="mockresponse-1" name="Success Response"
+                        encoding="UTF-8" httpResponseStatus="200">
+        <con:settings/>
+        <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
+   <soap:Header/>
+   <soap:Body>
+      <file:UploadFileResponse>
+         <file:status>SUCCESS</file:status>
+         <file:message>File uploaded and processed successfully</file:message>
+         <file:correlationId>corr-123-abc</file:correlationId>
+         <file:processedAt>2024-04-20T12:00:00Z</file:processedAt>
+         <file:externalReference>ext-ref-456</file:externalReference>
+      </file:UploadFileResponse>
+   </soap:Body>
+</soap:Envelope>]]></con:responseContent>
+        <con:responseHeaders>
+          <con:entry key="Content-Type" value="text/xml;charset=UTF-8"/>
+        </con:responseHeaders>
+        <con:delay>100</con:delay>
+      </con:mockResponse>
+
+      <con:mockResponse id="mockresponse-2" name="Server Error 500"
+                        encoding="UTF-8" httpResponseStatus="500">
+        <con:settings/>
+        <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+   <soap:Header/>
+   <soap:Body>
+      <soap:Fault>
+         <faultcode>soap:Server</faultcode>
+         <faultstring>Internal Server Error - Temporary failure</faultstring>
+      </soap:Fault>
+   </soap:Body>
+</soap:Envelope>]]></con:responseContent>
+        <con:responseHeaders>
+          <con:entry key="Content-Type" value="text/xml;charset=UTF-8"/>
+        </con:responseHeaders>
+        <con:delay>100</con:delay>
+      </con:mockResponse>
+
+      <con:mockResponse id="mockresponse-3" name="Service Unavailable 503"
+                        encoding="UTF-8" httpResponseStatus="503">
+        <con:settings/>
+        <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+   <soap:Header/>
+   <soap:Body>
+      <soap:Fault>
+         <faultcode>soap:Server</faultcode>
+         <faultstring>Service Temporarily Unavailable</faultstring>
+      </soap:Fault>
+   </soap:Body>
+</soap:Envelope>]]></con:responseContent>
+        <con:responseHeaders>
+          <con:entry key="Content-Type" value="text/xml;charset=UTF-8"/>
+          <con:entry key="Retry-After" value="30"/>
+        </con:responseHeaders>
+        <con:delay>100</con:delay>
+      </con:mockResponse>
+
+    </con:mockOperation>
+  </con:mockService>
+
+  <con:reporting/>
+</con:soapui-project>

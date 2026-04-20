@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+                  xmlns:tns="http://example.com/fileservice"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                  targetNamespace="http://example.com/fileservice"
+                  name="FileService">
+
+  <wsdl:types>
+    <xsd:schema targetNamespace="http://example.com/fileservice">
+      <xsd:element name="UploadFileRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="content" type="xsd:string"/>
+            <xsd:element name="filename" type="xsd:string"/>
+            <xsd:element name="contentType" type="xsd:string"/>
+            <xsd:element name="fileSize" type="xsd:long"/>
+            <xsd:element name="traceId" type="xsd:string"/>
+            <xsd:element name="timestamp" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="UploadFileResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="status" type="xsd:string"/>
+            <xsd:element name="message" type="xsd:string"/>
+            <xsd:element name="correlationId" type="xsd:string"/>
+            <xsd:element name="processedAt" type="xsd:string" minOccurs="0"/>
+            <xsd:element name="externalReference" type="xsd:string" minOccurs="0"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </wsdl:types>
+
+  <wsdl:message name="UploadFileRequestMessage">
+    <wsdl:part name="parameters" element="tns:UploadFileRequest"/>
+  </wsdl:message>
+
+  <wsdl:message name="UploadFileResponseMessage">
+    <wsdl:part name="parameters" element="tns:UploadFileResponse"/>
+  </wsdl:message>
+
+  <wsdl:portType name="FileServicePortType">
+    <wsdl:operation name="UploadFile">
+      <wsdl:input message="tns:UploadFileRequestMessage"/>
+      <wsdl:output message="tns:UploadFileResponseMessage"/>
+    </wsdl:operation>
+  </wsdl:portType>
+
+  <wsdl:binding name="FileServiceSoapBinding" type="tns:FileServicePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="UploadFile">
+      <soap:operation soapAction="http://example.com/fileservice/UploadFile"/>
+      <wsdl:input>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+
+  <wsdl:service name="FileService">
+    <wsdl:port name="FileServicePort" binding="tns:FileServiceSoapBinding">
+      <soap:address location="http://localhost:8081/soap/fileservice"/>
+    </wsdl:port>
+  </wsdl:service>
+
+</wsdl:definitions>

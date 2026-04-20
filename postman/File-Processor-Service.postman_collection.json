@@ -1,0 +1,400 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "File Processor Service",
+    "description": "Colección para consumir el microservicio File Processor - Subida de archivos con envío SOAP",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "12345"
+  },
+  "item": [
+    {
+      "name": "⚠️ IMPORTANTE - Configuración Inicial",
+      "item": [
+        {
+          "name": "1. Verificar Servicio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Primero verifica que el servicio esté corriendo. Debe retornar {\"status\": \"UP\"}"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Instrucciones de Configuración",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "PASOS PARA CONFIGURAR:\n\n1. Ve a la pestaña 'Body' de cualquier petición de upload\n2. Selecciona 'form-data'\n3. En el campo 'file', haz clic en 'Select Files'\n4. Elige un archivo de la carpeta 'samples/'\n5. NO agregues header Content-Type manualmente\n6. Envía la petición\n\nSi ves 'No file provided', significa que no seleccionaste el archivo."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Upload File - PDF",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "samples/sample.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/files",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "files"
+          ]
+        },
+        "description": "📋 CONFIGURACIÓN REQUERIDA (después de importar):\n\n1. Ve a la pestaña 'Body'\n2. Selecciona 'form-data'\n3. En el campo 'file', haz clic en 'Select Files'\n4. Selecciona: samples/sample.pdf\n5. Ve a Headers y asegúrate de NO tener Content-Type manual\n6. Solo debe estar: Accept: application/json\n\n⚠️ Si ves 'No file provided', no seleccionaste el archivo.\n\n📝 Nota: Postman no carga automáticamente los archivos al importar. Siempre debes seleccionarlos manualmente."
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "samples/sample.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/files",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "files"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"File uploaded successfully\",\n  \"correlationId\": \"corr-123-abc\",\n  \"traceId\": \"uuid-generado\",\n  \"processedAt\": \"2024-01-15T10:30:00Z\",\n  \"externalReference\": \"ext-ref-456\",\n  \"success\": true\n}"
+        },
+        {
+          "name": "Bad Request - Invalid File Type",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "samples/sample.txt"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/files",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "files"
+              ]
+            }
+          },
+          "status": "Bad Request",
+          "code": 400,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"timestamp\": \"2024-01-15T10:30:00Z\",\n  \"status\": 400,\n  \"error\": \"Bad Request\",\n  \"message\": \"File type not allowed. Allowed types: pdf,docx,txt\",\n  \"errorCode\": \"INVALID_FILE_TYPE\",\n  \"traceId\": \"uuid-generado\"\n}"
+        },
+        {
+          "name": "Gateway Timeout",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "samples/sample.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/files",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "files"
+              ]
+            }
+          },
+          "status": "Gateway Timeout",
+          "code": 504,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"timestamp\": \"2024-01-15T10:30:00Z\",\n  \"status\": 504,\n  \"error\": \"Gateway Timeout\",\n  \"message\": \"SOAP request timed out after 3 retries\",\n  \"errorCode\": \"GATEWAY_TIMEOUT\",\n  \"traceId\": \"uuid-generado\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Upload File - DOCX",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "samples/sample.docx"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/files",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "files"
+          ]
+        },
+        "description": "📋 CONFIGURACIÓN: Ve a Body > form-data, haz clic en 'Select Files' y elige samples/sample.docx\n⚠️ Recuerda: Postman requiere seleccionar el archivo manualmente después de importar."
+      },
+      "response": []
+    },
+    {
+      "name": "Upload File - TXT",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "samples/sample.txt"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/files",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "files"
+          ]
+        },
+        "description": "📋 CONFIGURACIÓN: Ve a Body > form-data, haz clic en 'Select Files' y elige samples/sample.txt\n⚠️ Recuerda seleccionar el archivo manualmente después de importar la colección."
+      },
+      "response": []
+    },
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/actuator/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "actuator",
+            "health"
+          ]
+        },
+        "description": "Verificar estado del servicio"
+      },
+      "response": [
+        {
+          "name": "Health OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/actuator/health",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": \"UP\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Upload File - Error (Invalid Extension)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "samples/sample.txt"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/files",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "files"
+          ]
+        },
+        "description": "Prueba con archivo de extensión no permitida (debe retornar 400)"
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Verificar configuración de la petición",
+          "if (pm.request.body && pm.request.body.mode === 'formdata') {",
+          "    const fileKey = pm.request.body.formdata.find(p => p.key === 'file');",
+          "    if (!fileKey || !fileKey.src) {",
+          "        console.log('⚠️ ADVERTENCIA: No se ha seleccionado archivo.');",
+          "        console.log('👉 Ve a Body > form-data, haz clic en el campo file y selecciona un archivo.');",
+          "    } else {",
+          "        console.log('✅ Archivo seleccionado: ' + fileKey.src);",
+          "    }",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "// Validar respuesta",
+          "if (pm.response.code === 200) {",
+          "    const jsonData = pm.response.json();",
+          "    pm.test('Respuesta exitosa', function () {",
+          "        pm.expect(jsonData.success).to.be.true;",
+          "        pm.expect(jsonData.status).to.eql('SUCCESS');",
+          "    });",
+          "} else if (pm.response.code === 500) {",
+          "    const jsonData = pm.response.json();",
+          "    if (jsonData.message && jsonData.message.includes('No file provided')) {",
+          "        pm.test('⚠️ No seleccionaste archivo', function () {",
+          "            pm.expect.fail('Ve a Body > form-data y selecciona un archivo en el campo file');",
+          "        });",
+          "    }",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ]
+}
