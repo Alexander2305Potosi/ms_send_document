@@ -4,7 +4,6 @@
 # Build directories
 build/
 .gradle/
-out/
 
 # IDE files
 .idea/
