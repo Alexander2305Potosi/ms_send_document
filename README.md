@@ -147,6 +147,28 @@ String soapXml = envelopeWrapper.wrapRequest(request);
 |----------|-------------|---------|
 | `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:8081/soap/fileservice` |
 
+## Mock SOAP para desarrollo
+
+Para desarrollo y pruebas locales, incluye mocks SOAP que simulan el servicio externo:
+
+### Iniciar el Mock SOAP
+
+```bash
+# Mock simple (siempre responde éxito 200)
+./start-mock.sh
+
+# Mock avanzado (múltiples respuestas: 200, 500, 503, 504, delay, 400)
+./start-advanced-mock.sh
+```
+
+El mock se iniciará en `http://localhost:8081/soap/fileservice`
+
+### Más información
+
+Para detalles sobre los mocks disponibles y cómo personalizarlos, ver:
+- [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentación completa de los mocks
+- [`soapui/README.md`](soapui/README.md) - Alternativa usando SOAP UI
+
 ## API Endpoints
 
 ### POST /api/v1/files
@@ -201,7 +223,7 @@ Ver carpeta `postman/`:
 
 ```bash
 # Importar en Postman
-File-Processor-Service.postman_collection.json
+postman/File-Processor-Service.postman_collection.json
 ```
 
 Endpoints incluidos:
@@ -209,13 +231,17 @@ Endpoints incluidos:
 - Health Check
 - Error scenarios (400, 504)
 
+⚠️ **Importante**: Después de importar, selecciona manualmente el archivo en la pestaña Body → form-data.
+
+Para más detalles: [`postman/README.md`](postman/README.md)
+
 ## Testing con SOAP UI
 
 Ver carpeta `soapui/`:
 
 ```bash
 # Importar en SOAP UI
-FileService-Mock-soapui-project.xml
+soapui/FileService-Mock-soapui-project.xml
 ```
 
 Respuestas mock configuradas:
@@ -224,6 +250,8 @@ Respuestas mock configuradas:
 - ❌ Service Unavailable 503 (reintentable)
 - ⏱️ Slow Response (30s delay)
 - ❌ Bad Request 400 (no reintentable)
+
+📖 **Nota**: El mock de Java es más estable y simple. Ver [Mock SOAP en Java](src/test/java/com/example/fileprocessor/mock/README.md) para comparar opciones.
 
 ## Dependencias Clave
 
