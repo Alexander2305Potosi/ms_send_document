@@ -1,6 +1,5 @@
 package com.example.fileprocessor.infrastructure.rest.exception;
 
-import com.example.fileprocessor.domain.exception.DomainException;
 import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import org.slf4j.Logger;

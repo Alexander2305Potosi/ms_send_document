@@ -10,7 +10,13 @@ echo ""
 cd "$(dirname "$0")"
 
 # Compilar
-javac -d build/classes/java/test src/test/java/com/example/fileprocessor/mock/SimpleSoapMock.java
+javac -d build/classes/java/test src/test/java/com/example/fileprocessor/mock/SimpleSoapMock.java 2>/dev/null || {
+    echo "Error compilando. Intentando con gradle..."
+    ./gradlew testClasses --quiet
+}
 
-# Ejecutar
-java -cp build/classes/java/test com.example.fileprocessor.mock.SimpleSoapMock
+# Ejecutar en segundo plano y guardar PID
+java -cp build/classes/java/test com.example.fileprocessor.mock.SimpleSoapMock &
+echo $! > .mock.pid
+echo "Mock iniciado con PID: $(cat .mock.pid)"
+echo "Para detenerlo: ./stop-mock.sh"

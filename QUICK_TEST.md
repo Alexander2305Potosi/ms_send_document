@@ -4,9 +4,14 @@
 
 ### 1. Iniciar el Mock SOAP
 
-En una terminal:
+**Linux/macOS:**
 ```bash
 ./start-mock.sh
+```
+
+**Windows:**
+```cmd
+start-mock.bat
 ```
 
 ### 2. Verificar que el servicio responde
@@ -75,4 +80,15 @@ El problema es la configuración de Postman. Sigue estos pasos:
 
 ### Error "SOAP timeout"
 - El mock SOAP no está corriendo
-- Inicia con: `./start-mock.sh`
+- Inicia con: `./start-mock.sh` (Linux/Mac) o `start-mock.bat` (Windows)
+
+### Error "SOAP error response: 404 Not Found"
+- La variable `SOAP_ENDPOINT` no está configurada o está mal configurada
+- Verifica: `echo $SOAP_ENDPOINT` (Linux/Mac) o `echo %SOAP_ENDPOINT%` (Windows)
+- Debe ser: `http://localhost:8081/soap/fileservice`
+- En Windows: Configura la variable en Propiedades del Sistema → Variables de entorno
+
+### Error "Address already in use: 8081"
+- El puerto 8081 está ocupado (posiblemente por SoapUI u otra instancia del mock)
+- Detén el mock anterior: `./stop-mock.sh` (Linux/Mac) o `stop-mock.bat` (Windows)
+- O cambia el puerto en `application.yml`

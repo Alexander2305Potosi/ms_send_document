@@ -147,18 +147,49 @@ String soapXml = envelopeWrapper.wrapRequest(request);
 |----------|-------------|---------|
 | `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:8081/soap/fileservice` |
 
+### Configuración en Linux/macOS
+
+```bash
+export SOAP_ENDPOINT=http://localhost:8081/soap/fileservice
+./gradlew bootRun
+```
+
+### Configuración en Windows
+
+```cmd
+set SOAP_ENDPOINT=http://localhost:8081/soap/fileservice
+gradlew.bat bootRun
+```
+
+O permanentemente en Variables de Entorno del Sistema → Variables de usuario → Nuevo:
+- Nombre: `SOAP_ENDPOINT`
+- Valor: `http://localhost:8081/soap/fileservice`
+
 ## Mock SOAP para desarrollo
 
 Para desarrollo y pruebas locales, incluye mocks SOAP que simulan el servicio externo:
 
 ### Iniciar el Mock SOAP
 
+**Linux/macOS:**
 ```bash
 # Mock simple (siempre responde éxito 200)
 ./start-mock.sh
 
 # Mock avanzado (múltiples respuestas: 200, 500, 503, 504, delay, 400)
 ./start-advanced-mock.sh
+
+# Detener el mock
+./stop-mock.sh
+```
+
+**Windows:**
+```cmd
+# Mock simple
+start-mock.bat
+
+# Detener el mock
+stop-mock.bat
 ```
 
 El mock se iniciará en `http://localhost:8081/soap/fileservice`
@@ -235,6 +266,17 @@ Endpoints incluidos:
 
 Para más detalles: [`postman/README.md`](postman/README.md)
 
+## Scripts Disponibles
+
+| Script | Plataforma | Descripción |
+|--------|------------|-------------|
+| `./gradlew bootRun` | Todos | Iniciar el servicio Spring Boot |
+| `./start-mock.sh` | Linux/Mac | Iniciar mock SOAP simple |
+| `start-mock.bat` | Windows | Iniciar mock SOAP simple |
+| `./start-advanced-mock.sh` | Linux/Mac | Iniciar mock con múltiples respuestas |
+| `./stop-mock.sh` | Linux/Mac | Detener el mock SOAP |
+| `stop-mock.bat` | Windows | Detener el mock SOAP |
+
 ## Testing con SOAP UI
 
 Ver carpeta `soapui/`:
@@ -260,3 +302,14 @@ Respuestas mock configuradas:
 implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.1")
 runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.4")
 ```
+
+## Changelog
+
+### 2025-04-20 - Scripts de Mock Mejorados
+- **Agregado:** Scripts `stop-mock.sh` y `stop-mock.bat` para detener el mock SOAP fácilmente
+- **Agregado:** `start-mock.sh` ahora guarda el PID para facilitar la detención
+- **Actualizado:** Documentación con instrucciones para Windows y Linux/macOS
+- **Agregado:** Sección de troubleshooting con errores comunes (puerto ocupado, 404, timeout)
+
+### 2025-04-20 - Refactor de Código
+- **Eliminado:** Imports sin usar en `FileControllerTest.java`, `ExternalSoapGatewayImplTest.java` y `GlobalErrorHandler.java`

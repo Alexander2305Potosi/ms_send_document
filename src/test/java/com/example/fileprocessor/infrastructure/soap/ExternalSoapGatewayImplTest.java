@@ -1,7 +1,6 @@
 package com.example.fileprocessor.infrastructure.soap;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
-import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.infrastructure.soap.adapter.ExternalSoapGatewayImpl;
 import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;

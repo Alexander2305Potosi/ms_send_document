@@ -86,14 +86,33 @@ Edita `AdvancedSoapMock.java`:
 
 ## Ejecución
 
-### Mock simple (solo éxito):
+### Linux/macOS
+
+**Mock simple (solo éxito):**
 ```bash
 ./start-mock.sh
 ```
 
-### Mock avanzado (múltiples respuestas):
+**Mock avanzado (múltiples respuestas):**
 ```bash
 ./start-advanced-mock.sh
+```
+
+**Detener el mock:**
+```bash
+./stop-mock.sh
+```
+
+### Windows
+
+**Mock simple:**
+```cmd
+start-mock.bat
+```
+
+**Detener el mock:**
+```cmd
+stop-mock.bat
 ```
 
 ## Personalización rápida
@@ -112,3 +131,32 @@ server.createContext("/mi/ruta/personalizada", new SoapHandler());
 ```java
 Thread.sleep(2000); // 2 segundos antes de cada respuesta
 ```
+
+## Solución de Problemas
+
+### Error "Address already in use: 8081"
+**Causa:** El puerto 8081 está ocupado (otro mock, SoapUI, etc.)
+
+**Solución:**
+```bash
+# Linux/macOS - usar el script de detención
+./stop-mock.sh
+
+# O manualmente
+lsof -ti:8081 | xargs kill -9
+
+# Windows
+taskkill /F /IM java.exe
+# o
+stop-mock.bat
+```
+
+### Error "Connection refused" al subir archivo
+**Causa:** El mock no está corriendo o está en otro puerto
+
+**Solución:**
+1. Verificar que el mock está corriendo: `curl http://localhost:8081/soap/fileservice`
+2. Verificar la variable `SOAP_ENDPOINT`:
+   - Linux/Mac: `echo $SOAP_ENDPOINT`
+   - Windows: `echo %SOAP_ENDPOINT%`
+3. Debe ser: `http://localhost:8081/soap/fileservice`

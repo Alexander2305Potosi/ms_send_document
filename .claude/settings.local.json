@@ -6,7 +6,8 @@
       "Read(//usr/lib/**)",
       "Bash(chmod +x *)",
       "Bash(./gradlew clean *)",
-      "Bash(/Users/alexander2305/Downloads/file-processor-service/test-curl.sh)"
+      "Bash(/Users/alexander2305/Downloads/file-processor-service/test-curl.sh)",
+      "Bash(./gradlew compileJava compileTestJava)"
     ]
   }
 }
