@@ -8,6 +8,30 @@ echo ""
 
 cd "$(dirname "$0")"
 
+# Configurar Java (buscar instalaciones comunes)
+if [ -z "$JAVA_HOME" ]; then
+    # Buscar Java en ubicaciones comunes
+    if [ -d "/opt/java/jdk-21.0.2+13/Contents/Home" ]; then
+        export JAVA_HOME="/opt/java/jdk-21.0.2+13/Contents/Home"
+    elif [ -d "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home" ]; then
+        export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home"
+    elif [ -d "/usr/local/opt/openjdk@21" ]; then
+        export JAVA_HOME="/usr/local/opt/openjdk@21"
+    elif command -v /usr/libexec/java_home >/dev/null 2>&1; then
+        export JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null)
+    fi
+fi
+
+# Verificar que Java está disponible
+if [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+    echo "Java encontrado en: $JAVA_HOME"
+    java -version 2>&1 | head -1
+else
+    echo "ADVERTENCIA: No se pudo detectar JAVA_HOME. Usando java del PATH..."
+fi
+echo ""
+
 # Verificar si el puerto está ocupado
 echo "Verificando puerto 8081..."
 PID=$(lsof -ti:8081 2>/dev/null)
