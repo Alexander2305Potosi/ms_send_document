@@ -3,6 +3,7 @@ plugins {
     application
     id("org.springframework.boot") version "3.3.5"
     id("io.spring.dependency-management") version "1.1.6"
+    id("info.solidsoft.pitest") version "1.15.0"
 }
 
 group = "com.example"
@@ -86,4 +87,18 @@ tasks.withType<JavaCompile> {
 
 springBoot {
     buildInfo()
+}
+
+pitest {
+    junit5PluginVersion.set("1.2.1")
+    pitestVersion.set("1.15.0")
+    targetClasses.set(listOf("com.example.fileprocessor.domain.*", "com.example.fileprocessor.infrastructure.soap.*", "com.example.fileprocessor.infrastructure.rest.*"))
+    targetTests.set(listOf("com.example.fileprocessor.*"))
+    outputFormats.set(listOf("HTML", "XML"))
+    timestampedReports.set(false)
+    mutationThreshold.set(50)
+    coverageThreshold.set(60)
+    mutators.set(listOf("DEFAULTS", "REMOVE_CONDITIONALS_EQUAL_IF", "REMOVE_CONDITIONALS_ORDER_IF", "REMOVE_INCREMENTS", "INVERT_NEGS", "MATH", "NEGATE_CONDITIONALS", "RETURN_VALS", "VOID_METHOD_CALLS", "NON_VOID_METHOD_CALLS"))
+    excludedClasses.set(listOf("com.example.fileprocessor.Application", "com.example.fileprocessor.config.*", "com.example.fileprocessor.infrastructure.config.*", "com.example.fileprocessor.mock.*"))
+    excludedMethods.set(listOf("toString", "hashCode", "equals", "log.*"))
 }
