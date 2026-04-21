@@ -5,7 +5,7 @@
 El mock SOAP portable funciona en cualquier máquina sin configuración manual:
 
 - **Auto-detección de Java**: Busca en `JAVA_HOME`, `PATH` y ubicaciones comunes
-- **Puerto dinámico**: Intenta 8081, si está ocupado usa 9000-9999
+- **Puerto dinámico**: Intenta 9000, si está ocupado usa 9000-9999
 - **Guarda configuración**: Crea archivo temporal con el endpoint usado
 - **Cross-platform**: Mismo código funciona en Windows, Linux y macOS
 
@@ -17,7 +17,7 @@ Request POST ──> HttpServer ──> Handler ──> Respuesta XML
 ```
 
 1. Detecta Java instalado
-2. Busca puerto disponible (8081 → 9000-9999)
+2. Busca puerto disponible (9000 → 9000-9999)
 3. Crea servidor HTTP en ese puerto
 4. Guarda info en archivo temporal
 5. Responde SOAP XML estático

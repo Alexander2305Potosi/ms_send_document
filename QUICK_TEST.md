@@ -23,7 +23,7 @@ chmod +x start-dev.sh
 
 Esto hará:
 1. Detectar Java instalado
-2. Buscar un puerto disponible (8081 o 9000-9999)
+2. Buscar un puerto disponible (9000 o 9000-9999)
 3. Iniciar el Mock SOAP
 4. Configurar automáticamente `SOAP_ENDPOINT`
 5. Iniciar el microservicio
@@ -57,7 +57,7 @@ Deberías ver:
 ========================================
   SOAP Mock Server (Portable)
 ========================================
-  Puerto: 9001  (o 8081 si estaba libre)
+  Puerto: 9001  (o 9000 si estaba libre)
   Endpoint: http://localhost:9001/soap/fileservice
 ========================================
 ```

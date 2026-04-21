@@ -70,16 +70,16 @@ REM ========================================
 echo Verificando disponibilidad de puertos...
 
 REM Funcion para verificar si puerto esta libre
-call :checkPort 8081
+call :checkPort 9000
 if !errorlevel! neq 0 (
-    echo [ADVERTENCIA] Puerto 8081 ocupado
+    echo [ADVERTENCIA] Puerto 9000 ocupado
     echo Intentando liberar...
-    call :killPort 8081
+    call :killPort 9000
 
     REM Verificar nuevamente
-    call :checkPort 8081
+    call :checkPort 9000
     if !errorlevel! neq 0 (
-        echo [INFO] Puerto 8081 no se puede liberar, se buscara alternativo
+        echo [INFO] Puerto 9000 no se puede liberar, se buscara alternativo
     )
 )
 echo.

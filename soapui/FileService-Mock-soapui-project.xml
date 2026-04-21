@@ -4,7 +4,7 @@
   <con:properties>
     <con:property>
       <con:name>mockPort</con:name>
-      <con:value>8081</con:value>
+      <con:value>9000</con:value>
     </con:property>
   </con:properties>
 
@@ -86,7 +86,7 @@
 
   <wsdl:service name="FileService">
     <wsdl:port name="FileServicePort" binding="tns:FileServiceSoapBinding">
-      <soap:address location="http://localhost:8081/soap/fileservice"/>
+      <soap:address location="http://localhost:9000/soap/fileservice"/>
     </wsdl:port>
   </wsdl:service>
 
@@ -96,7 +96,7 @@
     </con:definitionCache>
 
     <con:endpoints>
-      <con:endpoint>http://localhost:8081/soap/fileservice</con:endpoint>
+      <con:endpoint>http://localhost:9000/soap/fileservice</con:endpoint>
     </con:endpoints>
 
     <con:operation id="operation-1" isOneWay="false"
@@ -110,11 +110,12 @@
     </con:operation>
   </con:interface>
 
-  <con:mockService id="mockservice-1" port="8081" path="/soap/fileservice"
-                   host="localhost" name="FileService Mock"
-                   bindToHostOnly="false" docroot="">
+  <con:mockService id="mockservice-1" port="9000" path="/soap/fileservice"
+                   host="127.0.0.1" name="FileService Mock"
+                   bindToHostOnly="true" docroot="">
     <con:settings>
       <con:setting id="com.eviware.soapui.impl.wsdl.mock.WsdlMockService@require-soap-action">false</con:setting>
+      <con:setting id="com.eviware.soapui.impl.wsdl.mock.WsdlMockService@dispatch-response">1</con:setting>
     </con:settings>
 
     <con:mockOperation name="UploadFile" id="mockoperation-1"

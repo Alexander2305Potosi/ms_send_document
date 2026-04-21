@@ -6,7 +6,7 @@ logging:
 
 app:
   soap:
-    endpoint: http://localhost:8081/soap/fileservice
+    endpoint: http://localhost:9000/soap/fileservice
     timeout-seconds: 5
     retry-attempts: 1
     retry-backoff-millis: 500

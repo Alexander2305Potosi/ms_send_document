@@ -2,7 +2,7 @@
 
 Estos scripts funcionan en cualquier máquina sin configuración manual, detectando automáticamente:
 - Java instalado (busca en ubicaciones comunes)
-- Puertos disponibles (si 8081 está ocupado, usa 9000-9999)
+- Puertos disponibles (si 9000 está ocupado, usa 9001-9999)
 - Plataforma (Windows `.bat` / Unix `.sh`)
 
 ## Archivos

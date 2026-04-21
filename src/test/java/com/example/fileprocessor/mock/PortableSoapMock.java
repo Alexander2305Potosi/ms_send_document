@@ -19,7 +19,7 @@ import java.nio.file.Paths;
  */
 public class PortableSoapMock {
 
-    private static final int DEFAULT_PORT = 8081;
+    private static final int DEFAULT_PORT = 9000;
     private static final int PORT_RANGE_START = 9000;
     private static final int PORT_RANGE_END = 9999;
 

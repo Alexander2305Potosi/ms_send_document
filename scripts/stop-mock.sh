@@ -33,9 +33,9 @@ if command -v pgrep &> /dev/null; then
     fi
 fi
 
-# Buscar por puerto (8081 o rango alternativo)
+# Buscar por puerto (9000 o rango alternativo)
 if command -v lsof &> /dev/null; then
-    for port in 8081 9000 9001 9002 9003 9004 9005; do
+    for port in 9000 9001 9002 9003 9004 9005; do
         pid=$(lsof -ti:$port 2>/dev/null)
         if [ -n "$pid" ]; then
             # Verificar si es Java

@@ -73,7 +73,7 @@ timeout /t 3 /nobreak >nul
 REM Verificar que el mock guardo su info
 if not exist "%TEMP%\file-processor-mock.info" (
     echo [ADVERTENCIA] No se pudo verificar el mock, usando puerto por defecto...
-    set "SOAP_ENDPOINT=http://localhost:8081/soap/fileservice"
+    set "SOAP_ENDPOINT=http://localhost:9000/soap/fileservice"
 ) else (
     REM Leer endpoint del archivo
     for /f "tokens=2 delims==" %%a in ('type %TEMP%\file-processor-mock.info ^| findstr "endpoint"') do (

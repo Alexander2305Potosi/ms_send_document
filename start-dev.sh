@@ -63,7 +63,7 @@ if [ -f "$INFO_FILE" ]; then
     export SOAP_ENDPOINT=$(grep "endpoint=" "$INFO_FILE" | cut -d= -f2)
 else
     echo -e "${YELLOW}⚠${NC} No se pudo detectar endpoint, usando default"
-    export SOAP_ENDPOINT="http://localhost:8081/soap/fileservice"
+    export SOAP_ENDPOINT="http://localhost:9000/soap/fileservice"
 fi
 
 echo "  Mock listo en: $SOAP_ENDPOINT"

@@ -36,7 +36,7 @@ app:
     allowed-types: pdf,docx,txt
     max-filename-length: 255
   soap:
-    endpoint: ${SOAP_ENDPOINT:http://localhost:8081/soap/fileservice}
+    endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
     retry-attempts: 3
     retry-backoff-millis: 1000

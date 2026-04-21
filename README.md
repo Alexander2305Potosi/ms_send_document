@@ -163,7 +163,7 @@ Los mutators crean cambios artificiales en el codigo (ej: `>` -> `>=`, eliminar 
 
 | Variable | Descripcion | Default |
 |----------|-------------|---------|
-| `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:8081/soap/fileservice` |
+| `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:9000/soap/fileservice` |
 
 ### Configuracion Automatica (Recomendada)
 
@@ -248,7 +248,7 @@ cat /tmp/file-processor-mock.info
 
 El mock detecta automaticamente:
 - **Java**: Busca en ubicaciones comunes (`JAVA_HOME`, `PATH`, etc.)
-- **Puerto libre**: Intenta 8081, si esta ocupado usa 9000-9999
+- **Puerto libre**: Intenta 9000, si esta ocupado usa 9000-9999
 - **Configuracion**: Guarda el endpoint en archivo temporal
 
 ### Ejecucion Manual con Puerto Especifico
@@ -457,7 +457,7 @@ id("info.solidsoft.pitest") version "1.15.0"
 - **Timeout Dual**: Netty `responseTimeout` desfasado 5s del timeout de Reactor
 
 ### 2025-04-21 - Mock SOAP Portable (v3)
-- **Nuevo:** `PortableSoapMock.java` - Detecta automaticamente puerto libre (8081, o 9000-9999)
+- **Nuevo:** `PortableSoapMock.java` - Detecta automaticamente puerto libre (9000, o 9000-9999)
 - **Nuevo:** `start-dev.sh` / `start-dev.bat` - Inicia Mock + Microservicio en un solo comando
 - **Nuevo:** Scripts en carpeta `scripts/` - Organizados y portables
 - **Mejorado:** Auto-deteccion de Java en ubicaciones comunes (sin `JAVA_HOME` requerido)

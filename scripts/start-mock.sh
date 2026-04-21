@@ -93,15 +93,15 @@ kill_port() {
     fi
 }
 
-# Verificar puerto 8081
+# Verificar puerto 9000
 echo "Verificando disponibilidad de puertos..."
-if ! check_port 8081; then
-    echo -e "${YELLOW}⚠${NC} Puerto 8081 ocupado"
+if ! check_port 9000; then
+    echo -e "${YELLOW}⚠${NC} Puerto 9000 ocupado"
     echo "Intentando liberar..."
-    kill_port 8081
+    kill_port 9000
 
-    if ! check_port 8081; then
-        echo -e "${YELLOW}⚠${NC} Puerto 8081 no se puede liberar, se buscará alternativo"
+    if ! check_port 9000; then
+        echo -e "${YELLOW}⚠${NC} Puerto 9000 no se puede liberar, se buscará alternativo"
     fi
 fi
 echo ""

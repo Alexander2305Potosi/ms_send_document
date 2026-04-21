@@ -22,7 +22,7 @@ e        taskkill /F /PID %%a >nul 2>&1
 )
 
 REM Buscar en puertos comunes
-for %%P in (8081 9000 9001 9002 9003 9004 9005) do (
+for %%P in (9000 9001 9002 9003 9004 9005) do (
     for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%%P" ^| findstr "LISTENING"') do (
         echo Deteniendo proceso en puerto %%P (PID: %%a)
         taskkill /F /PID %%a >nul 2>&1
