@@ -147,52 +147,106 @@ String soapXml = envelopeWrapper.wrapRequest(request);
 |----------|-------------|---------|
 | `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:8081/soap/fileservice` |
 
-### Configuración en Linux/macOS
+### Configuración Automática (Recomendada)
+
+Al usar los scripts portables (`start-dev.bat` / `start-dev.sh`), la variable se configura automáticamente:
 
 ```bash
-export SOAP_ENDPOINT=http://localhost:8081/soap/fileservice
+./start-dev.sh  # Detecta el puerto y configura SOAP_ENDPOINT
+```
+
+### Configuración Manual
+
+Si ejecutas manualmente, obtén el endpoint del mock:
+
+```bash
+# Linux/Mac
+export SOAP_ENDPOINT=$(cat /tmp/file-processor-mock.info | grep endpoint | cut -d= -f2)
+
+# Windows
+for /f "tokens=2 delims==" %a in ('type %TEMP%\file-processor-mock.info ^| findstr "endpoint"') do set SOAP_ENDPOINT=%a
+```
+
+Luego inicia el microservicio:
+
+```bash
+# Linux/macOS
+./gradlew bootRun --args='--spring.profiles.active=dev'
+
+# Windows
+gradlew.bat bootRun --args='--spring.profiles.active=dev'
+```
+
+### Configuración Fija (Sin Mock Variable)
+
+Para usar siempre el mismo puerto (ej: 9000), define la variable manualmente:
+
+**Linux/macOS:**
+```bash
+export SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
 ./gradlew bootRun
 ```
 
-### Configuración en Windows
-
+**Windows:**
 ```cmd
-set SOAP_ENDPOINT=http://localhost:8081/soap/fileservice
+set SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
 gradlew.bat bootRun
 ```
 
-O permanentemente en Variables de Entorno del Sistema → Variables de usuario → Nuevo:
-- Nombre: `SOAP_ENDPOINT`
-- Valor: `http://localhost:8081/soap/fileservice`
+O configura permanentemente en Variables de Entorno del Sistema.
 
 ## Mock SOAP para desarrollo
 
 Para desarrollo y pruebas locales, incluye mocks SOAP que simulan el servicio externo:
 
-### Iniciar el Mock SOAP
+### Iniciar el Mock SOAP (Versión Portable - Recomendada)
 
-**Linux/macOS:**
-```bash
-# Mock simple (siempre responde éxito 200)
-./start-mock.sh
-
-# Mock avanzado (múltiples respuestas: 200, 500, 503, 504, delay, 400)
-./start-advanced-mock.sh
-
-# Detener el mock
-./stop-mock.sh
-```
+**Nuevo:** Los scripts portables detectan automáticamente Java y un puerto disponible (no requiere admin).
 
 **Windows:**
 ```cmd
-# Mock simple
-start-mock.bat
+# Opción 1: Script completo (Mock + Microservicio)
+start-dev.bat
 
-# Detener el mock
-stop-mock.bat
+# Opción 2: Solo el Mock
+scripts\start-mock.bat
+
+# Ver que puerto se usó:
+type %TEMP%\file-processor-mock.info
 ```
 
-El mock se iniciará en `http://localhost:8081/soap/fileservice`
+**Linux/macOS:**
+```bash
+# Opción 1: Script completo (Mock + Microservicio)
+chmod +x start-dev.sh
+./start-dev.sh
+
+# Opción 2: Solo el Mock
+./scripts/start-mock.sh
+
+# Ver que puerto se usó:
+cat /tmp/file-processor-mock.info
+```
+
+El mock detecta automáticamente:
+- **Java**: Busca en ubicaciones comunes (`JAVA_HOME`, `PATH`, etc.)
+- **Puerto libre**: Intenta 8081, si está ocupado usa 9000-9999
+- **Configuración**: Guarda el endpoint en archivo temporal
+
+### Ejecución Manual con Puerto Específico
+
+Si necesitas un puerto fijo (ej: 9000), ejecuta directamente con Java:
+
+```bash
+# Compilar
+./gradlew testClasses
+
+# Iniciar con puerto específico
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000
+
+# Configurar endpoint manualmente
+export SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
+```
 
 ### Más información
 
@@ -268,14 +322,16 @@ Para más detalles: [`postman/README.md`](postman/README.md)
 
 ## Scripts Disponibles
 
+### Scripts Principales (Nuevos - Portable)
+
 | Script | Plataforma | Descripción |
 |--------|------------|-------------|
-| `./gradlew bootRun` | Todos | Iniciar el servicio Spring Boot |
-| `./start-mock.sh` | Linux/Mac | Iniciar mock SOAP simple |
-| `start-mock.bat` | Windows | Iniciar mock SOAP simple |
-| `./start-advanced-mock.sh` | Linux/Mac | Iniciar mock con múltiples respuestas |
-| `./stop-mock.sh` | Linux/Mac | Detener el mock SOAP |
-| `stop-mock.bat` | Windows | Detener el mock SOAP |
+| `./start-dev.sh` | Linux/Mac | **Inicia Mock + Microservicio** (auto-configura puerto) |
+| `start-dev.bat` | Windows | **Inicia Mock + Microservicio** (auto-configura puerto) |
+| `./scripts/start-mock.sh` | Linux/Mac | Mock portable (auto-detecta Java y puerto libre) |
+| `scripts\start-mock.bat` | Windows | Mock portable (auto-detecta Java y puerto libre) |
+| `./scripts/stop-mock.sh` | Linux/Mac | Detener cualquier mock activo |
+| `scripts\stop-mock.bat` | Windows | Detener cualquier mock activo |
 
 ## Testing con SOAP UI
 
@@ -304,6 +360,15 @@ runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.4")
 ```
 
 ## Changelog
+
+### 2025-04-21 - Mock SOAP Portable (v3) 🎉
+- **Nuevo:** `PortableSoapMock.java` - Detecta automáticamente puerto libre (8081, o 9000-9999)
+- **Nuevo:** `start-dev.sh` / `start-dev.bat` - Inicia Mock + Microservicio en un solo comando
+- **Nuevo:** Scripts en carpeta `scripts/` - Organizados y portables
+- **Mejorado:** Auto-detección de Java en ubicaciones comunes (sin `JAVA_HOME` requerido)
+- **Mejorado:** Guarda configuración en archivo temporal (`/tmp/file-processor-mock.info`)
+- **Solucionado:** Ya no requiere permisos de administrador en Windows
+- **Documentación:** Guía completa en `scripts/README.md`
 
 ### 2025-04-20 - Scripts de Mock Mejorados (v2)
 - **Mejorado:** Scripts ahora verifican que el puerto realmente se libere antes de reportar éxito

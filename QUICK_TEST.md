@@ -1,125 +1,186 @@
 # Prueba Rápida - File Processor Service
 
-## Verificar que todo funciona
+Guía rápida para ejecutar el proyecto en modo desarrollo con el Mock SOAP.
+
+## Opción 1: Script Automático (Recomendada) ⭐
+
+Un solo comando inicia todo (Mock + Microservicio):
+
+### Windows
+
+```cmd
+# Desde el directorio raiz del proyecto
+start-dev.bat
+```
+
+### Linux/macOS
+
+```bash
+# Desde el directorio raiz del proyecto
+chmod +x start-dev.sh
+./start-dev.sh
+```
+
+Esto hará:
+1. Detectar Java instalado
+2. Buscar un puerto disponible (8081 o 9000-9999)
+3. Iniciar el Mock SOAP
+4. Configurar automáticamente `SOAP_ENDPOINT`
+5. Iniciar el microservicio
+
+**Listo para probar en Postman!**
+
+---
+
+## Opción 2: Manual (Mayor control)
 
 ### 1. Iniciar el Mock SOAP
 
+**Windows:**
+```cmd
+scripts\start-mock.bat
+
+# Ver en que puerto quedo:
+type %TEMP%\file-processor-mock.info
+```
+
 **Linux/macOS:**
 ```bash
-./start-mock.sh
+./scripts/start-mock.sh
+
+# Ver en que puerto quedo:
+cat /tmp/file-processor-mock.info
 ```
+
+Deberías ver:
+```
+========================================
+  SOAP Mock Server (Portable)
+========================================
+  Puerto: 9001  (o 8081 si estaba libre)
+  Endpoint: http://localhost:9001/soap/fileservice
+========================================
+```
+
+### 2. Configurar Endpoint
+
+El script `start-mock` guarda el endpoint usado. Configúralo:
 
 **Windows:**
 ```cmd
-start-mock.bat
+for /f "tokens=2 delims==" %a in ('type %TEMP%\file-processor-mock.info ^| findstr "endpoint"') do set SOAP_ENDPOINT=%a
+
+echo %SOAP_ENDPOINT%
 ```
 
-### 2. Verificar que el servicio responde
-
-En otra terminal:
+**Linux/macOS:**
 ```bash
-curl http://localhost:8080/actuator/health
+export SOAP_ENDPOINT=$(cat /tmp/file-processor-mock.info | grep endpoint | cut -d= -f2)
+
+echo $SOAP_ENDPOINT
 ```
 
-Debería retornar: `{"status":"UP"}`
-
-### 3. Probar subida de archivo
+### 3. Iniciar Microservicio
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/files -F "file=@postman/samples/sample.txt" -H "Accept: application/json"
-```
+# Windows
+gradlew.bat bootRun --args='--spring.profiles.active=dev'
 
-Respuesta esperada:
-```json
-{"status":"SUCCESS","message":"File processed successfully","correlationId":"corr-test-12345","success":true}
+# Linux/Mac
+./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
 ---
 
-## Si curl funciona pero Postman no
-
-El problema es la configuración de Postman. Sigue estos pasos:
-
-1. **Abre la petición** "Upload File - TXT" en Postman
-
-2. **Ve a la pestaña Body** y verifica:
-   - Esté seleccionado `form-data`
-   - La key sea `file`
-   - El tipo sea `File` (no Text)
-   - Hayas seleccionado un archivo en la columna Value
-
-3. **Ve a la pestaña Headers** y verifica:
-   - NO haya un header `Content-Type`
-   - Solo esté `Accept: application/json`
-
-4. **Haz clic en Send**
-
----
-
-## URLs de los servicios
+## URLs de los Servicios
 
 | Servicio | URL |
 |----------|-----|
 | File Processor | http://localhost:8080/api/v1/files |
 | Health Check | http://localhost:8080/actuator/health |
-| Mock SOAP | http://localhost:8081/soap/fileservice |
+| Mock SOAP | Ver archivo `file-processor-mock.info` |
 
 ---
 
-## Solución de problemas
+## Probar con cURL
 
-### Error "No file provided with key 'file'"
-- Postman no está enviando el archivo
-- Verifica que en Body esté seleccionado "form-data"
-- Verifica que el campo "file" tenga tipo "File"
-- Asegúrate de haber seleccionado un archivo
+```bash
+# Subir archivo (ajusta la ruta)
+curl -X POST http://localhost:8080/api/v1/files \
+  -F "file=@postman/samples/sample.txt" \
+  -H "Accept: application/json"
+```
+
+Respuesta esperada:
+```json
+{
+  "status": "SUCCESS",
+  "message": "File processed successfully",
+  "correlationId": "corr-test-12345",
+  "success": true
+}
+```
+
+---
+
+## Solución de Problemas
+
+### "No se encontro Java"
+
+Define manualmente antes de ejecutar:
+
+**Windows:**
+```cmd
+set JAVA_HOME=C:\Program Files\Microsoft\OpenJDK\jdk-21
+```
+
+**Linux/Mac:**
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+```
 
 ### Error "Connection refused"
-- El servicio Spring Boot no está corriendo
-- Inicia con: `./gradlew bootRun --args='--spring.profiles.active=dev'`
 
-### Error "SOAP timeout"
-- El mock SOAP no está corriendo
-- Inicia con: `./start-mock.sh` (Linux/Mac) o `start-mock.bat` (Windows)
+El microservicio no encuentra el mock. Verifica:
+1. El mock está corriendo: `cat /tmp/file-processor-mock.info` (Linux/Mac) o `type %TEMP%\file-processor-mock.info` (Windows)
+2. La variable `SOAP_ENDPOINT` está configurada correctamente
 
-### Error "SOAP error response: 404 Not Found"
-- La variable `SOAP_ENDPOINT` no está configurada o está mal configurada
-- Verifica: `echo $SOAP_ENDPOINT` (Linux/Mac) o `echo %SOAP_ENDPOINT%` (Windows)
-- Debe ser: `http://localhost:8081/soap/fileservice`
-- En Windows: Configura la variable en Propiedades del Sistema → Variables de entorno
+### Error "SOAP error response: 404"
 
-### Error "Address already in use: 8081"
+El microservicio apunta a un endpoint incorrecto. Asegúrate de:
+1. Configurar `SOAP_ENDPOINT` antes de iniciar el microservicio
+2. Usar el puerto correcto que muestra el mock
 
-El puerto 8081 está ocupado por un proceso Java anterior que no se cerró correctamente.
+### Puerto ocupado en Windows (sin permisos admin)
 
-**Solución automática (intentada por los scripts):**
-```bash
-./stop-mock.sh
-# Espera a que confirme que el puerto está libre
+El script portable automáticamente busca otro puerto (9000-9999). Si falla:
 
-./start-mock.sh
-# El script detectará el puerto ocupado y lo liberará automáticamente
-```
-
-**Solución manual Linux/Mac:**
-```bash
-# Encontrar el proceso
-lsof -i :8081
-
-# Matar el proceso (reemplaza <PID> con el número mostrado)
-kill -9 <PID>
-
-# Verificar que se liberó
-lsof -i :8081  # No debe mostrar nada
-```
-
-**Solución manual Windows:**
 ```cmd
-# Encontrar el proceso
-netstat -ano | findstr :8081
+# Ver que puertos están usados
+netstat -ano | findstr "9000"
 
-# Matar el proceso (reemplaza <PID>)
-taskkill /F /PID <PID>
+# O reiniciar la computadora para liberar todos los puertos
 ```
 
-**Si el problema persiste:** Reinicia la computadora para limpiar todos los procesos zombie.
+---
+
+## Estructura de Archivos
+
+```
+file-processor-service/
+├── start-dev.sh              # Script completo (Linux/Mac) ⭐
+├── start-dev.bat             # Script completo (Windows) ⭐
+├── scripts/
+│   ├── start-mock.sh         # Solo Mock (Linux/Mac)
+│   ├── start-mock.bat        # Solo Mock (Windows)
+│   ├── stop-mock.sh          # Detener Mock (Linux/Mac)
+│   ├── stop-mock.bat         # Detener Mock (Windows)
+│   └── README.md             # Documentación completa
+├── src/test/java/...
+│   └── PortableSoapMock.java # Clase Java portable
+└── ...
+```
+
+---
+
+**Para más detalles:** Ver `scripts/README.md`

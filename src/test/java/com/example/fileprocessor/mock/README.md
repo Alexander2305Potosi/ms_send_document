@@ -1,189 +1,177 @@
-# Mock SOAP Servers en Java
+# Mock SOAP Server en Java
 
-## ¿Por qué funciona el mock Java y no SOAP UI?
+## Clase Principal: PortableSoapMock.java
 
-### Mock Java (SimpleSoapMock)
-✅ **Ventajas:**
-- No requiere configuración de WSDL
-- Acepta cualquier POST en el endpoint
-- Solo devuelve XML estático
-- No valida el SOAPAction
-- Funciona inmediatamente
+El mock SOAP portable funciona en cualquier máquina sin configuración manual:
 
-### SOAP UI
-❌ **Problemas:**
-- Requiere WSDL válido y bien configurado
-- Valida el SOAPAction contra el WSDL
-- El proyecto debe estar perfectamente vinculado
-- Puede dar errores de "Missing MockResponse"
+- **Auto-detección de Java**: Busca en `JAVA_HOME`, `PATH` y ubicaciones comunes
+- **Puerto dinámico**: Intenta 8081, si está ocupado usa 9000-9999
+- **Guarda configuración**: Crea archivo temporal con el endpoint usado
+- **Cross-platform**: Mismo código funciona en Windows, Linux y macOS
 
 ## Cómo funciona
 
 ```
 Request POST ──> HttpServer ──> Handler ──> Respuesta XML
+                              (puerto dinámico)
 ```
 
-El mock Java simplemente:
-1. Crea un servidor HTTP en el puerto 8081
-2. Escucha POST en `/soap/fileservice`
-3. Devuelve el XML que definimos
+1. Detecta Java instalado
+2. Busca puerto disponible (8081 → 9000-9999)
+3. Crea servidor HTTP en ese puerto
+4. Guarda info en archivo temporal
+5. Responde SOAP XML estático
 
-No valida nada del request, solo responde.
+## Uso
 
-## Archivos disponibles
+### Opción 1: Script Automático (Recomendada)
 
-| Archivo | Descripción | Uso |
-|---------|-------------|-----|
-| `SimpleSoapMock.java` | Mock básico - solo éxito | `./start-mock.sh` |
-| `AdvancedSoapMock.java` | Mock avanzado - múltiples respuestas | `./start-advanced-mock.sh` |
+Desde la raíz del proyecto:
 
-## Mock Avanzado - Respuestas en Secuencia
-
-El `AdvancedSoapMock` rota entre 6 respuestas:
-
-| # | Código | Descripción |
-|---|--------|-------------|
-| 1 | 200 | Éxito normal |
-| 2 | 500 | Error de servidor (reintentable) |
-| 3 | 503 | Servicio no disponible (reintentable) |
-| 4 | 504 | Gateway timeout (reintentable) |
-| 5 | 200 | Éxito con delay de 5 segundos |
-| 6 | 400 | Bad Request (no reintentable) |
-
-### Para agregar más respuestas
-
-Edita `AdvancedSoapMock.java`:
-
-1. **Cambiar el número de respuestas:**
-   ```java
-   int responseType = ((count - 1) % 6) + 1; // Cambia el 6 por el nuevo total
-   ```
-
-2. **Agregar nuevo case en el switch:**
-   ```java
-   case 7 -> sendCustomResponse(exchange);
-   ```
-
-3. **Crear el método de respuesta:**
-   ```java
-   private void sendCustomResponse(HttpExchange exchange) throws IOException {
-       String responseXml = """
-           <?xml version="1.0" encoding="UTF-8"?>
-           <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-              <soap:Header/>
-              <soap:Body>
-                 <soap:Fault>
-                    <faultcode>soap:Server</faultcode>
-                    <faultstring>Mi error personalizado</faultstring>
-                 </soap:Fault>
-              </soap:Body>
-           </soap:Envelope>
-           """;
-       sendResponse(exchange, 418, responseXml); // Código HTTP que quieras
-       System.out.println("[RESPONSE] 418 I'm a teapot");
-   }
-   ```
-
-## Ejecución
-
-### Linux/macOS
-
-**Mock simple (solo éxito):**
 ```bash
-./start-mock.sh
+# Windows
+start-dev.bat
+
+# Linux/Mac
+./start-dev.sh
 ```
 
-**Mock avanzado (múltiples respuestas):**
+Esto inicia el Mock + Microservicio con configuración automática.
+
+### Opción 2: Solo el Mock
+
 ```bash
-./start-advanced-mock.sh
+# Windows
+scripts\start-mock.bat
+
+# Linux/Mac
+./scripts/start-mock.sh
 ```
 
-**Detener el mock:**
+Ver el endpoint configurado:
+
 ```bash
-./stop-mock.sh
+# Windows
+type %TEMP%\file-processor-mock.info
+
+# Linux/Mac
+cat /tmp/file-processor-mock.info
 ```
 
-### Windows
-
-**Mock simple:**
-```cmd
-start-mock.bat
+Salida ejemplo:
+```
+port=9001
+endpoint=http://localhost:9001/soap/fileservice
+timestamp=...
 ```
 
-**Detener el mock:**
-```cmd
-stop-mock.bat
+### Opción 3: Ejecución Manual con Java
+
+```bash
+# Compilar
+./gradlew testClasses
+
+# Ejecutar (puerto automático)
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock
+
+# O con puerto específico
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000
 ```
 
-## Personalización rápida
+## Respuesta del Mock
 
-### Cambiar el puerto:
+Siempre devuelve éxito (HTTP 200):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
+   <soap:Header/>
+   <soap:Body>
+      <file:UploadFileResponse>
+         <file:status>SUCCESS</file:status>
+         <file:message>File processed successfully</file:message>
+         <file:correlationId>corr-test-12345</file:correlationId>
+         <file:processedAt>2024-04-20T12:00:00Z</file:processedAt>
+         <file:externalReference>ext-ref-mock-001</file:externalReference>
+      </file:UploadFileResponse>
+   </soap:Body>
+</soap:Envelope>
+```
+
+## Personalización
+
+Para modificar la respuesta SOAP, edita el método `handle()` en `PortableSoapMock.java`:
+
 ```java
-HttpServer server = HttpServer.create(new InetSocketAddress(8082), 0);
-```
-
-### Cambiar el path:
-```java
-server.createContext("/mi/ruta/personalizada", new SoapHandler());
-```
-
-### Agregar delay a todas las respuestas:
-```java
-Thread.sleep(2000); // 2 segundos antes de cada respuesta
+String responseXml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <soap:Envelope ...>
+       <!-- Tu XML personalizado aquí -->
+    </soap:Envelope>
+    """;
 ```
 
 ## Solución de Problemas
 
-### Error "Address already in use: 8081" / "Address already in use: bind"
+### "No se encontro Java"
 
-**Causa:** El puerto 8081 está ocupado por un proceso Java anterior (mock, SoapUI, IDE, etc.)
+Define `JAVA_HOME` manualmente:
 
-**Solución con scripts (recomendada):**
 ```bash
-# Linux/macOS
-./stop-mock.sh   # Espera confirmación de liberación
-./start-mock.sh  # Detecta y libera el puerto automáticamente
-
 # Windows
-stop-mock.bat
-start-mock.bat
+set JAVA_HOME=C:\Program Files\Microsoft\OpenJDK\jdk-21
+
+# Linux/Mac
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 ```
 
-**Solución manual Linux/macOS:**
+### "Puerto no disponible"
+
+El mock automáticamente busca en el rango 9000-9999. Si todos están ocupados:
+
 ```bash
-# Paso 1: Encontrar el proceso que usa el puerto
-lsof -i :8081
-# Output: COMMAND  PID   USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
-#         java    1234   user  123u  IPv6 0x...      0t0  TCP *:sunproxyadmin (LISTEN)
+# Ver puertos usados
+# Windows:
+netstat -ano | findstr "9000"
 
-# Paso 2: Matar el proceso específico
-kill -9 1234  # Reemplaza 1234 con el PID real
-
-# Paso 3: Verificar que se liberó
-lsof -i :8081  # No debe mostrar nada
+# Linux/Mac:
+netstat -tuln | grep "900[0-9]"
 ```
 
-**Solución manual Windows:**
-```cmd
-:: Paso 1: Encontrar el proceso
-netstat -ano | findstr :8081
-:: Output: TCP    0.0.0.0:8081    0.0.0.0:0    LISTENING    1234
+### Mock no responde
 
-:: Paso 2: Matar el proceso
-taskkill /F /PID 1234  :: Reemplaza 1234 con el PID real
+```bash
+# Verificar que está corriendo
+# Windows:
+tasklist | findstr "java"
 
-:: Paso 3: Verificar
-netstat -ano | findstr :8081  :: No debe mostrar nada
+# Linux/Mac:
+pgrep -f "PortableSoapMock"
+
+# Probar endpoint
+curl -X POST http://localhost:PORT/soap/fileservice \
+  -H "Content-Type: text/xml" -d "<test>"
 ```
 
-**Si nada funciona:** Reinicia la computadora para limpiar procesos zombie.
+### Detener el Mock
 
-### Error "Connection refused" al subir archivo
-**Causa:** El mock no está corriendo o está en otro puerto
+```bash
+# Windows
+scripts\stop-mock.bat
 
-**Solución:**
-1. Verificar que el mock está corriendo: `curl http://localhost:8081/soap/fileservice`
-2. Verificar la variable `SOAP_ENDPOINT`:
-   - Linux/Mac: `echo $SOAP_ENDPOINT`
-   - Windows: `echo %SOAP_ENDPOINT%`
-3. Debe ser: `http://localhost:8081/soap/fileservice`
+# Linux/Mac
+./scripts/stop-mock.sh
+
+# O manualmente
+killall java  # Linux/Mac
+taskkill /F /IM java.exe  # Windows
+```
+
+## Archivos
+
+| Archivo | Descripción |
+|---------|-------------|
+| `PortableSoapMock.java` | Mock portable con auto-detección de puerto |
+| `README.md` | Esta documentación |
+
+Para más detalles, ver `scripts/README.md` en la raíz del proyecto.
