@@ -6,7 +6,6 @@ import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.mapper.SoapMapper;
-import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
@@ -51,8 +50,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
         log.info("Sending SOAP request for traceId: {}, endpoint: {}",
             request.traceId(), properties.endpoint());
 
-        String soapBody = soapMapper.toSoapXml(request);
-        String soapEnvelope = SoapEnvelope.wrap(soapBody);
+        String soapEnvelope = soapMapper.toFullSoapMessage(request);
 
         return webClient.post()
             .contentType(MediaType.TEXT_XML)

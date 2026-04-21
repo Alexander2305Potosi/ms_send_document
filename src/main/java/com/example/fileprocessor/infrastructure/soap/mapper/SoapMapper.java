@@ -2,6 +2,7 @@ package com.example.fileprocessor.infrastructure.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelope;
 import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
 import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest;
 import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse;
@@ -40,6 +41,20 @@ public class SoapMapper {
         );
 
         return marshalRequest(uploadRequest);
+    }
+
+    /**
+     * Genera el mensaje SOAP completo (envelope + body) en un solo paso.
+     * Este método combina el marshalling del body con el wrapping del envelope.
+     *
+     * @param request el SoapRequest con los datos del archivo
+     * @return String con el mensaje SOAP completo
+     */
+    public String toFullSoapMessage(SoapRequest request) {
+        log.debug("Generating full SOAP message for traceId: {}", request.traceId());
+
+        String soapBody = toSoapXml(request);
+        return SoapEnvelope.wrap(soapBody);
     }
 
     private String marshalRequest(UploadFileRequest request) {
