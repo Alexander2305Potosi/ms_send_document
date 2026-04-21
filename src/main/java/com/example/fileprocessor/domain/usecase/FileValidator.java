@@ -1,8 +1,8 @@
-package com.example.fileprocessor.application.usecase;
+package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.application.config.FileUploadProperties;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.exception.FileValidationException;
+import com.example.fileprocessor.infrastructure.config.FileUploadProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

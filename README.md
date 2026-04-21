@@ -2,9 +2,9 @@
 
 Microservicio reactivo basado en Spring WebFlux que recibe archivos vía multipart y los envía a un servicio SOAP externo.
 
-## Arquitectura (Clean Architecture)
+## Arquitectura (Clean Architecture Light)
 
-El proyecto sigue **Clean Architecture** con las siguientes capas:
+El proyecto sigue **Clean Architecture simplificada** con solo 2 capas principales:
 
 ```
 com.example.fileprocessor/
@@ -13,56 +13,50 @@ com.example.fileprocessor/
 │   │   ├── FileData.java
 │   │   ├── SoapRequest.java
 │   │   └── SoapResponse.java
+│   ├── usecase/              # Casos de uso (lógica de negocio)
+│   │   ├── ProcessFileUseCase.java
+│   │   └── FileValidator.java
 │   ├── port/out/             # Puertos de salida (interfaces)
 │   │   └── ExternalSoapGateway.java
 │   └── exception/            # Excepciones de dominio
 │       ├── DomainException.java
 │       └── FileValidationException.java
 │
-├── application/               # Capa de aplicación (casos de uso)
-│   ├── usecase/              
-│   │   ├── ProcessFileUseCase.java
-│   │   └── FileValidator.java
-│   ├── dto/                  # DTOs de aplicación
-│   │   └── FileUploadResponseDto.java
-│   ├── mapper/               # Mappers de aplicación
-│   │   └── FileMapper.java
-│   └── config/               # Configuración de aplicación
-│       └── FileUploadProperties.java
-│
-└── infrastructure/            # Capa de infraestructura (adapters)
-    ├── rest/                  # Adapter REST (entrada)
+└── infrastructure/            # Capa de infraestructura (todo lo demás)
+    ├── config/               # Configuración (Properties, Beans)
+    │   ├── FileUploadProperties.java
+    │   └── WebClientConfig.java
+    ├── rest/                 # Adapter REST (entrada)
     │   ├── controller/
     │   │   └── FileController.java
     │   ├── dto/
-    │   │   └── FileUploadRequestDto.java
+    │   │   ├── FileUploadRequestDto.java
+    │   │   └── FileUploadResponseDto.java
     │   ├── mapper/
-    │   │   └── FileDtoMapper.java
+    │   │   ├── FileDtoMapper.java
+    │   │   └── FileMapper.java
     │   └── exception/
     │       └── GlobalErrorHandler.java
-    ├── soap/                  # Adapter SOAP (salida)
-    │   ├── adapter/
-    │   │   └── ExternalSoapGatewayImpl.java
-    │   ├── config/
-    │   │   └── SoapProperties.java
-    │   ├── mapper/
-    │   │   └── SoapMapper.java
-    │   ├── xml/
-    │   │   ├── SoapEnvelopeWrapper.java
-    │   │   └── model/
-    │   │       ├── UploadFileRequest.java   # JAXB Model
-    │   │       └── UploadFileResponse.java  # JAXB Model
-    │   └── exception/
-    │       └── SoapCommunicationException.java
-    └── config/                # Configuración global
-        └── WebClientConfig.java
+    └── soap/                 # Adapter SOAP (salida)
+        ├── adapter/
+        │   └── ExternalSoapGatewayImpl.java
+        ├── config/
+        │   └── SoapProperties.java
+        ├── mapper/
+        │   └── SoapMapper.java
+        ├── xml/
+        │   ├── SoapEnvelope.java
+        │   └── model/
+        │       ├── UploadFileRequest.java
+        │       └── UploadFileResponse.java
+        └── exception/
+            └── SoapCommunicationException.java
 ```
 
 ### Reglas de Dependencia
 
-- **Domain** no depende de ninguna otra capa
-- **Application** solo depende de Domain
-- **Infrastructure** depende de Application y Domain
+- **Domain** no depende de ninguna otra capa (puro Java, sin frameworks)
+- **Infrastructure** depende de Domain (acceso a casos de uso y entidades)
 
 ## JAXB - Serialización SOAP
 

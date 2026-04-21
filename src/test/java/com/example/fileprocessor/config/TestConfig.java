@@ -1,6 +1,6 @@
 package com.example.fileprocessor.config;
 
-import com.example.fileprocessor.application.config.FileUploadProperties;
+import com.example.fileprocessor.infrastructure.config.FileUploadProperties;
 import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;

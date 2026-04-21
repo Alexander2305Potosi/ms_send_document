@@ -97,30 +97,25 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
     }
 
     private boolean isRetryableException(Throwable throwable) {
-        if (throwable instanceof TimeoutException) {
-            log.debug("Retrying due to timeout");
-            return true;
-        }
-        if (throwable instanceof WebClientResponseException e) {
-            // Reintentar en errores 5xx o 503 Service Unavailable
-            if (e.getStatusCode().is5xxServerError() || e.getStatusCode().value() == 503) {
-                log.debug("Retrying due to server error: {}", e.getStatusCode());
-                return true;
+        return switch (throwable) {
+            case TimeoutException e -> {
+                log.debug("Retrying due to timeout");
+                yield true;
             }
-        }
-        return false;
+            case WebClientResponseException e when e.getStatusCode().is5xxServerError() || e.getStatusCode().value() == 503 -> {
+                log.debug("Retrying due to server error: {}", e.getStatusCode());
+                yield true;
+            }
+            default -> false;
+        };
     }
 
     private String mapHttpStatusToCode(HttpStatusCode statusCode) {
-        if (statusCode.is5xxServerError()) {
-            if (statusCode.value() == 504) {
-                return "GATEWAY_TIMEOUT";
-            }
-            return "BAD_GATEWAY";
-        }
-        if (statusCode.is4xxClientError()) {
-            return "CLIENT_ERROR";
-        }
-        return "UNKNOWN_ERROR";
+        return switch (statusCode.value()) {
+            case 504 -> "GATEWAY_TIMEOUT";
+            case Integer i when statusCode.is5xxServerError() -> "BAD_GATEWAY";
+            case Integer i when statusCode.is4xxClientError() -> "CLIENT_ERROR";
+            default -> "UNKNOWN_ERROR";
+        };
     }
 }

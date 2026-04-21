@@ -21,7 +21,9 @@
       "Bash(lsof -ti:8081)",
       "Bash(ps *)",
       "Bash(curl -X POST http://localhost:8081/soap/fileservice -H 'Content-Type: text/xml' -H 'SOAPAction: http://example.com/fileservice/UploadFile' -d '<?xml version=\"1.0\" encoding=\"UTF-8\"?> *)",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Bash(./gradlew compileJava compileTestJava --quiet)",
+      "Bash(git -C /Users/alexander2305/Downloads/file-processor-service diff --stat)"
     ]
   }
 }

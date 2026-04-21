@@ -1,4 +1,4 @@
-package com.example.fileprocessor.application.dto;
+package com.example.fileprocessor.infrastructure.rest.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;

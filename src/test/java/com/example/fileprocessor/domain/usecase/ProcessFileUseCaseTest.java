@@ -1,12 +1,12 @@
-package com.example.fileprocessor.application.usecase;
+package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.application.dto.FileUploadResponseDto;
-import com.example.fileprocessor.application.mapper.FileMapper;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
+import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
+import com.example.fileprocessor.infrastructure.rest.mapper.FileMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

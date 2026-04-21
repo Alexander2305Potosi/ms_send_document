@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.rest.controller;
 
-import com.example.fileprocessor.application.dto.FileUploadResponseDto;
-import com.example.fileprocessor.application.usecase.ProcessFileUseCase;
+import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
+import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.infrastructure.rest.dto.FileUploadRequestDto;
 import com.example.fileprocessor.infrastructure.rest.mapper.FileDtoMapper;
@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
@@ -23,7 +22,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/files")
@@ -41,16 +39,14 @@ public class FileController {
     @GetMapping("/debug")
     public Mono<ResponseEntity<Map<String, Object>>> debugRequest(ServerWebExchange exchange) {
         String traceId = UUID.randomUUID().toString();
-        log.info("Debug request received, headers: {}",
-            exchange.getRequest().getHeaders().entrySet().stream()
-                .map(e -> e.getKey() + "=" + e.getValue())
-                .collect(Collectors.joining(", ")));
+        var headers = exchange.getRequest().getHeaders();
+        log.info("Debug request received, headers: {}", headers);
 
         Map<String, Object> debug = Map.of(
-            "method", exchange.getRequest().getMethod().name(),
+            "method", exchange.getRequest().getMethod(),
             "path", exchange.getRequest().getPath().value(),
-            "contentType", String.valueOf(exchange.getRequest().getHeaders().getContentType()),
-            "headers", exchange.getRequest().getHeaders().toSingleValueMap(),
+            "contentType", headers.getContentType(),
+            "headers", headers.toSingleValueMap(),
             "traceId", traceId
         );
 
@@ -77,12 +73,11 @@ public class FileController {
                     log.error("No file part found. Available parts: {}", parts.keySet());
                     return Mono.error(new IllegalArgumentException("No file provided with key 'file'"));
                 }
-                if (!(filePart instanceof FilePart)) {
+                if (!(filePart instanceof FilePart file)) {
                     log.error("Part is not a FilePart, it's: {}", filePart.getClass().getName());
                     return Mono.error(new IllegalArgumentException("Part is not a file"));
                 }
 
-                FilePart file = (FilePart) filePart;
                 log.info("Processing file: {}", file.filename());
 
                 return DataBufferUtils.join(file.content())

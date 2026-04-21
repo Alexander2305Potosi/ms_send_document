@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.rest;
 
-import com.example.fileprocessor.application.dto.FileUploadResponseDto;
-import com.example.fileprocessor.application.usecase.ProcessFileUseCase;
+import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
+import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.infrastructure.rest.controller.FileController;
 import com.example.fileprocessor.infrastructure.rest.dto.FileUploadRequestDto;

@@ -1,7 +1,7 @@
-package com.example.fileprocessor.application.mapper;
+package com.example.fileprocessor.infrastructure.rest.mapper;
 
-import com.example.fileprocessor.application.dto.FileUploadResponseDto;
 import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
 import org.springframework.stereotype.Component;
 
 @Component

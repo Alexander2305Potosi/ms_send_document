@@ -80,15 +80,7 @@ public class SoapEnvelopeWrapper {
             }
 
             // Extraer el primer elemento hijo del Body (la respuesta)
-            Node responseNode = null;
-            for (int i = 0; i < body.getChildNodes().getLength(); i++) {
-                Node child = body.getChildNodes().item(i);
-                if (child.getNodeType() == Node.ELEMENT_NODE) {
-                    responseNode = child;
-                    break;
-                }
-            }
-
+            Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
                 throw new RuntimeException("Response element not found in SOAP Body");
             }
@@ -102,11 +94,22 @@ public class SoapEnvelopeWrapper {
 
             // Unmarshal
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
-            return (T) unmarshaller.unmarshal(new StringReader(responseXml));
+            return responseClass.cast(unmarshaller.unmarshal(new StringReader(responseXml)));
 
         } catch (Exception e) {
             log.error("Error unmarshalling SOAP response: {}", e.getMessage());
             throw new RuntimeException("Failed to parse SOAP response", e);
         }
+    }
+
+    private Node findFirstElementNode(Node parent) {
+        var children = parent.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                return child;
+            }
+        }
+        return null;
     }
 }
