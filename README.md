@@ -1,40 +1,43 @@
 # File Processor Service
 
-Microservicio reactivo basado en Spring WebFlux que recibe archivos vía multipart y los envía a un servicio SOAP externo.
+Microservicio reactivo basado en Spring WebFlux que recibe archivos via multipart y los envia a un servicio SOAP externo.
 
 ## Arquitectura (Clean Architecture Light)
 
-El proyecto sigue **Clean Architecture simplificada** con solo 2 capas principales:
+El proyecto sigue **Clean Architecture simplificada** con 2 capas principales. La capa de **dominio es pura Java** (sin dependencias de frameworks), y la capa de **infraestructura** provee los beans Spring.
 
 ```
 com.example.fileprocessor/
 ├── domain/                    # Capa de dominio (independiente de frameworks)
 │   ├── entity/               # Entidades de negocio
 │   │   ├── FileData.java
+│   │   ├── FileUploadResult.java
 │   │   ├── SoapRequest.java
 │   │   └── SoapResponse.java
-│   ├── usecase/              # Casos de uso (lógica de negocio)
+│   ├── usecase/              # Casos de uso (logica de negocio)
 │   │   ├── ProcessFileUseCase.java
 │   │   └── FileValidator.java
-│   ├── port/out/             # Puertos de salida (interfaces)
-│   │   └── ExternalSoapGateway.java
+│   ├── port/
+│   │   ├── in/
+│   │   │   └── FileValidationConfig.java
+│   │   └── out/
+│   │       └── ExternalSoapGateway.java
 │   └── exception/            # Excepciones de dominio
 │       ├── DomainException.java
 │       └── FileValidationException.java
 │
-└── infrastructure/            # Capa de infraestructura (todo lo demás)
-    ├── config/               # Configuración (Properties, Beans)
+└── infrastructure/            # Capa de infraestructura (frameworks)
+    ├── config/               # Configuracion (Properties, Beans)
+    │   ├── DomainConfig.java          # Beans de casos de uso
     │   ├── FileUploadProperties.java
-    │   └── WebClientConfig.java
+    │   ├── SoapConfig.java            # JAXBContext compartido
+    │   ├── WebClientConfig.java
+    │   └── WebFluxConfig.java
     ├── rest/                 # Adapter REST (entrada)
     │   ├── controller/
     │   │   └── FileController.java
     │   ├── dto/
-    │   │   ├── FileUploadRequestDto.java
     │   │   └── FileUploadResponseDto.java
-    │   ├── mapper/
-    │   │   ├── FileDtoMapper.java
-    │   │   └── FileMapper.java
     │   └── exception/
     │       └── GlobalErrorHandler.java
     └── soap/                 # Adapter SOAP (salida)
@@ -45,7 +48,8 @@ com.example.fileprocessor/
         ├── mapper/
         │   └── SoapMapper.java
         ├── xml/
-        │   ├── SoapEnvelope.java
+        │   ├── SoapEnvelopeWrapper.java
+        │   ├── SoapNamespaces.java
         │   └── model/
         │       ├── UploadFileRequest.java
         │       └── UploadFileResponse.java
@@ -55,38 +59,28 @@ com.example.fileprocessor/
 
 ### Reglas de Dependencia
 
-- **Domain** no depende de ninguna otra capa (puro Java, sin frameworks)
+- **Domain** no depende de ninguna otra capa (puro Java, sin frameworks, sin Spring)
+- **Domain** no contiene anotaciones de framework (`@Component`, `@Service`, etc.)
 - **Infrastructure** depende de Domain (acceso a casos de uso y entidades)
+- **Infrastructure** expone los beans de dominio via `DomainConfig.java`
 
-## JAXB - Serialización SOAP
+## JAXB - Serializacion SOAP
 
-El proyecto utiliza **Jakarta XML Binding (JAXB)** para la serialización/deserialización de mensajes SOAP:
+El proyecto utiliza **Jakarta XML Binding (JAXB)** para la serializacion/deserializacion de mensajes SOAP:
 
 ### Ventajas
 
 - **Tipado fuerte**: Clases Java con anotaciones XML
-- **Validación automática**: Esquemas XML validados en runtime
+- **Validacion automatica**: Esquemas XML validados en runtime
 - **Mantenibilidad**: Cambios en el modelo son refactorizaciones seguras
 - **Namespace handling**: Soporte completo de namespaces SOAP
 
-### Ejemplo de Request JAXB
-
-```java
-@XmlRootElement(name = "UploadFileRequest", namespace = "http://example.com/fileservice")
-@XmlAccessorType(XmlAccessType.FIELD)
-public class UploadFileRequest {
-    @XmlElement(name = "content", namespace = "http://example.com/fileservice", required = true)
-    private String content;
-    // ...
-}
-```
-
-### Generación del XML
+### Generacion del XML
 
 ```java
 // Marshalling (Java -> XML)
 UploadFileRequest request = new UploadFileRequest(content, filename, ...);
-String soapXml = envelopeWrapper.wrapRequest(request);
+String soapXml = soapMapper.toFullSoapMessage(request);
 
 // Resultado:
 // <?xml version="1.0" encoding="UTF-8"?>
@@ -103,55 +97,85 @@ String soapXml = envelopeWrapper.wrapRequest(request);
 // </soap:Envelope>
 ```
 
+### Namespaces Centralizados
+
+Los namespaces SOAP estan centralizados en `SoapNamespaces.java` para evitar hardcoding disperso:
+- `SOAP_ENVELOPE`: `http://schemas.xmlsoap.org/soap/envelope/`
+- `FILE_SERVICE`: `http://example.com/fileservice`
+
 ## Requisitos Previos
 
 - **Java 21**
 - **Docker** (opcional)
 - **Gradle 8.5+**
 
-## Compilación
+## Compilacion
 
 ```bash
 ./gradlew clean build
 ```
 
-## Ejecución de Tests
+## Ejecucion de Tests
 
 ```bash
-# Tests unitarios e integración
+# Tests unitarios e integracion
 ./gradlew test
 
 # Reporte se genera en:
 # build/reports/tests/test/index.html
 ```
 
-## Ejecución del Servicio
+## Mutation Testing (PIT)
+
+El proyecto incluye **PIT (Programmed Instructional Testing)** para evaluar la calidad de las pruebas:
+
+```bash
+# Ejecutar mutation tests
+./gradlew pitest
+
+# Ver reporte HTML
+open build/reports/pitest/index.html
+```
+
+### Configuracion
+
+| Parametro | Valor |
+|-----------|-------|
+| Motor | PIT 1.15.0 |
+| Plugin JUnit 5 | 1.2.1 |
+| **Mutation Threshold** | **50%** |
+| Coverage Threshold | 60% |
+| Mutators | DEFAULTS + REMOVE_CONDITIONALS + INVERT_NEGS + MATH + NEGATE_CONDITIONALS + RETURN_VALS + VOID_METHOD_CALLS + NON_VOID_METHOD_CALLS |
+
+Los mutators crean cambios artificiales en el codigo (ej: `>` -> `>=`, eliminar `if`). Si los tests detectan el cambio, el mutante "muere". El threshold del 50% garantiza que la mayoria de los cambios son detectados.
+
+## Ejecucion del Servicio
 
 ```bash
 # Desarrollo (con perfil dev)
 ./gradlew bootRun --args='--spring.profiles.active=dev'
 
-# Producción
+# Produccion
 ./gradlew bootRun --args='--spring.profiles.active=prod'
 ```
 
 ## Variables de Entorno
 
-| Variable | Descripción | Default |
+| Variable | Descripcion | Default |
 |----------|-------------|---------|
 | `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:8081/soap/fileservice` |
 
-### Configuración Automática (Recomendada)
+### Configuracion Automatica (Recomendada)
 
-Al usar los scripts portables (`start-dev.bat` / `start-dev.sh`), la variable se configura automáticamente:
+Al usar los scripts portables (`start-dev.bat` / `start-dev.sh`), la variable se configura automaticamente:
 
 ```bash
 ./start-dev.sh  # Detecta el puerto y configura SOAP_ENDPOINT
 ```
 
-### Configuración Manual
+### Configuracion Manual
 
-Si ejecutas manualmente, obtén el endpoint del mock:
+Si ejecutas manualmente, obten el endpoint del mock:
 
 ```bash
 # Linux/Mac
@@ -171,7 +195,7 @@ Luego inicia el microservicio:
 gradlew.bat bootRun --args='--spring.profiles.active=dev'
 ```
 
-### Configuración Fija (Sin Mock Variable)
+### Configuracion Fija (Sin Mock Variable)
 
 Para usar siempre el mismo puerto (ej: 9000), define la variable manualmente:
 
@@ -193,41 +217,41 @@ O configura permanentemente en Variables de Entorno del Sistema.
 
 Para desarrollo y pruebas locales, incluye mocks SOAP que simulan el servicio externo:
 
-### Iniciar el Mock SOAP (Versión Portable - Recomendada)
+### Iniciar el Mock SOAP (Version Portable - Recomendada)
 
-**Nuevo:** Los scripts portables detectan automáticamente Java y un puerto disponible (no requiere admin).
+**Nuevo:** Los scripts portables detectan automaticamente Java y un puerto disponible (no requiere admin).
 
 **Windows:**
 ```cmd
-# Opción 1: Script completo (Mock + Microservicio)
+# Opcion 1: Script completo (Mock + Microservicio)
 start-dev.bat
 
-# Opción 2: Solo el Mock
+# Opcion 2: Solo el Mock
 scripts\start-mock.bat
 
-# Ver que puerto se usó:
+# Ver que puerto se uso:
 type %TEMP%\file-processor-mock.info
 ```
 
 **Linux/macOS:**
 ```bash
-# Opción 1: Script completo (Mock + Microservicio)
+# Opcion 1: Script completo (Mock + Microservicio)
 chmod +x start-dev.sh
 ./start-dev.sh
 
-# Opción 2: Solo el Mock
+# Opcion 2: Solo el Mock
 ./scripts/start-mock.sh
 
-# Ver que puerto se usó:
+# Ver que puerto se uso:
 cat /tmp/file-processor-mock.info
 ```
 
-El mock detecta automáticamente:
+El mock detecta automaticamente:
 - **Java**: Busca en ubicaciones comunes (`JAVA_HOME`, `PATH`, etc.)
-- **Puerto libre**: Intenta 8081, si está ocupado usa 9000-9999
-- **Configuración**: Guarda el endpoint en archivo temporal
+- **Puerto libre**: Intenta 8081, si esta ocupado usa 9000-9999
+- **Configuracion**: Guarda el endpoint en archivo temporal
 
-### Ejecución Manual con Puerto Específico
+### Ejecucion Manual con Puerto Especifico
 
 Si necesitas un puerto fijo (ej: 9000), ejecuta directamente con Java:
 
@@ -235,24 +259,24 @@ Si necesitas un puerto fijo (ej: 9000), ejecuta directamente con Java:
 # Compilar
 ./gradlew testClasses
 
-# Iniciar con puerto específico
+# Iniciar con puerto especifico
 java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000
 
 # Configurar endpoint manualmente
 export SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
 ```
 
-### Más información
+### Mas informacion
 
-Para detalles sobre los mocks disponibles y cómo personalizarlos, ver:
-- [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentación completa de los mocks
+Para detalles sobre los mocks disponibles y como personalizarlos, ver:
+- [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentacion completa de los mocks
 - [`soapui/README.md`](soapui/README.md) - Alternativa usando SOAP UI
 
 ## API Endpoints
 
 ### POST /api/v1/files
 
-Sube un archivo y lo envía al servicio SOAP.
+Sube un archivo y lo envia al servicio SOAP.
 
 **Request:**
 ```bash
@@ -276,17 +300,36 @@ curl -X POST http://localhost:8080/api/v1/files \
 
 ## Restricciones de Archivos
 
-- **Tamaño máximo**: 10 MB
+- **Tamano maximo**: 10 MB
 - **Tipos permitidos**: `pdf`, `docx`, `txt`
-- **Nombre máximo**: 255 caracteres
+- **Nombre maximo**: 255 caracteres
+
+### Validacion Temprana de Tamano
+
+Antes de consumir el stream completo en memoria, el servicio verifica el `Content-Length` declarado por el cliente. Si excede el limite configurado, se rechaza inmediatamente con `FILE_SIZE_EXCEEDED`.
+
+### Payload Too Large
+
+Si el cuerpo de la peticion excede el buffer configurado en WebFlux (`maxInMemorySize`), el servicio responde con **HTTP 413 PAYLOAD_TOO_LARGE**.
 
 ## Reintentos SOAP
 
-El servicio implementa **3 reintentos máximos** con backoff exponencial:
+El servicio implementa **3 reintentos maximos** con backoff exponencial:
 
 - **Escenarios reintentables**: Timeouts, errores 5xx (500, 502, 503, 504)
 - **Delay**: 1s, 2s, 4s entre intentos
 - **Logging**: Cada reintento es loggeado con traceId
+
+### Estrategia de Timeout Dual
+
+Para robustez ante conexiones lentas o "keep-alive tricks", se usan dos capas de timeout desfasadas 5 segundos:
+
+| Capa | Timeout | Proposito |
+|------|---------|-----------|
+| Netty `responseTimeout` | `timeoutSeconds - 5` | Cancela la conexion si no hay respuesta de red |
+| Reactor `.timeout()` | `timeoutSeconds` | Red de seguridad absoluta para el pipeline completo |
+
+Esto evita que un servidor externo que envia bytes espaciados mantenga la conexion abierta indefinidamente.
 
 ```
 INFO  - Sending SOAP request for traceId: abc-123, maxRetries=3
@@ -295,6 +338,42 @@ WARN  - Retrying SOAP call for traceId=abc-123, attempt 2/3 (backoff=2000ms)
 WARN  - Retrying SOAP call for traceId=abc-123, attempt 3/3 (backoff=4000ms)
 ERROR - SOAP timeout for traceId: abc-123 after all retries exhausted
 ```
+
+## Manejo de Errores
+
+El `GlobalErrorHandler` centraliza el manejo de excepciones:
+
+| Excepcion | HTTP Status | Codigo |
+|-----------|-------------|--------|
+| `FileValidationException` | 400 | `FILE_SIZE_EXCEEDED`, `INVALID_FILE_TYPE`, `FILENAME_TOO_LONG`, `INVALID_FILENAME` |
+| `SoapCommunicationException` | 502/504/500 | `BAD_GATEWAY`, `GATEWAY_TIMEOUT`, `CLIENT_ERROR` |
+| `DataBufferLimitException` | 413 | `PAYLOAD_TOO_LARGE` |
+| `IllegalArgumentException` | 400 | `INVALID_ARGUMENT` |
+| `ServerWebInputException` | 400 | `INVALID_REQUEST` |
+| `RetryExhaustedException` | 504 | `GATEWAY_TIMEOUT` |
+
+### Retry Exhausted
+
+Cuando se agotan los reintentos configurados, el error es capturado y mapeado a `GATEWAY_TIMEOUT` con un mensaje descriptivo.
+
+## Seguridad
+
+### Proteccion XXE
+
+El parser XML del `SoapEnvelopeWrapper` tiene configuradas protecciones contra ataques XXE (XML External Entity):
+
+- `disallow-doctype-decl: true`
+- `external-general-entities: false`
+- `external-parameter-entities: false`
+
+Esto previene que un atacante use DOCTYPE para leer archivos del servidor via respuestas SOAP maliciosas.
+
+### Validacion de Nombres de Archivo
+
+El `FileValidator` rechaza nombres que contengan:
+- `..` (path traversal)
+- `/` o `\` (separadores de directorio)
+- Mas de 255 caracteres
 
 ## Testing con Postman
 
@@ -310,15 +389,15 @@ Endpoints incluidos:
 - Health Check
 - Error scenarios (400, 504)
 
-⚠️ **Importante**: Después de importar, selecciona manualmente el archivo en la pestaña Body → form-data.
+⚠️ **Importante**: Despues de importar, selecciona manualmente el archivo en la pestana Body -> form-data.
 
-Para más detalles: [`postman/README.md`](postman/README.md)
+Para mas detalles: [`postman/README.md`](postman/README.md)
 
 ## Scripts Disponibles
 
 ### Scripts Principales (Nuevos - Portable)
 
-| Script | Plataforma | Descripción |
+| Script | Plataforma | Descripcion |
 |--------|------------|-------------|
 | `./start-dev.sh` | Linux/Mac | **Inicia Mock + Microservicio** (auto-configura puerto) |
 | `start-dev.bat` | Windows | **Inicia Mock + Microservicio** (auto-configura puerto) |
@@ -343,7 +422,7 @@ Respuestas mock configuradas:
 - ⏱️ Slow Response (30s delay)
 - ❌ Bad Request 400 (no reintentable)
 
-📖 **Nota**: El mock de Java es más estable y simple. Ver [Mock SOAP en Java](src/test/java/com/example/fileprocessor/mock/README.md) para comparar opciones.
+📖 **Nota**: El mock de Java es mas estable y simple. Ver [Mock SOAP en Java](src/test/java/com/example/fileprocessor/mock/README.md) para comparar opciones.
 
 ## Dependencias Clave
 
@@ -351,25 +430,47 @@ Respuestas mock configuradas:
 // SOAP / JAXB
 implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.1")
 runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.4")
+
+// Mutation Testing
+id("info.solidsoft.pitest") version "1.15.0"
 ```
 
 ## Changelog
 
-### 2025-04-21 - Mock SOAP Portable (v3) 🎉
-- **Nuevo:** `PortableSoapMock.java` - Detecta automáticamente puerto libre (8081, o 9000-9999)
+### 2026-04-21 - Refactorizacion Completa (v4)
+- **Seguridad**: Proteccion XXE en `SoapEnvelopeWrapper` (disallow-doctype-decl, external entities bloqueadas)
+- **Seguridad**: Eliminado endpoint `/debug` que exponia headers sin autenticacion
+- **Defensa**: Validacion temprana de tamano (`Content-Length`) antes de cargar stream en memoria
+- **Defensa**: Handler `DataBufferLimitException` con HTTP 413
+- **Arquitectura**: Dominio desacoplado de Spring (`@Service`/`@Component` removidos, `DomainConfig` creado)
+- **Arquitectura**: Eliminados `FileUploadRequestDto` y `FileDtoMapper` (redundantes con `FileData`)
+- **Arquitectura**: Consolidado `JAXBContext` en bean `SoapConfig` compartido
+- **Arquitectura**: Eliminado `SoapEnvelope.java`, envelope unificado en `SoapMapper`
+- **Arquitectura**: Namespaces SOAP centralizados en `SoapNamespaces`
+- **Bugfix**: `onErrorResume(TimeoutException)` ahora captura `retryExhausted` correctamente
+- **Bugfix**: Eliminada condicion redundante `|| value == 503` en `isRetryableException`
+- **Bugfix**: `SoapMapper.fromSoapXml()` propaga `SoapCommunicationException` ante XML invalido
+- **Performance**: `FileValidator` precalcula `Set` de tipos permitidos con `trim()` y `toLowerCase()`
+- **Performance**: Eliminado `.subscribeOn(Schedulers.boundedElastic())` innecesario en WebClient
+- **Error Handling**: Agregado handler `IllegalStateException` para `Exceptions.retryExhausted`
+- **Mutation Testing**: Plugin PIT integrado con threshold del 50%
+- **Timeout Dual**: Netty `responseTimeout` desfasado 5s del timeout de Reactor
+
+### 2025-04-21 - Mock SOAP Portable (v3)
+- **Nuevo:** `PortableSoapMock.java` - Detecta automaticamente puerto libre (8081, o 9000-9999)
 - **Nuevo:** `start-dev.sh` / `start-dev.bat` - Inicia Mock + Microservicio en un solo comando
 - **Nuevo:** Scripts en carpeta `scripts/` - Organizados y portables
-- **Mejorado:** Auto-detección de Java en ubicaciones comunes (sin `JAVA_HOME` requerido)
-- **Mejorado:** Guarda configuración en archivo temporal (`/tmp/file-processor-mock.info`)
+- **Mejorado:** Auto-deteccion de Java en ubicaciones comunes (sin `JAVA_HOME` requerido)
+- **Mejorado:** Guarda configuracion en archivo temporal (`/tmp/file-processor-mock.info`)
 - **Solucionado:** Ya no requiere permisos de administrador en Windows
-- **Documentación:** Guía completa en `scripts/README.md`
+- **Documentacion:** Guia completa en `scripts/README.md`
 
 ### 2025-04-20 - Scripts de Mock Mejorados (v2)
-- **Mejorado:** Scripts ahora verifican que el puerto realmente se libere antes de reportar éxito
-- **Agregado:** `start-mock.sh` detecta si el puerto está ocupado e intenta liberarlo automáticamente
+- **Mejorado:** Scripts ahora verifican que el puerto realmente se libere antes de reportar exito
+- **Agregado:** `start-mock.sh` detecta si el puerto esta ocupado e intenta liberarlo automaticamente
 - **Agregado:** `stop-mock.sh` espera y verifica que el proceso realmente haya terminado
 - **Agregado:** Scripts `stop-mock.sh` y `stop-mock.bat` para detener el mock SOAP
-- **Actualizado:** Documentación con instrucciones para Windows y Linux/macOS
+- **Actualizado:** Documentacion con instrucciones para Windows y Linux/macOS
 
-### 2025-04-20 - Refactor de Código
-- **Eliminado:** Imports sin usar en `FileControllerTest.java`, `ExternalSoapGatewayImplTest.java` y `GlobalErrorHandler.java`
+### 2025-04-20 - Refactor de Codigo
+- **Eliminado:** Imports sin uso en `FileControllerTest.java`, `ExternalSoapGatewayImplTest.java` y `GlobalErrorHandler.java`

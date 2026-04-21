@@ -39,7 +39,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
         this.soapMapper = soapMapper;
 
         HttpClient httpClient = HttpClient.create()
-            .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
+            .responseTimeout(Duration.ofSeconds(Math.max(1, properties.timeoutSeconds() - 5)));
 
         this.webClient = webClientBuilder
             .baseUrl(properties.endpoint())
