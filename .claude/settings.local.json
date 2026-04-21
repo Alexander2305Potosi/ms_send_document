@@ -16,7 +16,11 @@
       "Read(//usr/local/opt/**)",
       "Bash(./stop-mock.sh)",
       "Bash(./start-mock.sh)",
-      "Bash(curl -s http://localhost:8081/soap/fileservice -X POST -H \"Content-Type: text/xml\" -d '<?xml version=\"1.0\"?><test/>')"
+      "Bash(curl -s http://localhost:8081/soap/fileservice -X POST -H \"Content-Type: text/xml\" -d '<?xml version=\"1.0\"?><test/>')",
+      "Bash(netstat -ano)",
+      "Bash(lsof -ti:8081)",
+      "Bash(ps *)",
+      "Bash(curl -X POST http://localhost:8081/soap/fileservice -H 'Content-Type: text/xml' -H 'SOAPAction: http://example.com/fileservice/UploadFile' -d '<?xml version=\"1.0\" encoding=\"UTF-8\"?> *)"
     ]
   }
 }
