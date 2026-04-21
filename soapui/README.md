@@ -58,18 +58,21 @@ Si el puerto 9000 esta ocupado:
 
 ## Respuestas disponibles
 
-El mock esta configurado con dispatch **SCRIPT** (Groovy), lo que significa que las respuestas se devuelven en orden y **rotan infinitamente** (nunca se agotan):
+El mock esta configurado con dispatch **SEQUENCE**, lo que significa que las respuestas se devuelven en orden. Cuando se agota la secuencia, **automaticamente usa la respuesta "Default"** (200 Success), asi que nunca devuelve error "Missing MockResponse":
 
 | # | Respuesta | HTTP Status | Delay | Descripcion |
 |---|-----------|-------------|-------|-------------|
-| 1 | **Success Response** | 200 | 100ms | Respuesta exitosa con `status=SUCCEES` |
+| 1 | **Success Response** | 200 | 100ms | Respuesta exitosa con `status=SUCCESS` |
 | 2 | **Server Error 500** | 500 | 100ms | `soap:Fault` con error de servidor |
 | 3 | **Service Unavailable 503** | 503 | 100ms | `soap:Fault` con header `Retry-After: 30` |
 | 4 | **Gateway Timeout 504** | 504 | 100ms | `soap:Fault` con timeout de gateway |
 | 5 | **Slow Response** | 200 | **30s** | Respuesta exitosa pero con delay de 30 segundos |
 | 6 | **Bad Request 400** | 400 | 100ms | `soap:Fault` con error de cliente |
+| 7+ | **Default** | 200 | 100ms | Respuesta exitosa por defecto (nunca se agota) |
 
-Despues de la respuesta 6, vuelve a la 1 automaticamente.
+### Reiniciar la secuencia
+
+Para volver a la primera respuesta, haz clic derecho en **FileService Mock** → **Restart**.
 
 ## Solucion de problemas
 
