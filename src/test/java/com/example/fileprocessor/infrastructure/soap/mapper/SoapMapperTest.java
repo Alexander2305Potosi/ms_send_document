@@ -2,7 +2,11 @@ package com.example.fileprocessor.infrastructure.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
+import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest;
+import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse;
+import jakarta.xml.bind.JAXBContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,8 +21,9 @@ class SoapMapperTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        envelopeWrapper = new SoapEnvelopeWrapper();
-        soapMapper = new SoapMapper(envelopeWrapper);
+        JAXBContext context = JAXBContext.newInstance(UploadFileRequest.class, UploadFileResponse.class);
+        envelopeWrapper = new SoapEnvelopeWrapper(context);
+        soapMapper = new SoapMapper(envelopeWrapper, context);
     }
 
     @Test
@@ -123,14 +128,14 @@ class SoapMapperTest {
     }
 
     @Test
-    void fromSoapXml_shouldHandleInvalidXml() {
+    void fromSoapXml_shouldThrowSoapCommunicationException_whenInvalidXml() {
         String invalidXml = "not valid xml";
 
-        SoapResponse response = soapMapper.fromSoapXml(invalidXml, "trace-000");
+        SoapCommunicationException exception = assertThrows(SoapCommunicationException.class,
+            () -> soapMapper.fromSoapXml(invalidXml, "trace-000"));
 
-        assertNotNull(response);
-        assertEquals("ERROR", response.status());
-        assertEquals("N/A", response.correlationId());
-        assertEquals("trace-000", response.traceId());
+        assertEquals("INVALID_RESPONSE", exception.getErrorCode());
+        assertEquals("trace-000", exception.getTraceId());
+        assertTrue(exception.getMessage().contains("Failed to parse"));
     }
 }

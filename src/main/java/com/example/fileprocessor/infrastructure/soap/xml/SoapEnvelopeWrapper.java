@@ -1,8 +1,6 @@
 package com.example.fileprocessor.infrastructure.soap.xml;
 
 import jakarta.xml.bind.JAXBContext;
-import jakarta.xml.bind.JAXBException;
-import jakarta.xml.bind.Marshaller;
 import jakarta.xml.bind.Unmarshaller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,46 +23,19 @@ public class SoapEnvelopeWrapper {
 
     private static final Logger log = LoggerFactory.getLogger(SoapEnvelopeWrapper.class);
 
-    private static final String SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/";
-    private static final String FILE_NS = "http://example.com/fileservice";
-
     private final JAXBContext jaxbContext;
     private final DocumentBuilderFactory documentBuilderFactory;
 
-    public SoapEnvelopeWrapper() throws JAXBException {
-        this.jaxbContext = JAXBContext.newInstance(
-            com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest.class,
-            com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse.class
-        );
+    public SoapEnvelopeWrapper(JAXBContext jaxbContext) {
+        this.jaxbContext = jaxbContext;
         this.documentBuilderFactory = DocumentBuilderFactory.newInstance();
         this.documentBuilderFactory.setNamespaceAware(true);
-    }
-
-    public String wrapRequest(Object request) {
         try {
-            Marshaller marshaller = jaxbContext.createMarshaller();
-            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
-            marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
-
-            StringWriter writer = new StringWriter();
-            marshaller.marshal(request, writer);
-            String requestXml = writer.toString();
-
-            String envelope = """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
-                               xmlns:file="http://example.com/fileservice">
-                  <soap:Header/>
-                  <soap:Body>
-                %s
-                  </soap:Body>
-                </soap:Envelope>
-                """.formatted(requestXml);
-
-            return envelope;
-        } catch (JAXBException e) {
-            log.error("Error marshalling SOAP request: {}", e.getMessage());
-            throw new RuntimeException("Failed to create SOAP envelope", e);
+            this.documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            this.documentBuilderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            this.documentBuilderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to configure secure XML parser", e);
         }
     }
 
@@ -73,26 +44,22 @@ public class SoapEnvelopeWrapper {
             DocumentBuilder builder = documentBuilderFactory.newDocumentBuilder();
             Document doc = builder.parse(new org.xml.sax.InputSource(new StringReader(soapXml)));
 
-            // Buscar el elemento Body
-            Node body = doc.getElementsByTagNameNS(SOAP_NS, "Body").item(0);
+            Node body = doc.getElementsByTagNameNS(SoapNamespaces.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
                 throw new RuntimeException("SOAP Body not found");
             }
 
-            // Extraer el primer elemento hijo del Body (la respuesta)
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
                 throw new RuntimeException("Response element not found in SOAP Body");
             }
 
-            // Convertir el nodo a string
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
             transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
             StringWriter writer = new StringWriter();
             transformer.transform(new DOMSource(responseNode), new StreamResult(writer));
             String responseXml = writer.toString();
 
-            // Unmarshal
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
             return responseClass.cast(unmarshaller.unmarshal(new StringReader(responseXml)));
 

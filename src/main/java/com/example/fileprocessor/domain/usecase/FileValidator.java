@@ -5,21 +5,25 @@ import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-@Component
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
     private final FileValidationConfig config;
+    private final Set<String> allowedTypes;
 
     public FileValidator(FileValidationConfig config) {
         this.config = config;
+        this.allowedTypes = Arrays.stream(config.allowedTypes().split(","))
+            .map(String::trim)
+            .map(String::toLowerCase)
+            .collect(Collectors.toUnmodifiableSet());
     }
 
     public Mono<FileData> validate(FileData fileData) {
@@ -42,8 +46,6 @@ public class FileValidator {
 
     private Mono<FileData> validateExtension(FileData fileData) {
         String extension = fileData.extension();
-        Set<String> allowedTypes = new HashSet<>(
-            Arrays.asList(config.allowedTypes().split(",")));
 
         if (!allowedTypes.contains(extension.toLowerCase())) {
             log.warn("File {} has invalid extension: {}",

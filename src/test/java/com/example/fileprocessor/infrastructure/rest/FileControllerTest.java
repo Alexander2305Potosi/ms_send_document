@@ -3,12 +3,11 @@ package com.example.fileprocessor.infrastructure.rest;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
+import com.example.fileprocessor.infrastructure.config.FileUploadProperties;
 import com.example.fileprocessor.infrastructure.rest.controller.FileController;
-import com.example.fileprocessor.infrastructure.rest.dto.FileUploadRequestDto;
-import com.example.fileprocessor.infrastructure.rest.mapper.FileDtoMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -24,7 +23,6 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -36,9 +34,6 @@ class FileControllerTest {
     private ProcessFileUseCase processFileUseCase;
 
     @Mock
-    private FileDtoMapper fileDtoMapper;
-
-    @Mock
     private ServerWebExchange exchange;
 
     @Mock
@@ -47,8 +42,14 @@ class FileControllerTest {
     @Mock
     private FilePart filePart;
 
-    @InjectMocks
     private FileController fileController;
+
+    @BeforeEach
+    void setUp() {
+        FileUploadProperties properties = new FileUploadProperties(
+            10 * 1024 * 1024, "pdf,docx,txt", 255);
+        fileController = new FileController(processFileUseCase, properties);
+    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -82,8 +83,7 @@ class FileControllerTest {
         when(exchange.getRequest()).thenReturn(request);
         when(exchange.getMultipartData()).thenReturn(Mono.just(multipartData));
 
-        // Setup mapper and usecase
-        when(fileDtoMapper.toDomain(any(FileUploadRequestDto.class))).thenReturn(fileData);
+        // Setup usecase
         when(processFileUseCase.execute(any(FileData.class))).thenReturn(Mono.just(result));
 
         StepVerifier.create(fileController.uploadFile(exchange))

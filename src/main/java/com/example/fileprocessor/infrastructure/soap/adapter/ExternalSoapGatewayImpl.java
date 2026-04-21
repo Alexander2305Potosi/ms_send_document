@@ -6,6 +6,7 @@ import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.mapper.SoapMapper;
+import com.example.fileprocessor.infrastructure.soap.xml.SoapNamespaces;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
@@ -14,6 +15,7 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import reactor.util.retry.Retry;
@@ -54,7 +56,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
 
         return webClient.post()
             .contentType(MediaType.TEXT_XML)
-            .header("SOAPAction", "http://example.com/fileservice/UploadFile")
+            .header("SOAPAction", SoapNamespaces.FILE_SERVICE + "/UploadFile")
             .bodyValue(soapEnvelope)
             .retrieve()
             .onStatus(HttpStatusCode::isError, response ->
@@ -80,17 +82,24 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
             .map(responseXml -> soapMapper.fromSoapXml(responseXml, request.traceId()))
             .doOnNext(response -> log.info("SOAP response received for traceId={}: correlationId={}",
                 request.traceId(), response.correlationId()))
-            .onErrorResume(TimeoutException.class, e -> {
-                log.error("SOAP timeout for traceId: {} after all retries exhausted", request.traceId());
-                return Mono.error(new SoapCommunicationException(
-                    "SOAP request timed out after " + properties.retryAttempts() + " retries",
-                    "GATEWAY_TIMEOUT", request.traceId()));
-            })
-            .onErrorResume(WebClientResponseException.class, e -> {
-                log.error("WebClient error for traceId: {}: {}", request.traceId(), e.getMessage());
-                return Mono.error(new SoapCommunicationException(
-                    "Communication error with SOAP service: " + e.getMessage(),
-                    mapHttpStatusToCode(e.getStatusCode()), request.traceId()));
+            .onErrorResume(throwable -> {
+                Throwable cause = throwable;
+                if (Exceptions.isRetryExhausted(throwable)) {
+                    cause = Exceptions.unwrap(throwable);
+                }
+                if (cause instanceof TimeoutException) {
+                    log.error("SOAP timeout for traceId: {} after all retries exhausted", request.traceId());
+                    return Mono.error(new SoapCommunicationException(
+                        "SOAP request timed out after " + properties.retryAttempts() + " retries",
+                        "GATEWAY_TIMEOUT", request.traceId()));
+                }
+                if (cause instanceof WebClientResponseException e) {
+                    log.error("WebClient error for traceId: {}: {}", request.traceId(), e.getMessage());
+                    return Mono.error(new SoapCommunicationException(
+                        "Communication error with SOAP service: " + e.getMessage(),
+                        mapHttpStatusToCode(e.getStatusCode()), request.traceId()));
+                }
+                return Mono.error(throwable);
             });
     }
 
@@ -100,7 +109,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
             return true;
         }
         if (throwable instanceof WebClientResponseException e) {
-            if (e.getStatusCode().is5xxServerError() || e.getStatusCode().value() == 503) {
+            if (e.getStatusCode().is5xxServerError()) {
                 log.debug("Retrying due to server error: {}", e.getStatusCode());
                 return true;
             }

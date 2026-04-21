@@ -2,8 +2,9 @@ package com.example.fileprocessor.infrastructure.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
-import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelope;
+import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
+import com.example.fileprocessor.infrastructure.soap.xml.SoapNamespaces;
 import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest;
 import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse;
 import jakarta.xml.bind.JAXBContext;
@@ -20,12 +21,23 @@ import java.time.Instant;
 public class SoapMapper {
 
     private static final Logger log = LoggerFactory.getLogger(SoapMapper.class);
+
+    private static final String SOAP_HEADER =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+        "<soap:Envelope xmlns:soap=\"" + SoapNamespaces.SOAP_ENVELOPE + "\"\n" +
+        "               xmlns:file=\"" + SoapNamespaces.FILE_SERVICE + "\">\n" +
+        "  <soap:Header/>\n" +
+        "  <soap:Body>\n";
+    private static final String SOAP_FOOTER =
+        "  </soap:Body>\n" +
+        "</soap:Envelope>\n";
+
     private final SoapEnvelopeWrapper envelopeWrapper;
     private final JAXBContext jaxbContext;
 
-    public SoapMapper(SoapEnvelopeWrapper envelopeWrapper) throws JAXBException {
+    public SoapMapper(SoapEnvelopeWrapper envelopeWrapper, JAXBContext jaxbContext) {
         this.envelopeWrapper = envelopeWrapper;
-        this.jaxbContext = JAXBContext.newInstance(UploadFileRequest.class, UploadFileResponse.class);
+        this.jaxbContext = jaxbContext;
     }
 
     public String toSoapXml(SoapRequest request) {
@@ -43,18 +55,11 @@ public class SoapMapper {
         return marshalRequest(uploadRequest);
     }
 
-    /**
-     * Genera el mensaje SOAP completo (envelope + body) en un solo paso.
-     * Este método combina el marshalling del body con el wrapping del envelope.
-     *
-     * @param request el SoapRequest con los datos del archivo
-     * @return String con el mensaje SOAP completo
-     */
     public String toFullSoapMessage(SoapRequest request) {
         log.debug("Generating full SOAP message for traceId: {}", request.traceId());
 
         String soapBody = toSoapXml(request);
-        return SoapEnvelope.wrap(soapBody);
+        return SOAP_HEADER + soapBody + SOAP_FOOTER;
     }
 
     private String marshalRequest(UploadFileRequest request) {
@@ -92,14 +97,9 @@ public class SoapMapper {
             );
         } catch (Exception e) {
             log.error("Error parsing SOAP response: {}", e.getMessage());
-            return new SoapResponse(
-                "ERROR",
+            throw new SoapCommunicationException(
                 "Failed to parse SOAP response: " + e.getMessage(),
-                "N/A",
-                traceId,
-                Instant.now(),
-                null
-            );
+                "INVALID_RESPONSE", traceId);
         }
     }
 }

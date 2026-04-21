@@ -7,11 +7,8 @@ import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
-@Service
 public class ProcessFileUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessFileUseCase.class);
@@ -35,8 +32,7 @@ public class ProcessFileUseCase {
             .doOnNext(response -> log.info("File {} processed successfully, correlationId: {}",
                 fileData.filename(), response.correlationId()))
             .doOnError(error -> log.error("Error processing file {}: {}",
-                fileData.filename(), error.getMessage()))
-            .subscribeOn(Schedulers.boundedElastic());
+                fileData.filename(), error.getMessage()));
     }
 
     private FileUploadResult toResult(SoapResponse response) {

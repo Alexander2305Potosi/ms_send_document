@@ -1,27 +1,28 @@
 package com.example.fileprocessor.infrastructure.soap.xml.model;
 
+import com.example.fileprocessor.infrastructure.soap.xml.SoapNamespaces;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 
-@XmlRootElement(name = "UploadFileResponse", namespace = "http://example.com/fileservice")
+@XmlRootElement(name = "UploadFileResponse", namespace = SoapNamespaces.FILE_SERVICE)
 @XmlAccessorType(XmlAccessType.FIELD)
 public class UploadFileResponse {
 
-    @XmlElement(name = "status", namespace = "http://example.com/fileservice", required = true)
+    @XmlElement(name = "status", namespace = SoapNamespaces.FILE_SERVICE, required = true)
     private String status;
 
-    @XmlElement(name = "message", namespace = "http://example.com/fileservice", required = true)
+    @XmlElement(name = "message", namespace = SoapNamespaces.FILE_SERVICE, required = true)
     private String message;
 
-    @XmlElement(name = "correlationId", namespace = "http://example.com/fileservice", required = true)
+    @XmlElement(name = "correlationId", namespace = SoapNamespaces.FILE_SERVICE, required = true)
     private String correlationId;
 
-    @XmlElement(name = "processedAt", namespace = "http://example.com/fileservice")
+    @XmlElement(name = "processedAt", namespace = SoapNamespaces.FILE_SERVICE)
     private String processedAt;
 
-    @XmlElement(name = "externalReference", namespace = "http://example.com/fileservice")
+    @XmlElement(name = "externalReference", namespace = SoapNamespaces.FILE_SERVICE)
     private String externalReference;
 
     public UploadFileResponse() {
