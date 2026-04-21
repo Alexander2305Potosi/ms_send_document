@@ -58,7 +58,7 @@ Si el puerto 9000 esta ocupado:
 
 ## Respuestas disponibles
 
-El mock esta configurado con dispatch **SEQUENCE**, lo que significa que las respuestas se devuelven en orden:
+El mock esta configurado con dispatch **SCRIPT** (Groovy), lo que significa que las respuestas se devuelven en orden y **rotan infinitamente** (nunca se agotan):
 
 | # | Respuesta | HTTP Status | Delay | Descripcion |
 |---|-----------|-------------|-------|-------------|
@@ -69,9 +69,7 @@ El mock esta configurado con dispatch **SEQUENCE**, lo que significa que las res
 | 5 | **Slow Response** | 200 | **30s** | Respuesta exitosa pero con delay de 30 segundos |
 | 6 | **Bad Request 400** | 400 | 100ms | `soap:Fault` con error de cliente |
 
-### Reiniciar la secuencia
-
-Para volver a la primera respuesta, haz clic derecho en **FileService Mock** → **Restart**.
+Despues de la respuesta 6, vuelve a la 1 automaticamente.
 
 ## Solucion de problemas
 

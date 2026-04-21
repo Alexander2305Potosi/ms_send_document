@@ -122,7 +122,16 @@
                        interface="FileServiceSoapBinding"
                        operation="UploadFile">
       <con:settings/>
-      <con:dispatchStyle>SEQUENCE</con:dispatchStyle>
+      <con:dispatchStyle>SCRIPT</con:dispatchStyle>
+      <con:dispatchPath><![CDATA[
+// Rotar respuestas infinitamente (nunca se agota)
+def counter = mockOperation.mockService.getPropertyValue("counter")
+if (counter == null) counter = "0"
+def idx = Integer.parseInt(counter) % 6
+mockOperation.mockService.setPropertyValue("counter", String.valueOf(Integer.parseInt(counter) + 1))
+return mockOperation.getMockResponseAt(idx).getName()
+]]></con:dispatchPath>
+      <con:dispatchType>Groovy</con:dispatchType>
 
       <con:mockResponse id="mockresponse-1" name="Success Response"
                         encoding="UTF-8" httpResponseStatus="200">
