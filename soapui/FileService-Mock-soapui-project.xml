@@ -122,7 +122,17 @@
                        interface="FileServiceSoapBinding"
                        operation="UploadFile">
       <con:settings/>
-      <con:dispatchStyle>SEQUENCE</con:dispatchStyle>
+      <con:dispatchStyle>SCRIPT</con:dispatchStyle>
+      <con:dispatchConfig/>
+      <con:dispatchPath><![CDATA[
+def responses = ["Success Response", "Server Error 500", "Service Unavailable 503", "Gateway Timeout 504", "Slow Response", "Bad Request 400"]
+def counter = mockOperation.mockService.getPropertyValue("responseCounter")
+if (counter == null || counter.isEmpty()) counter = "0"
+def idx = Integer.parseInt(counter) % responses.size()
+mockOperation.mockService.setPropertyValue("responseCounter", String.valueOf(Integer.parseInt(counter) + 1))
+return responses[idx]
+]]></con:dispatchPath>
+      <con:dispatchType>Groovy</con:dispatchType>
 
       <con:mockResponse id="mockresponse-1" name="Success Response"
                         encoding="UTF-8" httpResponseStatus="200">

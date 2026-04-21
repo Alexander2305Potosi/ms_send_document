@@ -58,7 +58,7 @@ Si el puerto 9000 esta ocupado:
 
 ## Respuestas disponibles
 
-El mock esta configurado con dispatch **SEQUENCE**, lo que significa que las respuestas se devuelven en orden. Cuando se agota la secuencia, **automaticamente usa la respuesta "Default"** (200 Success), asi que nunca devuelve error "Missing MockResponse":
+El mock esta configurado con dispatch **SCRIPT** (Groovy), que rota las respuestas en orden y **nunca se agota** (usa modulo para volver al inicio):
 
 | # | Respuesta | HTTP Status | Delay | Descripcion |
 |---|-----------|-------------|-------|-------------|
