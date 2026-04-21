@@ -11,11 +11,26 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Mock SOAP Server portable - funciona en cualquier puerto disponible
- * Uso: java PortableSoapMock [puerto]
- * Si no se especifica puerto, busca uno disponible automáticamente
+ * Mock SOAP Server portable - funciona en cualquier puerto disponible.
+ * Soporta multiples escenarios de respuesta rotando infinitamente:
+ * 1. 200 Success
+ * 2. 500 Server Error (reintentable)
+ * 3. 503 Service Unavailable (reintentable)
+ * 4. 504 Gateway Timeout (reintentable)
+ * 5. 200 Slow Response (30s delay)
+ * 6. 400 Bad Request
+ *
+ * Uso: java PortableSoapMock [puerto] [escenarios]
+ *   - puerto: numero de puerto (default: 9000)
+ *   - escenarios: numeros separados por coma, ej: "1" o "1,2,5"
+ *
+ * Si no se especifica puerto, busca uno disponible automaticamente.
+ * Si no se especifican escenarios, rota entre todos.
  */
 public class PortableSoapMock {
 
@@ -23,27 +38,111 @@ public class PortableSoapMock {
     private static final int PORT_RANGE_START = 9000;
     private static final int PORT_RANGE_END = 9999;
 
+    // Escenarios base
+    private static final String RESPONSE_SUCCESS = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
+           <soap:Header/>
+           <soap:Body>
+              <file:UploadFileResponse>
+                 <file:status>SUCCESS</file:status>
+                 <file:message>File uploaded and processed successfully</file:message>
+                 <file:correlationId>corr-test-12345</file:correlationId>
+                 <file:processedAt>2024-04-20T12:00:00Z</file:processedAt>
+                 <file:externalReference>ext-ref-mock-001</file:externalReference>
+              </file:UploadFileResponse>
+           </soap:Body>
+        </soap:Envelope>
+        """;
+
+    private static final String RESPONSE_500 = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+           <soap:Header/>
+           <soap:Body>
+              <soap:Fault>
+                 <faultcode>soap:Server</faultcode>
+                 <faultstring>Internal Server Error - Temporary failure</faultstring>
+              </soap:Fault>
+           </soap:Body>
+        </soap:Envelope>
+        """;
+
+    private static final String RESPONSE_503 = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+           <soap:Header/>
+           <soap:Body>
+              <soap:Fault>
+                 <faultcode>soap:Server</faultcode>
+                 <faultstring>Service Temporarily Unavailable</faultstring>
+              </soap:Fault>
+           </soap:Body>
+        </soap:Envelope>
+        """;
+
+    private static final String RESPONSE_504 = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+           <soap:Header/>
+           <soap:Body>
+              <soap:Fault>
+                 <faultcode>soap:Server</faultcode>
+                 <faultstring>Gateway Timeout - Upstream service did not respond</faultstring>
+              </soap:Fault>
+           </soap:Body>
+        </soap:Envelope>
+        """;
+
+    private static final String RESPONSE_SLOW = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
+           <soap:Header/>
+           <soap:Body>
+              <file:UploadFileResponse>
+                 <file:status>SUCCESS</file:status>
+                 <file:message>File uploaded after delay</file:message>
+                 <file:correlationId>corr-slow-789</file:correlationId>
+                 <file:processedAt>2024-04-20T12:00:30Z</file:processedAt>
+                 <file:externalReference>ext-ref-slow</file:externalReference>
+              </file:UploadFileResponse>
+           </soap:Body>
+        </soap:Envelope>
+        """;
+
+    private static final String RESPONSE_400 = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+           <soap:Header/>
+           <soap:Body>
+              <soap:Fault>
+                 <faultcode>soap:Client</faultcode>
+                 <faultstring>Bad Request - Invalid message format</faultstring>
+              </soap:Fault>
+           </soap:Body>
+        </soap:Envelope>
+        """;
+
+    record Scenario(String responseXml, int statusCode, int delayMs, String label) {}
+
     public static void main(String[] args) throws IOException {
         int port = resolvePort(args);
+        List<Scenario> scenarios = resolveScenarios(args);
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/soap/fileservice", new SoapHandler());
+        server.createContext("/soap/fileservice", new SoapHandler(scenarios));
         server.setExecutor(null);
         server.start();
 
-        // Guardar información del servidor en un archivo para que otras herramientas la lean
         saveServerInfo(port);
+        printBanner(port, scenarios);
 
-        printBanner(port);
-
-        // Mantener el servidor vivo
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("\nDeteniendo servidor...");
             server.stop(0);
             cleanupServerInfo();
         }));
 
-        // Bloquear el hilo principal
         synchronized (PortableSoapMock.class) {
             try {
                 PortableSoapMock.class.wait();
@@ -54,7 +153,6 @@ public class PortableSoapMock {
     }
 
     private static int resolvePort(String[] args) {
-        // 1. Si se pasa argumento, usar ese puerto
         if (args.length > 0) {
             try {
                 int port = Integer.parseInt(args[0]);
@@ -67,12 +165,10 @@ public class PortableSoapMock {
             }
         }
 
-        // 2. Intentar puerto por defecto
         if (isPortAvailable(DEFAULT_PORT)) {
             return DEFAULT_PORT;
         }
 
-        // 3. Buscar puerto libre en rango alternativo
         for (int port = PORT_RANGE_START; port <= PORT_RANGE_END; port++) {
             if (isPortAvailable(port)) {
                 System.out.println("Puerto " + DEFAULT_PORT + " ocupado, usando alternativo: " + port);
@@ -92,6 +188,47 @@ public class PortableSoapMock {
         }
     }
 
+    private static List<Scenario> resolveScenarios(String[] args) {
+        List<Scenario> all = List.of(
+            new Scenario(RESPONSE_SUCCESS, 200, 100, "200 SUCCESS"),
+            new Scenario(RESPONSE_500, 500, 100, "500 SERVER ERROR"),
+            new Scenario(RESPONSE_503, 503, 100, "503 UNAVAILABLE"),
+            new Scenario(RESPONSE_504, 504, 100, "504 GATEWAY TIMEOUT"),
+            new Scenario(RESPONSE_SLOW, 200, 30000, "200 SLOW RESPONSE"),
+            new Scenario(RESPONSE_400, 400, 100, "400 BAD REQUEST")
+        );
+
+        if (args.length < 2) {
+            return all;
+        }
+
+        String filter = args[1].trim();
+        if (filter.isEmpty()) {
+            return all;
+        }
+
+        List<Scenario> filtered = new ArrayList<>();
+        for (String part : filter.split(",")) {
+            try {
+                int idx = Integer.parseInt(part.trim()) - 1;
+                if (idx >= 0 && idx < all.size()) {
+                    filtered.add(all.get(idx));
+                } else {
+                    System.err.println("Escenario invalido: " + (idx + 1) + ", ignorado.");
+                }
+            } catch (NumberFormatException e) {
+                System.err.println("Argumento de escenario invalido: '" + part.trim() + "', ignorado.");
+            }
+        }
+
+        if (filtered.isEmpty()) {
+            System.err.println("No se seleccionaron escenarios validos. Usando todos.");
+            return all;
+        }
+
+        return filtered;
+    }
+
     private static void saveServerInfo(int port) throws IOException {
         Path infoFile = getServerInfoFile();
         String content = "port=" + port + "\n" +
@@ -109,12 +246,11 @@ public class PortableSoapMock {
     }
 
     private static Path getServerInfoFile() {
-        // Guardar en directorio temporal del sistema
         String tempDir = System.getProperty("java.io.tmpdir");
         return Paths.get(tempDir, "file-processor-mock.info");
     }
 
-    private static void printBanner(int port) {
+    private static void printBanner(int port, List<Scenario> scenarios) {
         String endpoint = "http://localhost:" + port + "/soap/fileservice";
 
         System.out.println();
@@ -125,7 +261,13 @@ public class PortableSoapMock {
         System.out.println("  Endpoint: " + endpoint);
         System.out.println("========================================");
         System.out.println();
-        System.out.println("Variables de entorno configuradas:");
+        System.out.println("Escenarios activos (rotacion infinita):");
+        for (int i = 0; i < scenarios.size(); i++) {
+            Scenario s = scenarios.get(i);
+            System.out.println("  " + (i + 1) + ". " + s.label() + "          - delay=" + s.delayMs() + "ms");
+        }
+        System.out.println();
+        System.out.println("Variables de entorno:");
         System.out.println("  SOAP_ENDPOINT=" + endpoint);
         System.out.println();
         System.out.println("Presiona Ctrl+C para detener");
@@ -133,6 +275,14 @@ public class PortableSoapMock {
     }
 
     static class SoapHandler implements HttpHandler {
+
+        private final AtomicInteger counter = new AtomicInteger(0);
+        private final List<Scenario> scenarios;
+
+        SoapHandler(List<Scenario> scenarios) {
+            this.scenarios = scenarios;
+        }
+
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String method = exchange.getRequestMethod();
@@ -140,37 +290,33 @@ public class PortableSoapMock {
 
             System.out.println("[" + method + "] " + path);
 
-            // Leer el request
             String requestBody = readRequestBody(exchange.getRequestBody());
             System.out.println("Request received, length: " + requestBody.length());
 
-            // Generar respuesta SOAP exitosa
-            String responseXml = """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
-                   <soap:Header/>
-                   <soap:Body>
-                      <file:UploadFileResponse>
-                         <file:status>SUCCESS</file:status>
-                         <file:message>File processed successfully</file:message>
-                         <file:correlationId>corr-test-12345</file:correlationId>
-                         <file:processedAt>2024-04-20T12:00:00Z</file:processedAt>
-                         <file:externalReference>ext-ref-mock-001</file:externalReference>
-                      </file:UploadFileResponse>
-                   </soap:Body>
-                </soap:Envelope>
-                """;
+            int idx = counter.getAndIncrement() % scenarios.size();
+            Scenario s = scenarios.get(idx);
 
-            byte[] responseBytes = responseXml.getBytes(StandardCharsets.UTF_8);
+            if (s.delayMs() > 0) {
+                try {
+                    Thread.sleep(s.delayMs());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            byte[] responseBytes = s.responseXml().getBytes(StandardCharsets.UTF_8);
 
             exchange.getResponseHeaders().set("Content-Type", "text/xml; charset=UTF-8");
-            exchange.sendResponseHeaders(200, responseBytes.length);
+            if (s.statusCode() == 503) {
+                exchange.getResponseHeaders().set("Retry-After", "30");
+            }
+            exchange.sendResponseHeaders(s.statusCode(), responseBytes.length);
 
-            OutputStream os = exchange.getResponseBody();
-            os.write(responseBytes);
-            os.close();
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(responseBytes);
+            }
 
-            System.out.println("Response sent: 200 OK");
+            System.out.println("Response sent: " + s.label() + " (escenario #" + (idx + 1) + ")");
         }
 
         private String readRequestBody(InputStream is) throws IOException {

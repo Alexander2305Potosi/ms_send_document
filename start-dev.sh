@@ -51,7 +51,7 @@ fi
 
 # Iniciar mock en background
 echo "  Iniciando servidor..."
-java -cp "build/classes/java/test" com.example.fileprocessor.mock.PortableSoapMock &
+java -cp "build/classes/java/test" com.example.fileprocessor.mock.PortableSoapMock "$@" &
 MOCK_PID=$!
 
 # Esperar a que inicie y guarde su info

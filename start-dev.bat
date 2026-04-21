@@ -65,7 +65,7 @@ if not exist "build\classes\java\test\com\example\fileprocessor\mock\PortableSoa
 )
 
 REM Iniciar mock en background
-start "Mock SOAP" /B "%JAVA_CMD%" -cp "build\classes\java\test" com.example.fileprocessor.mock.PortableSoapMock
+start "Mock SOAP" /B "%JAVA_CMD%" -cp "build\classes\java\test" com.example.fileprocessor.mock.PortableSoapMock %*
 
 echo   Esperando que inicie (3 segundos)...
 timeout /t 3 /nobreak >nul

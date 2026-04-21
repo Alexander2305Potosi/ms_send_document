@@ -215,11 +215,18 @@ O configura permanentemente en Variables de Entorno del Sistema.
 
 ## Mock SOAP para desarrollo
 
-Para desarrollo y pruebas locales, incluye mocks SOAP que simulan el servicio externo:
+El mock portable ahora soporta **6 escenarios de respuesta** rotando infinitamente:
+
+| # | Escenario | HTTP Status | Delay | Reintentable |
+|---|-----------|-------------|-------|--------------|
+| 1 | **Success** | 200 | 100ms | - |
+| 2 | **Server Error** | 500 | 100ms | Si |
+| 3 | **Service Unavailable** | 503 | 100ms | Si |
+| 4 | **Gateway Timeout** | 504 | 100ms | Si |
+| 5 | **Slow Response** | 200 | **30s** | - |
+| 6 | **Bad Request** | 400 | 100ms | No |
 
 ### Iniciar el Mock SOAP (Version Portable - Recomendada)
-
-**Nuevo:** Los scripts portables detectan automaticamente Java y un puerto disponible (no requiere admin).
 
 **Windows:**
 ```cmd
@@ -246,31 +253,49 @@ chmod +x start-dev.sh
 cat /tmp/file-processor-mock.info
 ```
 
-El mock detecta automaticamente:
-- **Java**: Busca en ubicaciones comunes (`JAVA_HOME`, `PATH`, etc.)
-- **Puerto libre**: Intenta 9000, si esta ocupado usa 9000-9999
-- **Configuracion**: Guarda el endpoint en archivo temporal
-
 ### Ejecucion Manual con Puerto Especifico
-
-Si necesitas un puerto fijo (ej: 9000), ejecuta directamente con Java:
 
 ```bash
 # Compilar
 ./gradlew testClasses
 
-# Iniciar con puerto especifico
+# Iniciar con puerto especifico (todos los escenarios)
 java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000
+
+# Solo escenarios especificos (ej: solo 200 y 500)
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000 1,2
 
 # Configurar endpoint manualmente
 export SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
 ```
 
+### Filtrar Escenarios
+
+Puedes indicar qué escenarios responder separados por comas:
+
+```bash
+# Linux/Mac
+./scripts/start-mock.sh 9000 1      # Solo exito
+./scripts/start-mock.sh 9000 2,3,4    # Solo errores reintentables
+
+# Windows
+scripts\start-mock.bat 9000 1
+scripts\start-mock.bat 9000 2,3,4
+```
+
+| # | Escenario |
+|---|-----------|
+| 1 | 200 Success |
+| 2 | 500 Server Error |
+| 3 | 503 Service Unavailable |
+| 4 | 504 Gateway Timeout |
+| 5 | 200 Slow Response (30s) |
+| 6 | 400 Bad Request |
+
 ### Mas informacion
 
-Para detalles sobre los mocks disponibles y como personalizarlos, ver:
-- [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentacion completa de los mocks
-- [`soapui/README.md`](soapui/README.md) - Alternativa usando SOAP UI
+- [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentacion completa del mock Java
+- [`soapui/README.md`](soapui/README.md) - Alternativa usando SOAP UI (menos estable en Windows)
 
 ## API Endpoints
 

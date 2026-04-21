@@ -24,7 +24,8 @@
       "Bash(xargs -I {} basename {})",
       "Bash(./gradlew compileJava compileTestJava --quiet)",
       "Bash(git -C /Users/alexander2305/Downloads/file-processor-service diff --stat)",
-      "Bash(xargs ls *)"
+      "Bash(xargs ls *)",
+      "Bash(./gradlew testClasses *)"
     ]
   }
 }

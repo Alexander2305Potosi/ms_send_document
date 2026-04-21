@@ -71,16 +71,32 @@ timestamp=...
 # Compilar
 ./gradlew testClasses
 
-# Ejecutar (puerto automático)
+# Ejecutar (puerto automático, todos los escenarios)
 java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock
 
-# O con puerto específico
+# Con puerto específico
 java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000
+
+# Solo escenarios específicos (ej: solo 200 y 500)
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000 1,2
 ```
 
-## Respuesta del Mock
+## Escenarios de Respuesta
 
-Siempre devuelve éxito (HTTP 200):
+El mock rota **infinitamente** entre los escenarios activos. Cada peticion recibe el siguiente escenario en orden:
+
+| # | Escenario | HTTP Status | Delay | Descripcion |
+|---|-----------|-------------|-------|-------------|
+| 1 | **Success** | 200 | 100ms | Respuesta exitosa con `status=SUCCESS` |
+| 2 | **Server Error 500** | 500 | 100ms | `soap:Fault` con error temporal (reintentable) |
+| 3 | **Service Unavailable 503** | 503 | 100ms | `soap:Fault` con header `Retry-After: 30` (reintentable) |
+| 4 | **Gateway Timeout 504** | 504 | 100ms | `soap:Fault` con timeout (reintentable) |
+| 5 | **Slow Response** | 200 | **30s** | Respuesta exitosa con delay de 30 segundos |
+| 6 | **Bad Request 400** | 400 | 100ms | `soap:Fault` con error de cliente (no reintentable) |
+
+Despues del escenario 6, vuelve al 1 automaticamente.
+
+### Ejemplo de respuesta exitosa
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -89,7 +105,7 @@ Siempre devuelve éxito (HTTP 200):
    <soap:Body>
       <file:UploadFileResponse>
          <file:status>SUCCESS</file:status>
-         <file:message>File processed successfully</file:message>
+         <file:message>File uploaded and processed successfully</file:message>
          <file:correlationId>corr-test-12345</file:correlationId>
          <file:processedAt>2024-04-20T12:00:00Z</file:processedAt>
          <file:externalReference>ext-ref-mock-001</file:externalReference>
@@ -97,6 +113,48 @@ Siempre devuelve éxito (HTTP 200):
    </soap:Body>
 </soap:Envelope>
 ```
+
+## Filtrar Escenarios
+
+Puedes ejecutar el mock respondiendo **solo los escenarios que necesites**. Esto es util cuando quieres validar un comportamiento específico del microservicio sin tener que esperar la rotacion completa.
+
+### Uso
+
+Pasa los numeros de escenario deseados como **segundo argumento**, separados por comas (sin espacios):
+
+```bash
+# Solo exito (200)
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000 1
+
+# Solo errores reintentables (500, 503, 504)
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000 2,3,4
+
+# Exito y respuesta lenta (200 + 30s delay)
+java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000 1,5
+```
+
+También funciona con los scripts portables:
+
+```bash
+# Linux/Mac
+./scripts/start-mock.sh 9000 1,2
+
+# Windows
+scripts\start-mock.bat 9000 1,2
+```
+
+### Mapeo de Escenarios
+
+| # | Escenario | HTTP Status | Delay |
+|---|-----------|-------------|-------|
+| **1** | 200 Success | 200 | 100ms |
+| **2** | 500 Server Error | 500 | 100ms |
+| **3** | 503 Service Unavailable | 503 | 100ms |
+| **4** | 504 Gateway Timeout | 504 | 100ms |
+| **5** | 200 Slow Response | 200 | 30s |
+| **6** | 400 Bad Request | 400 | 100ms |
+
+Si omites el segundo argumento, el mock rota entre **todos** los escenarios por defecto.
 
 ## Personalización
 

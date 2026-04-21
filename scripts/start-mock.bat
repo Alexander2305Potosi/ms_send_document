@@ -128,7 +128,8 @@ echo Iniciando servidor...
 echo.
 
 REM Iniciar el servidor (el Java buscara puerto automaticamente)
-"!JAVA_CMD!" -cp "%BUILD_DIR%" %MOCK_CLASS%
+REM Argumentos extra (escenarios) se pasan directamente
+"!JAVA_CMD!" -cp "%BUILD_DIR%" %MOCK_CLASS% %*
 
 REM Si llegamos aqui, el servidor se detuvo
 exit /b 0
