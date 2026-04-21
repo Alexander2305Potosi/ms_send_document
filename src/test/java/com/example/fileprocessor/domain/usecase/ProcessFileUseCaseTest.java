@@ -1,12 +1,11 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileData;
+import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
-import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
-import com.example.fileprocessor.infrastructure.rest.mapper.FileMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,9 +29,6 @@ class ProcessFileUseCaseTest {
     @Mock
     private FileValidator fileValidator;
 
-    @Mock
-    private FileMapper fileMapper;
-
     @InjectMocks
     private ProcessFileUseCase processFileUseCase;
 
@@ -43,12 +39,9 @@ class ProcessFileUseCaseTest {
             "application/pdf", traceId);
         SoapResponse expectedResponse = new SoapResponse("SUCCESS", "OK",
             "corr-123", traceId, Instant.now(), "ext-ref");
-        FileUploadResponseDto dto = new FileUploadResponseDto("SUCCESS", "OK",
-            "corr-123", traceId, Instant.now(), "ext-ref", true);
 
         when(fileValidator.validate(any(FileData.class))).thenReturn(Mono.just(fileData));
         when(soapGateway.sendFile(any(SoapRequest.class))).thenReturn(Mono.just(expectedResponse));
-        when(fileMapper.toResponseDto(any(SoapResponse.class))).thenReturn(dto);
 
         StepVerifier.create(processFileUseCase.execute(fileData))
             .assertNext(response -> {

@@ -1,8 +1,9 @@
 package com.example.fileprocessor.infrastructure.rest.controller;
 
+import com.example.fileprocessor.domain.entity.FileData;
+import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
 import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
-import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.infrastructure.rest.dto.FileUploadRequestDto;
 import com.example.fileprocessor.infrastructure.rest.mapper.FileDtoMapper;
 import org.slf4j.Logger;
@@ -96,7 +97,20 @@ public class FileController {
             })
             .map(fileDtoMapper::toDomain)
             .flatMap(fileData -> processFileUseCase.execute(fileData)
+                .map(this::toDto)
                 .map(ResponseEntity::ok))
             .doFinally(signal -> MDC.remove("traceId"));
+    }
+
+    private FileUploadResponseDto toDto(FileUploadResult result) {
+        return new FileUploadResponseDto(
+            result.status(),
+            result.message(),
+            result.correlationId(),
+            result.traceId(),
+            result.processedAt(),
+            result.externalReference(),
+            result.success()
+        );
     }
 }

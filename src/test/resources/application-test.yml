@@ -9,7 +9,7 @@ app:
     max-filename-length: 255
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:8888/soap/fileservice}
-    timeout-seconds: 5
+    timeout-seconds: 2
     retry-attempts: 0
     retry-backoff-millis: 100
 

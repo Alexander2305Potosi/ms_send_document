@@ -1,8 +1,8 @@
 package com.example.fileprocessor.infrastructure.rest;
 
-import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
-import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
 import com.example.fileprocessor.domain.entity.FileData;
+import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
 import com.example.fileprocessor.infrastructure.rest.controller.FileController;
 import com.example.fileprocessor.infrastructure.rest.dto.FileUploadRequestDto;
 import com.example.fileprocessor.infrastructure.rest.mapper.FileDtoMapper;
@@ -59,7 +59,7 @@ class FileControllerTest {
 
         FileData fileData = new FileData(content, filename, content.length,
             "application/pdf", traceId);
-        FileUploadResponseDto dto = new FileUploadResponseDto("SUCCESS", "File processed",
+        FileUploadResult result = new FileUploadResult("SUCCESS", "File processed",
             "corr-123", traceId, java.time.Instant.now(), "ext-ref", true);
 
         DataBuffer dataBuffer = new DefaultDataBufferFactory().wrap(content);
@@ -84,7 +84,7 @@ class FileControllerTest {
 
         // Setup mapper and usecase
         when(fileDtoMapper.toDomain(any(FileUploadRequestDto.class))).thenReturn(fileData);
-        when(processFileUseCase.execute(any(FileData.class))).thenReturn(Mono.just(dto));
+        when(processFileUseCase.execute(any(FileData.class))).thenReturn(Mono.just(result));
 
         StepVerifier.create(fileController.uploadFile(exchange))
             .assertNext(response -> {

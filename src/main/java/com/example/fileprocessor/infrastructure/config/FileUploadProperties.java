@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.config;
 
+import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -17,5 +18,5 @@ public record FileUploadProperties(
 
     @Min(10)
     int maxFilenameLength
-) {
+) implements FileValidationConfig {
 }

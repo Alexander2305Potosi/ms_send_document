@@ -109,7 +109,7 @@ class ExternalSoapGatewayImplTest {
         );
 
         StepVerifier.create(gateway.sendFile(request))
-            .expectError(SoapCommunicationException.class)
+            .expectErrorMatches(throwable -> throwable instanceof SoapCommunicationException)
             .verify();
     }
 

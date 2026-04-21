@@ -2,7 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.exception.FileValidationException;
-import com.example.fileprocessor.infrastructure.config.FileUploadProperties;
+import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -16,10 +16,10 @@ import java.util.Set;
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
-    private final FileUploadProperties properties;
+    private final FileValidationConfig config;
 
-    public FileValidator(FileUploadProperties properties) {
-        this.properties = properties;
+    public FileValidator(FileValidationConfig config) {
+        this.config = config;
     }
 
     public Mono<FileData> validate(FileData fileData) {
@@ -30,11 +30,11 @@ public class FileValidator {
     }
 
     private Mono<FileData> validateSize(FileData fileData) {
-        if (fileData.size() > properties.maxSize()) {
+        if (fileData.size() > config.maxSize()) {
             log.warn("File {} exceeds max size: {} > {}",
-                fileData.filename(), fileData.size(), properties.maxSize());
+                fileData.filename(), fileData.size(), config.maxSize());
             return Mono.error(new FileValidationException(
-                "File size exceeds maximum allowed: " + properties.maxSize() + " bytes",
+                "File size exceeds maximum allowed: " + config.maxSize() + " bytes",
                 "FILE_SIZE_EXCEEDED"));
         }
         return Mono.just(fileData);
@@ -43,13 +43,13 @@ public class FileValidator {
     private Mono<FileData> validateExtension(FileData fileData) {
         String extension = fileData.extension();
         Set<String> allowedTypes = new HashSet<>(
-            Arrays.asList(properties.allowedTypes().split(",")));
+            Arrays.asList(config.allowedTypes().split(",")));
 
         if (!allowedTypes.contains(extension.toLowerCase())) {
             log.warn("File {} has invalid extension: {}",
                 fileData.filename(), extension);
             return Mono.error(new FileValidationException(
-                "File type not allowed. Allowed types: " + properties.allowedTypes(),
+                "File type not allowed. Allowed types: " + config.allowedTypes(),
                 "INVALID_FILE_TYPE"));
         }
         return Mono.just(fileData);
@@ -57,10 +57,10 @@ public class FileValidator {
 
     private Mono<FileData> validateFilename(FileData fileData) {
         String filename = fileData.filename();
-        if (filename.length() > properties.maxFilenameLength()) {
+        if (filename.length() > config.maxFilenameLength()) {
             log.warn("Filename exceeds max length: {}", filename.length());
             return Mono.error(new FileValidationException(
-                "Filename exceeds maximum length: " + properties.maxFilenameLength(),
+                "Filename exceeds maximum length: " + config.maxFilenameLength(),
                 "FILENAME_TOO_LONG"));
         }
         if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
