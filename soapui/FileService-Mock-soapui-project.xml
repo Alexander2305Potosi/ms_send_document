@@ -181,6 +181,63 @@
         <con:delay>100</con:delay>
       </con:mockResponse>
 
+      <con:mockResponse id="mockresponse-4" name="Gateway Timeout 504"
+                        encoding="UTF-8" httpResponseStatus="504">
+        <con:settings/>
+        <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+   <soap:Header/>
+   <soap:Body>
+      <soap:Fault>
+         <faultcode>soap:Server</faultcode>
+         <faultstring>Gateway Timeout - Upstream service did not respond</faultstring>
+      </soap:Fault>
+   </soap:Body>
+</soap:Envelope>]]></con:responseContent>
+        <con:responseHeaders>
+          <con:entry key="Content-Type" value="text/xml;charset=UTF-8"/>
+        </con:responseHeaders>
+        <con:delay>100</con:delay>
+      </con:mockResponse>
+
+      <con:mockResponse id="mockresponse-5" name="Slow Response"
+                        encoding="UTF-8" httpResponseStatus="200">
+        <con:settings/>
+        <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
+   <soap:Header/>
+   <soap:Body>
+      <file:UploadFileResponse>
+         <file:status>SUCCESS</file:status>
+         <file:message>File uploaded after delay</file:message>
+         <file:correlationId>corr-slow-789</file:correlationId>
+         <file:processedAt>2024-04-20T12:00:30Z</file:processedAt>
+         <file:externalReference>ext-ref-slow</file:externalReference>
+      </file:UploadFileResponse>
+   </soap:Body>
+</soap:Envelope>]]></con:responseContent>
+        <con:responseHeaders>
+          <con:entry key="Content-Type" value="text/xml;charset=UTF-8"/>
+        </con:responseHeaders>
+        <con:delay>30000</con:delay>
+      </con:mockResponse>
+
+      <con:mockResponse id="mockresponse-6" name="Bad Request 400"
+                        encoding="UTF-8" httpResponseStatus="400">
+        <con:settings/>
+        <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+   <soap:Header/>
+   <soap:Body>
+      <soap:Fault>
+         <faultcode>soap:Client</faultcode>
+         <faultstring>Bad Request - Invalid message format</faultstring>
+      </soap:Fault>
+   </soap:Body>
+</soap:Envelope>]]></con:responseContent>
+        <con:responseHeaders>
+          <con:entry key="Content-Type" value="text/xml;charset=UTF-8"/>
+        </con:responseHeaders>
+        <con:delay>100</con:delay>
+      </con:mockResponse>
+
     </con:mockOperation>
   </con:mockService>
 
