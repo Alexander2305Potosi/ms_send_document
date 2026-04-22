@@ -3,6 +3,7 @@ package com.example.fileprocessor.integration;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
@@ -58,7 +59,7 @@ class FileUploadIntegrationTest {
             "<file:status>SUCCESS</file:status>" +
             "<file:message>File uploaded successfully</file:message>" +
             "<file:correlationId>int-123-456</file:correlationId>" +
-            "<file:processedAt>" + Instant.now().toString() + "</file:processedAt>" +
+            "<file:processedAt>2024-01-15T10:30:00Z</file:processedAt>" +
             "<file:externalReference>ext-ref-123</file:externalReference>" +
             "</file:UploadFileResponse>" +
             "</soap:Body>" +

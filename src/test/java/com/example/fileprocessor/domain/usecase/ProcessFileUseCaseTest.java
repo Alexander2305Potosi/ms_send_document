@@ -1,10 +1,13 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileData;
+import com.example.fileprocessor.domain.entity.SoapCommunicationLog;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
+import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
+import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,6 +31,9 @@ class ProcessFileUseCaseTest {
     @Mock
     private FileValidator fileValidator;
 
+    @Mock
+    private SoapCommunicationLogRepository logRepository;
+
     @InjectMocks
     private ProcessFileUseCase processFileUseCase;
 
@@ -41,6 +47,8 @@ class ProcessFileUseCaseTest {
 
         when(fileValidator.validate(any(FileData.class))).thenReturn(Mono.just(fileData));
         when(soapGateway.sendFile(any(SoapRequest.class))).thenReturn(Mono.just(expectedResponse));
+        when(logRepository.save(any(SoapCommunicationLog.class))).thenReturn(Mono.just(new SoapCommunicationLog(
+            traceId, "SUCCESS", 0, null, "test.pdf", Instant.now())));
 
         StepVerifier.create(processFileUseCase.execute(fileData))
             .assertNext(response -> {
@@ -51,6 +59,8 @@ class ProcessFileUseCaseTest {
 
         verify(fileValidator, times(1)).validate(any(FileData.class));
         verify(soapGateway, times(1)).sendFile(any(SoapRequest.class));
+        verify(logRepository, times(1)).save(argThat(log ->
+            log.traceId().equals(traceId) && log.status().equals("SUCCESS")));
     }
 
     @Test
@@ -65,20 +75,29 @@ class ProcessFileUseCaseTest {
         StepVerifier.create(processFileUseCase.execute(fileData))
             .expectError(FileValidationException.class)
             .verify();
+
+        verify(logRepository, never()).save(any(SoapCommunicationLog.class));
     }
 
     @Test
-    void execute_shouldHandleGatewayError() {
+    void execute_shouldHandleGatewayError_andLogFailure() {
         String traceId = UUID.randomUUID().toString();
         FileData fileData = new FileData(new byte[100], "test.pdf", 100,
             "application/pdf", traceId);
+        SoapCommunicationException gatewayError = new SoapCommunicationException(
+            "Gateway timeout", "GATEWAY_TIMEOUT", traceId);
 
         when(fileValidator.validate(any(FileData.class))).thenReturn(Mono.just(fileData));
-        when(soapGateway.sendFile(any(SoapRequest.class)))
-            .thenReturn(Mono.error(new RuntimeException("Gateway error")));
+        when(soapGateway.sendFile(any(SoapRequest.class))).thenReturn(Mono.error(gatewayError));
+        when(logRepository.save(any(SoapCommunicationLog.class))).thenReturn(Mono.just(new SoapCommunicationLog(
+            traceId, "FAILURE", 0, "GATEWAY_TIMEOUT", "test.pdf", Instant.now())));
 
         StepVerifier.create(processFileUseCase.execute(fileData))
-            .expectError(RuntimeException.class)
+            .expectErrorMatches(throwable -> throwable instanceof SoapCommunicationException &&
+                ((SoapCommunicationException) throwable).getErrorCode().equals("GATEWAY_TIMEOUT"))
             .verify();
+
+        verify(logRepository, times(1)).save(argThat(log ->
+            log.traceId().equals(traceId) && log.status().equals("FAILURE")));
     }
 }

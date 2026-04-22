@@ -55,6 +55,11 @@ dependencies {
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.1")
     runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.4")
 
+    // R2DBC + H2 (reactive database for traceability)
+    implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
+    implementation("io.r2dbc:r2dbc-h2")
+    runtimeOnly("com.h2database:h2")
+
     // Monitoring & Tracing
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
     implementation("io.projectreactor:reactor-tools")

@@ -21,6 +21,7 @@ import reactor.netty.http.client.HttpClient;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeoutException;
 
 @Component
@@ -53,8 +54,9 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
             request.traceId(), properties.endpoint());
 
         String soapEnvelope = soapMapper.toFullSoapMessage(request);
+        AtomicInteger retryCount = new AtomicInteger(0);
 
-        return webClient.post()
+        Mono<SoapResponse> soapCall = webClient.post()
             .contentType(MediaType.TEXT_XML)
             .header("SOAPAction", SoapNamespaces.FILE_SERVICE + "/UploadFile")
             .bodyValue(soapEnvelope)
@@ -73,31 +75,37 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
             .retryWhen(Retry.backoff(properties.retryAttempts(),
                     Duration.ofMillis(properties.retryBackoffMillis()))
                 .filter(this::isRetryableException)
-                .doBeforeRetry(retrySignal ->
+                .doBeforeRetry(retrySignal -> {
+                    int attempts = (int) retrySignal.totalRetries() + 1;
+                    retryCount.set(attempts);
                     log.warn("Retrying SOAP call for traceId={}, attempt {}/{} (backoff={}ms)",
                         request.traceId(),
-                        retrySignal.totalRetries() + 1,
+                        attempts,
                         properties.retryAttempts(),
-                        properties.retryBackoffMillis() * (retrySignal.totalRetries() + 1))))
+                        properties.retryBackoffMillis() * attempts);
+                }))
             .map(responseXml -> soapMapper.fromSoapXml(responseXml, request.traceId()))
             .doOnNext(response -> log.info("SOAP response received for traceId={}: correlationId={}",
-                request.traceId(), response.correlationId()))
+                request.traceId(), response.correlationId()));
+
+        return soapCall
             .onErrorResume(throwable -> {
                 Throwable cause = throwable;
                 if (Exceptions.isRetryExhausted(throwable)) {
                     cause = Exceptions.unwrap(throwable);
                 }
+                int retries = retryCount.get();
                 if (cause instanceof TimeoutException) {
-                    log.error("SOAP timeout for traceId: {} after all retries exhausted", request.traceId());
+                    log.error("SOAP timeout for traceId: {} after {} retries", request.traceId(), retries);
                     return Mono.error(new SoapCommunicationException(
                         "SOAP request timed out after " + properties.retryAttempts() + " retries",
-                        "GATEWAY_TIMEOUT", request.traceId()));
+                        "GATEWAY_TIMEOUT", request.traceId(), retries));
                 }
                 if (cause instanceof WebClientResponseException e) {
                     log.error("WebClient error for traceId: {}: {}", request.traceId(), e.getMessage());
                     return Mono.error(new SoapCommunicationException(
                         "Communication error with SOAP service: " + e.getMessage(),
-                        mapHttpStatusToCode(e.getStatusCode()), request.traceId()));
+                        mapHttpStatusToCode(e.getStatusCode()), request.traceId(), retries));
                 }
                 return Mono.error(throwable);
             });

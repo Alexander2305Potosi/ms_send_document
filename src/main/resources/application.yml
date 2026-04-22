@@ -5,6 +5,13 @@ server:
 spring:
   application:
     name: file-processor-service
+  r2dbc:
+    url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
   webflux:
     multipart:
       max-in-memory-size: 10MB

@@ -25,7 +25,27 @@
       "Bash(./gradlew compileJava compileTestJava --quiet)",
       "Bash(git -C /Users/alexander2305/Downloads/file-processor-service diff --stat)",
       "Bash(xargs ls *)",
-      "Bash(./gradlew testClasses *)"
+      "Bash(./gradlew testClasses *)",
+      "Bash(./gradlew build *)",
+      "Bash(./gradlew compileJava)",
+      "Bash(./gradlew dependencies *)",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew build --refresh-dependencies)",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew bootRun)",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew build)",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" nohup ./gradlew bootRun)",
+      "Bash(pkill -f \"gradlew bootRun\")",
+      "Bash(pkill -f \"file-processor-service\")",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew test)",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew test --tests \"FileUploadIntegrationTest.uploadFile_shouldReturnSuccess_whenSoapReturnsSuccess\")",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew test --tests \"FileUploadIntegrationTest\")",
+      "Bash(pkill -f \"GradleDaemon\\\\|file-processor\")",
+      "Bash(pkill -9 -f \"GradleDaemon\\\\|file-processor\\\\|java\")",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew test --no-daemon)",
+      "Bash(fuser -f /Users/alexander2305/Downloads/file-processor-service/build/test-results/test/binary/)",
+      "Bash(pkill -9 -f \"GradleDaemon\\\\|SimpleSoapMock\")",
+      "Bash(sudo chown *)",
+      "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew build --no-daemon)",
+      "Bash(pkill -9 -f \"GradleDaemon\")"
     ]
   }
 }
