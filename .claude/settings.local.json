@@ -58,7 +58,9 @@
       "Bash(JAVA_HOME=$\\(/usr/libexec/java_home\\) ./gradlew pitest)",
       "Bash(./gradlew pitest *)",
       "Bash(java -version)",
-      "Bash(export JAVA_HOME=\"/usr/local/Cellar/openjdk@21/21.0.8/libexec/openjdk.jdk/Contents/Home\")"
+      "Bash(export JAVA_HOME=\"/usr/local/Cellar/openjdk@21/21.0.8/libexec/openjdk.jdk/Contents/Home\")",
+      "Bash(./gradlew --stop)",
+      "Bash(sudo chmod *)"
     ]
   }
 }

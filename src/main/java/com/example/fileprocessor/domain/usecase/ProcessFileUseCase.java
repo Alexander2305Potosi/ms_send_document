@@ -72,14 +72,18 @@ public class ProcessFileUseCase {
             log.info("Document {} is a ZIP archive, extracting and processing contents", doc.getDocumentId());
             return processZipDocument(doc);
         }
-        return processSingleDocument(doc);
+        return processFile(toFileData(doc, null));
     }
 
-    private Mono<FileUploadResult> processSingleDocument(DocumentInfo doc) {
-        FileProcessingContext ctx = new FileProcessingContext(
-            doc.getContent(), doc.getFilename(), doc.getSize(),
-            doc.getContentType(), doc.getDocumentId(), java.util.UUID.randomUUID().toString());
-        return processFile(ctx, null);
+    private FileData toFileData(DocumentInfo doc, String parentDocumentId) {
+        return FileData.builder()
+            .content(doc.getContent())
+            .filename(doc.getFilename())
+            .size(doc.getSize())
+            .contentType(doc.getContentType())
+            .traceId(java.util.UUID.randomUUID().toString())
+            .parentDocumentId(parentDocumentId)
+            .build();
     }
 
     private Mono<FileUploadResult> processZipDocument(DocumentInfo doc) {
@@ -89,7 +93,6 @@ public class ProcessFileUseCase {
             .collectList()
             .flatMap(processedLogs -> {
                 Set<String> processedFiles = extractProcessedFilenames(processedLogs);
-
                 ZipArchive zipArchive = ZipArchive.builder()
                     .zipContent(doc.getContent())
                     .originalFilename(doc.getFilename())
@@ -126,16 +129,36 @@ public class ProcessFileUseCase {
                 }
 
                 return Flux.fromIterable(docsToProcess)
-                    .flatMap(extracted -> processFile(new FileProcessingContext(
-                        extracted.getContent(),
-                        extracted.getFilename(),
-                        extracted.getSize(),
-                        extracted.getContentType(),
-                        doc.getDocumentId(),
-                        java.util.UUID.randomUUID().toString()), doc.getDocumentId()))
+                    .map(extracted -> toFileData(extracted, doc.getDocumentId()))
+                    .flatMap(this::processFile)
                     .collectList()
                     .map(results -> aggregateResults(results, doc.getDocumentId(), zipTraceId));
             });
+    }
+
+    private FileData toFileData(ZipArchive.ExtractedDocument extracted, String parentDocumentId) {
+        return FileData.builder()
+            .content(extracted.getContent())
+            .filename(extracted.getFilename())
+            .size(extracted.getSize())
+            .contentType(extracted.getContentType())
+            .traceId(java.util.UUID.randomUUID().toString())
+            .parentDocumentId(parentDocumentId)
+            .build();
+    }
+
+    private Mono<FileUploadResult> processFile(FileData fileData) {
+        return fileValidator.validate(fileData)
+            .map(SoapRequest::fromFileData)
+            .flatMap(soapGateway::sendFile)
+            .flatMap(response -> logSuccess(fileData.getFilename(), fileData.getTraceId(), response, fileData.getParentDocumentId())
+                .thenReturn(response))
+            .map(this::toResult)
+            .doOnNext(result -> log.info("Document {} processed, correlationId: {}", fileData.getFilename(), result.getCorrelationId()))
+            .onErrorResume(throwable -> hasSoapCommunicationException(throwable)
+                ? logFailure(fileData.getFilename(), fileData.getTraceId(), throwable, fileData.getParentDocumentId())
+                    .then(Mono.error(throwable))
+                : Mono.error(throwable));
     }
 
     private Set<String> extractProcessedFilenames(List<SoapCommunicationLog> logs) {
@@ -157,42 +180,15 @@ public class ProcessFileUseCase {
             .findFirst()
             .orElse(null);
 
-        String correlationId = firstSuccess != null ? extractCorrelationIdFromLog(firstSuccess) : null;
-
         return Mono.just(FileUploadResult.builder()
             .status(STATUS_SUCCESS)
             .message(String.format("ZIP resumed: %d/%d documents previously successful", successCount, totalProcessed))
-            .correlationId(correlationId)
+            .correlationId(firstSuccess != null ? firstSuccess.getFilename() + "-resume" : null)
             .traceId(zipTraceId)
             .processedAt(Instant.now())
             .externalReference(documentId + " (ZIP-RESUMED)")
             .success(true)
             .build());
-    }
-
-    private String extractCorrelationIdFromLog(SoapCommunicationLog log) {
-        return log.getFilename() + "-resume";
-    }
-
-    private Mono<FileUploadResult> processFile(FileProcessingContext ctx, String parentDocumentId) {
-        FileData fileData = FileData.builder()
-            .content(ctx.content())
-            .filename(ctx.filename())
-            .size(ctx.size())
-            .contentType(ctx.contentType())
-            .traceId(ctx.traceId())
-            .build();
-
-        return fileValidator.validate(fileData)
-            .map(SoapRequest::fromFileData)
-            .flatMap(soapGateway::sendFile)
-            .flatMap(response -> logSuccess(ctx.filename(), ctx.traceId(), response, parentDocumentId).thenReturn(response))
-            .map(this::toResult)
-            .doOnNext(result -> log.info("Document {} processed, correlationId: {}",
-                ctx.filename(), result.getCorrelationId()))
-            .onErrorResume(throwable -> hasSoapCommunicationException(throwable)
-                ? logFailure(ctx.filename(), ctx.traceId(), throwable, parentDocumentId).then(Mono.error(throwable))
-                : Mono.error(throwable));
     }
 
     private FileUploadResult aggregateResults(List<FileUploadResult> results, String documentId, String zipTraceId) {
@@ -220,20 +216,14 @@ public class ProcessFileUseCase {
 
         return FileUploadResult.builder()
             .status(referenceResult.getStatus())
-            .message(buildZipMessage(results.size(), successes.size(), allSuccess))
+            .message(String.format("ZIP processed: %d documents, %d successful%s",
+                results.size(), successes.size(), allSuccess ? "" : ", some failed"))
             .correlationId(referenceResult.getCorrelationId())
             .traceId(zipTraceId)
             .processedAt(Instant.now())
             .externalReference(documentId + " (ZIP)")
             .success(allSuccess)
             .build();
-    }
-
-    private String buildZipMessage(int total, int successCount, boolean allSuccess) {
-        if (allSuccess) {
-            return String.format("ZIP processed: %d documents, %d successful", total, successCount);
-        }
-        return String.format("ZIP processed with errors: %d documents attempted", total);
     }
 
     private FileUploadResult toResult(SoapResponse response) {
@@ -287,13 +277,4 @@ public class ProcessFileUseCase {
         }
         return null;
     }
-
-    private record FileProcessingContext(
-        byte[] content,
-        String filename,
-        long size,
-        String contentType,
-        String documentId,
-        String traceId
-    ) {}
 }
