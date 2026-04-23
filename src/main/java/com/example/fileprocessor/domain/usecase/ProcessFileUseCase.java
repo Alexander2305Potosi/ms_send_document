@@ -30,6 +30,8 @@ public class ProcessFileUseCase {
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_FAILURE = "FAILURE";
     private static final String STATUS_SKIPPED = "SKIPPED";
+    private static final String STATUS_PROCESSING = "PROCESSING";
+    private static final String STATUS_RETRY = "RETRY";
     private static final String DEFAULT_ERROR_CODE = "UNKNOWN_ERROR";
     private static final int DEFAULT_RETRY_COUNT = 0;
     private static final long MB_TO_BYTES = 1024 * 1024;
@@ -65,6 +67,16 @@ public class ProcessFileUseCase {
     }
 
     private Mono<FileUploadResult> processPendingDocument(DocumentToProcess pending) {
+        return documentRepository.claimDocument(pending.getDocumentId())
+            .filter(Boolean::booleanValue)
+            .flatMap(claimed -> processDocumentClaimed(pending))
+            .switchIfEmpty(Mono.defer(() -> {
+                log.info("Document {} already claimed by another process or not pending, skipping", pending.getDocumentId());
+                return Mono.empty();
+            }));
+    }
+
+    private Mono<FileUploadResult> processDocumentClaimed(DocumentToProcess pending) {
         String traceId = java.util.UUID.randomUUID().toString();
         log.info("Processing pending document: {}, origin: {}, traceId: {}",
             pending.getDocumentId(), pending.getOrigin(), traceId);
@@ -128,10 +140,22 @@ public class ProcessFileUseCase {
 
     private Mono<FileUploadResult> handleDocumentError(String documentId, Throwable error, String traceId) {
         String errorCode = extractErrorCode(error);
-        log.error("Failed to process document {}: {}", documentId, error.getMessage());
+        String status = isRetryableError(error) ? STATUS_RETRY : STATUS_FAILURE;
+        log.error("Failed to process document {}: {} (status={}, errorCode={})",
+            documentId, error.getMessage(), status, errorCode);
 
-        return documentRepository.updateStatus(documentId, STATUS_FAILURE, traceId, null, errorCode)
+        return documentRepository.updateStatus(documentId, status, traceId, null, errorCode)
             .then(Mono.error(error));
+    }
+
+    private boolean isRetryableError(Throwable error) {
+        if (error instanceof SoapCommunicationException sce) {
+            String code = sce.getErrorCode();
+            return "TIMEOUT".equals(code) || "GATEWAY_TIMEOUT".equals(code);
+        }
+        String message = error.getMessage();
+        if (message == null) return false;
+        return message.contains("timeout") || message.contains("Timeout") || message.contains("TIMEOUT");
     }
 
     private FileUploadResult toResult(SoapResponse response) {

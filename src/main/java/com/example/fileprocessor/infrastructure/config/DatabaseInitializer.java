@@ -35,9 +35,28 @@ public class DatabaseInitializer implements ApplicationRunner {
     public Mono<Void> initialize() {
         log.info("Initializing database schema...");
 
-        return createDocumentsToProcessTable()
+        return resetProcessingDocuments()
+            .then(createDocumentsToProcessTable())
             .then(createSoapCommunicationLogTable())
             .then(createIndexes());
+    }
+
+    private Mono<Void> resetProcessingDocuments() {
+        return databaseClient.sql("UPDATE documents_to_process SET status = 'PENDING' WHERE status = 'PROCESSING'")
+            .fetch()
+            .rowsUpdated()
+            .doOnNext(count -> {
+                if (count > 0) {
+                    log.info("Crash recovery: reset {} PROCESSING documents to PENDING", count);
+                } else {
+                    log.info("No PROCESSING documents to reset");
+                }
+            })
+            .then()
+            .onErrorResume(e -> {
+                log.debug("Crash recovery skipped (table may not exist yet): {}", e.getMessage());
+                return Mono.empty();
+            });
     }
 
     private Mono<Void> createDocumentsToProcessTable() {

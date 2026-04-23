@@ -61,6 +61,7 @@ class ProcessFileUseCaseTest {
         lenient().when(validationConfig.foldersToSkip()).thenReturn(List.of());
         lenient().when(validationConfig.maxFileSizeMb()).thenReturn(50);
         lenient().when(validationConfig.keywords()).thenReturn(List.of());
+        lenient().when(documentRepository.claimDocument(any())).thenReturn(Mono.just(true));
     }
 
     @Test

@@ -10,6 +10,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Component
 public class R2dbcDocumentRepository implements DocumentRepository {
@@ -27,7 +28,7 @@ public class R2dbcDocumentRepository implements DocumentRepository {
         String sql = """
             SELECT document_id, filename, origin, status, created_at, processed_at, trace_id, soap_correlation_id, error_code
             FROM documents_to_process
-            WHERE status = 'PENDING'
+            WHERE status IN ('PENDING', 'RETRY', 'PROCESSING')
             ORDER BY created_at ASC
             """;
 
@@ -44,6 +45,26 @@ public class R2dbcDocumentRepository implements DocumentRepository {
                 .errorCode(row.get("error_code", String.class))
                 .build())
             .all();
+    }
+
+    @Override
+    public Mono<Boolean> claimDocument(String documentId) {
+        String sql = """
+            UPDATE documents_to_process
+            SET status = 'PROCESSING', trace_id = $2, processed_at = $3
+            WHERE document_id = $1 AND status = 'PENDING'
+            """;
+
+        String traceId = UUID.randomUUID().toString();
+
+        return databaseClient.sql(sql)
+            .bind("$1", documentId)
+            .bind("$2", traceId)
+            .bind("$3", Instant.now())
+            .fetch()
+            .rowsUpdated()
+            .map(rowsUpdated -> rowsUpdated > 0)
+            .doOnSuccess(claimed -> log.info("Claim document {}: {}", documentId, claimed));
     }
 
     @Override
