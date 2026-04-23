@@ -17,6 +17,13 @@ public class SoapCommunicationException extends RuntimeException {
         this.retryCount = retryCount;
     }
 
+    public SoapCommunicationException(String message, String errorCode, String traceId, Throwable cause) {
+        super(message, cause);
+        this.errorCode = errorCode;
+        this.traceId = traceId;
+        this.retryCount = 0;
+    }
+
     public String getErrorCode() {
         return errorCode;
     }

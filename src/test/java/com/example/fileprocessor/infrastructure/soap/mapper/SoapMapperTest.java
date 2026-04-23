@@ -28,19 +28,18 @@ class SoapMapperTest {
 
     @Test
     void toSoapXml_shouldGenerateValidSoapBody() {
-        SoapRequest request = new SoapRequest(
-            "dGVzdENvbnRlbnQ=", // base64
-            "test.pdf",
-            "application/pdf",
-            1234,
-            "trace-123",
-            Instant.now()
-        );
+        SoapRequest request = SoapRequest.builder()
+            .fileContentBase64("dGVzdENvbnRlbnQ=")
+            .filename("test.pdf")
+            .contentType("application/pdf")
+            .fileSize(1234)
+            .traceId("trace-123")
+            .timestamp(Instant.now())
+            .build();
 
         String xml = soapMapper.toSoapXml(request);
 
         assertNotNull(xml);
-        // Ahora solo genera el body, el envelope se agrega en el gateway
         assertFalse(xml.contains("soap:Envelope"), "Should NOT contain SOAP envelope");
         assertTrue(xml.contains("UploadFileRequest"));
         assertTrue(xml.contains("test.pdf"));
@@ -70,11 +69,11 @@ class SoapMapperTest {
         SoapResponse response = soapMapper.fromSoapXml(soapResponse, "trace-123");
 
         assertNotNull(response);
-        assertEquals("SUCCESS", response.status());
-        assertEquals("File processed", response.message());
-        assertEquals("corr-abc-123", response.correlationId());
-        assertEquals("trace-123", response.traceId());
-        assertEquals("ext-ref-456", response.externalReference());
+        assertEquals("SUCCESS", response.getStatus());
+        assertEquals("File processed", response.getMessage());
+        assertEquals("corr-abc-123", response.getCorrelationId());
+        assertEquals("trace-123", response.getTraceId());
+        assertEquals("ext-ref-456", response.getExternalReference());
         assertTrue(response.isSuccess());
     }
 
@@ -98,8 +97,8 @@ class SoapMapperTest {
         SoapResponse response = soapMapper.fromSoapXml(soapResponse, "trace-456");
 
         assertNotNull(response);
-        assertEquals("OK", response.status());
-        assertNull(response.externalReference());
+        assertEquals("OK", response.getStatus());
+        assertNull(response.getExternalReference());
         assertTrue(response.isSuccess());
     }
 
@@ -123,7 +122,7 @@ class SoapMapperTest {
         SoapResponse response = soapMapper.fromSoapXml(soapResponse, "trace-789");
 
         assertNotNull(response);
-        assertEquals("ERROR", response.status());
+        assertEquals("ERROR", response.getStatus());
         assertFalse(response.isSuccess());
     }
 

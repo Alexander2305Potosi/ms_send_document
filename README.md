@@ -1,6 +1,6 @@
 # File Processor Service
 
-Microservicio reactivo basado en Spring WebFlux que recibe archivos via multipart y los envia a un servicio SOAP externo.
+Microservicio reactivo basado en Spring WebFlux que obtiene documentos de una API REST externa y los envia a un servicio SOAP externo.
 
 ## Arquitectura (Clean Architecture Light)
 
@@ -10,17 +10,20 @@ El proyecto sigue **Clean Architecture simplificada** con 2 capas principales. L
 com.example.fileprocessor/
 ├── domain/                    # Capa de dominio (independiente de frameworks)
 │   ├── entity/               # Entidades de negocio
+│   │   ├── DocumentInfo.java        # Documento obtenido de REST
 │   │   ├── FileData.java
 │   │   ├── FileUploadResult.java
 │   │   ├── SoapRequest.java
-│   │   └── SoapResponse.java
+│   │   ├── SoapResponse.java
+│   │   └── ZipArchive.java          # ZIP con documentos extraibles
 │   ├── usecase/              # Casos de uso (logica de negocio)
-│   │   ├── ProcessFileUseCase.java
+│   │   ├── ProcessFileUseCase.java  # Obtiene de REST y envia a SOAP
 │   │   └── FileValidator.java
 │   ├── port/
 │   │   ├── in/
 │   │   │   └── FileValidationConfig.java
 │   │   └── out/
+│   │       ├── DocumentRestGateway.java  # Puerto para API REST documentos
 │   │       └── ExternalSoapGateway.java
 │   └── exception/            # Excepciones de dominio
 │       ├── DomainException.java
@@ -33,7 +36,11 @@ com.example.fileprocessor/
     │   ├── SoapConfig.java            # JAXBContext compartido
     │   ├── WebClientConfig.java
     │   └── WebFluxConfig.java
-    ├── rest/                 # Adapter REST (entrada)
+    ├── rest/                 # Adapter REST (entrada y Salida)
+    │   ├── adapter/
+    │   │   └── DocumentRestGatewayImpl.java  # Cliente REST para documentos
+    │   ├── config/
+    │   │   └── DocumentRestProperties.java
     │   ├── controller/
     │   │   └── FileController.java
     │   ├── dto/
@@ -164,6 +171,7 @@ Los mutators crean cambios artificiales en el codigo (ej: `>` -> `>=`, eliminar 
 | Variable | Descripcion | Default |
 |----------|-------------|---------|
 | `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:9000/soap/fileservice` |
+| `DOCUMENT_REST_ENDPOINT` | URL de la API REST de documentos | `http://localhost:8081` |
 
 ### Configuracion Automatica (Recomendada)
 
@@ -292,6 +300,35 @@ scripts\start-mock.bat 9000 2,3,4
 | 5 | 200 Slow Response (30s) |
 | 6 | 400 Bad Request |
 
+### Mock REST de Documentos
+
+El mock de documentos (`DocumentRestMock`) simula una API REST externa que provee documentos:
+
+| Endpoint | Descripcion |
+|----------|-------------|
+| `GET /api/documents` | Lista todos los documentos disponibles |
+| `GET /api/document/{id}` | Obtiene un documento especifico por ID |
+
+**Documentos disponibles:**
+
+| ID | Nombre | Tipo Contenido |
+|----|--------|----------------|
+| doc-001 | test-document.pdf | application/pdf |
+| doc-002 | test-document.docx | application/vnd.openxmlformats-officedocument.wordprocessingml.document |
+| doc-003 | test-document.txt | text/plain |
+| doc-004 | documents.zip | application/zip (contiene 3 archivos: pdf, txt, docx) |
+
+**Iniciar el Mock REST de Documentos:**
+
+```bash
+# Linux/macOS
+chmod +x ./scripts/start-document-mock.sh
+./scripts/start-document-mock.sh
+
+# Ver que puerto se uso:
+cat /tmp/document-rest-mock.info
+```
+
 ### Mas informacion
 
 - [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentacion completa del mock Java
@@ -299,15 +336,13 @@ scripts\start-mock.bat 9000 2,3,4
 
 ## API Endpoints
 
-### POST /api/v1/files
+### GET /api/v1/files/{documentId}
 
-Sube un archivo y lo envia al servicio SOAP.
+Obtiene un documento de la API REST externa y lo envia al servicio SOAP.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8080/api/v1/files \
-  -F "file=@/path/to/document.pdf" \
-  -H "Content-Type: multipart/form-data"
+curl -X GET http://localhost:8080/api/v1/files/doc-001
 ```
 
 **Response:**
@@ -323,6 +358,60 @@ curl -X POST http://localhost:8080/api/v1/files \
 }
 ```
 
+### GET /api/v1/files/{documentId} (ZIP)
+
+Si el documento es un archivo ZIP, retorna un resultado consolidado:
+
+```bash
+curl -X GET http://localhost:8080/api/v1/files/doc-004
+```
+
+**Response:**
+```json
+{
+  "status": "SUCCESS",
+  "message": "ZIP processed: 3 documents, 3 successful",
+  "correlationId": "corr-789-xyz",
+  "traceId": "uuid-generado",
+  "processedAt": "2024-01-15T10:30:01Z",
+  "externalReference": "doc-004 (ZIP)",
+  "success": true
+}
+```
+
+### GET /api/v1/files
+
+Obtiene todos los documentos disponibles de la API REST y los envia al servicio SOAP.
+
+**Request:**
+```bash
+curl -X GET http://localhost:8080/api/v1/files
+```
+
+**Response:**
+```json
+[
+  {
+    "status": "SUCCESS",
+    "message": "File uploaded successfully",
+    "correlationId": "corr-123-abc",
+    "traceId": "uuid-generado",
+    "processedAt": "2024-01-15T10:30:00Z",
+    "externalReference": "ext-ref-456",
+    "success": true
+  },
+  {
+    "status": "SUCCESS",
+    "message": "File uploaded successfully",
+    "correlationId": "corr-456-def",
+    "traceId": "uuid-generado",
+    "processedAt": "2024-01-15T10:30:01Z",
+    "externalReference": "ext-ref-789",
+    "success": true
+  }
+]
+```
+
 ## Restricciones de Archivos
 
 - **Tamano maximo**: 10 MB
@@ -336,6 +425,44 @@ Antes de consumir el stream completo en memoria, el servicio verifica el `Conten
 ### Payload Too Large
 
 Si el cuerpo de la peticion excede el buffer configurado en WebFlux (`maxInMemorySize`), el servicio responde con **HTTP 413 PAYLOAD_TOO_LARGE**.
+
+## Procesamiento de Archivos ZIP
+
+El servicio soporta el procesamiento de archivos comprimidos en formato ZIP. Cuando se recibe un documento ZIP:
+
+1. **Deteccion Automatica**: El sistema detecta archivos con extension `.zip` o cuyo campo `isZip` sea `true`
+2. **Extraccion**: El contenido del ZIP se extrae automáticamente
+3. **Procesamiento Individual**: Cada archivo dentro del ZIP se procesa individualmente mediante el servicio SOAP
+4. **Reporte Consolidado**: Se retorna un resultado consolidado con el total de documentos procesados
+
+### Contenido del ZIP
+
+El ZIP puede contener cualquier combinacion de:
+- `*.pdf` - Documentos PDF
+- `*.docx` - Documentos Word
+- `*.txt` - Archivos de texto
+- Otros formatos reconocidos
+
+### Archivos Ignorados
+
+El sistema ignora automaticamente:
+- Directorios dentro del ZIP
+- Archivos que comienzan con `_` (archivos de metadata)
+- Archivos con nombre vacio
+
+### Ejemplo de Respuesta para ZIP
+
+```json
+{
+  "status": "SUCCESS",
+  "message": "ZIP processed: 3 documents, 3 successful",
+  "correlationId": "corr-123-abc",
+  "traceId": "uuid-generado",
+  "processedAt": "2024-01-15T10:30:00Z",
+  "externalReference": "doc-004 (ZIP)",
+  "success": true
+}
+```
 
 ## Reintentos SOAP
 
@@ -410,11 +537,10 @@ postman/File-Processor-Service.postman_collection.json
 ```
 
 Endpoints incluidos:
-- Upload File PDF/DOCX/TXT
+- GET /api/v1/files/{documentId} - Procesar documento especifico
+- GET /api/v1/files - Procesar todos los documentos
 - Health Check
 - Error scenarios (400, 504)
-
-⚠️ **Importante**: Despues de importar, selecciona manualmente el archivo en la pestana Body -> form-data.
 
 Para mas detalles: [`postman/README.md`](postman/README.md)
 
@@ -426,8 +552,10 @@ Para mas detalles: [`postman/README.md`](postman/README.md)
 |--------|------------|-------------|
 | `./start-dev.sh` | Linux/Mac | **Inicia Mock + Microservicio** (auto-configura puerto) |
 | `start-dev.bat` | Windows | **Inicia Mock + Microservicio** (auto-configura puerto) |
-| `./scripts/start-mock.sh` | Linux/Mac | Mock portable (auto-detecta Java y puerto libre) |
-| `scripts\start-mock.bat` | Windows | Mock portable (auto-detecta Java y puerto libre) |
+| `./scripts/start-mock.sh` | Linux/Mac | Mock SOAP portable (auto-detecta Java y puerto libre) |
+| `scripts\start-mock.bat` | Windows | Mock SOAP portable (auto-detecta Java y puerto libre) |
+| `./scripts/start-document-mock.sh` | Linux/Mac | Mock REST documentos (puerto 8081) |
+| `scripts\start-document-mock.bat` | Windows | Mock REST documentos (puerto 8081) |
 | `./scripts/stop-mock.sh` | Linux/Mac | Detener cualquier mock activo |
 | `scripts\stop-mock.bat` | Windows | Detener cualquier mock activo |
 

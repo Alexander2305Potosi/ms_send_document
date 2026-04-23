@@ -45,7 +45,20 @@
       "Bash(pkill -9 -f \"GradleDaemon\\\\|SimpleSoapMock\")",
       "Bash(sudo chown *)",
       "Bash(JAVA_HOME=\"/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home\" ./gradlew build --no-daemon)",
-      "Bash(pkill -9 -f \"GradleDaemon\")"
+      "Bash(pkill -9 -f \"GradleDaemon\")",
+      "Bash(./mvnw compile *)",
+      "Bash(mvn compile *)",
+      "Bash(JAVA_HOME=$\\(/usr/libexec/java_home\\) ./gradlew compileJava compileTestJava)",
+      "Bash(/usr/libexec/java_home *)",
+      "Read(//usr/bin/**)",
+      "Bash(JAVA_HOME=$\\(/usr/libexec/java_home\\) ./gradlew compileTestJava)",
+      "Bash(grep -E \"\\\\{.{0,200}\")",
+      "Bash(JAVA_HOME=$\\(/usr/libexec/java_home\\) ./gradlew compileJava)",
+      "Bash(JAVA_HOME=$\\(/usr/libexec/java_home\\) ./gradlew test --tests \"*FileControllerTest\" --tests \"*ProcessFileUseCaseTest\")",
+      "Bash(JAVA_HOME=$\\(/usr/libexec/java_home\\) ./gradlew pitest)",
+      "Bash(./gradlew pitest *)",
+      "Bash(java -version)",
+      "Bash(export JAVA_HOME=\"/usr/local/Cellar/openjdk@21/21.0.8/libexec/openjdk.jdk/Contents/Home\")"
     ]
   }
 }

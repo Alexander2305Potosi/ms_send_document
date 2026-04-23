@@ -41,22 +41,22 @@ public class SoapMapper {
     }
 
     public String toSoapXml(SoapRequest request) {
-        log.debug("Converting SoapRequest to XML body for traceId: {}", request.traceId());
+        log.debug("Converting SoapRequest to XML body for traceId: {}", request.getTraceId());
 
         UploadFileRequest uploadRequest = new UploadFileRequest(
-            request.fileContentBase64(),
-            request.filename(),
-            request.contentType(),
-            request.fileSize(),
-            request.traceId(),
-            request.timestamp().toString()
+            request.getFileContentBase64(),
+            request.getFilename(),
+            request.getContentType(),
+            request.getFileSize(),
+            request.getTraceId(),
+            request.getTimestamp().toString()
         );
 
         return marshalRequest(uploadRequest);
     }
 
     public String toFullSoapMessage(SoapRequest request) {
-        log.debug("Generating full SOAP message for traceId: {}", request.traceId());
+        log.debug("Generating full SOAP message for traceId: {}", request.getTraceId());
 
         String soapBody = toSoapXml(request);
         return SOAP_HEADER + soapBody + SOAP_FOOTER;
@@ -73,7 +73,7 @@ public class SoapMapper {
             return writer.toString();
         } catch (JAXBException e) {
             log.error("Error marshalling SOAP request: {}", e.getMessage());
-            throw new RuntimeException("Failed to marshal SOAP request", e);
+            throw new SoapCommunicationException("Failed to marshal SOAP request", "MARSHALL_ERROR", null, e);
         }
     }
 
@@ -87,14 +87,14 @@ public class SoapMapper {
                 ? Instant.parse(response.getProcessedAt())
                 : Instant.now();
 
-            return new SoapResponse(
-                response.getStatus() != null ? response.getStatus() : "UNKNOWN",
-                response.getMessage() != null ? response.getMessage() : "No message received",
-                response.getCorrelationId() != null ? response.getCorrelationId() : "N/A",
-                traceId,
-                processedAt,
-                response.getExternalReference()
-            );
+            return SoapResponse.builder()
+                .status(response.getStatus() != null ? response.getStatus() : "UNKNOWN")
+                .message(response.getMessage() != null ? response.getMessage() : "No message received")
+                .correlationId(response.getCorrelationId() != null ? response.getCorrelationId() : "N/A")
+                .traceId(traceId)
+                .processedAt(processedAt)
+                .externalReference(response.getExternalReference())
+                .build();
         } catch (Exception e) {
             log.error("Error parsing SOAP response: {}", e.getMessage());
             throw new SoapCommunicationException(

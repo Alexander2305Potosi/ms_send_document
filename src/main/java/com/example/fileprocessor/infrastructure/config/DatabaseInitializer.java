@@ -41,11 +41,17 @@ public class DatabaseInitializer implements ApplicationRunner {
                     retry_count INT NOT NULL,
                     error_code VARCHAR(100),
                     filename VARCHAR(255),
+                    parent_document_id VARCHAR(255),
                     created_at TIMESTAMP NOT NULL
                 )
                 """)
             .fetch()
             .first()
+            .then()
+            .then(databaseClient.sql("""
+                CREATE INDEX IF NOT EXISTS idx_soap_log_parent_document_id
+                ON soap_communication_log(parent_document_id)
+                """).fetch().first())
             .then();
     }
 }

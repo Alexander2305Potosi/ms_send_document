@@ -1,25 +1,19 @@
 package com.example.fileprocessor.infrastructure.rest.controller;
 
-import com.example.fileprocessor.domain.entity.FileData;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
-import com.example.fileprocessor.infrastructure.config.FileUploadProperties;
-import com.example.fileprocessor.infrastructure.rest.dto.FileUploadResponseDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.http.codec.multipart.Part;
-import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @RestController
@@ -28,77 +22,77 @@ public class FileController {
 
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private final ProcessFileUseCase processFileUseCase;
-    private final FileUploadProperties fileUploadProperties;
 
-    public FileController(ProcessFileUseCase processFileUseCase,
-                          FileUploadProperties fileUploadProperties) {
+    public FileController(ProcessFileUseCase processFileUseCase) {
         this.processFileUseCase = processFileUseCase;
-        this.fileUploadProperties = fileUploadProperties;
     }
 
-    @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<ResponseEntity<FileUploadResponseDto>> uploadFile(ServerWebExchange exchange) {
+    @GetMapping(value = "/{documentId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<AsyncProcessResponse> getFile(@PathVariable String documentId) {
         String traceId = UUID.randomUUID().toString();
         MDC.put("traceId", traceId);
 
-        log.info("Receiving file upload request");
-        log.info("Content-Type: {}", exchange.getRequest().getHeaders().getContentType());
-        log.info("Headers: {}", exchange.getRequest().getHeaders());
+        log.info("Received request to process document: {}, traceId: {}", documentId, traceId);
 
-        return exchange.getMultipartData()
-            .doOnNext(parts -> {
-                log.info("Multipart parts received: {}", parts.keySet());
-                parts.forEach((k, v) -> log.info("Part {}: {}", k, v.getClass().getSimpleName()));
-            })
-            .flatMap(parts -> {
-                Part filePart = parts.getFirst("file");
-                if (filePart == null) {
-                    log.error("No file part found. Available parts: {}", parts.keySet());
-                    return Mono.error(new IllegalArgumentException("No file provided with key 'file'"));
-                }
-                if (!(filePart instanceof FilePart file)) {
-                    log.error("Part is not a FilePart, it's: {}", filePart.getClass().getName());
-                    return Mono.error(new IllegalArgumentException("Part is not a file"));
-                }
+        processFileUseCase.execute(documentId, traceId)
+            .doOnNext(result -> log.info("Document {} processing completed: status={}, correlationId={}",
+                documentId, result.getStatus(), result.getCorrelationId()))
+            .doOnError(error -> log.error("Document {} processing failed: {}", documentId, error.getMessage()))
+            .doFinally(signal -> MDC.remove("traceId"))
+            .subscribe();
 
-                log.info("Processing file: {}", file.filename());
-
-                long declaredSize = file.headers().getContentLength();
-                if (declaredSize > 0 && declaredSize > fileUploadProperties.maxSize()) {
-                    return Mono.error(new FileValidationException(
-                        "File size exceeds maximum allowed: " + fileUploadProperties.maxSize() + " bytes",
-                        "FILE_SIZE_EXCEEDED"));
-                }
-
-                return DataBufferUtils.join(file.content())
-                    .map(dataBuffer -> {
-                        byte[] content = new byte[dataBuffer.readableByteCount()];
-                        dataBuffer.read(content);
-                        DataBufferUtils.release(dataBuffer);
-
-                        String contentType = file.headers().getContentType() != null
-                            ? file.headers().getContentType().toString()
-                            : "application/octet-stream";
-
-                        return new FileData(content, file.filename(),
-                            content.length, contentType, traceId);
-                    });
-            })
-            .flatMap(fileData -> processFileUseCase.execute(fileData)
-                .map(this::toDto)
-                .map(ResponseEntity::ok))
-            .doFinally(signal -> MDC.remove("traceId"));
+        return ResponseEntity
+            .status(HttpStatus.ACCEPTED)
+            .body(new AsyncProcessResponse(
+                "PROCESSING",
+                "Document processing started",
+                traceId,
+                traceId,
+                null,
+                Instant.now(),
+                null,
+                true
+            ));
     }
 
-    private FileUploadResponseDto toDto(FileUploadResult result) {
-        return new FileUploadResponseDto(
-            result.status(),
-            result.message(),
-            result.correlationId(),
-            result.traceId(),
-            result.processedAt(),
-            result.externalReference(),
-            result.success()
-        );
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<AsyncProcessResponse> getAllFiles(
+            @RequestParam(required = false) String traceId) {
+
+        String actualTraceId = traceId != null ? traceId : UUID.randomUUID().toString();
+        MDC.put("traceId", actualTraceId);
+
+        log.info("Received request to process all documents, traceId: {}", actualTraceId);
+
+        processFileUseCase.executeAll(actualTraceId)
+            .doOnNext(result -> log.info("Document processed: correlationId={}, status={}",
+                result.getCorrelationId(), result.getStatus()))
+            .doOnError(error -> log.error("Processing failed: {}", error.getMessage()))
+            .doFinally(signal -> MDC.remove("traceId"))
+            .subscribe();
+
+        return ResponseEntity
+            .status(HttpStatus.ACCEPTED)
+            .body(new AsyncProcessResponse(
+                "PROCESSING",
+                "All documents processing started",
+                actualTraceId,
+                actualTraceId,
+                null,
+                Instant.now(),
+                null,
+                true
+            ));
     }
+
+    public record AsyncProcessResponse(
+        String status,
+        String message,
+        String correlationId,
+        String traceId,
+        String externalReference,
+        Instant processedAt,
+        String errorCode,
+        boolean success
+    ) {}
 }

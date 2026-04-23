@@ -19,7 +19,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -80,19 +79,19 @@ class ExternalSoapGatewayImplTest {
             .setBody(responseXml)
             .addHeader("Content-Type", "text/xml"));
 
-        SoapRequest request = new SoapRequest(
-            "base64content",
-            "test.pdf",
-            "application/pdf",
-            100,
-            "trace-123",
-            Instant.now()
-        );
+        SoapRequest request = SoapRequest.builder()
+            .fileContentBase64("base64content")
+            .filename("test.pdf")
+            .contentType("application/pdf")
+            .fileSize(100)
+            .traceId("trace-123")
+            .timestamp(Instant.now())
+            .build();
 
         StepVerifier.create(gateway.sendFile(request))
             .assertNext(response -> {
                 assertTrue(response.isSuccess());
-                assertEquals("123-abc", response.correlationId());
+                assertEquals("123-abc", response.getCorrelationId());
             })
             .verifyComplete();
     }
@@ -103,14 +102,14 @@ class ExternalSoapGatewayImplTest {
             .setResponseCode(500)
             .setBody("<?xml version=\"1.0\"?><soap:Fault></faultstring>Server Error</faultstring></soap:Fault>"));
 
-        SoapRequest request = new SoapRequest(
-            "base64content",
-            "test.pdf",
-            "application/pdf",
-            100,
-            "trace-123",
-            Instant.now()
-        );
+        SoapRequest request = SoapRequest.builder()
+            .fileContentBase64("base64content")
+            .filename("test.pdf")
+            .contentType("application/pdf")
+            .fileSize(100)
+            .traceId("trace-123")
+            .timestamp(Instant.now())
+            .build();
 
         StepVerifier.create(gateway.sendFile(request))
             .expectErrorMatches(throwable -> throwable instanceof SoapCommunicationException)
@@ -121,16 +120,16 @@ class ExternalSoapGatewayImplTest {
     @Disabled("Timeout test is flaky - exception arrives as WebClientRequestException not SoapCommunicationException")
     void sendFile_shouldReturnError_whenTimeout() {
         mockWebServer.enqueue(new MockResponse()
-            .setHeadersDelay(10, TimeUnit.SECONDS));
+            .setHeadersDelay(10, java.util.concurrent.TimeUnit.SECONDS));
 
-        SoapRequest request = new SoapRequest(
-            "base64content",
-            "test.pdf",
-            "application/pdf",
-            100,
-            "trace-123",
-            Instant.now()
-        );
+        SoapRequest request = SoapRequest.builder()
+            .fileContentBase64("base64content")
+            .filename("test.pdf")
+            .contentType("application/pdf")
+            .fileSize(100)
+            .traceId("trace-123")
+            .timestamp(Instant.now())
+            .build();
 
         StepVerifier.create(gateway.sendFile(request))
             .expectErrorMatches(throwable ->

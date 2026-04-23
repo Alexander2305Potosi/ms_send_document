@@ -4,19 +4,24 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * Represents file data for processing.
+ * Represents document metadata retrieved from the external REST API.
  */
 @Getter
 @Builder
-public class FileData {
-    private final byte[] content;
+public class DocumentInfo {
+    private final String documentId;
     private final String filename;
-    private final long size;
+    private final byte[] content;
     private final String contentType;
-    private final String traceId;
+    private final long size;
+    private final boolean isZip;
 
     public String extension() {
         int lastDot = filename.lastIndexOf('.');
         return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
+    }
+
+    public boolean isZipArchive() {
+        return isZip || "zip".equalsIgnoreCase(extension());
     }
 }

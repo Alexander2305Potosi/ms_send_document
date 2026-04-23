@@ -1,0 +1,26 @@
+spring:
+  main:
+    web-application-type: reactive
+  r2dbc:
+    url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+
+app:
+  file:
+    max-size: 10485760
+    allowed-types: pdf,docx,txt
+    max-filename-length: 255
+  soap:
+    endpoint: ${SOAP_ENDPOINT:http://localhost:8888/soap/fileservice}
+    timeout-seconds: 2
+    retry-attempts: 0
+    retry-backoff-millis: 100
+
+logging:
+  level:
+    com.example.fileprocessor: DEBUG
+    okhttp3.mockwebserver: WARN

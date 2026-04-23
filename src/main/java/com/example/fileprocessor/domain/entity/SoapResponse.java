@@ -1,21 +1,22 @@
 package com.example.fileprocessor.domain.entity;
 
-import java.time.Instant;
-import java.util.Objects;
+import lombok.Builder;
+import lombok.Getter;
 
-public record SoapResponse(
-    String status,
-    String message,
-    String correlationId,
-    String traceId,
-    Instant processedAt,
-    String externalReference
-) {
-    public SoapResponse {
-        Objects.requireNonNull(status, "status must not be null");
-        Objects.requireNonNull(message, "message must not be null");
-        Objects.requireNonNull(correlationId, "correlationId must not be null");
-    }
+import java.time.Instant;
+
+/**
+ * SOAP response from external service.
+ */
+@Getter
+@Builder
+public class SoapResponse {
+    private final String status;
+    private final String message;
+    private final String correlationId;
+    private final String traceId;
+    private final Instant processedAt;
+    private final String externalReference;
 
     public boolean isSuccess() {
         return "SUCCESS".equalsIgnoreCase(status) || "OK".equalsIgnoreCase(status);

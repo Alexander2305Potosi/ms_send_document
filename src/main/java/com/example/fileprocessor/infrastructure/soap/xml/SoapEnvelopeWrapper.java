@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.soap.xml;
 
+import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
 import org.slf4j.Logger;
@@ -46,12 +47,12 @@ public class SoapEnvelopeWrapper {
 
             Node body = doc.getElementsByTagNameNS(SoapNamespaces.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
-                throw new RuntimeException("SOAP Body not found");
+                throw new SoapCommunicationException("SOAP Body not found", "INVALID_RESPONSE", null);
             }
 
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
-                throw new RuntimeException("Response element not found in SOAP Body");
+                throw new SoapCommunicationException("Response element not found in SOAP Body", "INVALID_RESPONSE", null);
             }
 
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
@@ -63,9 +64,11 @@ public class SoapEnvelopeWrapper {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
             return responseClass.cast(unmarshaller.unmarshal(new StringReader(responseXml)));
 
+        } catch (SoapCommunicationException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error unmarshalling SOAP response: {}", e.getMessage());
-            throw new RuntimeException("Failed to parse SOAP response", e);
+            throw new SoapCommunicationException("Failed to parse SOAP response", "INVALID_RESPONSE", null, e);
         }
     }
 

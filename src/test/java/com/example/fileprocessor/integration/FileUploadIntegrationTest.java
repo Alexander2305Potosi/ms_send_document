@@ -8,20 +8,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.BodyInserters;
 
 import java.io.IOException;
-import java.time.Instant;
 
 @SpringBootTest
 @AutoConfigureWebTestClient
@@ -49,6 +42,14 @@ class FileUploadIntegrationTest {
         mockWebServer.shutdown();
     }
 
+    @BeforeEach
+    void setUp() {
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody(createSuccessResponse())
+            .addHeader("Content-Type", "text/xml"));
+    }
+
     private String createSuccessResponse() {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
             "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
@@ -66,98 +67,27 @@ class FileUploadIntegrationTest {
             "</soap:Envelope>";
     }
 
-    private String createError500Response() {
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
-            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">" +
-            "<soap:Header/>" +
-            "<soap:Body>" +
-            "<soap:Fault>" +
-            "<faultcode>soap:Server</faultcode>" +
-            "<faultstring>Internal Server Error</faultstring>" +
-            "</soap:Fault>" +
-            "</soap:Body>" +
-            "</soap:Envelope>";
-    }
-
     @Test
-    void uploadFile_shouldReturnSuccess_whenSoapReturnsSuccess() {
-        mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(200)
-            .setBody(createSuccessResponse())
-            .addHeader("Content-Type", "text/xml"));
-
-        MultiValueMap<String, HttpEntity<?>> parts = new LinkedMultiValueMap<>();
-        HttpHeaders fileHeaders = new HttpHeaders();
-        fileHeaders.setContentDisposition(ContentDisposition.builder("form-data")
-            .name("file")
-            .filename("test.pdf")
-            .build());
-        fileHeaders.setContentType(MediaType.APPLICATION_PDF);
-
-        byte[] fileContent = "test pdf content".getBytes();
-        parts.add("file", new HttpEntity<>(fileContent, fileHeaders));
-
-        webTestClient.post()
-            .uri("/api/v1/files")
-            .contentType(MediaType.MULTIPART_FORM_DATA)
-            .body(BodyInserters.fromMultipartData(parts))
+    void getFile_shouldReturnAccepted_whenDocumentExists() {
+        // The endpoint now returns 202 Accepted immediately and processes asynchronously
+        webTestClient.get()
+            .uri("/api/v1/files/doc-001")
             .exchange()
-            .expectStatus().isOk()
+            .expectStatus().isAccepted()
             .expectBody()
-            .jsonPath("$.status").isEqualTo("SUCCESS")
+            .jsonPath("$.status").isEqualTo("PROCESSING")
             .jsonPath("$.success").isEqualTo(true)
-            .jsonPath("$.correlationId").isEqualTo("int-123-456");
+            .jsonPath("$.traceId").isNotEmpty();
     }
 
     @Test
-    void uploadFile_shouldReturnBadGateway_whenSoapReturns500() {
-        // Configure mock server to return 500
-        mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(500)
-            .setBody(createError500Response())
-            .addHeader("Content-Type", "text/xml"));
-
-        MultiValueMap<String, HttpEntity<?>> parts = new LinkedMultiValueMap<>();
-        HttpHeaders fileHeaders = new HttpHeaders();
-        fileHeaders.setContentDisposition(ContentDisposition.builder("form-data")
-            .name("file")
-            .filename("test.pdf")
-            .build());
-        fileHeaders.setContentType(MediaType.APPLICATION_PDF);
-
-        byte[] fileContent = "test pdf content".getBytes();
-        parts.add("file", new HttpEntity<>(fileContent, fileHeaders));
-
-        webTestClient.post()
+    void getAllFiles_shouldReturnAccepted_whenCalled() {
+        webTestClient.get()
             .uri("/api/v1/files")
-            .contentType(MediaType.MULTIPART_FORM_DATA)
-            .body(BodyInserters.fromMultipartData(parts))
             .exchange()
-            .expectStatus().is5xxServerError();
-    }
-
-    @Test
-    void uploadFile_shouldReturnBadRequest_whenInvalidFileType() {
-        // No need mock server for this test - validation happens before SOAP call
-
-        MultiValueMap<String, HttpEntity<?>> parts = new LinkedMultiValueMap<>();
-        HttpHeaders fileHeaders = new HttpHeaders();
-        fileHeaders.setContentDisposition(ContentDisposition.builder("form-data")
-            .name("file")
-            .filename("test.exe")
-            .build());
-        fileHeaders.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-
-        byte[] fileContent = "exe content".getBytes();
-        parts.add("file", new HttpEntity<>(fileContent, fileHeaders));
-
-        webTestClient.post()
-            .uri("/api/v1/files")
-            .contentType(MediaType.MULTIPART_FORM_DATA)
-            .body(BodyInserters.fromMultipartData(parts))
-            .exchange()
-            .expectStatus().isBadRequest()
+            .expectStatus().isAccepted()
             .expectBody()
-            .jsonPath("$.errorCode").isEqualTo("INVALID_FILE_TYPE");
+            .jsonPath("$.status").isEqualTo("PROCESSING")
+            .jsonPath("$.success").isEqualTo(true);
     }
 }

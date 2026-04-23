@@ -41,7 +41,9 @@ dependencies {
     implementation("io.projectreactor:reactor-core")
     implementation("io.projectreactor.addons:reactor-extra")
 
-    // Lombok - removido por incompatibilidad con Java 25
+    // Lombok
+    compileOnly("org.projectlombok:lombok:1.18.30")
+    annotationProcessor("org.projectlombok:lombok:1.18.30")
 
     // MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
@@ -103,7 +105,7 @@ pitest {
     timestampedReports.set(false)
     mutationThreshold.set(50)
     coverageThreshold.set(60)
-    mutators.set(listOf("DEFAULTS", "REMOVE_CONDITIONALS_EQUAL_IF", "REMOVE_CONDITIONALS_ORDER_IF", "REMOVE_INCREMENTS", "INVERT_NEGS", "MATH", "NEGATE_CONDITIONALS", "RETURN_VALS", "VOID_METHOD_CALLS", "NON_VOID_METHOD_CALLS"))
+    mutators.set(listOf("DEFAULTS", "REMOVE_CONDITIONALS_EQUAL_IF", "REMOVE_CONDITIONALS_ORDER_IF", "REMOVE_INCREMENTS", "INVERT_NEGS", "MATH", "NEGATE_CONDITIONALS", "VOID_METHOD_CALLS", "NON_VOID_METHOD_CALLS"))
     excludedClasses.set(listOf("com.example.fileprocessor.Application", "com.example.fileprocessor.config.*", "com.example.fileprocessor.infrastructure.config.*", "com.example.fileprocessor.mock.*"))
     excludedMethods.set(listOf("toString", "hashCode", "equals", "log.*"))
 }

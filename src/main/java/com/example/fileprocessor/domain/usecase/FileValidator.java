@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,9 +33,9 @@ public class FileValidator {
     }
 
     private Mono<FileData> validateSize(FileData fileData) {
-        if (fileData.size() > config.maxSize()) {
+        if (fileData.getSize() > config.maxSize()) {
             log.warn("File {} exceeds max size: {} > {}",
-                fileData.filename(), fileData.size(), config.maxSize());
+                fileData.getFilename(), fileData.getSize(), config.maxSize());
             return Mono.error(new FileValidationException(
                 "File size exceeds maximum allowed: " + config.maxSize() + " bytes",
                 "FILE_SIZE_EXCEEDED"));
@@ -49,7 +48,7 @@ public class FileValidator {
 
         if (!allowedTypes.contains(extension.toLowerCase())) {
             log.warn("File {} has invalid extension: {}",
-                fileData.filename(), extension);
+                fileData.getFilename(), extension);
             return Mono.error(new FileValidationException(
                 "File type not allowed. Allowed types: " + config.allowedTypes(),
                 "INVALID_FILE_TYPE"));
@@ -58,7 +57,7 @@ public class FileValidator {
     }
 
     private Mono<FileData> validateFilename(FileData fileData) {
-        String filename = fileData.filename();
+        String filename = fileData.getFilename();
         if (filename.length() > config.maxFilenameLength()) {
             log.warn("Filename exceeds max length: {}", filename.length());
             return Mono.error(new FileValidationException(

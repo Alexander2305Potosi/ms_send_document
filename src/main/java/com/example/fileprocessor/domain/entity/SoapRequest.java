@@ -1,33 +1,32 @@
 package com.example.fileprocessor.domain.entity;
 
+import lombok.Builder;
+import lombok.Getter;
+
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Objects;
 
-public record SoapRequest(
-    String fileContentBase64,
-    String filename,
-    String contentType,
-    long fileSize,
-    String traceId,
-    Instant timestamp
-) {
-    public SoapRequest {
-        Objects.requireNonNull(fileContentBase64, "fileContentBase64 must not be null");
-        Objects.requireNonNull(filename, "filename must not be null");
-        Objects.requireNonNull(contentType, "contentType must not be null");
-        Objects.requireNonNull(traceId, "traceId must not be null");
-        Objects.requireNonNull(timestamp, "timestamp must not be null");
-    }
+/**
+ * SOAP request representation for sending files to external service.
+ */
+@Getter
+@Builder
+public class SoapRequest {
+    private final String fileContentBase64;
+    private final String filename;
+    private final String contentType;
+    private final long fileSize;
+    private final String traceId;
+    private final Instant timestamp;
 
     public static SoapRequest fromFileData(FileData fileData) {
-        return new SoapRequest(
-            Base64.getEncoder().encodeToString(fileData.content()),
-            fileData.filename(),
-            fileData.contentType(),
-            fileData.size(),
-            fileData.traceId(),
-            Instant.now()
-        );
+        return SoapRequest.builder()
+            .fileContentBase64(Base64.getEncoder().encodeToString(fileData.getContent()))
+            .filename(fileData.getFilename())
+            .contentType(fileData.getContentType())
+            .fileSize(fileData.getSize())
+            .traceId(fileData.getTraceId())
+            .timestamp(Instant.now())
+            .build();
     }
 }

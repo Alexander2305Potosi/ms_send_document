@@ -1,20 +1,21 @@
 package com.example.fileprocessor.domain.entity;
 
-import java.time.Instant;
-import java.util.Objects;
+import lombok.Builder;
+import lombok.Getter;
 
-public record SoapCommunicationLog(
-    String traceId,
-    String status,
-    int retryCount,
-    String errorCode,
-    String filename,
-    Instant createdAt
-) {
-    public SoapCommunicationLog {
-        Objects.requireNonNull(traceId, "traceId must not be null");
-        Objects.requireNonNull(status, "status must not be null");
-        Objects.requireNonNull(filename, "filename must not be null");
-        Objects.requireNonNull(createdAt, "createdAt must not be null");
-    }
+import java.time.Instant;
+
+/**
+ * Log entry for SOAP communication tracking.
+ */
+@Getter
+@Builder
+public class SoapCommunicationLog {
+    private final String traceId;
+    private final String status;
+    private final int retryCount;
+    private final String errorCode;
+    private final String filename;
+    private final String parentDocumentId;
+    private final Instant createdAt;
 }

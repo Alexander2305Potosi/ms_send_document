@@ -1,30 +1,23 @@
 package com.example.fileprocessor.infrastructure.rest;
 
-import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
-import com.example.fileprocessor.infrastructure.config.FileUploadProperties;
 import com.example.fileprocessor.infrastructure.rest.controller.FileController;
+import com.example.fileprocessor.infrastructure.rest.controller.FileController.AsyncProcessResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DefaultDataBufferFactory;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.http.codec.multipart.Part;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
-import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,85 +26,96 @@ class FileControllerTest {
     @Mock
     private ProcessFileUseCase processFileUseCase;
 
-    @Mock
-    private ServerWebExchange exchange;
-
-    @Mock
-    private ServerHttpRequest request;
-
-    @Mock
-    private FilePart filePart;
-
     private FileController fileController;
 
     @BeforeEach
     void setUp() {
-        FileUploadProperties properties = new FileUploadProperties(
-            10 * 1024 * 1024, "pdf,docx,txt", 255);
-        fileController = new FileController(processFileUseCase, properties);
+        fileController = new FileController(processFileUseCase);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void uploadFile_shouldReturnSuccessResponse() {
-        byte[] content = "test content".getBytes(StandardCharsets.UTF_8);
-        String filename = "test.pdf";
-        String traceId = "test-trace-id";
+    void getFile_shouldReturnAcceptedResponse() {
+        String documentId = "doc-001";
+        FileUploadResult result = FileUploadResult.builder()
+            .status("SUCCESS")
+            .message("File processed successfully")
+            .correlationId("corr-123")
+            .traceId("trace-123")
+            .processedAt(Instant.now())
+            .externalReference("ext-ref-456")
+            .success(true)
+            .build();
 
-        FileData fileData = new FileData(content, filename, content.length,
-            "application/pdf", traceId);
-        FileUploadResult result = new FileUploadResult("SUCCESS", "File processed",
-            "corr-123", traceId, java.time.Instant.now(), "ext-ref", true);
+        when(processFileUseCase.execute(eq(documentId), any(String.class)))
+            .thenReturn(Mono.just(result));
 
-        DataBuffer dataBuffer = new DefaultDataBufferFactory().wrap(content);
+        var response = fileController.getFile(documentId);
 
-        // Setup FilePart mock
-        when(filePart.content()).thenReturn(Flux.just(dataBuffer));
-        when(filePart.filename()).thenReturn(filename);
-        when(filePart.headers()).thenReturn(new org.springframework.http.HttpHeaders());
+        assertTrue(response.getStatusCode().is2xxSuccessful());
+        assertEquals("PROCESSING", response.getBody().status());
+        assertEquals("Document processing started", response.getBody().message());
+        assertTrue(response.getBody().success());
 
-        // Setup multipart data
-        MultiValueMap<String, Part> multipartData = mock(MultiValueMap.class);
-        when(multipartData.getFirst("file")).thenReturn(filePart);
-
-        // Setup request mock
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
-        when(request.getHeaders()).thenReturn(headers);
-
-        // Setup exchange mock
-        when(exchange.getRequest()).thenReturn(request);
-        when(exchange.getMultipartData()).thenReturn(Mono.just(multipartData));
-
-        // Setup usecase
-        when(processFileUseCase.execute(any(FileData.class))).thenReturn(Mono.just(result));
-
-        StepVerifier.create(fileController.uploadFile(exchange))
-            .assertNext(response -> {
-                assert response.getStatusCode().is2xxSuccessful();
-            })
-            .verifyComplete();
-
-        verify(processFileUseCase, times(1)).execute(any(FileData.class));
+        verify(processFileUseCase, times(1)).execute(eq(documentId), any(String.class));
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void uploadFile_shouldReturnError_whenNoFileProvided() {
-        // Setup multipart data with no file
-        MultiValueMap<String, Part> multipartData = mock(MultiValueMap.class);
-        when(multipartData.getFirst("file")).thenReturn(null);
+    void getAllFiles_shouldReturnAcceptedResponse() {
+        FileUploadResult result1 = FileUploadResult.builder()
+            .status("SUCCESS")
+            .message("File processed")
+            .correlationId("corr-1")
+            .traceId("trace-1")
+            .processedAt(Instant.now())
+            .externalReference("ext-1")
+            .success(true)
+            .build();
 
-        // Setup request mock
-        HttpHeaders headers = new HttpHeaders();
-        when(request.getHeaders()).thenReturn(headers);
+        FileUploadResult result2 = FileUploadResult.builder()
+            .status("SUCCESS")
+            .message("File processed")
+            .correlationId("corr-2")
+            .traceId("trace-2")
+            .processedAt(Instant.now())
+            .externalReference("ext-2")
+            .success(true)
+            .build();
 
-        // Setup exchange mock
-        when(exchange.getRequest()).thenReturn(request);
-        when(exchange.getMultipartData()).thenReturn(Mono.just(multipartData));
+        when(processFileUseCase.executeAll(any(String.class)))
+            .thenReturn(Flux.just(result1, result2));
 
-        StepVerifier.create(fileController.uploadFile(exchange))
-            .expectError(IllegalArgumentException.class)
-            .verify();
+        var response = fileController.getAllFiles(null);
+
+        assertTrue(response.getStatusCode().is2xxSuccessful());
+        assertEquals("PROCESSING", response.getBody().status());
+        assertEquals("All documents processing started", response.getBody().message());
+        assertTrue(response.getBody().success());
+
+        verify(processFileUseCase, times(1)).executeAll(any(String.class));
+    }
+
+    @Test
+    void getFile_shouldUseProvidedTraceId() {
+        String documentId = "doc-002";
+        String traceId = "custom-trace-id";
+
+        FileUploadResult result = FileUploadResult.builder()
+            .status("SUCCESS")
+            .message("OK")
+            .correlationId("corr-xyz")
+            .traceId(traceId)
+            .processedAt(Instant.now())
+            .externalReference("ext-789")
+            .success(true)
+            .build();
+
+        when(processFileUseCase.execute(eq(documentId), any(String.class)))
+            .thenReturn(Mono.just(result));
+
+        var response = fileController.getFile(documentId);
+
+        assertTrue(response.getStatusCode().is2xxSuccessful());
+
+        verify(processFileUseCase, times(1)).execute(eq(documentId), any(String.class));
     }
 }

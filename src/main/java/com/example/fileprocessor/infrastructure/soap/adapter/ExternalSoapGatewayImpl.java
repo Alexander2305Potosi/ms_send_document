@@ -51,7 +51,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
     @Override
     public Mono<SoapResponse> sendFile(SoapRequest request) {
         log.info("Sending SOAP request for traceId: {}, endpoint: {}",
-            request.traceId(), properties.endpoint());
+            request.getTraceId(), properties.endpoint());
 
         String soapEnvelope = soapMapper.toFullSoapMessage(request);
         AtomicInteger retryCount = new AtomicInteger(0);
@@ -68,7 +68,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
                         return Mono.error(new SoapCommunicationException(
                             "SOAP service returned error: " + response.statusCode(),
                             mapHttpStatusToCode(response.statusCode()),
-                            request.traceId()));
+                            request.getTraceId()));
                     }))
             .bodyToMono(String.class)
             .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
@@ -79,14 +79,14 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
                     int attempts = (int) retrySignal.totalRetries() + 1;
                     retryCount.set(attempts);
                     log.warn("Retrying SOAP call for traceId={}, attempt {}/{} (backoff={}ms)",
-                        request.traceId(),
+                        request.getTraceId(),
                         attempts,
                         properties.retryAttempts(),
                         properties.retryBackoffMillis() * attempts);
                 }))
-            .map(responseXml -> soapMapper.fromSoapXml(responseXml, request.traceId()))
+            .map(responseXml -> soapMapper.fromSoapXml(responseXml, request.getTraceId()))
             .doOnNext(response -> log.info("SOAP response received for traceId={}: correlationId={}",
-                request.traceId(), response.correlationId()));
+                request.getTraceId(), response.getCorrelationId()));
 
         return soapCall
             .onErrorResume(throwable -> {
@@ -96,16 +96,16 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
                 }
                 int retries = retryCount.get();
                 if (cause instanceof TimeoutException) {
-                    log.error("SOAP timeout for traceId: {} after {} retries", request.traceId(), retries);
+                    log.error("SOAP timeout for traceId: {} after {} retries", request.getTraceId(), retries);
                     return Mono.error(new SoapCommunicationException(
                         "SOAP request timed out after " + properties.retryAttempts() + " retries",
-                        "GATEWAY_TIMEOUT", request.traceId(), retries));
+                        "GATEWAY_TIMEOUT", request.getTraceId(), retries));
                 }
                 if (cause instanceof WebClientResponseException e) {
-                    log.error("WebClient error for traceId: {}: {}", request.traceId(), e.getMessage());
+                    log.error("WebClient error for traceId: {}: {}", request.getTraceId(), e.getMessage());
                     return Mono.error(new SoapCommunicationException(
                         "Communication error with SOAP service: " + e.getMessage(),
-                        mapHttpStatusToCode(e.getStatusCode()), request.traceId(), retries));
+                        mapHttpStatusToCode(e.getStatusCode()), request.getTraceId(), retries));
                 }
                 return Mono.error(throwable);
             });
