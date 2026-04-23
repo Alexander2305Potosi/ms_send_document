@@ -4,6 +4,7 @@ plugins {
     id("org.springframework.boot") version "3.3.5"
     id("io.spring.dependency-management") version "1.1.6"
     id("info.solidsoft.pitest") version "1.15.0"
+    id("jacoco")
 }
 
 group = "com.example"
@@ -108,4 +109,17 @@ pitest {
     mutators.set(listOf("DEFAULTS", "REMOVE_CONDITIONALS_EQUAL_IF", "REMOVE_CONDITIONALS_ORDER_IF", "REMOVE_INCREMENTS", "INVERT_NEGS", "MATH", "NEGATE_CONDITIONALS", "VOID_METHOD_CALLS", "NON_VOID_METHOD_CALLS"))
     excludedClasses.set(listOf("com.example.fileprocessor.Application", "com.example.fileprocessor.config.*", "com.example.fileprocessor.infrastructure.config.*", "com.example.fileprocessor.mock.*"))
     excludedMethods.set(listOf("toString", "hashCode", "equals", "log.*"))
+}
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/test"))
+    }
 }

@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentInfo;
+import com.example.fileprocessor.domain.entity.DocumentToProcess;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.SoapCommunicationLog;
@@ -8,8 +9,10 @@ import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.entity.ZipArchive;
 import com.example.fileprocessor.domain.port.out.DocumentRestGateway;
+import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
+import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,9 +21,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class ProcessFileUseCase {
 
@@ -28,202 +29,110 @@ public class ProcessFileUseCase {
 
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_FAILURE = "FAILURE";
+    private static final String STATUS_SKIPPED = "SKIPPED";
+    private static final String STATUS_PENDING = "PENDING";
     private static final String DEFAULT_ERROR_CODE = "UNKNOWN_ERROR";
     private static final int DEFAULT_RETRY_COUNT = 0;
+    private static final long MB_TO_BYTES = 1024 * 1024;
 
     private final DocumentRestGateway documentGateway;
+    private final DocumentRepository documentRepository;
     private final ExternalSoapGateway soapGateway;
     private final FileValidator fileValidator;
     private final SoapCommunicationLogRepository logRepository;
+    private final FileValidationConfig validationConfig;
 
     public ProcessFileUseCase(DocumentRestGateway documentGateway,
+                              DocumentRepository documentRepository,
                               ExternalSoapGateway soapGateway,
                               FileValidator fileValidator,
-                              SoapCommunicationLogRepository logRepository) {
+                              SoapCommunicationLogRepository logRepository,
+                              FileValidationConfig validationConfig) {
         this.documentGateway = documentGateway;
+        this.documentRepository = documentRepository;
         this.soapGateway = soapGateway;
         this.fileValidator = fileValidator;
         this.logRepository = logRepository;
+        this.validationConfig = validationConfig;
     }
 
-    public Mono<FileUploadResult> execute(String documentId, String traceId) {
-        log.info("Processing document: {}, traceId: {}", documentId, traceId);
+    public Flux<FileUploadResult> executePendingDocuments() {
+        log.info("Fetching pending documents from database...");
 
-        return documentGateway.getDocument(documentId, traceId)
-            .flatMap(this::processDocument)
-            .doOnNext(response -> log.info("Document {} processed successfully, correlationId: {}",
-                documentId, response.getCorrelationId()))
-            .doOnError(error -> log.error("Error processing document {}: {}",
-                documentId, error.getMessage()));
-    }
-
-    public Flux<FileUploadResult> executeAll(String traceId) {
-        log.info("Processing all documents, traceId: {}", traceId);
-
-        return documentGateway.getAllDocuments(traceId)
-            .flatMap(this::processDocument)
-            .doOnNext(response -> log.info("Document processed successfully, correlationId: {}",
-                response.getCorrelationId()))
+        return documentRepository.findPendingDocuments()
+            .flatMap(this::processPendingDocument)
+            .doOnNext(response -> log.info("Document processed: correlationId={}", response.getCorrelationId()))
             .doOnError(error -> log.error("Error processing document: {}", error.getMessage()));
     }
 
-    private Mono<FileUploadResult> processDocument(DocumentInfo doc) {
+    private Mono<FileUploadResult> processPendingDocument(DocumentToProcess pending) {
+        String traceId = java.util.UUID.randomUUID().toString();
+        log.info("Processing pending document: {}, origin: {}, traceId: {}",
+            pending.getDocumentId(), pending.getOrigin(), traceId);
+
+        // Rule 1: Check if origin contains a folder to skip
+        if (shouldSkipFolder(pending.getOrigin())) {
+            log.info("Document {} skipped due to folder rule, origin: {}",
+                pending.getDocumentId(), pending.getOrigin());
+            return documentRepository.updateStatus(pending.getDocumentId(), STATUS_SKIPPED, traceId, null, "SKIPPED_FOLDER")
+                .thenReturn(FileUploadResult.builder()
+                    .status(STATUS_SKIPPED)
+                    .message("Document skipped due to folder rule: " + pending.getOrigin())
+                    .correlationId(null)
+                    .traceId(traceId)
+                    .processedAt(Instant.now())
+                    .externalReference(pending.getDocumentId())
+                    .success(true)
+                    .build());
+        }
+
+        return documentGateway.getDocument(pending.getDocumentId(), traceId)
+            .flatMap(doc -> processDocument(doc, traceId, pending.getDocumentId(), pending.getOrigin()))
+            .flatMap(result -> {
+                // Only update DB if not SKIPPED (SKIPPED already updated inside processFile)
+                if (STATUS_SKIPPED.equals(result.getStatus())) {
+                    return Mono.just(result);
+                }
+                return updateDocumentStatus(pending.getDocumentId(), result, traceId).thenReturn(result);
+            })
+            .onErrorResume(error -> handleDocumentError(pending.getDocumentId(), error, traceId));
+    }
+
+    private boolean shouldSkipFolder(String origin) {
+        if (origin == null || origin.isBlank()) {
+            return false;
+        }
+        List<String> foldersToSkip = validationConfig.foldersToSkip();
+        if (foldersToSkip == null || foldersToSkip.isEmpty()) {
+            return false;
+        }
+        return foldersToSkip.stream()
+            .anyMatch(folder -> origin.contains(folder));
+    }
+
+    private Mono<FileUploadResult> processDocument(DocumentInfo doc, String traceId, String documentId, String origin) {
         if (doc.isZipArchive()) {
             log.info("Document {} is a ZIP archive, extracting and processing contents", doc.getDocumentId());
-            return processZipDocument(doc);
+            return processZipDocument(doc, traceId, origin);
         }
-        return processFile(toFileData(doc, null));
+        return processFile(toFileData(doc), origin);
     }
 
-    private FileData toFileData(DocumentInfo doc, String parentDocumentId) {
-        return FileData.builder()
-            .content(doc.getContent())
-            .filename(doc.getFilename())
-            .size(doc.getSize())
-            .contentType(doc.getContentType())
-            .traceId(java.util.UUID.randomUUID().toString())
-            .parentDocumentId(parentDocumentId)
-            .build();
+    private Mono<FileUploadResult> updateDocumentStatus(String documentId, FileUploadResult result, String traceId) {
+        String status = result.getStatus();
+        String soapCorrelationId = STATUS_SUCCESS.equals(status) ? result.getCorrelationId() : null;
+        String errorCode = STATUS_SUCCESS.equals(status) ? null : extractErrorCodeFromMessage(result.getMessage());
+
+        return documentRepository.updateStatus(documentId, status, traceId, soapCorrelationId, errorCode)
+            .thenReturn(result);
     }
 
-    private Mono<FileUploadResult> processZipDocument(DocumentInfo doc) {
-        String zipTraceId = java.util.UUID.randomUUID().toString();
+    private Mono<FileUploadResult> handleDocumentError(String documentId, Throwable error, String traceId) {
+        String errorCode = extractErrorCode(error);
+        log.error("Failed to process document {}: {}", documentId, error.getMessage());
 
-        return logRepository.findByParentDocumentId(doc.getDocumentId())
-            .collectList()
-            .flatMap(processedLogs -> {
-                Set<String> processedFiles = extractProcessedFilenames(processedLogs);
-                ZipArchive zipArchive = ZipArchive.builder()
-                    .zipContent(doc.getContent())
-                    .originalFilename(doc.getFilename())
-                    .build();
-
-                List<ZipArchive.ExtractedDocument> extractedDocs;
-                try {
-                    extractedDocs = zipArchive.extractDocuments();
-                } catch (IOException e) {
-                    log.error("Failed to extract ZIP archive {}: {}", doc.getFilename(), e.getMessage());
-                    return logFailure(doc.getDocumentId(), zipTraceId, e, doc.getDocumentId())
-                        .then(Mono.error(new IllegalStateException("Failed to extract ZIP: " + doc.getFilename(), e)));
-                }
-
-                if (extractedDocs.isEmpty()) {
-                    log.warn("ZIP archive {} is empty", doc.getFilename());
-                    return Mono.error(new IllegalStateException("ZIP archive is empty: " + doc.getFilename()));
-                }
-
-                List<ZipArchive.ExtractedDocument> docsToProcess = extractedDocs.stream()
-                    .filter(extracted -> !processedFiles.contains(extracted.getFilename()))
-                    .toList();
-
-                if (docsToProcess.isEmpty()) {
-                    log.info("All documents in ZIP {} already processed, skipping", doc.getFilename());
-                    return buildResumeResult(processedLogs, doc.getDocumentId(), zipTraceId);
-                }
-
-                if (docsToProcess.size() < extractedDocs.size()) {
-                    log.info("Resuming ZIP processing: {}/{} documents already processed, {} remaining",
-                        processedFiles.size(), extractedDocs.size(), docsToProcess.size());
-                } else {
-                    log.info("ZIP archive {} contains {} documents", doc.getFilename(), extractedDocs.size());
-                }
-
-                return Flux.fromIterable(docsToProcess)
-                    .map(extracted -> toFileData(extracted, doc.getDocumentId()))
-                    .flatMap(this::processFile)
-                    .collectList()
-                    .map(results -> aggregateResults(results, doc.getDocumentId(), zipTraceId));
-            });
-    }
-
-    private FileData toFileData(ZipArchive.ExtractedDocument extracted, String parentDocumentId) {
-        return FileData.builder()
-            .content(extracted.getContent())
-            .filename(extracted.getFilename())
-            .size(extracted.getSize())
-            .contentType(extracted.getContentType())
-            .traceId(java.util.UUID.randomUUID().toString())
-            .parentDocumentId(parentDocumentId)
-            .build();
-    }
-
-    private Mono<FileUploadResult> processFile(FileData fileData) {
-        return fileValidator.validate(fileData)
-            .map(SoapRequest::fromFileData)
-            .flatMap(soapGateway::sendFile)
-            .flatMap(response -> logSuccess(fileData.getFilename(), fileData.getTraceId(), response, fileData.getParentDocumentId())
-                .thenReturn(response))
-            .map(this::toResult)
-            .doOnNext(result -> log.info("Document {} processed, correlationId: {}", fileData.getFilename(), result.getCorrelationId()))
-            .onErrorResume(throwable -> hasSoapCommunicationException(throwable)
-                ? logFailure(fileData.getFilename(), fileData.getTraceId(), throwable, fileData.getParentDocumentId())
-                    .then(Mono.error(throwable))
-                : Mono.error(throwable));
-    }
-
-    private Set<String> extractProcessedFilenames(List<SoapCommunicationLog> logs) {
-        Set<String> processed = new HashSet<>();
-        for (SoapCommunicationLog logEntry : logs) {
-            if (STATUS_SUCCESS.equals(logEntry.getStatus())) {
-                processed.add(logEntry.getFilename());
-            }
-        }
-        return processed;
-    }
-
-    private Mono<FileUploadResult> buildResumeResult(List<SoapCommunicationLog> logs, String documentId, String zipTraceId) {
-        long successCount = logs.stream().filter(l -> STATUS_SUCCESS.equals(l.getStatus())).count();
-        long totalProcessed = logs.size();
-
-        SoapCommunicationLog firstSuccess = logs.stream()
-            .filter(l -> STATUS_SUCCESS.equals(l.getStatus()))
-            .findFirst()
-            .orElse(null);
-
-        return Mono.just(FileUploadResult.builder()
-            .status(STATUS_SUCCESS)
-            .message(String.format("ZIP resumed: %d/%d documents previously successful", successCount, totalProcessed))
-            .correlationId(firstSuccess != null ? firstSuccess.getFilename() + "-resume" : null)
-            .traceId(zipTraceId)
-            .processedAt(Instant.now())
-            .externalReference(documentId + " (ZIP-RESUMED)")
-            .success(true)
-            .build());
-    }
-
-    private FileUploadResult aggregateResults(List<FileUploadResult> results, String documentId, String zipTraceId) {
-        if (results.isEmpty()) {
-            return FileUploadResult.builder()
-                .status(STATUS_FAILURE)
-                .message("No documents processed")
-                .correlationId(null)
-                .traceId(zipTraceId)
-                .processedAt(Instant.now())
-                .externalReference(documentId + " (ZIP)")
-                .success(false)
-                .build();
-        }
-
-        var stats = results.stream().collect(
-            java.util.stream.Collectors.partitioningBy(FileUploadResult::isSuccess)
-        );
-
-        List<FileUploadResult> successes = stats.get(true);
-        List<FileUploadResult> failures = stats.get(false);
-
-        FileUploadResult referenceResult = successes.isEmpty() ? failures.get(failures.size() - 1) : successes.get(0);
-        boolean allSuccess = failures.isEmpty();
-
-        return FileUploadResult.builder()
-            .status(referenceResult.getStatus())
-            .message(String.format("ZIP processed: %d documents, %d successful%s",
-                results.size(), successes.size(), allSuccess ? "" : ", some failed"))
-            .correlationId(referenceResult.getCorrelationId())
-            .traceId(zipTraceId)
-            .processedAt(Instant.now())
-            .externalReference(documentId + " (ZIP)")
-            .success(allSuccess)
-            .build();
+        return documentRepository.updateStatus(documentId, STATUS_FAILURE, traceId, null, errorCode)
+            .then(Mono.error(error));
     }
 
     private FileUploadResult toResult(SoapResponse response) {
@@ -238,34 +147,191 @@ public class ProcessFileUseCase {
             .build();
     }
 
-    private boolean hasSoapCommunicationException(Throwable throwable) {
-        return throwable instanceof SoapCommunicationException
-            || throwable.getCause() instanceof SoapCommunicationException;
+    private Mono<FileUploadResult> processFile(FileData fileData, String origin) {
+        // Rule 2: Check file size - if >= 50MB, don't send to SOAP
+        if (shouldSkipBySize(fileData.getSize())) {
+            log.info("Document {} skipped due to size rule: {} bytes (>= {} MB)",
+                fileData.getFilename(), fileData.getSize(), validationConfig.maxFileSizeMb());
+            return Mono.just(FileUploadResult.builder()
+                .status(STATUS_SKIPPED)
+                .message("Document skipped due to size rule: " + fileData.getSize() + " bytes")
+                .correlationId(null)
+                .traceId(fileData.getTraceId())
+                .processedAt(Instant.now())
+                .externalReference(fileData.getFilename())
+                .success(true)
+                .build());
+        }
+
+        // Get folder info based on keywords (Rule 3)
+        FolderInfo folderInfo = extractFolderInfo(origin);
+
+        return fileValidator.validate(fileData)
+            .map(validData -> SoapRequest.fromFileData(validData, folderInfo.folderPadre(), folderInfo.folderChild()))
+            .flatMap(soapGateway::sendFile)
+            .flatMap(response -> saveSoapLog(fileData.getFilename(), fileData.getTraceId(), response).thenReturn(response))
+            .map(this::toResult)
+            .doOnNext(result -> log.info("File {} processed, correlationId: {}", fileData.getFilename(), result.getCorrelationId()))
+            .onErrorResume(error -> saveSoapErrorLog(fileData.getFilename(), fileData.getTraceId(), error)
+                .then(Mono.error(error)));
     }
 
-    private Mono<Void> logSuccess(String filename, String traceId, SoapResponse response, String parentDocumentId) {
-        return saveLog(filename, traceId, STATUS_SUCCESS, null, DEFAULT_RETRY_COUNT, parentDocumentId);
+    private boolean shouldSkipBySize(long sizeBytes) {
+        int maxSizeMb = validationConfig.maxFileSizeMb();
+        if (maxSizeMb <= 0) {
+            return false;
+        }
+        return sizeBytes >= (long) maxSizeMb * MB_TO_BYTES;
     }
 
-    private Mono<Void> logFailure(String filename, String traceId, Throwable error, String parentDocumentId) {
-        SoapCommunicationException sce = unwrapSoapException(error);
-        String errorCode = sce != null ? sce.getErrorCode() : DEFAULT_ERROR_CODE;
-        int retries = sce != null ? sce.getRetryCount() : DEFAULT_RETRY_COUNT;
-        return saveLog(filename, traceId, STATUS_FAILURE, errorCode, retries, parentDocumentId);
+    private FolderInfo extractFolderInfo(String origin) {
+        List<String> keywords = validationConfig.keywords();
+        if (keywords == null || keywords.isEmpty() || origin == null || origin.isBlank()) {
+            return new FolderInfo(".", ".");
+        }
+
+        for (String keyword : keywords) {
+            if (origin.contains(keyword)) {
+                String[] parts = origin.split("/");
+                if (parts.length >= 2) {
+                    String folderChild = parts[parts.length - 1];
+                    String folderPadre = parts.length > 1 ? parts[parts.length - 2] : ".";
+                    return new FolderInfo(folderPadre, folderChild);
+                }
+                return new FolderInfo(origin, ".");
+            }
+        }
+        return new FolderInfo(".", ".");
     }
 
-    private Mono<Void> saveLog(String filename, String traceId, String status,
-                               String errorCode, int retries, String parentDocumentId) {
+    private record FolderInfo(String folderPadre, String folderChild) {}
+
+    private Mono<FileUploadResult> processZipDocument(DocumentInfo doc, String traceId, String origin) {
+        ZipArchive zipArchive = ZipArchive.builder()
+            .zipContent(doc.getContent())
+            .originalFilename(doc.getFilename())
+            .build();
+
+        try {
+            var extractedDocs = zipArchive.extractDocuments();
+
+            if (extractedDocs.isEmpty()) {
+                log.warn("ZIP archive {} is empty", doc.getFilename());
+                return Mono.error(new IllegalStateException("ZIP archive is empty: " + doc.getFilename()));
+            }
+
+            log.info("ZIP archive {} contains {} documents", doc.getFilename(), extractedDocs.size());
+
+            return Flux.fromIterable(extractedDocs)
+                .map(extracted -> toFileData(extracted))
+                .flatMap(fileData -> processFile(fileData, origin))
+                .collectList()
+                .map(results -> aggregateResults(results, doc.getDocumentId()));
+        } catch (IOException e) {
+            log.error("Failed to extract ZIP archive {}: {}", doc.getFilename(), e.getMessage());
+            return Mono.error(new IllegalStateException("Failed to extract ZIP: " + doc.getFilename(), e));
+        }
+    }
+
+    private FileData toFileData(DocumentInfo doc) {
+        return FileData.builder()
+            .content(doc.getContent())
+            .filename(doc.getFilename())
+            .size(doc.getSize())
+            .contentType(doc.getContentType())
+            .traceId(java.util.UUID.randomUUID().toString())
+            .build();
+    }
+
+    private FileData toFileData(ZipArchive.ExtractedDocument extracted) {
+        return FileData.builder()
+            .content(extracted.getContent())
+            .filename(extracted.getFilename())
+            .size(extracted.getSize())
+            .contentType(extracted.getContentType())
+            .traceId(java.util.UUID.randomUUID().toString())
+            .build();
+    }
+
+    private FileUploadResult aggregateResults(java.util.List<FileUploadResult> results, String documentId) {
+        if (results.isEmpty()) {
+            return FileUploadResult.builder()
+                .status(STATUS_FAILURE)
+                .message("No documents processed")
+                .correlationId(null)
+                .traceId(null)
+                .processedAt(Instant.now())
+                .externalReference(documentId)
+                .success(false)
+                .build();
+        }
+
+        var stats = results.stream().collect(
+            java.util.stream.Collectors.partitioningBy(FileUploadResult::isSuccess)
+        );
+
+        var successes = stats.get(true);
+        var failures = stats.get(false);
+        var referenceResult = successes.isEmpty() ? failures.get(failures.size() - 1) : successes.get(0);
+        boolean allSuccess = failures.isEmpty();
+
+        return FileUploadResult.builder()
+            .status(referenceResult.getStatus())
+            .message(String.format("ZIP processed: %d documents, %d successful%s",
+                results.size(), successes.size(), allSuccess ? "" : ", some failed"))
+            .correlationId(referenceResult.getCorrelationId())
+            .traceId(null)
+            .processedAt(Instant.now())
+            .externalReference(documentId)
+            .success(allSuccess)
+            .build();
+    }
+
+    private Mono<Void> saveSoapLog(String filename, String traceId, SoapResponse response) {
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
             .traceId(traceId)
-            .status(status)
-            .retryCount(retries)
-            .errorCode(errorCode)
+            .status(STATUS_SUCCESS)
+            .retryCount(DEFAULT_RETRY_COUNT)
             .filename(filename)
-            .parentDocumentId(parentDocumentId)
             .createdAt(Instant.now())
             .build();
         return logRepository.save(dbLog).then();
+    }
+
+    private Mono<Void> saveSoapErrorLog(String filename, String traceId, Throwable error) {
+        SoapCommunicationException sce = unwrapSoapException(error);
+        String errorCode = sce != null ? sce.getErrorCode() : DEFAULT_ERROR_CODE;
+        int retries = sce != null ? sce.getRetryCount() : DEFAULT_RETRY_COUNT;
+
+        SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
+            .traceId(traceId)
+            .status(STATUS_FAILURE)
+            .retryCount(retries)
+            .errorCode(errorCode)
+            .filename(filename)
+            .createdAt(Instant.now())
+            .build();
+        return logRepository.save(dbLog).then();
+    }
+
+    private String extractErrorCode(Throwable error) {
+        if (error instanceof SoapCommunicationException sce) {
+            return sce.getErrorCode();
+        }
+        if (error.getCause() instanceof SoapCommunicationException sce) {
+            return sce.getErrorCode();
+        }
+        if (error instanceof com.example.fileprocessor.domain.exception.FileValidationException fve) {
+            return fve.getErrorCode();
+        }
+        return DEFAULT_ERROR_CODE;
+    }
+
+    private String extractErrorCodeFromMessage(String message) {
+        if (message == null) return DEFAULT_ERROR_CODE;
+        if (message.contains("timeout")) return "TIMEOUT";
+        if (message.contains("validation")) return "VALIDATION_ERROR";
+        return DEFAULT_ERROR_CODE;
     }
 
     private SoapCommunicationException unwrapSoapException(Throwable error) {

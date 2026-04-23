@@ -18,8 +18,10 @@ public class SoapRequest {
     private final long fileSize;
     private final String traceId;
     private final Instant timestamp;
+    private final String folderPadre;
+    private final String folderChild;
 
-    public static SoapRequest fromFileData(FileData fileData) {
+    public static SoapRequest fromFileData(FileData fileData, String folderPadre, String folderChild) {
         return SoapRequest.builder()
             .fileContentBase64(Base64.getEncoder().encodeToString(fileData.getContent()))
             .filename(fileData.getFilename())
@@ -27,6 +29,8 @@ public class SoapRequest {
             .fileSize(fileData.getSize())
             .traceId(fileData.getTraceId())
             .timestamp(Instant.now())
+            .folderPadre(folderPadre)
+            .folderChild(folderChild)
             .build();
     }
 }

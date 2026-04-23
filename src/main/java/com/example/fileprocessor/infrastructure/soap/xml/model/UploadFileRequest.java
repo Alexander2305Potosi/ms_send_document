@@ -28,17 +28,26 @@ public class UploadFileRequest {
     @XmlElement(name = "timestamp", namespace = SoapNamespaces.FILE_SERVICE, required = true)
     private String timestamp;
 
+    @XmlElement(name = "folderPadre", namespace = SoapNamespaces.FILE_SERVICE)
+    private String folderPadre;
+
+    @XmlElement(name = "folderChild", namespace = SoapNamespaces.FILE_SERVICE)
+    private String folderChild;
+
     public UploadFileRequest() {
     }
 
     public UploadFileRequest(String content, String filename, String contentType,
-                             long fileSize, String traceId, String timestamp) {
+                             long fileSize, String traceId, String timestamp,
+                             String folderPadre, String folderChild) {
         this.content = content;
         this.filename = filename;
         this.contentType = contentType;
         this.fileSize = fileSize;
         this.traceId = traceId;
         this.timestamp = timestamp;
+        this.folderPadre = folderPadre;
+        this.folderChild = folderChild;
     }
 
     public String getContent() {
@@ -87,5 +96,21 @@ public class UploadFileRequest {
 
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public String getFolderPadre() {
+        return folderPadre;
+    }
+
+    public void setFolderPadre(String folderPadre) {
+        this.folderPadre = folderPadre;
+    }
+
+    public String getFolderChild() {
+        return folderChild;
+    }
+
+    public void setFolderChild(String folderChild) {
+        this.folderChild = folderChild;
     }
 }

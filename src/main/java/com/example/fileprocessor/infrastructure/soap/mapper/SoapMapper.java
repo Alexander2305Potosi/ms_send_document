@@ -49,7 +49,9 @@ public class SoapMapper {
             request.getContentType(),
             request.getFileSize(),
             request.getTraceId(),
-            request.getTimestamp().toString()
+            request.getTimestamp().toString(),
+            request.getFolderPadre(),
+            request.getFolderChild()
         );
 
         return marshalRequest(uploadRequest);

@@ -34,6 +34,34 @@ public class DatabaseInitializer implements ApplicationRunner {
 
     public Mono<Void> initialize() {
         log.info("Initializing database schema...");
+
+        return createDocumentsToProcessTable()
+            .then(createSoapCommunicationLogTable())
+            .then(createIndexes());
+    }
+
+    private Mono<Void> createDocumentsToProcessTable() {
+        log.info("Creating documents_to_process table...");
+        return databaseClient.sql("""
+                CREATE TABLE IF NOT EXISTS documents_to_process (
+                    document_id VARCHAR(255) PRIMARY KEY,
+                    filename VARCHAR(255),
+                    origin VARCHAR(500),
+                    status VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    processed_at TIMESTAMP,
+                    trace_id VARCHAR(255),
+                    soap_correlation_id VARCHAR(255),
+                    error_code VARCHAR(100)
+                )
+                """)
+            .fetch()
+            .first()
+            .then();
+    }
+
+    private Mono<Void> createSoapCommunicationLogTable() {
+        log.info("Creating soap_communication_log table...");
         return databaseClient.sql("""
                 CREATE TABLE IF NOT EXISTS soap_communication_log (
                     trace_id VARCHAR(255) PRIMARY KEY,
@@ -41,17 +69,19 @@ public class DatabaseInitializer implements ApplicationRunner {
                     retry_count INT NOT NULL,
                     error_code VARCHAR(100),
                     filename VARCHAR(255),
-                    parent_document_id VARCHAR(255),
                     created_at TIMESTAMP NOT NULL
                 )
                 """)
             .fetch()
             .first()
-            .then()
-            .then(databaseClient.sql("""
-                CREATE INDEX IF NOT EXISTS idx_soap_log_parent_document_id
-                ON soap_communication_log(parent_document_id)
-                """).fetch().first())
+            .then();
+    }
+
+    private Mono<Void> createIndexes() {
+        log.info("Creating indexes...");
+        return databaseClient.sql("CREATE INDEX IF NOT EXISTS idx_documents_status ON documents_to_process(status)")
+            .fetch()
+            .first()
             .then();
     }
 }

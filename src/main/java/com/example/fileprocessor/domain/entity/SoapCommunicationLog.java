@@ -16,6 +16,5 @@ public class SoapCommunicationLog {
     private final int retryCount;
     private final String errorCode;
     private final String filename;
-    private final String parentDocumentId;
     private final Instant createdAt;
 }

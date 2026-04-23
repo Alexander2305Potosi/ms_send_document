@@ -14,7 +14,6 @@ public class FileData {
     private final long size;
     private final String contentType;
     private final String traceId;
-    private final String parentDocumentId;
 
     public String extension() {
         int lastDot = filename.lastIndexOf('.');

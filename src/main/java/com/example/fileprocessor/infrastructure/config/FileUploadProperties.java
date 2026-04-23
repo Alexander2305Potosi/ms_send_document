@@ -6,6 +6,7 @@ import org.springframework.validation.annotation.Validated;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 
 @Validated
 @ConfigurationProperties(prefix = "app.file")
@@ -17,6 +18,13 @@ public record FileUploadProperties(
     String allowedTypes,
 
     @Min(10)
-    int maxFilenameLength
+    int maxFilenameLength,
+
+    List<String> foldersToSkip,
+
+    @Min(1)
+    int maxFileSizeMb,
+
+    List<String> keywords
 ) implements FileValidationConfig {
 }
