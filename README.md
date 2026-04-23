@@ -11,8 +11,10 @@ com.example.fileprocessor/
 ├── domain/                    # Capa de dominio (independiente de frameworks)
 │   ├── entity/               # Entidades de negocio
 │   │   ├── DocumentInfo.java        # Documento obtenido de REST
+│   │   ├── DocumentToProcess.java   # Documento pendiente en BD
 │   │   ├── FileData.java
 │   │   ├── FileUploadResult.java
+│   │   ├── SoapCommunicationLog.java
 │   │   ├── SoapRequest.java
 │   │   ├── SoapResponse.java
 │   │   └── ZipArchive.java          # ZIP con documentos extraibles
@@ -33,8 +35,6 @@ com.example.fileprocessor/
     ├── config/               # Configuracion (Properties, Beans)
     │   ├── DomainConfig.java          # Beans de casos de uso
     │   ├── FileUploadProperties.java
-    │   ├── SoapConfig.java            # JAXBContext compartido
-    │   ├── WebClientConfig.java
     │   └── WebFluxConfig.java
     ├── rest/                 # Adapter REST (entrada y Salida)
     │   ├── adapter/
@@ -43,8 +43,6 @@ com.example.fileprocessor/
     │   │   └── DocumentRestProperties.java
     │   ├── controller/
     │   │   └── FileController.java
-    │   ├── dto/
-    │   │   └── FileUploadResponseDto.java
     │   └── exception/
     │       └── GlobalErrorHandler.java
     └── soap/                 # Adapter SOAP (salida)
@@ -645,6 +643,14 @@ id("info.solidsoft.pitest") version "1.15.0"
 ```
 
 ## Changelog
+
+### 2026-04-22 - Limpieza de Codigo
+- **Eliminado**: `SoapConfig.java` - bean `JAXBContext` sin uso
+- **Eliminado**: `WebClientConfig.java` - bean `WebClient.Builder` sin uso
+- **Eliminado**: `FileUploadResponseDto.java` - DTO sin uso
+- **Eliminado**: `DocumentRestGateway.getAllDocuments()` - metodo sin uso
+- **Eliminado**: `DocumentRepository.save()` y `findById()` - metodos sin uso
+- **Eliminado**: `STATUS_PENDING` constante sin uso en `ProcessFileUseCase.java`
 
 ### 2026-04-22 - Configuracion y Documentacion
 - **Config**: Agregado `max-file-size-mb: 50` en `application.yml`

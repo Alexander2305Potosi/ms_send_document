@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
 import com.example.fileprocessor.domain.entity.DocumentInfo;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -17,12 +16,4 @@ public interface DocumentRestGateway {
      * @return Mono<DocumentInfo> with the document data
      */
     Mono<DocumentInfo> getDocument(String documentId, String traceId);
-
-    /**
-     * Fetches all available documents from the external REST API.
-     *
-     * @param traceId the trace ID for logging purposes
-     * @return Flux<DocumentInfo> with all available documents
-     */
-    Flux<DocumentInfo> getAllDocuments(String traceId);
 }

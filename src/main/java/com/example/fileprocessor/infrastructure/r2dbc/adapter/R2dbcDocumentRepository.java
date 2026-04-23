@@ -47,50 +47,6 @@ public class R2dbcDocumentRepository implements DocumentRepository {
     }
 
     @Override
-    public Mono<DocumentToProcess> save(DocumentToProcess document) {
-        String sql = """
-            INSERT INTO documents_to_process (document_id, filename, origin, status, created_at, trace_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """;
-
-        return databaseClient.sql(sql)
-            .bind("$1", document.getDocumentId())
-            .bind("$2", document.getFilename() != null ? document.getFilename() : "")
-            .bind("$3", document.getOrigin() != null ? document.getOrigin() : "")
-            .bind("$4", document.getStatus())
-            .bind("$5", document.getCreatedAt())
-            .bind("$6", document.getTraceId() != null ? document.getTraceId() : "")
-            .fetch()
-            .first()
-            .thenReturn(document)
-            .doOnSuccess(saved -> log.info("Saved document to process: {}", saved.getDocumentId()));
-    }
-
-    @Override
-    public Mono<DocumentToProcess> findById(String documentId) {
-        String sql = """
-            SELECT document_id, filename, origin, status, created_at, processed_at, trace_id, soap_correlation_id, error_code
-            FROM documents_to_process
-            WHERE document_id = $1
-            """;
-
-        return databaseClient.sql(sql)
-            .bind("$1", documentId)
-            .map((row, metadata) -> DocumentToProcess.builder()
-                .documentId(row.get("document_id", String.class))
-                .filename(row.get("filename", String.class))
-                .origin(row.get("origin", String.class))
-                .status(row.get("status", String.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .processedAt(row.get("processed_at", Instant.class))
-                .traceId(row.get("trace_id", String.class))
-                .soapCorrelationId(row.get("soap_correlation_id", String.class))
-                .errorCode(row.get("error_code", String.class))
-                .build())
-            .first();
-    }
-
-    @Override
     public Mono<Void> updateStatus(String documentId, String status, String traceId, String soapCorrelationId, String errorCode) {
         String sql = """
             UPDATE documents_to_process

@@ -1,3 +1,14 @@
+# Mocks para Desarrollo
+
+Este directorio contiene dos servidores mock para pruebas:
+
+| Mock | Descripcion | Puerto default |
+|------|-------------|-----------------|
+| `PortableSoapMock.java` | Mock SOAP con escenarios rotativos | 9000 |
+| `DocumentRestMock.java` | Mock REST para documentos | 8081 |
+
+---
+
 # Mock SOAP Server en Java
 
 ## Clase Principal: PortableSoapMock.java

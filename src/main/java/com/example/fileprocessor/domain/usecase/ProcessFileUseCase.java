@@ -30,7 +30,6 @@ public class ProcessFileUseCase {
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_FAILURE = "FAILURE";
     private static final String STATUS_SKIPPED = "SKIPPED";
-    private static final String STATUS_PENDING = "PENDING";
     private static final String DEFAULT_ERROR_CODE = "UNKNOWN_ERROR";
     private static final int DEFAULT_RETRY_COUNT = 0;
     private static final long MB_TO_BYTES = 1024 * 1024;
