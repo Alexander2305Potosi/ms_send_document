@@ -132,6 +132,43 @@ Los namespaces SOAP estan centralizados en `SoapNamespaces.java` para evitar har
 # build/reports/tests/test/index.html
 ```
 
+## Coverage Reports (JaCoCo)
+
+El proyecto incluye **JaCoCo** para generar reportes de cobertura de código:
+
+```bash
+# Generar reporte de cobertura
+./gradlew jacocoTestReport
+
+# Ver reporte HTML
+open build/reports/jacoco/test/index.html
+
+# El reporte XML se genera en:
+# build/reports/jacoco/test/jacocoTestReport.xml
+```
+
+## SonarQube Analysis
+
+Para ejecutar análisis estático con SonarQube:
+
+```bash
+# Opcion 1: Usar Docker Scanner
+docker run --rm -v $(pwd):/usr/src sonarsource/sonar-scanner-cli
+
+# Opcion 2: Descargar scanner manualmente
+# https://docs.sonarsource.com/sonarqube/latest analysis/scan/sonarscanner/
+
+# Configuracion requerida (variables de entorno o sonar-project.properties):
+# SONAR_HOST_URL - URL del servidor SonarQube
+# SONAR_TOKEN    - Token de autenticacion
+```
+
+El análisis cubre:
+- Code smells
+- Duplicated code
+- Complexity metrics
+- Coverage integration
+
 ## Mutation Testing (PIT)
 
 El proyecto incluye **PIT (Programmed Instructional Testing)** para evaluar la calidad de las pruebas:
@@ -155,6 +192,14 @@ open build/reports/pitest/index.html
 | Mutators | DEFAULTS + REMOVE_CONDITIONALS + INVERT_NEGS + MATH + NEGATE_CONDITIONALS + RETURN_VALS + VOID_METHOD_CALLS + NON_VOID_METHOD_CALLS |
 
 Los mutators crean cambios artificiales en el codigo (ej: `>` -> `>=`, eliminar `if`). Si los tests detectan el cambio, el mutante "muere". El threshold del 50% garantiza que la mayoria de los cambios son detectados.
+
+## Cobertura (JaCoCo)
+
+| Parametro | Valor |
+|-----------|-------|
+| Version | JaCoCo 0.8.12 |
+| Reporte XML | `build/reports/jacoco/test/jacocoTestReport.xml` |
+| Reporte HTML | `build/reports/jacoco/test/index.html` |
 
 ## Ejecucion del Servicio
 
@@ -412,6 +457,17 @@ curl -X GET http://localhost:8080/api/v1/files
 ]
 ```
 
+## Configuracion de Propiedades
+
+El servicio utiliza `FileUploadProperties` para validar archivos:
+
+| Propiedad | Descripcion | Default | Validacion |
+|-----------|-------------|---------|------------|
+| `app.file.max-size` | Tamano maximo en bytes | 10485760 (10MB) | Min 1024 |
+| `app.file.allowed-types` | Tipos permitidos | pdf,docx,txt | No vacio |
+| `app.file.max-filename-length` | Longitud maxima nombre | 255 | Min 10 |
+| `app.file.max-file-size-mb` | Tamano maximo en MB | 50 | Min 1 |
+
 ## Restricciones de Archivos
 
 - **Tamano maximo**: 10 MB
@@ -589,6 +645,12 @@ id("info.solidsoft.pitest") version "1.15.0"
 ```
 
 ## Changelog
+
+### 2026-04-22 - Configuracion y Documentacion
+- **Config**: Agregado `max-file-size-mb: 50` en `application.yml`
+- **Doc**: Agregada seccion de JaCoCo coverage reports
+- **Doc**: Agregada seccion de SonarQube analysis
+- **Doc**: Agregada tabla de `FileUploadProperties`
 
 ### 2026-04-21 - Refactorizacion Completa (v4)
 - **Seguridad**: Proteccion XXE en `SoapEnvelopeWrapper` (disallow-doctype-decl, external entities bloqueadas)

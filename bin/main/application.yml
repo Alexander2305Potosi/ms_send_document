@@ -43,6 +43,12 @@ app:
     allowed-types: pdf,docx,txt
     max-filename-length: 255
     max-file-size-mb: 50
+    folders-to-skip:
+      - "/tmp"
+      - "/transient"
+    keywords:
+      - "test"
+      - "mock"
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
