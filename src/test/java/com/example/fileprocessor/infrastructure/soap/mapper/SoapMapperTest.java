@@ -6,7 +6,6 @@ import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunication
 import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
 import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest;
 import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse;
-import jakarta.xml.bind.JAXBContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -20,10 +19,9 @@ class SoapMapperTest {
     private SoapEnvelopeWrapper envelopeWrapper;
 
     @BeforeEach
-    void setUp() throws Exception {
-        JAXBContext context = JAXBContext.newInstance(UploadFileRequest.class, UploadFileResponse.class);
-        envelopeWrapper = new SoapEnvelopeWrapper(context);
-        soapMapper = new SoapMapper(envelopeWrapper, context);
+    void setUp() {
+        envelopeWrapper = new SoapEnvelopeWrapper();
+        soapMapper = new SoapMapper(envelopeWrapper);
     }
 
     @Test

@@ -6,9 +6,6 @@ import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.mapper.SoapMapper;
 import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
-import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest;
-import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse;
-import jakarta.xml.bind.JAXBContext;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -34,9 +31,8 @@ class ExternalSoapGatewayImplTest {
         mockWebServer = new MockWebServer();
         mockWebServer.start();
 
-        JAXBContext context = JAXBContext.newInstance(UploadFileRequest.class, UploadFileResponse.class);
-        SoapEnvelopeWrapper envelopeWrapper = new SoapEnvelopeWrapper(context);
-        soapMapper = new SoapMapper(envelopeWrapper, context);
+        SoapEnvelopeWrapper envelopeWrapper = new SoapEnvelopeWrapper();
+        soapMapper = new SoapMapper(envelopeWrapper);
 
         SoapProperties properties = new SoapProperties(
             mockWebServer.url("/").toString(),

@@ -1,6 +1,8 @@
 package com.example.fileprocessor.infrastructure.soap.xml;
 
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest;
+import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
 import org.slf4j.Logger;
@@ -27,8 +29,12 @@ public class SoapEnvelopeWrapper {
     private final JAXBContext jaxbContext;
     private final DocumentBuilderFactory documentBuilderFactory;
 
-    public SoapEnvelopeWrapper(JAXBContext jaxbContext) {
-        this.jaxbContext = jaxbContext;
+    public SoapEnvelopeWrapper() {
+        try {
+            this.jaxbContext = JAXBContext.newInstance(UploadFileRequest.class, UploadFileResponse.class);
+        } catch (jakarta.xml.bind.JAXBException e) {
+            throw new IllegalStateException("Failed to initialize JAXB context", e);
+        }
         this.documentBuilderFactory = DocumentBuilderFactory.newInstance();
         this.documentBuilderFactory.setNamespaceAware(true);
         try {

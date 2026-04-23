@@ -35,9 +35,13 @@ public class SoapMapper {
     private final SoapEnvelopeWrapper envelopeWrapper;
     private final JAXBContext jaxbContext;
 
-    public SoapMapper(SoapEnvelopeWrapper envelopeWrapper, JAXBContext jaxbContext) {
+    public SoapMapper(SoapEnvelopeWrapper envelopeWrapper) {
         this.envelopeWrapper = envelopeWrapper;
-        this.jaxbContext = jaxbContext;
+        try {
+            this.jaxbContext = JAXBContext.newInstance(UploadFileRequest.class, UploadFileResponse.class);
+        } catch (jakarta.xml.bind.JAXBException e) {
+            throw new IllegalStateException("Failed to initialize JAXB context", e);
+        }
     }
 
     public String toSoapXml(SoapRequest request) {
