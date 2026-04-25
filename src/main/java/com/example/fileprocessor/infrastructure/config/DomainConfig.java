@@ -28,12 +28,11 @@ public class DomainConfig {
     }
 
     @Bean
-    public ProcessProductDocumentsUseCase processProductDocumentsUseCase(ProductRestGateway productGateway,
-                                                                      ProductDocumentRepository documentRepository,
+    public ProcessProductDocumentsUseCase processProductDocumentsUseCase(ProductDocumentRepository documentRepository,
                                                                       ExternalSoapGateway soapGateway,
                                                                       FileValidator fileValidator,
                                                                       SoapCommunicationLogRepository logRepository,
                                                                       FileValidationConfig validationConfig) {
-        return new ProcessProductDocumentsUseCase(productGateway, documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
+        return new ProcessProductDocumentsUseCase(documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
     }
 }

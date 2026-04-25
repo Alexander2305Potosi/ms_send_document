@@ -96,7 +96,10 @@ Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multip
 |-------|------|-------------|
 | document_id | VARCHAR(255) | PK |
 | product_id | VARCHAR(255) | FK a products_to_process |
+| parent_document_id | VARCHAR(255) | PK del documento ZIP padre (si es hijo de ZIP) |
 | filename | VARCHAR(255) | Nombre del archivo |
+| content | TEXT | Contenido del archivo (Base64) |
+| content_type | VARCHAR(255) | Tipo MIME |
 | origin | VARCHAR(500) | Origen (ej. folderA/incoming) |
 | status | VARCHAR(50) | PENDING, PROCESSING, SUCCESS, FAILURE, RETRY, SKIPPED |
 | created_at | TIMESTAMP | Fecha de creacion |
@@ -119,12 +122,17 @@ Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multip
 
 ### GET /api/v1/products/load
 
-Carga productos y sus documentos asociados desde la API REST externa.
+Carga productos y sus documentos asociados desde la API REST externa. **Los documentos ZIP son expandidos automaticamente** durante la carga, creando documentos hijos independientes por cada archivo contenido.
 
 **Flujo:**
 1. Consulta `GET /api/products` para obtener lista de productos con documentos
-2. Guarda cada producto en `products_to_process`
-3. Guarda los documentos en `product_documents_to_process` con `status=PENDING`
+2. Por cada documento:
+   - Si es ZIP: extrae archivos y crea documentos hijos (ej: `doc-001_file1.txt`, `doc-001_file2.txt`)
+   - Si es normal: guarda el documento directamente
+3. Guarda productos en `products_to_process`
+4. Guarda documentos en `product_documents_to_process` con `status=PENDING`
+
+**Nota:** El contenido de cada documento (bytes) se guarda en la BD para procesamiento posterior.
 
 **Response:**
 ```json
@@ -138,20 +146,20 @@ Carga productos y sus documentos asociados desde la API REST externa.
 
 ### GET /api/v1/products
 
-Procesa los documentos pendientes de todos los productos.
+Procesa los documentos pendientes de todos los productos. **El contenido ya esta en BD** (previamente cargado), no necesita llamar a API REST externa.
 
 **Flujo:**
 1. Consulta `product_documents_to_process` donde `status=PENDING`
 2. Por cada documento:
    - `claimDocument()` - cambia status a `PROCESSING` (si esta en PENDING)
-   - Obtiene contenido del documento via `GET /api/products/{productId}/documents/{documentId}`
-   - Envía a SOAP
+   - Envia contenido a SOAP directamente desde BD
    - Actualiza status: SUCCESS, FAILURE, RETRY o SKIPPED
 
 **Resiliencia:** Si el MS cae durante el procesamiento:
 - El documento queda en `status=PROCESSING`
 - Al reiniciar, `DatabaseInitializer` lo restaura a `PENDING`
 - Solo ese documento se reprocesa (no se duplican envios SOAP)
+- **ZIP:** Si un hijo falla, solo ese hijo se reprocesa, los demas no se tocan
 
 **Response:**
 ```json
@@ -162,6 +170,14 @@ Procesa los documentos pendientes de todos los productos.
   "success": true
 }
 ```
+
+## Procesamiento de ZIP
+
+Los documentos ZIP son expandidos durante la carga (`/load`):
+- Cada archivo extraido se guarda como documento hijo independiente
+- El `parent_document_id` indica a que ZIP pertenece
+- Cada hijo tiene su propio estado (`PENDING/PROCESSING/SUCCESS/FAILURE`)
+- Si el sistema cae durante el envio de un hijo, solo ese hijo se reprocesa
 
 ## Reintentos SOAP
 

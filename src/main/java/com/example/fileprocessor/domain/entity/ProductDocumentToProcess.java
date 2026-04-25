@@ -5,7 +5,10 @@ import java.time.Instant;
 public class ProductDocumentToProcess {
     private final String documentId;
     private final String productId;
+    private final String parentDocumentId;
     private final String filename;
+    private final byte[] content;
+    private final String contentType;
     private final String origin;
     private final String status;
     private final Instant createdAt;
@@ -17,7 +20,10 @@ public class ProductDocumentToProcess {
     private ProductDocumentToProcess(Builder builder) {
         this.documentId = builder.documentId;
         this.productId = builder.productId;
+        this.parentDocumentId = builder.parentDocumentId;
         this.filename = builder.filename;
+        this.content = builder.content;
+        this.contentType = builder.contentType;
         this.origin = builder.origin;
         this.status = builder.status;
         this.createdAt = builder.createdAt;
@@ -35,8 +41,20 @@ public class ProductDocumentToProcess {
         return productId;
     }
 
+    public String getParentDocumentId() {
+        return parentDocumentId;
+    }
+
     public String getFilename() {
         return filename;
+    }
+
+    public byte[] getContent() {
+        return content;
+    }
+
+    public String getContentType() {
+        return contentType;
     }
 
     public String getOrigin() {
@@ -74,7 +92,10 @@ public class ProductDocumentToProcess {
     public static class Builder {
         private String documentId;
         private String productId;
+        private String parentDocumentId;
         private String filename;
+        private byte[] content;
+        private String contentType;
         private String origin;
         private String status;
         private Instant createdAt;
@@ -93,8 +114,23 @@ public class ProductDocumentToProcess {
             return this;
         }
 
+        public Builder parentDocumentId(String parentDocumentId) {
+            this.parentDocumentId = parentDocumentId;
+            return this;
+        }
+
         public Builder filename(String filename) {
             this.filename = filename;
+            return this;
+        }
+
+        public Builder content(byte[] content) {
+            this.content = content;
+            return this;
+        }
+
+        public Builder contentType(String contentType) {
+            this.contentType = contentType;
             return this;
         }
 

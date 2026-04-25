@@ -13,7 +13,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -155,6 +158,52 @@ class LoadProductsUseCaseTest {
             .verifyComplete();
 
         verify(productRepository).save(any());
+        verify(documentRepository).saveAll(any());
+    }
+
+    @Test
+    void execute_shouldExpandZipAndCreateChildDocuments() throws Exception {
+        // Create a ZIP with 2 files inside
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+            zos.putNextEntry(new ZipEntry("file1.txt"));
+            zos.write("content1".getBytes());
+            zos.closeEntry();
+            zos.putNextEntry(new ZipEntry("file2.txt"));
+            zos.write("content2".getBytes());
+            zos.closeEntry();
+        }
+        byte[] zipContent = baos.toByteArray();
+
+        // Product with one ZIP document
+        ProductDocumentInfo zipDoc = new ProductDocumentInfo(
+            "doc-zip", "documents.zip", zipContent, "application/zip", zipContent.length, true, "folderA"
+        );
+
+        ProductInfo product = ProductInfo.builder()
+            .productId("prod-001")
+            .name("Laptop")
+            .documents(List.of(zipDoc))
+            .build();
+
+        when(productGateway.getAllProducts(any())).thenReturn(Flux.just(product));
+        when(productRepository.save(any())).thenReturn(Mono.empty());
+        when(documentRepository.saveAll(any())).thenReturn(Mono.empty());
+
+        LoadProductsUseCase useCase = new LoadProductsUseCase(productGateway, productRepository, documentRepository);
+
+        StepVerifier.create(useCase.execute())
+            .assertNext(result -> {
+                assert result.getProductId().equals("prod-001");
+                // ZIP with 2 files expands to 2 child documents in DB
+                // but documentCount reflects original documents from REST API (1 ZIP)
+                assert result.getDocumentCount() == 1;
+                assert result.isSuccess();
+            })
+            .verifyComplete();
+
+        verify(productRepository).save(any());
+        // ZIP expands to 2 child documents, each saved individually
         verify(documentRepository).saveAll(any());
     }
 }

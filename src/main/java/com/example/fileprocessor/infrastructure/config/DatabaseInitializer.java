@@ -86,7 +86,10 @@ public class DatabaseInitializer implements ApplicationRunner {
                 CREATE TABLE IF NOT EXISTS product_documents_to_process (
                     document_id VARCHAR(255) PRIMARY KEY,
                     product_id VARCHAR(255) NOT NULL,
+                    parent_document_id VARCHAR(255),
                     filename VARCHAR(255),
+                    content TEXT,
+                    content_type VARCHAR(255),
                     origin VARCHAR(500),
                     status VARCHAR(50) NOT NULL,
                     created_at TIMESTAMP NOT NULL,

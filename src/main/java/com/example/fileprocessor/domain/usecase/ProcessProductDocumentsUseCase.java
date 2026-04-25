@@ -3,16 +3,13 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.entity.SoapCommunicationLog;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
-import com.example.fileprocessor.domain.entity.ZipArchive;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
-import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import org.slf4j.Logger;
@@ -20,7 +17,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -33,20 +29,17 @@ public class ProcessProductDocumentsUseCase {
     private static final int DEFAULT_RETRY_COUNT = 0;
     private static final long MB_TO_BYTES = 1024 * 1024;
 
-    private final ProductRestGateway productGateway;
     private final ProductDocumentRepository documentRepository;
     private final ExternalSoapGateway soapGateway;
     private final FileValidator fileValidator;
     private final SoapCommunicationLogRepository logRepository;
     private final FileValidationConfig validationConfig;
 
-    public ProcessProductDocumentsUseCase(ProductRestGateway productGateway,
-                                        ProductDocumentRepository documentRepository,
+    public ProcessProductDocumentsUseCase(ProductDocumentRepository documentRepository,
                                         ExternalSoapGateway soapGateway,
                                         FileValidator fileValidator,
                                         SoapCommunicationLogRepository logRepository,
                                         FileValidationConfig validationConfig) {
-        this.productGateway = productGateway;
         this.documentRepository = documentRepository;
         this.soapGateway = soapGateway;
         this.fileValidator = fileValidator;
@@ -99,8 +92,7 @@ public class ProcessProductDocumentsUseCase {
                     .build());
         }
 
-        return productGateway.getDocument(pending.getProductId(), pending.getDocumentId(), traceId)
-            .flatMap(doc -> processDocument(doc, traceId, pending.getDocumentId(), pending.getProductId(), pending.getOrigin()))
+        return processFile(pending, traceId)
             .flatMap(result -> updateDocumentStatus(pending.getDocumentId(), result, traceId).thenReturn(result))
             .onErrorResume(error -> handleDocumentError(pending.getDocumentId(), error, traceId));
     }
@@ -115,15 +107,6 @@ public class ProcessProductDocumentsUseCase {
         }
         return foldersToSkip.stream()
             .anyMatch(folder -> origin.contains(folder));
-    }
-
-    private Mono<FileUploadResult> processDocument(ProductDocumentInfo doc, String traceId,
-                                                  String documentId, String productId, String origin) {
-        if (doc.isZipArchive()) {
-            log.info("Document {} is a ZIP archive, extracting and processing contents", documentId);
-            return processZipDocument(doc, traceId, productId, origin);
-        }
-        return processFile(toFileData(doc, traceId), origin);
     }
 
     private Mono<FileUploadResult> updateDocumentStatus(String documentId, FileUploadResult result, String traceId) {
@@ -167,17 +150,15 @@ public class ProcessProductDocumentsUseCase {
             .build();
     }
 
-    private FileData toFileData(ProductDocumentInfo doc, String traceId) {
-        return FileData.builder()
-            .content(doc.content())
-            .filename(doc.filename())
-            .size(doc.size())
-            .contentType(doc.contentType())
+    private Mono<FileUploadResult> processFile(ProductDocumentToProcess document, String traceId) {
+        FileData fileData = FileData.builder()
+            .content(document.getContent())
+            .filename(document.getFilename())
+            .size(document.getContent() != null ? document.getContent().length : 0)
+            .contentType(document.getContentType())
             .traceId(traceId)
             .build();
-    }
 
-    private Mono<FileUploadResult> processFile(FileData fileData, String origin) {
         if (shouldSkipBySize(fileData.getSize())) {
             log.info("Document {} skipped due to size rule: {} bytes (>= {} MB)",
                 fileData.getFilename(), fileData.getSize(), validationConfig.maxFileSizeMb());
@@ -185,14 +166,14 @@ public class ProcessProductDocumentsUseCase {
                 .status(DocumentStatus.SKIPPED_VALUE)
                 .message("Document skipped due to size rule: " + fileData.getSize() + " bytes")
                 .correlationId(null)
-                .traceId(fileData.getTraceId())
+                .traceId(traceId)
                 .processedAt(Instant.now())
                 .externalReference(fileData.getFilename())
                 .success(true)
                 .build());
         }
 
-        FolderInfo folderInfo = extractFolderInfo(origin);
+        FolderInfo folderInfo = extractFolderInfo(document.getOrigin());
 
         return fileValidator.validate(fileData)
             .map(validData -> SoapRequest.fromFileData(validData, folderInfo.folderPadre(), folderInfo.folderChild()))
@@ -234,77 +215,6 @@ public class ProcessProductDocumentsUseCase {
 
     private record FolderInfo(String folderPadre, String folderChild) {}
 
-    private Mono<FileUploadResult> processZipDocument(ProductDocumentInfo doc, String traceId, String productId, String origin) {
-        ZipArchive zipArchive = ZipArchive.builder()
-            .zipContent(doc.content())
-            .originalFilename(doc.filename())
-            .build();
-
-        try {
-            var extractedDocs = zipArchive.extractDocuments();
-
-            if (extractedDocs.isEmpty()) {
-                log.warn("ZIP archive {} is empty", doc.filename());
-                return Mono.error(new IllegalStateException("ZIP archive is empty: " + doc.filename()));
-            }
-
-            log.info("ZIP archive {} contains {} documents", doc.filename(), extractedDocs.size());
-
-            return Flux.fromIterable(extractedDocs)
-                .map(extracted -> toFileDataFromExtracted(extracted, UUID.randomUUID().toString()))
-                .flatMap(fileData -> processFile(fileData, origin))
-                .collectList()
-                .map(results -> aggregateResults(results, doc.documentId()));
-        } catch (IOException e) {
-            log.error("Failed to extract ZIP archive {}: {}", doc.filename(), e.getMessage());
-            return Mono.error(new IllegalStateException("Failed to extract ZIP: " + doc.filename(), e));
-        }
-    }
-
-    private FileData toFileDataFromExtracted(ZipArchive.ExtractedDocument extracted, String traceId) {
-        return FileData.builder()
-            .content(extracted.getContent())
-            .filename(extracted.getFilename())
-            .size(extracted.getSize())
-            .contentType(extracted.getContentType())
-            .traceId(traceId)
-            .build();
-    }
-
-    private FileUploadResult aggregateResults(List<FileUploadResult> results, String documentId) {
-        if (results.isEmpty()) {
-            return FileUploadResult.builder()
-                .status(DocumentStatus.FAILURE_VALUE)
-                .message("No documents processed")
-                .correlationId(null)
-                .traceId(null)
-                .processedAt(Instant.now())
-                .externalReference(documentId)
-                .success(false)
-                .build();
-        }
-
-        var stats = results.stream().collect(
-            java.util.stream.Collectors.partitioningBy(FileUploadResult::isSuccess)
-        );
-
-        var successes = stats.get(true);
-        var failures = stats.get(false);
-        var referenceResult = successes.isEmpty() ? failures.get(failures.size() - 1) : successes.get(0);
-        boolean allSuccess = failures.isEmpty();
-
-        return FileUploadResult.builder()
-            .status(referenceResult.getStatus())
-            .message(String.format("ZIP processed: %d documents, %d successful%s",
-                results.size(), successes.size(), allSuccess ? "" : ", some failed"))
-            .correlationId(referenceResult.getCorrelationId())
-            .traceId(null)
-            .processedAt(Instant.now())
-            .externalReference(documentId)
-            .success(allSuccess)
-            .build();
-    }
-
     private Mono<Void> saveSoapLog(String filename, String traceId, SoapResponse response) {
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
             .traceId(traceId)
@@ -319,7 +229,7 @@ public class ProcessProductDocumentsUseCase {
     private Mono<Void> saveSoapErrorLog(String filename, String traceId, Throwable error) {
         SoapCommunicationException sce = unwrapSoapException(error);
         String errorCode = sce != null ? sce.getErrorCode() : DEFAULT_ERROR_CODE;
-        int retries = sce != null ? sce.getRetryCount() : DEFAULT_RETRY_COUNT;
+        int retries = sce != null ? sce.getRetryCount() : DEFAULT_ERROR_CODE.length();
 
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
             .traceId(traceId)

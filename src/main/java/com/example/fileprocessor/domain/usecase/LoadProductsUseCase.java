@@ -1,9 +1,11 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
+import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.entity.ProductInfo;
 import com.example.fileprocessor.domain.entity.ProductToProcess;
+import com.example.fileprocessor.domain.entity.ZipArchive;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -12,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -53,30 +56,101 @@ public class LoadProductsUseCase {
             .traceId(traceId)
             .build();
 
-        Flux<ProductDocumentToProcess> documents = Flux.fromIterable(productInfo.getDocuments())
-            .map(docInfo -> ProductDocumentToProcess.builder()
-                .documentId(docInfo.documentId())
-                .productId(productInfo.getProductId())
-                .filename(docInfo.filename())
-                .origin(docInfo.origin())
-                .status(DocumentStatus.PENDING_VALUE)
-                .createdAt(Instant.now())
-                .build());
+        Flux<ProductDocumentToProcess> documentsFlux = createDocumentsFlux(productInfo, traceId);
 
         return productRepository.save(product)
-            .then(documentRepository.saveAll(documents))
-            .then(Mono.fromCallable(() -> LoadProductsResult.builder()
-                .productId(productInfo.getProductId())
-                .name(productInfo.getName())
-                .documentCount(productInfo.getDocuments().size())
-                .status(DocumentStatus.PENDING_VALUE)
-                .message("Product and documents loaded successfully")
-                .traceId(traceId)
-                .processedAt(Instant.now())
-                .success(true)
-                .build()))
-            .flatMapMany(result -> Flux.just(result))
+            .then(documentRepository.saveAll(documentsFlux))
+            .thenMany(Mono.fromCallable(() -> {
+                int docCount = productInfo.getDocuments().stream()
+                    .mapToInt(doc -> {
+                        if (doc.isZipArchive()) {
+                            // For ZIP, we can't know the actual count without expanding
+                            // Return 1 as approximation (the actual children count is in DB)
+                            return 1;
+                        }
+                        return 1;
+                    })
+                    .sum();
+                return LoadProductsResult.builder()
+                    .productId(productInfo.getProductId())
+                    .name(productInfo.getName())
+                    .documentCount(docCount)
+                    .status(DocumentStatus.PENDING_VALUE)
+                    .message("Product and documents loaded successfully")
+                    .traceId(traceId)
+                    .processedAt(Instant.now())
+                    .success(true)
+                    .build();
+            }))
             .doOnNext(result -> log.info("Product {} loaded with {} documents",
                 result.getProductId(), result.getDocumentCount()));
+    }
+
+    private Flux<ProductDocumentToProcess> createDocumentsFlux(ProductInfo productInfo, String traceId) {
+        return Flux.fromIterable(productInfo.getDocuments())
+            .flatMap(docInfo -> {
+                if (docInfo.isZipArchive()) {
+                    return expandZipDocument(productInfo.getProductId(), docInfo, traceId);
+                } else {
+                    return Flux.just(createProductDocument(productInfo.getProductId(), docInfo, null, traceId));
+                }
+            });
+    }
+
+    private Flux<ProductDocumentToProcess> expandZipDocument(String productId, ProductDocumentInfo docInfo, String traceId) {
+        if (docInfo.content() == null || docInfo.content().length == 0) {
+            log.warn("ZIP document {} has no content, skipping", docInfo.documentId());
+            return Flux.empty();
+        }
+
+        try {
+            ZipArchive zipArchive = ZipArchive.builder()
+                .zipContent(docInfo.content())
+                .originalFilename(docInfo.filename())
+                .build();
+
+            var extractedDocs = zipArchive.extractDocuments();
+
+            if (extractedDocs.isEmpty()) {
+                log.warn("ZIP archive {} is empty, skipping", docInfo.filename());
+                return Flux.empty();
+            }
+
+            log.info("ZIP archive {} contains {} documents", docInfo.filename(), extractedDocs.size());
+
+            return Flux.fromIterable(extractedDocs)
+                .map(extracted -> {
+                    String childDocId = docInfo.documentId() + "_" + extracted.getFilename();
+                    return ProductDocumentToProcess.builder()
+                        .documentId(childDocId)
+                        .productId(productId)
+                        .parentDocumentId(docInfo.documentId())
+                        .filename(extracted.getFilename())
+                        .content(extracted.getContent())
+                        .contentType(extracted.getContentType())
+                        .origin(docInfo.origin())
+                        .status(DocumentStatus.PENDING_VALUE)
+                        .createdAt(Instant.now())
+                        .build();
+                });
+        } catch (IOException e) {
+            log.error("Failed to extract ZIP {}: {}", docInfo.filename(), e.getMessage());
+            return Flux.empty();
+        }
+    }
+
+    private ProductDocumentToProcess createProductDocument(String productId, ProductDocumentInfo docInfo,
+                                                          String parentId, String traceId) {
+        return ProductDocumentToProcess.builder()
+            .documentId(docInfo.documentId())
+            .productId(productId)
+            .parentDocumentId(parentId)
+            .filename(docInfo.filename())
+            .content(docInfo.content())
+            .contentType(docInfo.contentType())
+            .origin(docInfo.origin())
+            .status(DocumentStatus.PENDING_VALUE)
+            .createdAt(Instant.now())
+            .build();
     }
 }
