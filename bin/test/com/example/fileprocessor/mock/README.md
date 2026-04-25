@@ -9,6 +9,115 @@ Este directorio contiene dos servidores mock para pruebas:
 
 ---
 
+# Mock REST Document Server
+
+## Clase Principal: DocumentRestMock.java
+
+El mock REST de documentos funciona en cualquier maquina sin configuracion manual:
+
+- **Auto-detección de Java**: Busca en `JAVA_HOME`, `PATH` y ubicaciones comunes
+- **Puerto dinámico**: Intenta 8081, si esta ocupado usa 8081-9999
+- **Guarda configuración**: Crea archivo temporal con el endpoint usado
+- **Sin dependencias externas**: No usa Jackson, genera JSON manualmente
+
+## Endpoints
+
+| Endpoint | Metodo | Descripcion |
+|----------|--------|-------------|
+| `/api/documents` | GET | Lista todos los documentos disponibles |
+| `/api/document/{id}` | GET | Obtiene un documento especifico por ID |
+
+## Documentos Disponibles
+
+| ID | Nombre | Content-Type | Origin |
+|----|--------|--------------|--------|
+| doc-001 | test-document.pdf | application/pdf | folderA/incoming |
+| doc-002 | test-document.docx | application/vnd.openxmlformats-officedocument.wordprocessingml.document | folderB/incoming |
+| doc-003 | test-document.txt | text/plain | folderA/special |
+
+## Uso
+
+### Opcion 1: Script Automatico (Recomendada)
+
+```bash
+# Windows
+scripts\start-document-mock.bat
+
+# Linux/Mac
+chmod +x ./scripts/start-document-mock.sh
+./scripts/start-document-mock.sh
+```
+
+Ver el endpoint configurado:
+
+```bash
+# Windows
+type %TEMP%\document-rest-mock.info
+
+# Linux/Mac
+cat /tmp/document-rest-mock.info
+```
+
+### Opcion 2: Ejecucion Manual con Java
+
+```bash
+# Compilar
+./gradlew testClasses
+
+# Ejecutar (puerto automatico)
+java -cp build/classes/java/test com.example.fileprocessor.mock.DocumentRestMock
+
+# Con puerto especifico
+java -cp build/classes/java/test com.example.fileprocessor.mock.DocumentRestMock 8081
+```
+
+## Ejemplo de Respuesta
+
+### GET /api/documents
+
+```json
+[
+  {
+    "documentId": "doc-001",
+    "filename": "test-document.pdf",
+    "content": "JVBERi0x...",
+    "contentType": "application/pdf",
+    "size": 1024,
+    "isZip": false,
+    "origin": "folderA/incoming"
+  }
+]
+```
+
+### GET /api/document/doc-001
+
+```json
+{
+  "documentId": "doc-001",
+  "filename": "test-document.pdf",
+  "content": "JVBERi0x...",
+  "contentType": "application/pdf",
+  "size": 1024,
+  "isZip": false,
+  "origin": "folderA/incoming"
+}
+```
+
+## Arquitectura
+
+```
+Request GET --> HttpServer --> Handler --> JSON Response
+                    (puerto dinamico)
+```
+
+1. Detecta Java instalado
+2. Busca puerto disponible (8081 -> 8081-9999)
+3. Crea servidor HTTP en ese puerto
+4. Guarda info en archivo temporal
+5. Responde JSON estatico
+
+---
+
 # Mock SOAP Server en Java
 
 ## Clase Principal: PortableSoapMock.java

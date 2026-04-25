@@ -9,9 +9,11 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -46,6 +48,21 @@ public class DocumentRestGatewayImpl implements DocumentRestGateway {
             .doOnNext(doc -> log.info("Document {} retrieved: {}", documentId, doc.getFilename()));
     }
 
+    @Override
+    public Flux<DocumentInfo> getAllDocuments(String traceId) {
+        log.info("Fetching all documents from REST API, traceId: {}", traceId);
+
+        return webClient.get()
+            .uri(properties.documentsPath())
+            .accept(MediaType.APPLICATION_JSON)
+            .header("X-Trace-Id", traceId)
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+            .map(list -> list.stream().map(this::mapToDocumentInfo).toList())
+            .flatMapMany(Flux::fromIterable)
+            .doOnNext(doc -> log.info("Document retrieved: {}", doc.getFilename()));
+    }
+
     private DocumentInfo mapToDocumentInfo(Map<String, Object> json) {
         String contentBase64 = (String) json.get("content");
         byte[] content = contentBase64 != null
@@ -65,6 +82,7 @@ public class DocumentRestGatewayImpl implements DocumentRestGateway {
             .contentType((String) json.get("contentType"))
             .size(size)
             .isZip(isZip)
+            .origin((String) json.get("origin"))
             .build();
     }
 }

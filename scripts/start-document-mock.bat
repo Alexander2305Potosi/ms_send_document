@@ -1,13 +1,12 @@
 @echo off
-REM Script portable para iniciar Mock SOAP en Windows
-REM El mock busca automaticamente un puerto disponible
-REM Si necesita pasar argumentos, estos se envian al mock
+REM Script portable para iniciar Mock REST de Documentos en Windows
+REM El mock busca automaticamente un puerto disponible (default 8081)
 
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo   Mock SOAP Server - Portable
+echo   Document REST Mock Server - Portable
 echo ========================================
 echo.
 
@@ -16,7 +15,7 @@ set "SCRIPT_DIR=%~dp0"
 set "PROJECT_DIR=%SCRIPT_DIR%.."
 cd /d "%PROJECT_DIR%"
 
-set "MOCK_CLASS=com.example.fileprocessor.mock.PortableSoapMock"
+set "MOCK_CLASS=com.example.fileprocessor.mock.DocumentRestMock"
 set "BUILD_DIR=%PROJECT_DIR%\build\classes\java\test"
 
 REM ========================================
@@ -73,7 +72,7 @@ echo Verificando clases del mock...
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 
 REM Verificar si ya esta compilado
-if exist "%BUILD_DIR%\com\example\fileprocessor\mock\PortableSoapMock.class" (
+if exist "%BUILD_DIR%\com\example\fileprocessor\mock\DocumentRestMock.class" (
     echo [OK] Clases ya compiladas
     goto :ready
 )

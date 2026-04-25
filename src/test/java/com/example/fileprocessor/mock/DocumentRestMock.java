@@ -4,21 +4,16 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
-import java.util.zip.ZipOutputStream;
-import java.util.zip.ZipEntry;
 
 /**
  * Mock REST API Server for document retrieval.
@@ -43,23 +38,11 @@ public class DocumentRestMock {
 
     private static final int DEFAULT_PORT = 8081;
     private static final int PORT_RANGE_START = 8081;
-    private static final int PORT_RANGE_END = 8999;
+    private static final int PORT_RANGE_END = 9999;
 
-    private static final ObjectMapper objectMapper = new ObjectMapper()
-        .registerModule(new JavaTimeModule());
-
-    record DocumentInfo(String documentId, String filename, String contentBase64,
-                       String contentType, long size, Instant timestamp, boolean isZip) {}
-
-    record ErrorResponse(String error, String message) {}
-
-    // Sample document content (small test files)
     private static final String PDF_CONTENT = createPdfContent();
     private static final String DOCX_CONTENT = createDocxContent();
     private static final String TXT_CONTENT = createTxtContent();
-
-    // Lazy initialized ZIP content
-    private static String lazyZipContent;
 
     public static void main(String[] args) throws IOException {
         int port = resolvePort(args);
@@ -86,13 +69,6 @@ public class DocumentRestMock {
                 Thread.currentThread().interrupt();
             }
         }
-    }
-
-    private static synchronized String getZipContent() throws IOException {
-        if (lazyZipContent == null) {
-            lazyZipContent = createZipContent();
-        }
-        return lazyZipContent;
     }
 
     private static int resolvePort(String[] args) {
@@ -197,7 +173,6 @@ public class DocumentRestMock {
     }
 
     private static String createDocxContent() {
-        // Minimal DOCX structure (ZIP) - using bytes instead of escape sequences
         byte[] docxBytes = new byte[] {0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00};
         return Base64.getEncoder().encodeToString(docxBytes);
     }
@@ -208,23 +183,11 @@ public class DocumentRestMock {
         );
     }
 
-    private static String createZipContent() throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-            zos.putNextEntry(new ZipEntry("inner-document.pdf"));
-            zos.write("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\nxref\n0 1\n0000000000 65535 f\ntrailer<</Size 1/Root 1 0 R>>\nstartxref\n50\n%%EOF".getBytes(StandardCharsets.UTF_8));
-            zos.closeEntry();
-
-            zos.putNextEntry(new ZipEntry("inner-document.txt"));
-            zos.write("Document inside ZIP.\nLine 2 of inner document.".getBytes(StandardCharsets.UTF_8));
-            zos.closeEntry();
-
-            zos.putNextEntry(new ZipEntry("inner-document.docx"));
-            byte[] docxBytes = new byte[] {0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00};
-            zos.write(docxBytes);
-            zos.closeEntry();
-        }
-        return Base64.getEncoder().encodeToString(baos.toByteArray());
+    private static String createDocumentJson(String id, String filename, String content, String contentType, long size, boolean isZip, String origin) {
+        return String.format(
+            "{\"documentId\":\"%s\",\"filename\":\"%s\",\"content\":\"%s\",\"contentType\":\"%s\",\"size\":%d,\"isZip\":%b,\"origin\":\"%s\"}",
+            id, filename, content, contentType, size, isZip, origin
+        );
     }
 
     static class DocumentsListHandler implements HttpHandler {
@@ -236,31 +199,17 @@ public class DocumentRestMock {
             System.out.println("[" + method + "] " + path);
 
             if (!"GET".equalsIgnoreCase(method)) {
-                sendJsonResponse(exchange, 405, new ErrorResponse("METHOD_NOT_ALLOWED", "Only GET is supported"));
+                sendJsonResponse(exchange, 405, "{\"error\":\"METHOD_NOT_ALLOWED\",\"message\":\"Only GET is supported\"}");
                 return;
             }
 
-            try {
-                String zipContent = getZipContent();
-                byte[] zipBytes = Base64.getDecoder().decode(zipContent);
+            String doc1 = createDocumentJson("doc-001", "test-document.pdf", PDF_CONTENT, "application/pdf", PDF_CONTENT.length(), false, "folderA/incoming");
+            String doc2 = createDocumentJson("doc-002", "test-document.docx", DOCX_CONTENT, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", DOCX_CONTENT.length(), false, "folderB/incoming");
+            String doc3 = createDocumentJson("doc-003", "test-document.txt", TXT_CONTENT, "text/plain", TXT_CONTENT.length(), false, "folderA/special");
 
-                List<DocumentInfo> documents = List.of(
-                    new DocumentInfo("doc-001", "test-document.pdf", PDF_CONTENT,
-                        "application/pdf", (long) PDF_CONTENT.getBytes(StandardCharsets.UTF_8).length, Instant.now(), false),
-                    new DocumentInfo("doc-002", "test-document.docx", DOCX_CONTENT,
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", (long) DOCX_CONTENT.getBytes(StandardCharsets.UTF_8).length, Instant.now(), false),
-                    new DocumentInfo("doc-003", "test-document.txt", TXT_CONTENT,
-                        "text/plain", (long) TXT_CONTENT.getBytes(StandardCharsets.UTF_8).length, Instant.now(), false),
-                    new DocumentInfo("doc-004", "documents.zip", zipContent,
-                        "application/zip", (long) zipBytes.length, Instant.now(), true)
-                );
-
-                String jsonResponse = objectMapper.writeValueAsString(documents);
-                sendJsonResponse(exchange, 200, jsonResponse);
-                System.out.println("Response sent: document list with " + documents.size() + " documents");
-            } catch (Exception e) {
-                sendJsonResponse(exchange, 500, new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
-            }
+            String jsonResponse = "[" + doc1 + "," + doc2 + "," + doc3 + "]";
+            sendJsonResponse(exchange, 200, jsonResponse);
+            System.out.println("Response sent: document list with 3 documents");
         }
     }
 
@@ -273,57 +222,38 @@ public class DocumentRestMock {
             System.out.println("[" + method + "] " + path);
 
             if (!"GET".equalsIgnoreCase(method)) {
-                sendJsonResponse(exchange, 405, new ErrorResponse("METHOD_NOT_ALLOWED", "Only GET is supported"));
+                sendJsonResponse(exchange, 405, "{\"error\":\"METHOD_NOT_ALLOWED\",\"message\":\"Only GET is supported\"}");
                 return;
             }
 
             String pathInfo = exchange.getHttpContext().getPath();
             String documentId = path.substring(pathInfo.length() + 1);
+            documentId = URLDecoder.decode(documentId, StandardCharsets.UTF_8);
 
             if (documentId.isEmpty()) {
-                sendJsonResponse(exchange, 400, new ErrorResponse("BAD_REQUEST", "Document ID is required"));
+                sendJsonResponse(exchange, 400, "{\"error\":\"BAD_REQUEST\",\"message\":\"Document ID is required\"}");
                 return;
             }
 
             System.out.println("Document requested: " + documentId);
 
-            try {
-                String zipContent = getZipContent();
-                byte[] zipBytes = Base64.getDecoder().decode(zipContent);
+            String jsonResponse = switch (documentId) {
+                case "doc-001" -> createDocumentJson("doc-001", "test-document.pdf", PDF_CONTENT, "application/pdf", PDF_CONTENT.length(), false, "folderA/incoming");
+                case "doc-002" -> createDocumentJson("doc-002", "test-document.docx", DOCX_CONTENT, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", DOCX_CONTENT.length(), false, "folderB/incoming");
+                case "doc-003" -> createDocumentJson("doc-003", "test-document.txt", TXT_CONTENT, "text/plain", TXT_CONTENT.length(), false, "folderA/special");
+                default -> null;
+            };
 
-                DocumentInfo document = switch (documentId) {
-                    case "doc-001" -> new DocumentInfo("doc-001", "test-document.pdf", PDF_CONTENT,
-                        "application/pdf", (long) PDF_CONTENT.getBytes(StandardCharsets.UTF_8).length, Instant.now(), false);
-                    case "doc-002" -> new DocumentInfo("doc-002", "test-document.docx", DOCX_CONTENT,
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", (long) DOCX_CONTENT.getBytes(StandardCharsets.UTF_8).length, Instant.now(), false);
-                    case "doc-003" -> new DocumentInfo("doc-003", "test-document.txt", TXT_CONTENT,
-                        "text/plain", (long) TXT_CONTENT.getBytes(StandardCharsets.UTF_8).length, Instant.now(), false);
-                    case "doc-004" -> new DocumentInfo("doc-004", "documents.zip", zipContent,
-                        "application/zip", (long) zipBytes.length, Instant.now(), true);
-                    default -> null;
-                };
-
-                if (document == null) {
-                    sendJsonResponse(exchange, 404, new ErrorResponse("NOT_FOUND", "Document not found: " + documentId));
-                } else {
-                    String jsonResponse = objectMapper.writeValueAsString(document);
-                    sendJsonResponse(exchange, 200, jsonResponse);
-                    System.out.println("Response sent: document " + documentId);
-                }
-            } catch (Exception e) {
-                sendJsonResponse(exchange, 500, new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
+            if (jsonResponse == null) {
+                sendJsonResponse(exchange, 404, "{\"error\":\"NOT_FOUND\",\"message\":\"Document not found: " + documentId + "\"}");
+            } else {
+                sendJsonResponse(exchange, 200, jsonResponse);
+                System.out.println("Response sent: document " + documentId);
             }
         }
     }
 
-    private static void sendJsonResponse(HttpExchange exchange, int statusCode, Object response) throws IOException {
-        String json;
-        if (response instanceof String s) {
-            json = s;
-        } else {
-            json = objectMapper.writeValueAsString(response);
-        }
-
+    private static void sendJsonResponse(HttpExchange exchange, int statusCode, String json) throws IOException {
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(statusCode, bytes.length);

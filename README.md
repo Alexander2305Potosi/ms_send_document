@@ -354,12 +354,11 @@ El mock de documentos (`DocumentRestMock`) simula una API REST externa que prove
 
 **Documentos disponibles:**
 
-| ID | Nombre | Tipo Contenido |
-|----|--------|----------------|
-| doc-001 | test-document.pdf | application/pdf |
-| doc-002 | test-document.docx | application/vnd.openxmlformats-officedocument.wordprocessingml.document |
-| doc-003 | test-document.txt | text/plain |
-| doc-004 | documents.zip | application/zip (contiene 3 archivos: pdf, txt, docx) |
+| ID | Nombre | Tipo Contenido | Origin |
+|----|--------|----------------|--------|
+| doc-001 | test-document.pdf | application/pdf | folderA/incoming |
+| doc-002 | test-document.docx | application/vnd.openxmlformats-officedocument.wordprocessingml.document | folderB/incoming |
+| doc-003 | test-document.txt | text/plain | folderA/special |
 
 **Iniciar el Mock REST de Documentos:**
 
@@ -372,12 +371,54 @@ chmod +x ./scripts/start-document-mock.sh
 cat /tmp/document-rest-mock.info
 ```
 
+**Windows:**
+```cmd
+scripts\start-document-mock.bat
+type %TEMP%\document-rest-mock.info
+```
+
+### Mockoon Desktop
+
+Si prefieres usar **Mockoon Desktop** en lugar del mock Java, puedes importar la configuracion:
+
+```bash
+# Importar en Mockoon Desktop
+mockoon/document-rest-mock.json
+```
+
+Endpoints configurados:
+- `GET /api/documents` - Lista todos los documentos
+- `GET /api/document/:id` - Documento por ID
+
 ### Mas informacion
 
 - [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentacion completa del mock Java
 - [`soapui/README.md`](soapui/README.md) - Alternativa usando SOAP UI (menos estable en Windows)
 
 ## API Endpoints
+
+### POST /api/v1/files/load
+
+Carga documentos desde la API REST externa y los guarda en la base de datos para su procesamiento posterior. Este es el primer paso del flujo de dos pasos.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/v1/files/load
+```
+
+**Response:**
+```json
+{
+  "status": "LOADING",
+  "message": "Document loading from REST API started",
+  "correlationId": null,
+  "traceId": "uuid-generado",
+  "externalReference": null,
+  "processedAt": "2024-01-15T10:30:00Z",
+  "errorCode": null,
+  "success": true
+}
+```
 
 ### GET /api/v1/files/{documentId}
 
@@ -643,6 +684,35 @@ id("info.solidsoft.pitest") version "1.15.0"
 ```
 
 ## Changelog
+
+### 2026-04-25 - Refactorizacion Mock REST Documentos
+- **Refactor:** `DocumentRestMock.java` - Eliminado Jackson, generacion JSON manual
+- **Refactor:** `start-document-mock.sh` - Simplificado (mock auto-detecta puerto)
+- **Nuevo:** `start-document-mock.bat` - Script Windows para mock REST
+- **Doc:** Actualizado `mock/README.md` con documentacion del mock REST
+
+### 2026-04-25 - Nuevo Endpoint de Carga de Documentos
+- **Nuevo:** `POST /api/v1/files/load` - Carga documentos desde API REST externa a la BD
+- **Nuevo:** `LoadDocumentsUseCase` - Caso de uso para carga de documentos
+- **Nuevo:** `LoadDocumentsResult` - DTO de resultado para carga
+- **Nuevo:** `DocumentRestGateway.getAllDocuments()` - Puerto para obtener todos los documentos
+- **Nuevo:** `DocumentRepository.save(DocumentToProcess)` - Metodo para guardar documentos
+- **Nuevo:** `R2dbcDocumentRepository.save()` - Implementacion R2dbc
+- **Nuevo:** `DocumentRestMock` - Mock de API REST de documentos con `origin`
+- **Nuevo:** `LoadDocumentsUseCaseTest` - Pruebas unitarias
+- **Nuevo:** `DocumentRestGatewayImplTest` - Pruebas del adapter
+- **Actualizado:** `FileController` con nuevo endpoint `/load`
+- **Actualizado:** `DocumentInfo` con campo `origin`
+- **Actualizado:** `DocumentRestMock` incluye `origin` en respuestas
+
+### 2026-04-25 - Constantes de Status Centralizadas
+- **Nuevo:** `DocumentStatus.java` - Enum con valores `PENDING`, `PROCESSING`, `RETRY`, `SUCCESS`, `FAILURE`, `SKIPPED`
+- **Refactor:** `R2dbcDocumentRepository` ahora usa `DocumentStatus.*_VALUE` en SQL
+- **Refactor:** `DatabaseInitializer` ahora usa constantes para SQL
+- **Refactor:** `ProcessFileUseCase` usa `DocumentStatus.*_VALUE` en lugar de constantes locales
+- **Refactor:** `SoapResponse.isSuccess()` usa `DocumentStatus.SUCCESS_VALUE`
+- **Refactor:** `FileController` usa `DocumentStatus.PROCESSING_VALUE`
+- **Cleanup:** `start-mock.bat` simplificado (el mock ahora auto-detecta puerto)
 
 ### 2026-04-22 - Limpieza de Codigo
 - **Eliminado**: `SoapConfig.java` - bean `JAXBContext` sin uso

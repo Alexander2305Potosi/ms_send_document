@@ -47,6 +47,71 @@
       ]
     },
     {
+      "name": "📥 Carga de Documentos (Paso 1)",
+      "item": [
+        {
+          "name": "POST /api/v1/files/load - Cargar Documentos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/load",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "load"
+              ]
+            },
+            "description": "Carga documentos desde la API REST externa y los guarda en la base de datos para su procesamiento posterior.\n\nEste es el **PASO 1** del flujo de dos pasos:\n1. POST /api/v1/files/load - Carga documentos a la BD (status=PENDING)\n2. GET /api/v1/files - Procesa los documentos pendientes\n\n**Nota:** Requiere que el Document REST Mock esté corriendo en el puerto 8081"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:8080/api/v1/files/load",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8080",
+                  "path": [
+                    "api",
+                    "v1",
+                    "files",
+                    "load"
+                  ]
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": \"LOADING\",\n  \"message\": \"Document loading from REST API started\",\n  \"correlationId\": null,\n  \"traceId\": \"uuid-generado\",\n  \"externalReference\": null,\n  \"processedAt\": \"2024-01-15T10:30:00Z\",\n  \"errorCode\": null,\n  \"success\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Upload File - PDF",
       "request": {
         "method": "POST",

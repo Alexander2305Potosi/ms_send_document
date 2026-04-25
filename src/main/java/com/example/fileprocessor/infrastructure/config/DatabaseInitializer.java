@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.config;
 
+import com.example.fileprocessor.domain.entity.DocumentStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -42,7 +43,9 @@ public class DatabaseInitializer implements ApplicationRunner {
     }
 
     private Mono<Void> resetProcessingDocuments() {
-        return databaseClient.sql("UPDATE documents_to_process SET status = 'PENDING' WHERE status = 'PROCESSING'")
+        String sql = "UPDATE documents_to_process SET status = '%s' WHERE status = '%s'"
+            .formatted(DocumentStatus.PENDING_VALUE, DocumentStatus.PROCESSING_VALUE);
+        return databaseClient.sql(sql)
             .fetch()
             .rowsUpdated()
             .doOnNext(count -> {

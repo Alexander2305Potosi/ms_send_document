@@ -19,6 +19,6 @@ public class SoapResponse {
     private final String externalReference;
 
     public boolean isSuccess() {
-        return "SUCCESS".equalsIgnoreCase(status) || "OK".equalsIgnoreCase(status);
+        return DocumentStatus.SUCCESS_VALUE.equalsIgnoreCase(status) || "OK".equalsIgnoreCase(status);
     }
 }

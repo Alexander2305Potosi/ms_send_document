@@ -1,5 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.DocumentInfo;
 import com.example.fileprocessor.domain.entity.DocumentToProcess;
 import com.example.fileprocessor.domain.entity.FileData;
@@ -27,11 +28,6 @@ public class ProcessFileUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessFileUseCase.class);
 
-    private static final String STATUS_SUCCESS = "SUCCESS";
-    private static final String STATUS_FAILURE = "FAILURE";
-    private static final String STATUS_SKIPPED = "SKIPPED";
-    private static final String STATUS_PROCESSING = "PROCESSING";
-    private static final String STATUS_RETRY = "RETRY";
     private static final String DEFAULT_ERROR_CODE = "UNKNOWN_ERROR";
     private static final int DEFAULT_RETRY_COUNT = 0;
     private static final long MB_TO_BYTES = 1024 * 1024;
@@ -85,9 +81,9 @@ public class ProcessFileUseCase {
         if (shouldSkipFolder(pending.getOrigin())) {
             log.info("Document {} skipped due to folder rule, origin: {}",
                 pending.getDocumentId(), pending.getOrigin());
-            return documentRepository.updateStatus(pending.getDocumentId(), STATUS_SKIPPED, traceId, null, "SKIPPED_FOLDER")
+            return documentRepository.updateStatus(pending.getDocumentId(), DocumentStatus.SKIPPED_VALUE, traceId, null, "SKIPPED_FOLDER")
                 .thenReturn(FileUploadResult.builder()
-                    .status(STATUS_SKIPPED)
+                    .status(DocumentStatus.SKIPPED_VALUE)
                     .message("Document skipped due to folder rule: " + pending.getOrigin())
                     .correlationId(null)
                     .traceId(traceId)
@@ -101,7 +97,7 @@ public class ProcessFileUseCase {
             .flatMap(doc -> processDocument(doc, traceId, pending.getDocumentId(), pending.getOrigin()))
             .flatMap(result -> {
                 // Only update DB if not SKIPPED (SKIPPED already updated inside processFile)
-                if (STATUS_SKIPPED.equals(result.getStatus())) {
+                if (DocumentStatus.SKIPPED_VALUE.equals(result.getStatus())) {
                     return Mono.just(result);
                 }
                 return updateDocumentStatus(pending.getDocumentId(), result, traceId).thenReturn(result);
@@ -131,8 +127,8 @@ public class ProcessFileUseCase {
 
     private Mono<FileUploadResult> updateDocumentStatus(String documentId, FileUploadResult result, String traceId) {
         String status = result.getStatus();
-        String soapCorrelationId = STATUS_SUCCESS.equals(status) ? result.getCorrelationId() : null;
-        String errorCode = STATUS_SUCCESS.equals(status) ? null : extractErrorCodeFromMessage(result.getMessage());
+        String soapCorrelationId = DocumentStatus.SUCCESS_VALUE.equals(status) ? result.getCorrelationId() : null;
+        String errorCode = DocumentStatus.SUCCESS_VALUE.equals(status) ? null : extractErrorCodeFromMessage(result.getMessage());
 
         return documentRepository.updateStatus(documentId, status, traceId, soapCorrelationId, errorCode)
             .thenReturn(result);
@@ -140,7 +136,7 @@ public class ProcessFileUseCase {
 
     private Mono<FileUploadResult> handleDocumentError(String documentId, Throwable error, String traceId) {
         String errorCode = extractErrorCode(error);
-        String status = isRetryableError(error) ? STATUS_RETRY : STATUS_FAILURE;
+        String status = isRetryableError(error) ? DocumentStatus.RETRY_VALUE : DocumentStatus.FAILURE_VALUE;
         log.error("Failed to process document {}: {} (status={}, errorCode={})",
             documentId, error.getMessage(), status, errorCode);
 
@@ -176,7 +172,7 @@ public class ProcessFileUseCase {
             log.info("Document {} skipped due to size rule: {} bytes (>= {} MB)",
                 fileData.getFilename(), fileData.getSize(), validationConfig.maxFileSizeMb());
             return Mono.just(FileUploadResult.builder()
-                .status(STATUS_SKIPPED)
+                .status(DocumentStatus.SKIPPED_VALUE)
                 .message("Document skipped due to size rule: " + fileData.getSize() + " bytes")
                 .correlationId(null)
                 .traceId(fileData.getTraceId())
@@ -279,7 +275,7 @@ public class ProcessFileUseCase {
     private FileUploadResult aggregateResults(java.util.List<FileUploadResult> results, String documentId) {
         if (results.isEmpty()) {
             return FileUploadResult.builder()
-                .status(STATUS_FAILURE)
+                .status(DocumentStatus.FAILURE_VALUE)
                 .message("No documents processed")
                 .correlationId(null)
                 .traceId(null)
@@ -313,7 +309,7 @@ public class ProcessFileUseCase {
     private Mono<Void> saveSoapLog(String filename, String traceId, SoapResponse response) {
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
             .traceId(traceId)
-            .status(STATUS_SUCCESS)
+            .status(DocumentStatus.SUCCESS_VALUE)
             .retryCount(DEFAULT_RETRY_COUNT)
             .filename(filename)
             .createdAt(Instant.now())
@@ -328,7 +324,7 @@ public class ProcessFileUseCase {
 
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
             .traceId(traceId)
-            .status(STATUS_FAILURE)
+            .status(DocumentStatus.FAILURE_VALUE)
             .retryCount(retries)
             .errorCode(errorCode)
             .filename(filename)

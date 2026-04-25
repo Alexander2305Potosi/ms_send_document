@@ -15,6 +15,7 @@ public class DocumentInfo {
     private final String contentType;
     private final long size;
     private final boolean isZip;
+    private final String origin;
 
     public String extension() {
         int lastDot = filename.lastIndexOf('.');

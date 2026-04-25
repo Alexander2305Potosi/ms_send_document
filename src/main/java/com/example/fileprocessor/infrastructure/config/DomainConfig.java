@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.DocumentRestGateway;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.usecase.FileValidator;
+import com.example.fileprocessor.domain.usecase.LoadDocumentsUseCase;
 import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
@@ -26,5 +27,11 @@ public class DomainConfig {
                                                   SoapCommunicationLogRepository logRepository,
                                                   FileValidationConfig validationConfig) {
         return new ProcessFileUseCase(documentGateway, documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
+    }
+
+    @Bean
+    public LoadDocumentsUseCase loadDocumentsUseCase(DocumentRestGateway documentGateway,
+                                                     DocumentRepository documentRepository) {
+        return new LoadDocumentsUseCase(documentGateway, documentRepository);
     }
 }

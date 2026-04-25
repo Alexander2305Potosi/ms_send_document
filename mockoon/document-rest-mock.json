@@ -1,0 +1,129 @@
+{
+    "uuid": "266df6a5-2d61-462b-81fe-b4fbb2e85fc9",
+    "lastMigration": 33,
+    "name": "Document REST Mock",
+    "endpointPrefix": "",
+    "latency": 0,
+    "port": 3001,
+    "hostname": "",
+    "folders": [],
+    "routes": [
+        {
+            "uuid": "71389fe2-bb06-4d12-b950-584aab35bdc9",
+            "type": "http",
+            "documentation": "",
+            "method": "get",
+            "endpoint": "api/documents",
+            "responses": [
+                {
+                    "uuid": "11d98d0b-7107-45ac-a533-e955cde27167",
+                    "body": "[\n  {\n    \"documentId\": \"doc-001\",\n    \"filename\": \"test-document.pdf\",\n    \"content\": \"JVBERi0x\",\n    \"contentType\": \"application/pdf\",\n    \"size\": 1024,\n    \"isZip\": false,\n    \"origin\": \"folderA/incoming\"\n  },\n  {\n    \"documentId\": \"doc-002\",\n    \"filename\": \"test-document.docx\",\n    \"content\": \"UEsDBBQ=\",\n    \"contentType\": \"application/vnd.openxmlformats-officedocument.wordprocessingml.document\",\n    \"size\": 2048,\n    \"isZip\": false,\n    \"origin\": \"folderB/incoming\"\n  },\n  {\n    \"documentId\": \"doc-003\",\n    \"filename\": \"test-document.txt\",\n    \"content\": \"VGhpcyBpcyBhIHRlc3Q=\",\n    \"contentType\": \"text/plain\",\n    \"size\": 512,\n    \"isZip\": false,\n    \"origin\": \"folderA/special\"\n  }\n]",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        },
+        {
+            "uuid": "fa39d0ab-83a2-4dfd-ac7f-1f59249999ad",
+            "type": "http",
+            "documentation": "",
+            "method": "post",
+            "endpoint": "api/document/:id",
+            "responses": [
+                {
+                    "uuid": "78d52d13-1857-4d9a-a4b8-31af5e7746f9",
+                    "body": "{\n  \"documentId\": \"doc-001\",\n  \"filename\": \"test-document.pdf\",\n  \"content\": \"JVBERi0x\",\n  \"contentType\": \"application/pdf\",\n  \"size\": 1024,\n  \"isZip\": false,\n    \"origin\": \"folderA/incoming\"\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        }
+    ],
+    "rootChildren": [
+        {
+            "type": "route",
+            "uuid": "71389fe2-bb06-4d12-b950-584aab35bdc9"
+        },
+        {
+            "type": "route",
+            "uuid": "fa39d0ab-83a2-4dfd-ac7f-1f59249999ad"
+        }
+    ],
+    "proxyMode": false,
+    "proxyHost": "",
+    "proxyRemovePrefix": false,
+    "tlsOptions": {
+        "enabled": false,
+        "type": "CERT",
+        "pfxPath": "",
+        "certPath": "",
+        "keyPath": "",
+        "caPath": "",
+        "passphrase": ""
+    },
+    "cors": true,
+    "headers": [
+        {
+            "key": "Content-Type",
+            "value": "application/json"
+        },
+        {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+        },
+        {
+            "key": "Access-Control-Allow-Methods",
+            "value": "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS"
+        },
+        {
+            "key": "Access-Control-Allow-Headers",
+            "value": "Content-Type, Origin, Accept, Authorization, Content-Length, X-Requested-With"
+        }
+    ],
+    "proxyReqHeaders": [
+        {
+            "key": "",
+            "value": ""
+        }
+    ],
+    "proxyResHeaders": [
+        {
+            "key": "",
+            "value": ""
+        }
+    ],
+    "data": [],
+    "callbacks": []
+}

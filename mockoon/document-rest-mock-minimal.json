@@ -1,0 +1,27 @@
+{
+  "name": "Document REST Mock",
+  "port": 8081,
+  "hostname": "localhost",
+  "routes": [
+    {
+      "method": "get",
+      "endpoint": "api/documents",
+      "responses": [
+        {
+          "statusCode": 200,
+          "body": "[{\"documentId\":\"doc-001\",\"filename\":\"test-document.pdf\",\"content\":\"JVBERi0x\",\"contentType\":\"application/pdf\",\"size\":1024,\"isZip\":false,\"origin\":\"folderA/incoming\"},{\"documentId\":\"doc-002\",\"filename\":\"test-document.docx\",\"content\":\"UEsDBBQ=\",\"contentType\":\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\",\"size\":2048,\"isZip\":false,\"origin\":\"folderB/incoming\"},{\"documentId\":\"doc-003\",\"filename\":\"test-document.txt\",\"content\":\"VGhpcyBpcyBhIHRlc3Q=\",\"contentType\":\"text/plain\",\"size\":512,\"isZip\":false,\"origin\":\"folderA/special\"}]"
+        }
+      ]
+    },
+    {
+      "method": "get",
+      "endpoint": "api/document/:id",
+      "responses": [
+        {
+          "statusCode": 200,
+          "body": "{\"documentId\":\"doc-001\",\"filename\":\"test-document.pdf\",\"content\":\"JVBERi0x\",\"contentType\":\"application/pdf\",\"size\":1024,\"isZip\":false,\"origin\":\"folderA/incoming\"}"
+        }
+      ]
+    }
+  ]
+}

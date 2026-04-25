@@ -62,7 +62,15 @@
       "Bash(./gradlew --stop)",
       "Bash(sudo chmod *)",
       "Bash(./gradlew bootRun)",
-      "Bash(./gradlew compileTestJava)"
+      "Bash(./gradlew compileTestJava)",
+      "WebSearch",
+      "WebFetch(domain:mockoon.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python3 -c \"import json; json.load\\(open\\('/Users/alexander2305/Downloads/file-processor-service/mockoon/document-rest-mock.json'\\)\\)\")",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -s \"https://api.github.com/repos/mockoon/mockoon/contents/packages%2Fcommons%2Fsrc%2Fconstants%2Fenvironment-schema.constants.ts\")",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data['content']\\)\")",
+      "Bash(python3 *)"
     ]
   }
 }
