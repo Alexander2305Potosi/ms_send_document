@@ -148,12 +148,22 @@ Carga productos y sus documentos asociados desde la API REST externa. **Los docu
 
 Procesa los documentos pendientes de todos los productos. **El contenido ya esta en BD** (previamente cargado), no necesita llamar a API REST externa.
 
+**Reglas de Negocio:**
+
+1. **Tamano de archivo:** Solo archivos **> 50 MB** se envian a SOAP. Archivos menores se marcan como `NOT_SENT` con trazabilidad del motivo.
+
+2. **Tipos de archivo permitidos:** Solo `pdf`, `txt`, `csv` se procesan. Otros tipos se marcan como `NOT_SENT` con el motivo.
+
+3. **Carpetas excluidas:** Archivos en carpetas `/tmp` o `/transient` se marcan como `SKIPPED`.
+
 **Flujo:**
 1. Consulta `product_documents_to_process` donde `status=PENDING`
 2. Por cada documento:
    - `claimDocument()` - cambia status a `PROCESSING` (si esta en PENDING)
-   - Envia contenido a SOAP directamente desde BD
-   - Actualiza status: SUCCESS, FAILURE, RETRY o SKIPPED
+   - Validar tamano (> 50MB) - si no cumple: `NOT_SENT`
+   - Validar tipo (regex `allowed-types`) - si no cumple: `NOT_SENT`
+   - Enviar a SOAP si pasa validaciones
+   - Actualiza status: SUCCESS, FAILURE, RETRY, SKIPPED o NOT_SENT
 
 **Resiliencia:** Si el MS cae durante el procesamiento:
 - El documento queda en `status=PROCESSING`
@@ -178,6 +188,26 @@ Los documentos ZIP son expandidos durante la carga (`/load`):
 - El `parent_document_id` indica a que ZIP pertenece
 - Cada hijo tiene su propio estado (`PENDING/PROCESSING/SUCCESS/FAILURE`)
 - Si el sistema cae durante el envio de un hijo, solo ese hijo se reprocesa
+
+## Estados de Documento
+
+| Estado | Descripcion |
+|--------|-------------|
+| `PENDING` | Documento esperando procesamiento |
+| `PROCESSING` | Documento siendo procesado |
+| `SUCCESS` | Enviado a SOAP exitosamente |
+| `FAILURE` | Error permanente en SOAP |
+| `RETRY` | Error reintentable (timeout) |
+| `SKIPPED` | Saltado por regla de carpeta |
+| `NOT_SENT` | No enviado (tamano <= 50MB o tipo no permitido) |
+
+## Configuracion
+
+| Variable | Default | Descripcion |
+|----------|---------|-------------|
+| `app.file.max-file-size-mb` | 50 | Tamano maximo para enviar a SOAP |
+| `app.file.allowed-types` | `pdf,txt,csv` | Tipos de archivo permitidos (regex) |
+| `app.file.folders-to-skip` | `/tmp,/transient` | Carpetas a excluir |
 
 ## Reintentos SOAP
 

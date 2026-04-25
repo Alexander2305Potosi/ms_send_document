@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
@@ -67,11 +68,15 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldProcessDocumentsPerDocument() {
+        // Files must be > 50MB to be sent to SOAP
+        byte[] largeContent1 = new byte[60 * 1024 * 1024]; // 60MB
+        byte[] largeContent2 = new byte[55 * 1024 * 1024]; // 55MB
+
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
             .filename("manual.pdf")
-            .content(new byte[]{1, 2, 3})
+            .content(largeContent1)
             .contentType("application/pdf")
             .origin("folderA/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -82,7 +87,7 @@ class ProcessProductDocumentsUseCaseTest {
             .documentId("doc-002")
             .productId("prod-001")
             .filename("specs.pdf")
-            .content(new byte[]{4, 5, 6})
+            .content(largeContent2)
             .contentType("application/pdf")
             .origin("folderB/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -154,11 +159,14 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldSkipDocumentsByFolder() {
+        // File must be > 50MB to pass size check, then folder rule applies
+        byte[] largeContent = new byte[60 * 1024 * 1024]; // 60MB
+
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
             .filename("manual.pdf")
-            .content(new byte[]{1, 2, 3})
+            .content(largeContent)
             .contentType("application/pdf")
             .origin("/tmp/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -183,17 +191,49 @@ class ProcessProductDocumentsUseCaseTest {
     }
 
     @Test
+    void executePendingDocuments_shouldNotSendFilesSmallerThan50MB() {
+        // File with size < 50MB should be marked as NOT_SENT
+        ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
+            .documentId("doc-001")
+            .productId("prod-001")
+            .filename("small-file.pdf")
+            .content(new byte[]{1, 2, 3}) // 3 bytes < 50MB
+            .contentType("application/pdf")
+            .origin("folderA/incoming")
+            .status(DocumentStatus.PENDING_VALUE)
+            .createdAt(Instant.now())
+            .build();
+
+        when(documentRepository.findPendingDocuments()).thenReturn(Flux.just(doc1));
+        when(documentRepository.claimDocument("doc-001")).thenReturn(Mono.just(true));
+        when(documentRepository.updateStatus(anyString(), anyString(), anyString(), nullable(String.class), nullable(String.class)))
+            .thenReturn(Mono.empty());
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(result -> {
+                assert result.getStatus().equals(DocumentStatus.NOT_SENT_VALUE);
+                assert result.getMessage().contains("file size");
+                assert result.isSuccess();
+            })
+            .verifyComplete();
+
+        verify(soapGateway, never()).sendFile(any());
+    }
+
+    @Test
     void executePendingDocuments_shouldNotReprocessAlreadySuccessfulDocuments() {
         // Scenario: MS crashed after doc-001 was processed successfully
         // When restarted, findPendingDocuments returns doc-001 (PROCESSING) and doc-002 (PENDING)
         // claimDocument for doc-001 should return FALSE because it's PROCESSING (not PENDING)
         // So doc-001 should NOT be reprocessed - only doc-002 should be claimed and processed
 
+        byte[] largeContent = new byte[60 * 1024 * 1024]; // 60MB
+
         ProductDocumentToProcess docProcessing = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
             .filename("manual.pdf")
-            .content(new byte[]{1, 2, 3})
+            .content(largeContent)
             .contentType("application/pdf")
             .origin("folderA/incoming")
             .status(DocumentStatus.PROCESSING_VALUE)
@@ -204,7 +244,7 @@ class ProcessProductDocumentsUseCaseTest {
             .documentId("doc-002")
             .productId("prod-001")
             .filename("specs.pdf")
-            .content(new byte[]{4, 5, 6})
+            .content(largeContent) // > 50MB so it gets sent
             .contentType("application/pdf")
             .origin("folderB/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -233,6 +273,45 @@ class ProcessProductDocumentsUseCaseTest {
 
         // doc-001 was skipped (claim returned false), doc-002 was processed
         // So sendFile should be called exactly once (for doc-002 only)
+        verify(soapGateway, times(1)).sendFile(any());
+    }
+
+    @Test
+    void executePendingDocuments_shouldSendFilesLargerThan50MB() {
+        // File with size > 50MB should be sent to SOAP
+        byte[] largeContent = new byte[60 * 1024 * 1024]; // 60MB
+
+        ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
+            .documentId("doc-001")
+            .productId("prod-001")
+            .filename("large-file.pdf")
+            .content(largeContent)
+            .contentType("application/pdf")
+            .origin("folderA/incoming")
+            .status(DocumentStatus.PENDING_VALUE)
+            .createdAt(Instant.now())
+            .build();
+
+        SoapResponse soapResponse = SoapResponse.builder()
+            .status(DocumentStatus.SUCCESS_VALUE)
+            .message("Success")
+            .correlationId("corr-001")
+            .processedAt(Instant.now())
+            .build();
+
+        when(documentRepository.findPendingDocuments()).thenReturn(Flux.just(doc1));
+        when(documentRepository.claimDocument("doc-001")).thenReturn(Mono.just(true));
+        when(fileValidator.validate(any(FileData.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(soapGateway.sendFile(any())).thenReturn(Mono.just(soapResponse));
+        when(documentRepository.updateStatus(anyString(), anyString(), anyString(), nullable(String.class), nullable(String.class)))
+            .thenReturn(Mono.empty());
+        when(logRepository.save(any())).thenReturn(Mono.empty());
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .expectNextCount(1)
+            .verifyComplete();
+
+        // File > 50MB should be sent
         verify(soapGateway, times(1)).sendFile(any());
     }
 }

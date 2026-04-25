@@ -159,12 +159,13 @@ public class ProcessProductDocumentsUseCase {
             .traceId(traceId)
             .build();
 
-        if (shouldSkipBySize(fileData.getSize())) {
-            log.info("Document {} skipped due to size rule: {} bytes (>= {} MB)",
-                fileData.getFilename(), fileData.getSize(), validationConfig.maxFileSizeMb());
+        // Check if file should NOT be sent (< 50MB rule)
+        if (shouldNotSendBySize(fileData.getSize())) {
+            log.info("Document {} NOT SENT due to size rule: {} bytes (<= {} MB). Trace: {}",
+                fileData.getFilename(), fileData.getSize(), validationConfig.maxFileSizeMb(), traceId);
             return Mono.just(FileUploadResult.builder()
-                .status(DocumentStatus.SKIPPED_VALUE)
-                .message("Document skipped due to size rule: " + fileData.getSize() + " bytes")
+                .status(DocumentStatus.NOT_SENT_VALUE)
+                .message("Document not sent: file size " + fileData.getSize() + " bytes is within limit (<= " + validationConfig.maxFileSizeMb() + " MB)")
                 .correlationId(null)
                 .traceId(traceId)
                 .processedAt(Instant.now())
@@ -181,16 +182,35 @@ public class ProcessProductDocumentsUseCase {
             .flatMap(response -> saveSoapLog(fileData.getFilename(), fileData.getTraceId(), response).thenReturn(response))
             .map(this::toResult)
             .doOnNext(result -> log.info("File {} processed, correlationId: {}", fileData.getFilename(), result.getCorrelationId()))
-            .onErrorResume(error -> saveSoapErrorLog(fileData.getFilename(), fileData.getTraceId(), error)
-                .then(Mono.error(error)));
+            .onErrorResume(error -> {
+                // Validation errors (invalid type, etc.) -> NOT_SENT with reason
+                if (error instanceof com.example.fileprocessor.domain.exception.FileValidationException fve) {
+                    log.info("Document {} NOT SENT due to validation rule: {}. Trace: {}",
+                        fileData.getFilename(), fve.getMessage(), traceId);
+                    return saveSoapErrorLog(fileData.getFilename(), traceId, error)
+                        .thenReturn(FileUploadResult.builder()
+                            .status(DocumentStatus.NOT_SENT_VALUE)
+                            .message("Document not sent: " + fve.getMessage())
+                            .correlationId(null)
+                            .traceId(traceId)
+                            .processedAt(Instant.now())
+                            .externalReference(fileData.getFilename())
+                            .success(true)
+                            .build());
+                }
+                // SOAP errors -> FAILURE
+                return saveSoapErrorLog(fileData.getFilename(), fileData.getTraceId(), error)
+                    .then(Mono.error(error));
+            });
     }
 
-    private boolean shouldSkipBySize(long sizeBytes) {
+    private boolean shouldNotSendBySize(long sizeBytes) {
         int maxSizeMb = validationConfig.maxFileSizeMb();
         if (maxSizeMb <= 0) {
             return false;
         }
-        return sizeBytes >= (long) maxSizeMb * MB_TO_BYTES;
+        // NOT_SENT if size <= 50MB (only files > 50MB are sent)
+        return sizeBytes <= (long) maxSizeMb * MB_TO_BYTES;
     }
 
     private FolderInfo extractFolderInfo(String origin) {
