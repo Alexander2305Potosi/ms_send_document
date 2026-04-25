@@ -16,7 +16,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,12 +28,11 @@ public abstract class AbstractProcessDocumentsUseCase {
     protected static final Logger log = LoggerFactory.getLogger(AbstractProcessDocumentsUseCase.class);
     protected static final String DEFAULT_ERROR_CODE = "UNKNOWN_ERROR";
     protected static final int DEFAULT_RETRY_COUNT = 0;
-    protected static final long MB_TO_BYTES = 1024 * 1024;
 
     protected final ProductDocumentRepository documentRepository;
     protected final FileValidator fileValidator;
     protected final SoapCommunicationLogRepository logRepository;
-    protected final FileValidationConfig validationConfig;
+    protected final DocumentValidationRules validationRules;
 
     protected AbstractProcessDocumentsUseCase(
             ProductDocumentRepository documentRepository,
@@ -44,13 +42,9 @@ public abstract class AbstractProcessDocumentsUseCase {
         this.documentRepository = documentRepository;
         this.fileValidator = fileValidator;
         this.logRepository = logRepository;
-        this.validationConfig = validationConfig;
+        this.validationRules = new DocumentValidationRules(validationConfig);
     }
 
-    /**
-     * Template method: executes the pending documents processing workflow.
-     * Subclasses should not override this method; override sendDocument() instead.
-     */
     public Flux<FileUploadResult> executePendingDocuments() {
         log.info("Fetching pending product documents from database...");
         return documentRepository.findPendingDocuments()
@@ -59,9 +53,6 @@ public abstract class AbstractProcessDocumentsUseCase {
             .doOnError(error -> log.error("Error processing document: {}", error.getMessage()));
     }
 
-    /**
-     * Process a pending document: claims it, validates, sends, and updates status.
-     */
     private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
         return documentRepository.claimDocument(pending.getDocumentId())
             .filter(Boolean::booleanValue)
@@ -73,17 +64,15 @@ public abstract class AbstractProcessDocumentsUseCase {
             }));
     }
 
-    /**
-     * Process a document that has been successfully claimed.
-     * Applies validation rules and delegates to sendDocument() for actual sending.
-     */
     private Mono<FileUploadResult> processDocumentClaimed(ProductDocumentToProcess pending) {
         String traceId = UUID.randomUUID().toString();
         log.info("Processing pending document: {}, productId: {}, traceId: {}",
             pending.getDocumentId(), pending.getProductId(), traceId);
 
+        long fileSize = pending.getContent() != null ? pending.getContent().length : 0;
+
         // Rule 1: Check if folder should be skipped
-        if (shouldSkipFolder(pending.getOrigin())) {
+        if (validationRules.shouldSkipFolder(pending.getOrigin())) {
             log.info("Document {} skipped due to folder rule, origin: {}",
                 pending.getDocumentId(), pending.getOrigin());
             return documentRepository.updateStatus(
@@ -98,7 +87,7 @@ public abstract class AbstractProcessDocumentsUseCase {
         }
 
         // Rule 2: Check if origin matches required patterns
-        if (!shouldSendByOrigin(pending.getOrigin())) {
+        if (!validationRules.shouldSendByOrigin(pending.getOrigin())) {
             log.info("Document {} NOT SENT due to origin pattern rule, origin: {}",
                 pending.getDocumentId(), pending.getOrigin());
             return documentRepository.updateStatus(
@@ -112,11 +101,10 @@ public abstract class AbstractProcessDocumentsUseCase {
                     null, traceId, pending.getDocumentId(), true));
         }
 
-        // Rule 3: Check file size (>= maxSizeMb means NOT_SENT)
-        long fileSize = pending.getContent() != null ? pending.getContent().length : 0;
-        if (shouldNotSendBySize(fileSize)) {
+        // Rule 3: Check file size
+        if (validationRules.shouldNotSendBySize(fileSize)) {
             log.info("Document {} NOT SENT due to size rule: {} bytes (>= {} MB). Trace: {}",
-                pending.getFilename(), fileSize, validationConfig.maxFileSizeMb(), traceId);
+                pending.getFilename(), fileSize, validationRules.extractFolderInfo(pending.getOrigin()), traceId);
             return documentRepository.updateStatus(
                     pending.getDocumentId(),
                     DocumentStatus.NOT_SENT_VALUE,
@@ -124,7 +112,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     null,
                     "SIZE_EXCEEDED")
                 .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
-                    "Document not sent: file size " + fileSize + " bytes exceeds limit (>= " + validationConfig.maxFileSizeMb() + " MB)",
+                    "Document not sent: file size " + fileSize + " bytes exceeds limit",
                     null, traceId, pending.getFilename(), true));
         }
 
@@ -137,10 +125,8 @@ public abstract class AbstractProcessDocumentsUseCase {
             .traceId(traceId)
             .build();
 
-        // Extract folder info for the destination
-        FolderInfo folderInfo = extractFolderInfo(pending.getOrigin());
+        DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(pending.getOrigin());
 
-        // Validate file type
         return fileValidator.validate(fileData)
             .flatMap(validData -> {
                 SoapRequest request = SoapRequest.fromFileData(validData,
@@ -152,60 +138,6 @@ public abstract class AbstractProcessDocumentsUseCase {
             })
             .onErrorResume(error -> handleDocumentError(pending.getDocumentId(), error, traceId));
     }
-
-    // ============== Shared Validation Methods ==============
-
-    protected boolean shouldSkipFolder(String origin) {
-        if (origin == null || origin.isBlank()) {
-            return false;
-        }
-        List<String> foldersToSkip = validationConfig.foldersToSkip();
-        if (foldersToSkip == null || foldersToSkip.isEmpty()) {
-            return false;
-        }
-        return foldersToSkip.stream().anyMatch(folder -> origin.contains(folder));
-    }
-
-    protected boolean shouldSendByOrigin(String origin) {
-        List<String> patterns = validationConfig.originPatternsToSend();
-        if (patterns == null || patterns.isEmpty()) {
-            return true;
-        }
-        if (origin == null || origin.isBlank()) {
-            return false;
-        }
-        return patterns.stream().anyMatch(pattern -> origin.contains(pattern));
-    }
-
-    protected boolean shouldNotSendBySize(long sizeBytes) {
-        int maxSizeMb = validationConfig.maxFileSizeMb();
-        if (maxSizeMb <= 0) {
-            return false;
-        }
-        return sizeBytes >= (long) maxSizeMb * MB_TO_BYTES;
-    }
-
-    protected FolderInfo extractFolderInfo(String origin) {
-        List<String> keywords = validationConfig.keywords();
-        if (keywords == null || keywords.isEmpty() || origin == null || origin.isBlank()) {
-            return new FolderInfo(".", ".");
-        }
-
-        for (String keyword : keywords) {
-            if (origin.contains(keyword)) {
-                String[] parts = origin.split("/");
-                if (parts.length >= 2) {
-                    String childFolder = parts[parts.length - 1];
-                    String parentFolder = parts.length > 1 ? parts[parts.length - 2] : ".";
-                    return new FolderInfo(parentFolder, childFolder);
-                }
-                return new FolderInfo(origin, ".");
-            }
-        }
-        return new FolderInfo(".", ".");
-    }
-
-    protected record FolderInfo(String parentFolder, String childFolder) {}
 
     // ============== Status Management ==============
 
@@ -309,17 +241,9 @@ public abstract class AbstractProcessDocumentsUseCase {
             .build();
     }
 
-    // ============== Abstract Methods (to be implemented by subclasses) ==============
+    // ============== Abstract Methods ==============
 
-    /**
-     * Send document to the destination (SOAP, S3, GCS, etc.)
-     * @param request the SOAP request containing file data and metadata
-     * @return Mono<DocumentResult> with the result of the send operation
-     */
     protected abstract Mono<DocumentResult> sendDocument(SoapRequest request);
 
-    /**
-     * @return the name of the implementation for logging purposes
-     */
     protected abstract String getImplementationName();
 }

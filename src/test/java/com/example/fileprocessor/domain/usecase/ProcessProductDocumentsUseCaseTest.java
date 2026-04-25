@@ -5,7 +5,6 @@ import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.entity.SoapResponse;
-import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
@@ -49,7 +48,7 @@ class ProcessProductDocumentsUseCaseTest {
     @Mock
     private FileValidationConfig validationConfig;
 
-    private ProcessProductDocumentsUseCase useCase;
+    private SoapDocumentUseCase useCase;
 
     @BeforeEach
     void setUp() {
@@ -58,20 +57,13 @@ class ProcessProductDocumentsUseCaseTest {
         lenient().when(validationConfig.maxFileSizeMb()).thenReturn(50);
         lenient().when(validationConfig.originPatternsToSend()).thenReturn(List.of("incoming", "documents"));
 
-        useCase = new ProcessProductDocumentsUseCase(
-            documentRepository,
-            soapGateway,
-            fileValidator,
-            logRepository,
-            validationConfig
-        );
+        useCase = new SoapDocumentUseCase(documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
     }
 
     @Test
     void executePendingDocuments_shouldProcessDocumentsPerDocument() {
-        // Files must be < 50MB to be sent to SOAP (use small arrays to avoid OOM in tests)
-        byte[] smallContent1 = new byte[1024 * 1024]; // 1MB
-        byte[] smallContent2 = new byte[512 * 1024]; // 512KB
+        byte[] smallContent1 = new byte[1024 * 1024];
+        byte[] smallContent2 = new byte[512 * 1024];
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -160,8 +152,7 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldSkipDocumentsByFolder() {
-        // File must be < 50MB to pass size check, then folder rule applies
-        byte[] smallContent = new byte[1024 * 1024]; // 1MB
+        byte[] smallContent = new byte[1024 * 1024];
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -174,7 +165,7 @@ class ProcessProductDocumentsUseCaseTest {
             .createdAt(Instant.now())
             .build();
 
-        when(validationConfig.foldersToSkip()).thenReturn(List.of("/tmp"));
+        lenient().when(validationConfig.foldersToSkip()).thenReturn(List.of("/tmp"));
 
         when(documentRepository.findPendingDocuments()).thenReturn(Flux.just(doc1));
         when(documentRepository.claimDocument("doc-001")).thenReturn(Mono.just(true));
@@ -193,8 +184,7 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldNotSendFilesLargerThan50MB() {
-        // Test with max file size of 1MB - so files >= 1MB are NOT_SENT
-        byte[] largeContent = new byte[2 * 1024 * 1024]; // 2MB (>= 1MB threshold)
+        byte[] largeContent = new byte[2 * 1024 * 1024];
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -207,7 +197,7 @@ class ProcessProductDocumentsUseCaseTest {
             .createdAt(Instant.now())
             .build();
 
-        when(validationConfig.maxFileSizeMb()).thenReturn(1); // 1MB threshold
+        lenient().when(validationConfig.maxFileSizeMb()).thenReturn(1);
         when(documentRepository.findPendingDocuments()).thenReturn(Flux.just(doc1));
         when(documentRepository.claimDocument("doc-001")).thenReturn(Mono.just(true));
         when(documentRepository.updateStatus(anyString(), anyString(), anyString(), nullable(String.class), nullable(String.class)))
@@ -226,12 +216,7 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldNotReprocessAlreadySuccessfulDocuments() {
-        // Scenario: MS crashed after doc-001 was processed successfully
-        // When restarted, findPendingDocuments returns doc-001 (PROCESSING) and doc-002 (PENDING)
-        // claimDocument for doc-001 should return FALSE because it's PROCESSING (not PENDING)
-        // So doc-001 should NOT be reprocessed - only doc-002 should be claimed and processed
-
-        byte[] smallContent = new byte[1024 * 1024]; // 1MB (< 50MB, should be sent)
+        byte[] smallContent = new byte[1024 * 1024];
 
         ProductDocumentToProcess docProcessing = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -248,7 +233,7 @@ class ProcessProductDocumentsUseCaseTest {
             .documentId("doc-002")
             .productId("prod-001")
             .filename("specs.pdf")
-            .content(smallContent) // < 50MB so it gets sent
+            .content(smallContent)
             .contentType("application/pdf")
             .origin("folderB/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -275,15 +260,12 @@ class ProcessProductDocumentsUseCaseTest {
             .expectNextCount(1)
             .verifyComplete();
 
-        // doc-001 was skipped (claim returned false), doc-002 was processed
-        // So sendFile should be called exactly once (for doc-002 only)
         verify(soapGateway, times(1)).sendFile(any());
     }
 
     @Test
     void executePendingDocuments_shouldSendFilesSmallerThan50MB() {
-        // File with size < 50MB should be sent to SOAP
-        byte[] smallContent = new byte[1024 * 1024]; // 1MB
+        byte[] smallContent = new byte[1024 * 1024];
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -315,14 +297,12 @@ class ProcessProductDocumentsUseCaseTest {
             .expectNextCount(1)
             .verifyComplete();
 
-        // File < 50MB should be sent
         verify(soapGateway, times(1)).sendFile(any());
     }
 
     @Test
     void executePendingDocuments_shouldNotSendIfOriginDoesNotMatchPattern() {
-        // Origin "other/folder" doesn't match patterns (incoming, documents)
-        byte[] smallContent = new byte[1024 * 1024]; // 1MB
+        byte[] smallContent = new byte[1024 * 1024];
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")

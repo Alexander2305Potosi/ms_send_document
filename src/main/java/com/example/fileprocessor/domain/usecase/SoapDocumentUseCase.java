@@ -1,7 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
+import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
+import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import reactor.core.publisher.Mono;
 
 /**
@@ -12,8 +15,12 @@ public class SoapDocumentUseCase extends AbstractProcessDocumentsUseCase {
 
     private final ExternalSoapGateway soapGateway;
 
-    public SoapDocumentUseCase(ExternalSoapGateway soapGateway) {
-        super(null, null, null, null);
+    public SoapDocumentUseCase(ProductDocumentRepository documentRepository,
+                              ExternalSoapGateway soapGateway,
+                              FileValidator fileValidator,
+                              SoapCommunicationLogRepository logRepository,
+                              FileValidationConfig validationConfig) {
+        super(documentRepository, fileValidator, logRepository, validationConfig);
         this.soapGateway = soapGateway;
     }
 

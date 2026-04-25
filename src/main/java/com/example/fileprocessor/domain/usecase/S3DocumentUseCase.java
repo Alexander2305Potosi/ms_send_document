@@ -1,7 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
+import com.example.fileprocessor.domain.port.in.FileValidationConfig;
+import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
+import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -18,8 +21,12 @@ public class S3DocumentUseCase extends AbstractProcessDocumentsUseCase {
 
     private final S3Gateway s3Gateway;
 
-    public S3DocumentUseCase(S3Gateway s3Gateway) {
-        super(null, null, null, null);
+    public S3DocumentUseCase(ProductDocumentRepository documentRepository,
+                           S3Gateway s3Gateway,
+                           FileValidator fileValidator,
+                           SoapCommunicationLogRepository logRepository,
+                           FileValidationConfig validationConfig) {
+        super(documentRepository, fileValidator, logRepository, validationConfig);
         this.s3Gateway = s3Gateway;
     }
 
