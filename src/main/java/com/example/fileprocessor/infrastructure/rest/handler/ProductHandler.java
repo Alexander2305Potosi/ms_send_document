@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.usecase.AbstractProcessDocumentsUseCase;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentUseCase;
+import com.example.fileprocessor.infrastructure.rest.RestApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -19,14 +20,6 @@ import java.util.UUID;
 public class ProductHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ProductHandler.class);
-
-    public static final String PROCESSOR_SOAP = "soap";
-    public static final String PROCESSOR_S3 = "s3";
-
-    public static final String STATUS_LOADING = "LOADING";
-    public static final String STATUS_PROCESSING = "PROCESSING";
-    public static final String MSG_LOADING = "Product loading from REST API started";
-    public static final String MSG_PROCESSING = "Pending product documents processing started";
 
     private final LoadProductsUseCase loadProductsUseCase;
     private final SoapDocumentUseCase soapDocumentUseCase;
@@ -55,8 +48,8 @@ public class ProductHandler {
 
         return ServerResponse.accepted()
             .bodyValue(new AsyncProcessResponse(
-                STATUS_LOADING,
-                MSG_LOADING,
+                RestApiConstants.STATUS_LOADING,
+                RestApiConstants.MSG_LOADING,
                 null,
                 traceId,
                 null,
@@ -67,7 +60,7 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
-        String processorType = request.queryParam("processor").orElse(PROCESSOR_SOAP);
+        String processorType = request.queryParam("processor").orElse(RestApiConstants.PROCESSOR_SOAP);
 
         String traceId = UUID.randomUUID().toString();
         MDC.put("traceId", traceId);
@@ -85,8 +78,8 @@ public class ProductHandler {
 
         return ServerResponse.accepted()
             .bodyValue(new AsyncProcessResponse(
-                STATUS_PROCESSING,
-                MSG_PROCESSING,
+                RestApiConstants.STATUS_PROCESSING,
+                RestApiConstants.MSG_PROCESSING,
                 null,
                 traceId,
                 null,
@@ -98,8 +91,8 @@ public class ProductHandler {
 
     private AbstractProcessDocumentsUseCase resolveUseCase(String processorType) {
         return switch (processorType.toLowerCase()) {
-            case PROCESSOR_S3 -> s3DocumentUseCase;
-            case PROCESSOR_SOAP -> soapDocumentUseCase;
+            case RestApiConstants.PROCESSOR_S3 -> s3DocumentUseCase;
+            case RestApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
             default -> {
                 log.warn("Unknown processor type '{}', defaulting to SOAP", processorType);
                 yield soapDocumentUseCase;
