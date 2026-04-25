@@ -54,18 +54,21 @@
       ]
     },
     {
-      "name": "3. GET /api/v1/products - Procesar Documentos",
+      "name": "3. GET /api/v1/products?processor=soap - Procesar Documentos via SOAP",
       "request": {
         "method": "GET",
         "header": [
           {"key": "Accept", "value": "application/json", "type": "text"}
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/products",
+          "raw": "{{baseUrl}}/api/v1/products?processor=soap",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "products"]
+          "path": ["api", "v1", "products"],
+          "query": [
+            {"key": "processor", "value": "soap", "description": "Procesador SOAP (default)"}
+          ]
         },
-        "description": "Procesa los documentos pendientes de todos los productos.\n\n**PASO 2** del flujo:\n1. POST /api/v1/products/load - Carga productos y documentos\n2. GET /api/v1/products - Procesa los documentos pendientes\n\n**Resiliencia:** Si el MS cae durante el procesamiento, al reiniciar solo se reprocesa el documento que quedó en PROCESSING.\n\n**Nota:** Requiere que el SOAP mock esté corriendo en puerto 9000."
+        "description": "Procesa los documentos pendientes de todos los productos usando SOAP.\n\n**PASO 2** del flujo:\n1. GET /api/v1/products/load - Carga productos y documentos\n2. GET /api/v1/products?processor=soap - Procesa los documentos pendientes\n\n**Resiliencia:** Si el MS cae durante el procesamiento, al reiniciar solo se reprocesa el documento que quedó en PROCESSING.\n\n**Nota:** Requiere que el SOAP mock esté corriendo en puerto 9000."
       },
       "response": [
         {
@@ -78,7 +81,34 @@
       ]
     },
     {
-      "name": "4. Config - Instrucciones",
+      "name": "4. GET /api/v1/products?processor=s3 - Procesar Documentos via S3",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Accept", "value": "application/json", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products?processor=s3",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"],
+          "query": [
+            {"key": "processor", "value": "s3", "description": "Procesador S3 (upload a AWS S3)"}
+          ]
+        },
+        "description": "Procesa los documentos pendientes de todos los productos usando S3.\n\n**PASO 2** del flujo:\n1. GET /api/v1/products/load - Carga productos y documentos\n2. GET /api/v1/products?processor=s3 - Procesa los documentos pendientes\n\n**Resiliencia:** Si el MS cae durante el procesamiento, al reiniciar solo se reprocesa el documento que quedó en PROCESSING.\n\n**Nota:** Requiere que el S3 mock esté corriendo en puerto 4566."
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "status": "Accepted",
+          "code": 202,
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": "{\n  \"status\": \"PROCESSING\",\n  \"message\": \"Pending product documents processing started\",\n  \"correlationId\": null,\n  \"traceId\": \"uuid-generado\",\n  \"externalReference\": null,\n  \"processedAt\": \"2024-01-15T10:30:00Z\",\n  \"errorCode\": null,\n  \"success\": true\n}"
+        }
+      ]
+    },
+    {
+      "name": "5. Config - Instrucciones",
       "request": {
         "method": "GET",
         "header": [],
