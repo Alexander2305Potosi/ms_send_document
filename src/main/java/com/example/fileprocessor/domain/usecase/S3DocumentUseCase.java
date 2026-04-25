@@ -1,5 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
@@ -37,8 +38,8 @@ public class S3DocumentUseCase extends AbstractProcessDocumentsUseCase {
                 log.info("S3 upload successful: {} -> {}/{}",
                     request.getFilename(), s3Result.bucket(), s3Result.key());
                 return DocumentResult.builder()
-                    .status("SUCCESS")
-                    .message("Uploaded to S3: " + s3Result.bucket() + "/" + s3Result.key())
+                    .status(DocumentStatus.SUCCESS_VALUE)
+                    .message(S3UseCaseConstants.MSG_UPLOAD_SUCCESS + s3Result.bucket() + "/" + s3Result.key())
                     .correlationId(s3Result.eTag())
                     .traceId(request.getTraceId())
                     .processedAt(Instant.now())
@@ -49,8 +50,8 @@ public class S3DocumentUseCase extends AbstractProcessDocumentsUseCase {
             .onErrorResume(error -> {
                 log.error("S3 upload failed for {}: {}", request.getFilename(), error.getMessage());
                 return Mono.just(DocumentResult.builder()
-                    .status("FAILURE")
-                    .message("S3 upload failed: " + error.getMessage())
+                    .status(DocumentStatus.FAILURE_VALUE)
+                    .message(S3UseCaseConstants.MSG_UPLOAD_FAILURE + error.getMessage())
                     .correlationId(null)
                     .traceId(request.getTraceId())
                     .processedAt(Instant.now())
@@ -62,6 +63,6 @@ public class S3DocumentUseCase extends AbstractProcessDocumentsUseCase {
 
     @Override
     protected String getImplementationName() {
-        return "S3";
+        return S3UseCaseConstants.IMPL_NAME;
     }
 }

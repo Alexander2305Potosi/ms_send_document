@@ -41,6 +41,6 @@ public class SoapDocumentUseCase extends AbstractProcessDocumentsUseCase {
 
     @Override
     protected String getImplementationName() {
-        return "SOAP";
+        return SoapUseCaseConstants.IMPL_NAME;
     }
 }

@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.rest.config;
 
+import com.example.fileprocessor.infrastructure.rest.RestApiPaths;
 import com.example.fileprocessor.infrastructure.rest.handler.ProductHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,8 +15,8 @@ public class ProductRoutes {
     @Bean
     public RouterFunction<ServerResponse> productRouter(ProductHandler handler) {
         return route()
-            .GET("/api/v1/products/load", handler::loadProducts)
-            .GET("/api/v1/products", handler::processPendingProducts)
+            .GET(RestApiPaths.API_V1_PRODUCTS_LOAD, handler::loadProducts)
+            .GET(RestApiPaths.API_V1_PRODUCTS, handler::processPendingProducts)
             .build();
     }
 }

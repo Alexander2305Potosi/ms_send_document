@@ -37,8 +37,8 @@ public class FileValidator {
             log.warn("File {} exceeds max size: {} > {}",
                 fileData.getFilename(), fileData.getSize(), config.maxSize());
             return Mono.error(new FileValidationException(
-                "File size exceeds maximum allowed: " + config.maxSize() + " bytes",
-                "FILE_SIZE_EXCEEDED"));
+                FileValidationErrorCodes.MSG_FILE_SIZE_EXCEEDED + config.maxSize() + " bytes",
+                FileValidationErrorCodes.FILE_SIZE_EXCEEDED));
         }
         return Mono.just(fileData);
     }
@@ -50,8 +50,8 @@ public class FileValidator {
             log.warn("File {} has invalid extension: {}",
                 fileData.getFilename(), extension);
             return Mono.error(new FileValidationException(
-                "File type not allowed. Allowed types: " + config.allowedTypes(),
-                "INVALID_FILE_TYPE"));
+                FileValidationErrorCodes.MSG_FILE_TYPE_NOT_ALLOWED + config.allowedTypes(),
+                FileValidationErrorCodes.INVALID_FILE_TYPE));
         }
         return Mono.just(fileData);
     }
@@ -61,14 +61,14 @@ public class FileValidator {
         if (filename.length() > config.maxFilenameLength()) {
             log.warn("Filename exceeds max length: {}", filename.length());
             return Mono.error(new FileValidationException(
-                "Filename exceeds maximum length: " + config.maxFilenameLength(),
-                "FILENAME_TOO_LONG"));
+                FileValidationErrorCodes.MSG_FILENAME_TOO_LONG + config.maxFilenameLength(),
+                FileValidationErrorCodes.FILENAME_TOO_LONG));
         }
         if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
             log.warn("Filename contains invalid characters: {}", filename);
             return Mono.error(new FileValidationException(
-                "Filename contains invalid characters",
-                "INVALID_FILENAME"));
+                FileValidationErrorCodes.MSG_FILENAME_INVALID,
+                FileValidationErrorCodes.INVALID_FILENAME));
         }
         return Mono.just(fileData);
     }

@@ -1,5 +1,6 @@
 package com.example.fileprocessor.domain.entity;
 
+import com.example.fileprocessor.domain.util.MediaTypeConstants;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -74,17 +75,17 @@ public class ZipArchive {
     private String detectContentType(String filename) {
         String lower = filename.toLowerCase();
         if (lower.endsWith(".pdf")) {
-            return "application/pdf";
+            return MediaTypeConstants.APPLICATION_PDF;
         } else if (lower.endsWith(".docx")) {
-            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            return MediaTypeConstants.APPLICATION_WORD;
         } else if (lower.endsWith(".txt")) {
-            return "text/plain";
+            return MediaTypeConstants.TEXT_PLAIN;
         } else if (lower.endsWith(".xml")) {
-            return "application/xml";
+            return MediaTypeConstants.APPLICATION_XML;
         } else if (lower.endsWith(".json")) {
-            return "application/json";
+            return MediaTypeConstants.APPLICATION_JSON;
         }
-        return "application/octet-stream";
+        return MediaTypeConstants.APPLICATION_OCTET_STREAM;
     }
 
     @Getter

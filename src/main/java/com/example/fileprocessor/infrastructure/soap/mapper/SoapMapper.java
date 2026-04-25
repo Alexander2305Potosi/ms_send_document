@@ -2,6 +2,7 @@ package com.example.fileprocessor.infrastructure.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.domain.usecase.DocumentErrorCodes;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
 import com.example.fileprocessor.infrastructure.soap.xml.SoapNamespaces;
@@ -94,9 +95,9 @@ public class SoapMapper {
                 : Instant.now();
 
             return SoapResponse.builder()
-                .status(response.getStatus() != null ? response.getStatus() : "UNKNOWN")
-                .message(response.getMessage() != null ? response.getMessage() : "No message received")
-                .correlationId(response.getCorrelationId() != null ? response.getCorrelationId() : "N/A")
+                .status(response.getStatus() != null ? response.getStatus() : SoapResponseDefaults.UNKNOWN)
+                .message(response.getMessage() != null ? response.getMessage() : SoapResponseDefaults.NO_MESSAGE)
+                .correlationId(response.getCorrelationId() != null ? response.getCorrelationId() : SoapResponseDefaults.NOT_AVAILABLE)
                 .traceId(traceId)
                 .processedAt(processedAt)
                 .externalReference(response.getExternalReference())
@@ -105,7 +106,7 @@ public class SoapMapper {
             log.error("Error parsing SOAP response: {}", e.getMessage());
             throw new SoapCommunicationException(
                 "Failed to parse SOAP response: " + e.getMessage(),
-                "INVALID_RESPONSE", traceId);
+                DocumentErrorCodes.UNKNOWN_ERROR, traceId);
         }
     }
 }
