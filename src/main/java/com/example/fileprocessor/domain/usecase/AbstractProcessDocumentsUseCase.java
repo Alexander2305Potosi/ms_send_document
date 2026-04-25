@@ -246,4 +246,8 @@ public abstract class AbstractProcessDocumentsUseCase {
     protected abstract Mono<DocumentResult> sendDocument(SoapRequest request);
 
     protected abstract String getImplementationName();
+
+    public String implementationName() {
+        return getImplementationName();
+    }
 }

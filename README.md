@@ -52,9 +52,10 @@ com.example.fileprocessor/
     │   ├── adapter/
     │   │   └── ProductRestGatewayImpl.java  # Cliente REST para productos
     │   ├── config/
-    │   │   └── DocumentRestProperties.java
-    │   ├── controller/
-    │   │   └── ProductController.java
+    │   │   ├── DocumentRestProperties.java
+    │   │   └── ProductRouterConfig.java  # RouterFunction para endpoints
+    │   ├── handler/
+    │   │   └── ProductHandler.java        # Logica de handlers
     │   └── exception/
     │       └── GlobalErrorHandler.java
     ├── soap/                 # Adapter SOAP (salida)
@@ -132,6 +133,13 @@ Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multip
 | created_at | TIMESTAMP | Fecha del log |
 
 ## API Endpoints
+
+### RouterFunction -> Handler -> UseCase Pattern
+
+El servicio utiliza funciones reactivas de Spring WebFlux:
+- **RouterFunction**: define las rutas y delegacion al handler
+- **Handler**: contiene la logica de negocio y selecciona el use case
+- **UseCase**: ejecuta la logica de procesamiento (SoapDocumentUseCase o S3DocumentUseCase)
 
 ### GET /api/v1/products/load
 
@@ -233,9 +241,12 @@ Carga productos y sus documentos asociados desde la API REST externa. **Los docu
 
 ---
 
-### GET /api/v1/products
+### GET /api/v1/products?processor={soap|s3}
 
-Procesa los documentos pendientes de todos los productos. **El contenido ya esta en BD** (previamente cargado), no necesita llamar a API REST externa.
+Procesa los documentos pendientes de todos los productos usando el procesador especificado (SOAP o S3). **El contenido ya esta en BD** (previamente cargado), no necesita llamar a API REST externa.
+
+**Parametros:**
+- `processor` (opcional): Tipo de procesador a usar. Valores: `soap` (default), `s3`
 
 **Reglas de Negocio:**
 
