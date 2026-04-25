@@ -49,6 +49,9 @@ app:
     keywords:
       - "test"
       - "mock"
+    origin-patterns-to-send:
+      - "incoming"
+      - "documents"
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30

@@ -92,9 +92,40 @@ public class ProcessProductDocumentsUseCase {
                     .build());
         }
 
+        if (!shouldSendByOrigin(pending.getOrigin())) {
+            log.info("Document {} NOT SENT due to origin pattern rule, origin: {}",
+                pending.getDocumentId(), pending.getOrigin());
+            return documentRepository.updateStatus(
+                    pending.getDocumentId(),
+                    DocumentStatus.NOT_SENT_VALUE,
+                    traceId,
+                    null,
+                    "NOT_SENT_ORIGIN")
+                .thenReturn(FileUploadResult.builder()
+                    .status(DocumentStatus.NOT_SENT_VALUE)
+                    .message("Document not sent: origin does not match required patterns: " + pending.getOrigin())
+                    .correlationId(null)
+                    .traceId(traceId)
+                    .processedAt(Instant.now())
+                    .externalReference(pending.getDocumentId())
+                    .success(true)
+                    .build());
+        }
+
         return processFile(pending, traceId)
             .flatMap(result -> updateDocumentStatus(pending.getDocumentId(), result, traceId).thenReturn(result))
             .onErrorResume(error -> handleDocumentError(pending.getDocumentId(), error, traceId));
+    }
+
+    private boolean shouldSendByOrigin(String origin) {
+        List<String> patterns = validationConfig.originPatternsToSend();
+        if (patterns == null || patterns.isEmpty()) {
+            return true;
+        }
+        if (origin == null || origin.isBlank()) {
+            return false;
+        }
+        return patterns.stream().anyMatch(pattern -> origin.contains(pattern));
     }
 
     private boolean shouldSkipFolder(String origin) {
@@ -165,7 +196,7 @@ public class ProcessProductDocumentsUseCase {
                 fileData.getFilename(), fileData.getSize(), validationConfig.maxFileSizeMb(), traceId);
             return Mono.just(FileUploadResult.builder()
                 .status(DocumentStatus.NOT_SENT_VALUE)
-                .message("Document not sent: file size " + fileData.getSize() + " bytes is within limit (<= " + validationConfig.maxFileSizeMb() + " MB)")
+                .message("Document not sent: file size " + fileData.getSize() + " bytes exceeds limit (>= " + validationConfig.maxFileSizeMb() + " MB)")
                 .correlationId(null)
                 .traceId(traceId)
                 .processedAt(Instant.now())
@@ -209,8 +240,8 @@ public class ProcessProductDocumentsUseCase {
         if (maxSizeMb <= 0) {
             return false;
         }
-        // NOT_SENT if size <= 50MB (only files > 50MB are sent)
-        return sizeBytes <= (long) maxSizeMb * MB_TO_BYTES;
+        // NOT_SENT if size >= 50MB (only files < 50MB are sent)
+        return sizeBytes >= (long) maxSizeMb * MB_TO_BYTES;
     }
 
     private FolderInfo extractFolderInfo(String origin) {

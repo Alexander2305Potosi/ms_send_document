@@ -25,6 +25,8 @@ public record FileUploadProperties(
     @Min(1)
     int maxFileSizeMb,
 
-    List<String> keywords
+    List<String> keywords,
+
+    List<String> originPatternsToSend
 ) implements FileValidationConfig {
 }

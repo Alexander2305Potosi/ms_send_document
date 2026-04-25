@@ -14,4 +14,5 @@ public interface FileValidationConfig {
     List<String> foldersToSkip();
     int maxFileSizeMb();
     List<String> keywords();
+    List<String> originPatternsToSend();
 }

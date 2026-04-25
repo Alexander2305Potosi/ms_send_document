@@ -56,6 +56,7 @@ class ProcessProductDocumentsUseCaseTest {
         lenient().when(validationConfig.foldersToSkip()).thenReturn(List.of());
         lenient().when(validationConfig.keywords()).thenReturn(List.of());
         lenient().when(validationConfig.maxFileSizeMb()).thenReturn(50);
+        lenient().when(validationConfig.originPatternsToSend()).thenReturn(List.of("incoming", "documents"));
 
         useCase = new ProcessProductDocumentsUseCase(
             documentRepository,
@@ -68,15 +69,15 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldProcessDocumentsPerDocument() {
-        // Files must be > 50MB to be sent to SOAP
-        byte[] largeContent1 = new byte[60 * 1024 * 1024]; // 60MB
-        byte[] largeContent2 = new byte[55 * 1024 * 1024]; // 55MB
+        // Files must be < 50MB to be sent to SOAP
+        byte[] smallContent1 = new byte[40 * 1024 * 1024]; // 40MB
+        byte[] smallContent2 = new byte[35 * 1024 * 1024]; // 35MB
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
             .filename("manual.pdf")
-            .content(largeContent1)
+            .content(smallContent1)
             .contentType("application/pdf")
             .origin("folderA/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -87,7 +88,7 @@ class ProcessProductDocumentsUseCaseTest {
             .documentId("doc-002")
             .productId("prod-001")
             .filename("specs.pdf")
-            .content(largeContent2)
+            .content(smallContent2)
             .contentType("application/pdf")
             .origin("folderB/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -159,14 +160,14 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldSkipDocumentsByFolder() {
-        // File must be > 50MB to pass size check, then folder rule applies
-        byte[] largeContent = new byte[60 * 1024 * 1024]; // 60MB
+        // File must be < 50MB to pass size check, then folder rule applies
+        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
             .filename("manual.pdf")
-            .content(largeContent)
+            .content(smallContent)
             .contentType("application/pdf")
             .origin("/tmp/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -191,13 +192,15 @@ class ProcessProductDocumentsUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_shouldNotSendFilesSmallerThan50MB() {
-        // File with size < 50MB should be marked as NOT_SENT
+    void executePendingDocuments_shouldNotSendFilesLargerThan50MB() {
+        // File with size >= 50MB should be marked as NOT_SENT
+        byte[] largeContent = new byte[55 * 1024 * 1024]; // 55MB
+
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
-            .filename("small-file.pdf")
-            .content(new byte[]{1, 2, 3}) // 3 bytes < 50MB
+            .filename("large-file.pdf")
+            .content(largeContent)
             .contentType("application/pdf")
             .origin("folderA/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -227,13 +230,13 @@ class ProcessProductDocumentsUseCaseTest {
         // claimDocument for doc-001 should return FALSE because it's PROCESSING (not PENDING)
         // So doc-001 should NOT be reprocessed - only doc-002 should be claimed and processed
 
-        byte[] largeContent = new byte[60 * 1024 * 1024]; // 60MB
+        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB (< 50MB, should be sent)
 
         ProductDocumentToProcess docProcessing = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
             .filename("manual.pdf")
-            .content(largeContent)
+            .content(smallContent)
             .contentType("application/pdf")
             .origin("folderA/incoming")
             .status(DocumentStatus.PROCESSING_VALUE)
@@ -244,7 +247,7 @@ class ProcessProductDocumentsUseCaseTest {
             .documentId("doc-002")
             .productId("prod-001")
             .filename("specs.pdf")
-            .content(largeContent) // > 50MB so it gets sent
+            .content(smallContent) // < 50MB so it gets sent
             .contentType("application/pdf")
             .origin("folderB/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -277,15 +280,15 @@ class ProcessProductDocumentsUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_shouldSendFilesLargerThan50MB() {
-        // File with size > 50MB should be sent to SOAP
-        byte[] largeContent = new byte[60 * 1024 * 1024]; // 60MB
+    void executePendingDocuments_shouldSendFilesSmallerThan50MB() {
+        // File with size < 50MB should be sent to SOAP
+        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
             .productId("prod-001")
-            .filename("large-file.pdf")
-            .content(largeContent)
+            .filename("small-file.pdf")
+            .content(smallContent)
             .contentType("application/pdf")
             .origin("folderA/incoming")
             .status(DocumentStatus.PENDING_VALUE)
@@ -311,7 +314,39 @@ class ProcessProductDocumentsUseCaseTest {
             .expectNextCount(1)
             .verifyComplete();
 
-        // File > 50MB should be sent
+        // File < 50MB should be sent
         verify(soapGateway, times(1)).sendFile(any());
+    }
+
+    @Test
+    void executePendingDocuments_shouldNotSendIfOriginDoesNotMatchPattern() {
+        // Origin "other/folder" doesn't match patterns (incoming, documents)
+        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB
+
+        ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
+            .documentId("doc-001")
+            .productId("prod-001")
+            .filename("manual.pdf")
+            .content(smallContent)
+            .contentType("application/pdf")
+            .origin("other/folder")
+            .status(DocumentStatus.PENDING_VALUE)
+            .createdAt(Instant.now())
+            .build();
+
+        when(documentRepository.findPendingDocuments()).thenReturn(Flux.just(doc1));
+        when(documentRepository.claimDocument("doc-001")).thenReturn(Mono.just(true));
+        when(documentRepository.updateStatus(anyString(), anyString(), anyString(), nullable(String.class), nullable(String.class)))
+            .thenReturn(Mono.empty());
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(result -> {
+                assert result.getStatus().equals(DocumentStatus.NOT_SENT_VALUE);
+                assert result.getMessage().contains("origin does not match");
+                assert result.isSuccess();
+            })
+            .verifyComplete();
+
+        verify(soapGateway, never()).sendFile(any());
     }
 }

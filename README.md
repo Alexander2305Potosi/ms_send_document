@@ -150,17 +150,21 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 
 **Reglas de Negocio:**
 
-1. **Tamano de archivo:** Solo archivos **> 50 MB** se envian a SOAP. Archivos menores se marcan como `NOT_SENT` con trazabilidad del motivo.
+1. **Tamano de archivo:** Solo archivos **< 50 MB** se envian a SOAP. Archivos de 50MB o mayores se marcan como `NOT_SENT` con trazabilidad del motivo.
 
 2. **Tipos de archivo permitidos:** Solo `pdf`, `txt`, `csv` se procesan. Otros tipos se marcan como `NOT_SENT` con el motivo.
 
 3. **Carpetas excluidas:** Archivos en carpetas `/tmp` o `/transient` se marcan como `SKIPPED`.
 
+4. **Patrones de origen:** Solo archivos cuyo `origin` contenga alguno de los patrones configurados en `origin-patterns-to-send` se envian a SOAP. Archivos con origin que no matcheen ningun patron se marcan como `NOT_SENT`.
+
 **Flujo:**
 1. Consulta `product_documents_to_process` donde `status=PENDING`
 2. Por cada documento:
    - `claimDocument()` - cambia status a `PROCESSING` (si esta en PENDING)
-   - Validar tamano (> 50MB) - si no cumple: `NOT_SENT`
+   - Validar carpeta excluida - si esta en lista: `SKIPPED`
+   - Validar patron de origen - si no matchea: `NOT_SENT`
+   - Validar tamano (< 50MB) - si no cumple: `NOT_SENT`
    - Validar tipo (regex `allowed-types`) - si no cumple: `NOT_SENT`
    - Enviar a SOAP si pasa validaciones
    - Actualiza status: SUCCESS, FAILURE, RETRY, SKIPPED o NOT_SENT
@@ -199,7 +203,7 @@ Los documentos ZIP son expandidos durante la carga (`/load`):
 | `FAILURE` | Error permanente en SOAP |
 | `RETRY` | Error reintentable (timeout) |
 | `SKIPPED` | Saltado por regla de carpeta |
-| `NOT_SENT` | No enviado (tamano <= 50MB o tipo no permitido) |
+| `NOT_SENT` | No enviado (tamano >= 50MB, tipo no permitido, o origin no matchea patrones) |
 
 ## Configuracion
 
@@ -208,6 +212,7 @@ Los documentos ZIP son expandidos durante la carga (`/load`):
 | `app.file.max-file-size-mb` | 50 | Tamano maximo para enviar a SOAP |
 | `app.file.allowed-types` | `pdf,txt,csv` | Tipos de archivo permitidos (regex) |
 | `app.file.folders-to-skip` | `/tmp,/transient` | Carpetas a excluir |
+| `app.file.origin-patterns-to-send` | `incoming,documents` | Patrones de origin que deben contener los archivos para ser enviados |
 
 ## Reintentos SOAP
 
