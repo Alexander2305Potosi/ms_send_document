@@ -20,6 +20,14 @@ public class ProductHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ProductHandler.class);
 
+    public static final String PROCESSOR_SOAP = "soap";
+    public static final String PROCESSOR_S3 = "s3";
+
+    public static final String STATUS_LOADING = "LOADING";
+    public static final String STATUS_PROCESSING = "PROCESSING";
+    public static final String MSG_LOADING = "Product loading from REST API started";
+    public static final String MSG_PROCESSING = "Pending product documents processing started";
+
     private final LoadProductsUseCase loadProductsUseCase;
     private final SoapDocumentUseCase soapDocumentUseCase;
     private final S3DocumentUseCase s3DocumentUseCase;
@@ -47,8 +55,8 @@ public class ProductHandler {
 
         return ServerResponse.accepted()
             .bodyValue(new AsyncProcessResponse(
-                "LOADING",
-                "Product loading from REST API started",
+                STATUS_LOADING,
+                MSG_LOADING,
                 null,
                 traceId,
                 null,
@@ -59,7 +67,7 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
-        String processorType = request.queryParam("processor").orElse("soap");
+        String processorType = request.queryParam("processor").orElse(PROCESSOR_SOAP);
 
         String traceId = UUID.randomUUID().toString();
         MDC.put("traceId", traceId);
@@ -77,8 +85,8 @@ public class ProductHandler {
 
         return ServerResponse.accepted()
             .bodyValue(new AsyncProcessResponse(
-                "PROCESSING",
-                "Pending product documents processing started",
+                STATUS_PROCESSING,
+                MSG_PROCESSING,
                 null,
                 traceId,
                 null,
@@ -90,8 +98,8 @@ public class ProductHandler {
 
     private AbstractProcessDocumentsUseCase resolveUseCase(String processorType) {
         return switch (processorType.toLowerCase()) {
-            case "s3" -> s3DocumentUseCase;
-            case "soap" -> soapDocumentUseCase;
+            case PROCESSOR_S3 -> s3DocumentUseCase;
+            case PROCESSOR_SOAP -> soapDocumentUseCase;
             default -> {
                 log.warn("Unknown processor type '{}', defaulting to SOAP", processorType);
                 yield soapDocumentUseCase;

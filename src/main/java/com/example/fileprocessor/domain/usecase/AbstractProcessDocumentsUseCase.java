@@ -26,8 +26,11 @@ import java.util.UUID;
 public abstract class AbstractProcessDocumentsUseCase {
 
     protected static final Logger log = LoggerFactory.getLogger(AbstractProcessDocumentsUseCase.class);
-    protected static final String DEFAULT_ERROR_CODE = "UNKNOWN_ERROR";
     protected static final int DEFAULT_RETRY_COUNT = 0;
+
+    private static final String MSG_SKIPPED_FOLDER = "Document skipped due to folder rule: ";
+    private static final String MSG_NOT_SENT_ORIGIN = "Document not sent: origin does not match required patterns: ";
+    private static final String MSG_SIZE_EXCEEDED = "Document not sent: file size "; private static final String MSG_SIZE_EXCEEDED_SUFFIX = " bytes exceeds limit";
 
     protected final ProductDocumentRepository documentRepository;
     protected final FileValidator fileValidator;
@@ -80,9 +83,9 @@ public abstract class AbstractProcessDocumentsUseCase {
                     DocumentStatus.SKIPPED_VALUE,
                     traceId,
                     null,
-                    "SKIPPED_FOLDER")
+                    DocumentErrorCodes.SKIPPED_FOLDER)
                 .thenReturn(buildResult(DocumentStatus.SKIPPED_VALUE,
-                    "Document skipped due to folder rule: " + pending.getOrigin(),
+                    MSG_SKIPPED_FOLDER + pending.getOrigin(),
                     null, traceId, pending.getDocumentId(), true));
         }
 
@@ -95,9 +98,9 @@ public abstract class AbstractProcessDocumentsUseCase {
                     DocumentStatus.NOT_SENT_VALUE,
                     traceId,
                     null,
-                    "NOT_SENT_ORIGIN")
+                    DocumentErrorCodes.NOT_SENT_ORIGIN)
                 .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
-                    "Document not sent: origin does not match required patterns: " + pending.getOrigin(),
+                    MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
                     null, traceId, pending.getDocumentId(), true));
         }
 
@@ -110,9 +113,9 @@ public abstract class AbstractProcessDocumentsUseCase {
                     DocumentStatus.NOT_SENT_VALUE,
                     traceId,
                     null,
-                    "SIZE_EXCEEDED")
+                    DocumentErrorCodes.SIZE_EXCEEDED)
                 .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
-                    "Document not sent: file size " + fileSize + " bytes exceeds limit",
+                    MSG_SIZE_EXCEEDED + fileSize + MSG_SIZE_EXCEEDED_SUFFIX,
                     null, traceId, pending.getFilename(), true));
         }
 
@@ -190,7 +193,7 @@ public abstract class AbstractProcessDocumentsUseCase {
     protected boolean isRetryableError(Throwable error) {
         if (error instanceof SoapCommunicationException sce) {
             String code = sce.getErrorCode();
-            return "TIMEOUT".equals(code) || "GATEWAY_TIMEOUT".equals(code);
+            return DocumentErrorCodes.TIMEOUT.equals(code) || DocumentErrorCodes.GATEWAY_TIMEOUT.equals(code);
         }
         String message = error.getMessage();
         if (message == null) return false;
@@ -204,14 +207,14 @@ public abstract class AbstractProcessDocumentsUseCase {
         if (error.getCause() instanceof SoapCommunicationException sce) {
             return sce.getErrorCode();
         }
-        return DEFAULT_ERROR_CODE;
+        return DocumentErrorCodes.UNKNOWN_ERROR;
     }
 
     protected String extractErrorCodeFromMessage(String message) {
-        if (message == null) return DEFAULT_ERROR_CODE;
-        if (message.contains("timeout")) return "TIMEOUT";
-        if (message.contains("validation")) return "VALIDATION_ERROR";
-        return DEFAULT_ERROR_CODE;
+        if (message == null) return DocumentErrorCodes.UNKNOWN_ERROR;
+        if (message.contains("timeout")) return DocumentErrorCodes.TIMEOUT;
+        if (message.contains("validation")) return DocumentErrorCodes.VALIDATION_ERROR;
+        return DocumentErrorCodes.UNKNOWN_ERROR;
     }
 
     // ============== Helper Methods ==============

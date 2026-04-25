@@ -3,6 +3,7 @@ package com.example.fileprocessor.infrastructure.soap.adapter;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
+import com.example.fileprocessor.domain.usecase.DocumentErrorCodes;
 import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.soap.mapper.SoapMapper;
@@ -99,7 +100,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
                     log.error("SOAP timeout for traceId: {} after {} retries", request.getTraceId(), retries);
                     return Mono.error(new SoapCommunicationException(
                         "SOAP request timed out after " + properties.retryAttempts() + " retries",
-                        "GATEWAY_TIMEOUT", request.getTraceId(), retries));
+                        DocumentErrorCodes.GATEWAY_TIMEOUT, request.getTraceId(), retries));
                 }
                 if (cause instanceof WebClientResponseException e) {
                     log.error("WebClient error for traceId: {}: {}", request.getTraceId(), e.getMessage());
@@ -128,14 +129,14 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
     private String mapHttpStatusToCode(HttpStatusCode statusCode) {
         int value = statusCode.value();
         if (value == 504) {
-            return "GATEWAY_TIMEOUT";
+            return DocumentErrorCodes.GATEWAY_TIMEOUT;
         }
         if (statusCode.is5xxServerError()) {
-            return "BAD_GATEWAY";
+            return DocumentErrorCodes.BAD_GATEWAY;
         }
         if (statusCode.is4xxClientError()) {
-            return "CLIENT_ERROR";
+            return DocumentErrorCodes.CLIENT_ERROR;
         }
-        return "UNKNOWN_ERROR";
+        return DocumentErrorCodes.UNKNOWN_ERROR;
     }
 }
