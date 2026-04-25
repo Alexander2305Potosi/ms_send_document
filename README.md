@@ -31,7 +31,9 @@ com.example.fileprocessor/
 │   │       ├── ProductRestGateway.java         # Puerto para API REST productos
 │   │       ├── ProductRepository.java          # Puerto para productos
 │   │       ├── ProductDocumentRepository.java  # Puerto para documentos de productos
-│   │       └── ExternalSoapGateway.java
+│   │       ├── ExternalSoapGateway.java        # Puerto para SOAP
+│   │       ├── S3Gateway.java                 # Puerto para S3
+│   │       └── SoapCommunicationLogRepository.java
 │   └── exception/            # Excepciones de dominio
 │       ├── DomainException.java
 │       └── FileValidationException.java
@@ -65,6 +67,12 @@ com.example.fileprocessor/
         │       └── UploadFileResponse.java
         └── exception/
             └── SoapCommunicationException.java
+    └── aws/                  # Adapter AWS S3 (salida)
+        ├── adapter/
+        │   └── S3GatewayImpl.java
+        ├── config/
+        │   └── AwsConfig.java
+        └── S3Properties.java
 ```
 
 ### Reglas de Dependencia
@@ -498,21 +506,32 @@ Importar `mockoon/document-rest-mock.json` en Mockoon Desktop.
 ./scripts/start-mock.sh
 ```
 
+### Mock S3 (LocalStack-like)
+```bash
+./scripts/start-s3-mock.sh
+```
+
 ## Configuracion
 
 | Variable | Default | Descripcion |
 |----------|---------|-------------|
 | `DOCUMENT_REST_ENDPOINT` | `http://localhost:3001` | Endpoint de API REST de productos |
 | `SOAP_ENDPOINT` | `http://localhost:9000/soap/fileservice` | Endpoint del servicio SOAP |
+| `AWS_ENDPOINT` | `http://localhost:4566` | Endpoint del mock S3 (LocalStack) |
+| `AWS_BUCKET` | `documents-bucket` | Bucket S3 para uploads |
+| `AWS_REGION` | `us-east-1` | Region AWS |
 
 ## Changelog
 
-### 2026-04-25 - Refactorizacion Product-Centric
+### 2026-04-25 - Refactorizacion Product-Centric + S3 Support
 - **Nuevo:** Entidades ProductToProcess, ProductDocumentToProcess, ProductInfo, ProductDocumentInfo
 - **Nuevo:** Puertos ProductRestGateway, ProductRepository, ProductDocumentRepository
 - **Nuevo:** Use cases LoadProductsUseCase, ProcessProductDocumentsUseCase
 - **Nuevo:** Controlador ProductController con endpoints /api/v1/products/load y /api/v1/products
 - **Nuevo:** Mock ProductRestMock y script start-product-mock.sh
+- **Nuevo:** S3Gateway port y S3GatewayImpl adapter para uploads a AWS S3
+- **Nuevo:** S3Mock y script start-s3-mock.sh para testing local (simula LocalStack)
+- **Nuevo:** Perfil Spring "s3" para activar procesamiento via S3 en lugar de SOAP
 - **Eliminado:** FileController, LoadDocumentsUseCase, ProcessFileUseCase (dominio anterior)
 - **Actualizado:** DatabaseInitializer con nuevas tablas y crash recovery
 - **Actualizado:** Postman y Mockoon con nueva estructura de productos

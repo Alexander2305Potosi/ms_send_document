@@ -45,6 +45,7 @@ dependencies {
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.30")
     annotationProcessor("org.projectlombok:lombok:1.18.30")
+    implementation("org.projectlombok:lombok:1.18.30")
 
     // MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
@@ -62,6 +63,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
     implementation("io.r2dbc:r2dbc-h2")
     runtimeOnly("com.h2database:h2")
+
+    // AWS S3
+    implementation("software.amazon.awssdk:s3:2.28.29")
+    implementation("software.amazon.awssdk:netty-nio-client:2.28.29")
 
     // Monitoring & Tracing
     implementation("io.micrometer:micrometer-tracing-bridge-brave")

@@ -64,3 +64,27 @@ app:
     products-path: /api/products
     product-documents-path: /api/products/{productId}/documents
     timeout-seconds: 15
+  aws:
+    s3:
+      bucket-name: ${AWS_BUCKET:documents-bucket}
+      region: ${AWS_REGION:us-east-1}
+      endpoint: ${AWS_ENDPOINT:}
+      path-style-access: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: soap
+
+---
+spring:
+  config:
+    activate:
+      on-profile: s3
+  aws:
+    s3:
+      bucket-name: documents-bucket
+      region: us-east-1
+      endpoint: http://localhost:4566
+      path-style-access: true

@@ -1,0 +1,60 @@
+package com.example.fileprocessor.domain.usecase;
+
+import com.example.fileprocessor.domain.entity.SoapRequest;
+import com.example.fileprocessor.domain.port.out.S3Gateway;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+
+import java.time.Instant;
+
+/**
+ * Document processing use case that uploads documents to AWS S3.
+ * Extends AbstractProcessDocumentsUseCase to leverage shared validation logic.
+ */
+public class S3DocumentUseCase extends AbstractProcessDocumentsUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(S3DocumentUseCase.class);
+
+    private final S3Gateway s3Gateway;
+
+    public S3DocumentUseCase(S3Gateway s3Gateway) {
+        super(null, null, null, null);
+        this.s3Gateway = s3Gateway;
+    }
+
+    @Override
+    protected Mono<DocumentResult> sendDocument(SoapRequest request) {
+        return s3Gateway.upload(request)
+            .map(s3Result -> {
+                log.info("S3 upload successful: {} -> {}/{}",
+                    request.getFilename(), s3Result.bucket(), s3Result.key());
+                return DocumentResult.builder()
+                    .status("SUCCESS")
+                    .message("Uploaded to S3: " + s3Result.bucket() + "/" + s3Result.key())
+                    .correlationId(s3Result.eTag())
+                    .traceId(request.getTraceId())
+                    .processedAt(Instant.now())
+                    .externalReference(s3Result.key())
+                    .success(true)
+                    .build();
+            })
+            .onErrorResume(error -> {
+                log.error("S3 upload failed for {}: {}", request.getFilename(), error.getMessage());
+                return Mono.just(DocumentResult.builder()
+                    .status("FAILURE")
+                    .message("S3 upload failed: " + error.getMessage())
+                    .correlationId(null)
+                    .traceId(request.getTraceId())
+                    .processedAt(Instant.now())
+                    .externalReference(request.getFilename())
+                    .success(false)
+                    .build());
+            });
+    }
+
+    @Override
+    protected String getImplementationName() {
+        return "S3";
+    }
+}
