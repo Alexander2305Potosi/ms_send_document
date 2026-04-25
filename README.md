@@ -124,25 +124,101 @@ Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multip
 
 Carga productos y sus documentos asociados desde la API REST externa. **Los documentos ZIP son expandidos automaticamente** durante la carga, creando documentos hijos independientes por cada archivo contenido.
 
-**Flujo:**
-1. Consulta `GET /api/products` para obtener lista de productos con documentos
-2. Por cada documento:
-   - Si es ZIP: extrae archivos y crea documentos hijos (ej: `doc-001_file1.txt`, `doc-001_file2.txt`)
-   - Si es normal: guarda el documento directamente
-3. Guarda productos en `products_to_process`
-4. Guarda documentos en `product_documents_to_process` con `status=PENDING`
+**Flujo de Ejecucion (Step-by-Step):**
 
-**Nota:** El contenido de cada documento (bytes) se guarda en la BD para procesamiento posterior.
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. ProductController.loadProducts()                                          │
+│    - Genera traceId UUID                                                     │
+│    - Registra traceId en MDC para logging                                    │
+│    - Invoca LoadProductsUseCase.execute()                                    │
+│    - Retorna HTTP 202 ACCEPTED inmediatamente (operacion async)               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. LoadProductsUseCase.execute()                                             │
+│    - Genera traceId para la operacion                                        │
+│    - Invoca ProductRestGateway.getAllProducts(traceId)                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 3. ProductRestGatewayImpl.getAllProducts()                                   │
+│    - WebClient GET /api/products                                              │
+│    - Header X-Trace-Id: {traceId}                                             │
+│    - Parsea JSON response a List<Map<String, Object>>                        │
+│    - Convierte cada Map a ProductInfo via mapToProductInfo()                 │
+│    - Retorna Flux<ProductInfo>                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 4. LoadProductsUseCase.loadProductAndDocuments(ProductInfo)                  │
+│    - Por cada ProductInfo recibido:                                           │
+│      a) Crea ProductToProcess con status=PENDING                             │
+│      b) Invoca createDocumentsFlux() para crear documentos                    │
+│         - Si doc.isZipArchive() -> expandZipDocument()                        │
+│         - Si no -> createProductDocument()                                   │
+│      c) Guarda product en ProductRepository.save()                          │
+│      d) Guarda todos los documentos en documentRepository.saveAll()         │
+│      e) Retorna LoadProductsResult                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 5. ZIP Expansion (expandZipDocument)                                         │
+│    - ByteArrayInputStream del contenido ZIP                                   │
+│    - ZipInputStream para iterar entradas                                     │
+│    - Por cada entrada:                                                        │
+│      - Extrae nombre archivo y contenido                                     │
+│      - Crea ProductDocumentToProcess con:                                   │
+│        - documentId: "{zipDocId}_{filename}"                                 │
+│        - parentDocumentId: id del ZIP padre                                  │
+│        - content: bytes del archivo                                          │
+│        - contentType: detectado por nombre                                   │
+│        - origin: mismo origin que el ZIP                                     │
+│        - status: PENDING                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 6. R2dbcProductRepository.save(ProductToProcess)                            │
+│    - SQL: INSERT INTO products_to_process (...) VALUES (...)                 │
+│    - Bind: productId, name, status, createdAt, traceId                        │
+│    - Ejecuta en H2 database via DatabaseClient                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 7. R2dbcProductDocumentRepository.saveAll(documents)                        │
+│    - Flux<ProductDocumentToProcess> -> flatMap -> save()                    │
+│    - Por cada documento:                                                      │
+│      - SQL: INSERT INTO product_documents_to_process (...)                   │
+│      - Bind: todos los campos incluyendo content (Base64)                    │
+│    - Content se almacena en texto (Base64 encoded)                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 8. Respuesta al Cliente                                                      │
+│    - HTTP 202 ACCEPTED                                                       │
+│    - Body: { status: "LOADING", message: "...", traceId: "...", success: true }│
+│    - El procesamiento real continua en background                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 **Response:**
 ```json
 {
   "status": "LOADING",
   "message": "Product loading from REST API started",
-  "traceId": "uuid-generado",
+  "traceId": "550e8400-e29b-41d4-a716-446655440000",
   "success": true
 }
 ```
+
+---
 
 ### GET /api/v1/products
 
@@ -158,31 +234,205 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 
 4. **Patrones de origen:** Solo archivos cuyo `origin` contenga alguno de los patrones configurados en `origin-patterns-to-send` se envian a SOAP. Archivos con origin que no matcheen ningun patron se marcan como `NOT_SENT`.
 
-**Flujo:**
-1. Consulta `product_documents_to_process` donde `status=PENDING`
-2. Por cada documento:
-   - `claimDocument()` - cambia status a `PROCESSING` (si esta en PENDING)
-   - Validar carpeta excluida - si esta en lista: `SKIPPED`
-   - Validar patron de origen - si no matchea: `NOT_SENT`
-   - Validar tamano (< 50MB) - si no cumple: `NOT_SENT`
-   - Validar tipo (regex `allowed-types`) - si no cumple: `NOT_SENT`
-   - Enviar a SOAP si pasa validaciones
-   - Actualiza status: SUCCESS, FAILURE, RETRY, SKIPPED o NOT_SENT
+**Flujo de Ejecucion (Step-by-Step):**
 
-**Resiliencia:** Si el MS cae durante el procesamiento:
-- El documento queda en `status=PROCESSING`
-- Al reiniciar, `DatabaseInitializer` lo restaura a `PENDING`
-- Solo ese documento se reprocesa (no se duplican envios SOAP)
-- **ZIP:** Si un hijo falla, solo ese hijo se reprocesa, los demas no se tocan
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. ProductController.processPendingProducts()                               │
+│    - Genera traceId UUID                                                     │
+│    - Registra traceId en MDC                                                 │
+│    - Invoca ProcessProductDocumentsUseCase.executePendingDocuments()         │
+│    - Retorna HTTP 202 ACCEPTED inmediatamente                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. ProcessProductDocumentsUseCase.executePendingDocuments()                  │
+│    - Invoca documentRepository.findPendingDocuments()                        │
+│    - Retorna Flux<ProductDocumentToProcess> con statuses:                   │
+│      PENDING, RETRY, PROCESSING (crash recovery)                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 3. R2dbcProductDocumentRepository.findPendingDocuments()                    │
+│    - SQL: SELECT * FROM product_documents_to_process                         │
+│      WHERE status IN ('PENDING', 'RETRY', 'PROCESSING')                     │
+│      ORDER BY created_at ASC                                                │
+│    - Por cada row: construye ProductDocumentToProcess                        │
+│    - Decodifica content Base64 -> byte[]                                     │
+│    - Retorna Flux<ProductDocumentToProcess>                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 4. processPendingDocument(ProductDocumentToProcess)                          │
+│    - Invoca documentRepository.claimDocument(documentId)                   │
+│    - Solo si claim returns TRUE continua el procesamiento                    │
+│    - Si claim returns FALSE (otro proceso o no PENDING): salta documento     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 5. R2dbcProductDocumentRepository.claimDocument(documentId)                  │
+│    - SQL: UPDATE product_documents_to_process                               │
+│      SET status = 'PROCESSING', trace_id = $2, processed_at = $3            │
+│      WHERE document_id = $1 AND status = 'PENDING'                          │
+│    - Retorna TRUE si rowsUpdated > 0, FALSE si no hubo match                 │
+│    - Este mecanismo previene duplicacion de envio                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 6. processDocumentClaimed(ProductDocumentToProcess)                         │
+│    - Genera traceId UUID para este documento                                 │
+│    - Evalua reglas de negocio en orden:                                      │
+│                                                                             │
+│    REGLA 1 - Carpeta Excluida (shouldSkipFolder):                          │
+│    ┌─────────────────────────────────────────────────────────────────────┐  │
+│    │ if origin.contains("/tmp") OR origin.contains("/transient")         │  │
+│    │   -> UPDATE status = 'SKIPPED', error_code = 'SKIPPED_FOLDER'        │  │
+│    │   -> RETURN FileUploadResult con status=SKIPPED                     │  │
+│    └─────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                         │
+│                                    ▼                                         │
+│    REGLA 2 - Patron de Origen (shouldSendByOrigin):                        │
+│    ┌─────────────────────────────────────────────────────────────────────┐  │
+│    │ patterns = originPatternsToSend()  // default: ["incoming","docs"] │  │
+│    │ if NOT origin.contains(any(patterns))                               │  │
+│    │   -> UPDATE status = 'NOT_SENT', error_code = 'NOT_SENT_ORIGIN'    │  │
+│    │   -> RETURN FileUploadResult con status=NOT_SENT                    │  │
+│    └─────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                         │
+│                                    ▼                                         │
+│    REGLA 3 - Tamano de Archivo (shouldNotSendBySize):                       │
+│    ┌─────────────────────────────────────────────────────────────────────┐  │
+│    │ maxSizeMb = 50 (configurable)                                      │  │
+│    │ if sizeBytes >= (maxSizeMb * 1MB)                                   │  │
+│    │   -> UPDATE status = 'NOT_SENT', error_code = 'SIZE_EXCEEDED'       │  │
+│    │   -> RETURN FileUploadResult con status=NOT_SENT, message con tamano│  │
+│    └─────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                         │
+│                                    ▼                                         │
+│    SI TODAS LAS REGLAS PASAN -> continua a processFile()                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 7. processFile(ProductDocumentToProcess, traceId)                           │
+│    - Construye FileData con: content, filename, size, contentType, traceId   │
+│                                                                             │
+│    REGLA 4 - Tipo de Archivo (FileValidator.validate):                      │
+│    ┌─────────────────────────────────────────────────────────────────────┐  │
+│    │ allowedTypes = "pdf,txt,csv" (regex pattern)                        │  │
+│    │ if NOT filename matches allowedTypes                               │  │
+│    │   -> Lanza FileValidationException                                  │  │
+│    │   -> En onErrorResume: status='NOT_SENT', message=validation error  │  │
+│    └─────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                         │
+│                                    ▼ (si pasa validacion)                   │
+│    - Extrae folderInfo del origin (keywords: "test", "mock")                │
+│      - parentFolder = parts[length-2]                                       │
+│      - childFolder = parts[length-1]                                        │
+│    - Construye SoapRequest via SoapRequest.fromFileData()                  │
+│      - Base64.encode(content)                                              │
+│      - Incluye parentFolder y childFolder                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 8. ExternalSoapGatewayImpl.sendFile(SoapRequest)                            │
+│    - SoapMapper.toFullSoapMessage(request) -> XML completo SOAP             │
+│    - WebClient.post() al endpoint SOAP                                      │
+│    - Header: SOAPAction = "fileService/UploadFile"                          │
+│    - Content-Type: TEXT_XML                                                 │
+│    - Timeout: configurable (default 30s)                                    │
+│    - Retry: backoff 3 intentos (1s, 2s, 4s)                                 │
+│    - Filtro de reintento: TimeoutException, 5xx Server Error                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 9. SoapMapper.toFullSoapMessage(SoapRequest)                                 │
+│    - Crea UploadFileRequest JAXB object                                     │
+│      - fileContentBase64: Base64 encoded content                            │
+│      - filename, contentType, fileSize                                      │
+│      - traceId, timestamp                                                   │
+│      - parentFolder, childFolder                                            │
+│    - Marshalls a XML con format:                                           │
+│      <file:UploadFileRequest>                                              │
+│        <file:fileContentBase64>...</file:fileContentBase64>                │
+│        <file:filename>...</file:filename>                                   │
+│        ...                                                                 │
+│      </file:UploadFileRequest>                                             │
+│    - Envuelve en envelope SOAP:                                             │
+│      <?xml version="1.0"?>                                                  │
+│      <soap:Envelope>                                                        │
+│        <soap:Body>                                                          │
+│          ...upload request...                                               │
+│        </soap:Body>                                                         │
+│      </soap:Envelope>                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 10. Respuesta SOAP y actualizacion de estado                                 │
+│     - SOAP Response parseado via SoapMapper.fromSoapXml()                   │
+│     - Extrae correlationId, status, message                                 │
+│     - Invoca documentRepository.updateStatus():                             │
+│       UPDATE product_documents_to_process                                   │
+│       SET status = 'SUCCESS',                                              │
+│           soap_correlation_id = 'correlationId',                            │
+│           trace_id = 'traceId',                                             │
+│           processed_at = NOW()                                              │
+│       WHERE document_id = 'doc-xxx'                                         │
+│     - Guarda SoapCommunicationLog (success)                                 │
+│     - Retorna FileUploadResult al flux                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 11. Manejo de Errores                                                        │
+│                                                                             │
+│  TIMEOUT / 5xx ERROR:                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ - Reintenta hasta 3 veces con backoff exponencial                     │   │
+│  │ - Si todos fallan: marca status='RETRY' o 'FAILURE'                   │   │
+│  │ - Guarda SoapCommunicationLog con errorCode y retryCount               │   │
+│  │ - Lanza SoapCommunicationException                                    │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  VALIDATION ERROR:                                                          │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ - Capturado en onErrorResume de processFile                          │   │
+│  │ - status='NOT_SENT', message=validation error                        │   │
+│  │ - No se lanza excepcion (result es exitoso con status NOT_SENT)        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  CRASH RECOVERY:                                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ - Si MS cae mientras documento estaba PROCESSING:                    │   │
+│  │ - Al reiniciar: DatabaseInitializer resetea PROCESSING -> PENDING    │   │
+│  │ - Solo ese documento se reprocesa (claim previene duplicados)         │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 **Response:**
 ```json
 {
   "status": "PROCESSING",
   "message": "Pending product documents processing started",
-  "traceId": "uuid-generado",
+  "traceId": "660e8400-e29b-41d4-a716-446655440001",
   "success": true
 }
+```
+
+**Response asincrono (llega via logs, no al cliente HTTP):**
+```
+Document processed: correlationId=abc123, status=SUCCESS
+Document processed: correlationId=def456, status=NOT_SENT (file size >= 50MB)
+Document processed: correlationId=ghi789, status=FAILURE (SOAP error)
 ```
 
 ## Procesamiento de ZIP
