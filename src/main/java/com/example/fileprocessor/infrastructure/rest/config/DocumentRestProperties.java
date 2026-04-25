@@ -5,19 +5,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "document.rest")
 public record DocumentRestProperties(
     String endpoint,
-    String documentsPath,
-    String documentPath,
+    String listPath,
+    String getPath,
     int timeoutSeconds
 ) {
     public DocumentRestProperties {
         if (endpoint == null || endpoint.isBlank()) {
-            endpoint = "http://localhost:8081";
+            endpoint = "http://localhost:3001";
         }
-        if (documentsPath == null || documentsPath.isBlank()) {
-            documentsPath = "/api/documents";
+        if (listPath == null || listPath.isBlank()) {
+            listPath = "/api/documents";
         }
-        if (documentPath == null || documentPath.isBlank()) {
-            documentPath = "/api/document";
+        if (getPath == null || getPath.isBlank()) {
+            getPath = "/api/document";
         }
         if (timeoutSeconds <= 0) {
             timeoutSeconds = 30;

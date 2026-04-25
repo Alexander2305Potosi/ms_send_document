@@ -39,7 +39,7 @@ public class DocumentRestGatewayImpl implements DocumentRestGateway {
         log.info("Fetching document {} from REST API, traceId: {}", documentId, traceId);
 
         return webClient.get()
-            .uri(properties.documentPath() + "/{id}", documentId)
+            .uri(properties.getPath() + "/{id}", documentId)
             .accept(MediaType.APPLICATION_JSON)
             .header("X-Trace-Id", traceId)
             .retrieve()
@@ -53,7 +53,7 @@ public class DocumentRestGatewayImpl implements DocumentRestGateway {
         log.info("Fetching all documents from REST API, traceId: {}", traceId);
 
         return webClient.get()
-            .uri(properties.documentsPath())
+            .uri(properties.listPath())
             .accept(MediaType.APPLICATION_JSON)
             .header("X-Trace-Id", traceId)
             .retrieve()

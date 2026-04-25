@@ -25,16 +25,16 @@ class DocumentRestGatewayImplTest {
     @Test
     void constructor_shouldAcceptValidDependencies() {
         DocumentRestProperties properties = new DocumentRestProperties(
-            "http://localhost:8081",
+            "http://localhost:3001",
             "/api/documents",
             "/api/document",
             30
         );
 
         // Verify that properties are correctly set
-        assertEquals("http://localhost:8081", properties.endpoint());
-        assertEquals("/api/documents", properties.documentsPath());
-        assertEquals("/api/document", properties.documentPath());
+        assertEquals("http://localhost:3001", properties.endpoint());
+        assertEquals("/api/documents", properties.listPath());
+        assertEquals("/api/document", properties.getPath());
         assertEquals(30, properties.timeoutSeconds());
     }
 
@@ -42,9 +42,9 @@ class DocumentRestGatewayImplTest {
     void properties_shouldUseDefaultsForMissingValues() {
         DocumentRestProperties properties = new DocumentRestProperties(null, null, null, 0);
 
-        assertEquals("http://localhost:8081", properties.endpoint());
-        assertEquals("/api/documents", properties.documentsPath());
-        assertEquals("/api/document", properties.documentPath());
+        assertEquals("http://localhost:3001", properties.endpoint());
+        assertEquals("/api/documents", properties.listPath());
+        assertEquals("/api/document", properties.getPath());
         assertEquals(30, properties.timeoutSeconds());
     }
 }

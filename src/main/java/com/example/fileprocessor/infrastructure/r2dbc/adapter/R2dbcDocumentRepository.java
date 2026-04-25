@@ -102,7 +102,7 @@ public class R2dbcDocumentRepository implements DocumentRepository {
             .bind("$3", document.getOrigin())
             .bind("$4", document.getStatus())
             .bind("$5", document.getCreatedAt() != null ? document.getCreatedAt() : Instant.now())
-            .bind("$6", document.getProcessedAt())
+            .bind("$6", document.getProcessedAt() != null ? document.getProcessedAt() : Instant.now())
             .bind("$7", document.getTraceId() != null ? document.getTraceId() : "")
             .bind("$8", document.getSoapCorrelationId() != null ? document.getSoapCorrelationId() : "")
             .bind("$9", document.getErrorCode() != null ? document.getErrorCode() : "")

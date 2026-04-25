@@ -11,7 +11,7 @@ app:
     retry-attempts: 1
     retry-backoff-millis: 500
   document-rest:
-    endpoint: http://localhost:8081
-    documents-path: /api/documents
-    document-path: /api/document
+    endpoint: http://localhost:3001
+    list-path: /api/documents
+    get-path: /api/document
     timeout-seconds: 5

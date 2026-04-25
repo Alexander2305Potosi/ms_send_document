@@ -214,7 +214,7 @@ Los mutators crean cambios artificiales en el codigo (ej: `>` -> `>=`, eliminar 
 | Variable | Descripcion | Default |
 |----------|-------------|---------|
 | `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:9000/soap/fileservice` |
-| `DOCUMENT_REST_ENDPOINT` | URL de la API REST de documentos | `http://localhost:8081` |
+| `DOCUMENT_REST_ENDPOINT` | URL de la API REST de documentos | `http://localhost:3001` |
 
 ### Configuracion Automatica (Recomendada)
 
@@ -386,9 +386,11 @@ Si prefieres usar **Mockoon Desktop** en lugar del mock Java, puedes importar la
 mockoon/document-rest-mock.json
 ```
 
+**Puerto:** 3001 (configurable al abrir el archivo en Mockoon)
+
 Endpoints configurados:
 - `GET /api/documents` - Lista todos los documentos
-- `GET /api/document/:id` - Documento por ID
+- `POST /api/document/:id` - Documento por ID
 
 ### Mas informacion
 
