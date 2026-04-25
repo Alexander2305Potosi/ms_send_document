@@ -1,5 +1,8 @@
 package com.example.fileprocessor.domain.entity;
 
+import lombok.Builder;
+
+@Builder
 public record ProductDocumentInfo(
     String documentId,
     String filename,
