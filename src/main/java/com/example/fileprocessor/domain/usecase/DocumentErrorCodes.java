@@ -14,6 +14,8 @@ public final class DocumentErrorCodes {
     public static final String CLIENT_ERROR = "CLIENT_ERROR";
     public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
 
+    public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
+
     public static final String SKIPPED_FOLDER = "SKIPPED_FOLDER";
     public static final String NOT_SENT_ORIGIN = "NOT_SENT_ORIGIN";
     public static final String SIZE_EXCEEDED = "SIZE_EXCEEDED";
