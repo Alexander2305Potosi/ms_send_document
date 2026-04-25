@@ -7,6 +7,8 @@ public record DocumentRestProperties(
     String endpoint,
     String listPath,
     String getPath,
+    String productsPath,
+    String productDocumentsPath,
     int timeoutSeconds
 ) {
     public DocumentRestProperties {
@@ -18,6 +20,12 @@ public record DocumentRestProperties(
         }
         if (getPath == null || getPath.isBlank()) {
             getPath = "/api/document";
+        }
+        if (productsPath == null || productsPath.isBlank()) {
+            productsPath = "/api/products";
+        }
+        if (productDocumentsPath == null || productDocumentsPath.isBlank()) {
+            productDocumentsPath = "/api/products/{productId}/documents";
         }
         if (timeoutSeconds <= 0) {
             timeoutSeconds = 30;

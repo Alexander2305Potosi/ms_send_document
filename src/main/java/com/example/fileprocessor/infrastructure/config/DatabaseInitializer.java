@@ -36,23 +36,24 @@ public class DatabaseInitializer implements ApplicationRunner {
     public Mono<Void> initialize() {
         log.info("Initializing database schema...");
 
-        return resetProcessingDocuments()
-            .then(createDocumentsToProcessTable())
+        return resetProcessingProductDocuments()
+            .then(createProductsToProcessTable())
+            .then(createProductDocumentsToProcessTable())
             .then(createSoapCommunicationLogTable())
             .then(createIndexes());
     }
 
-    private Mono<Void> resetProcessingDocuments() {
-        String sql = "UPDATE documents_to_process SET status = '%s' WHERE status = '%s'"
+    private Mono<Void> resetProcessingProductDocuments() {
+        String sql = "UPDATE product_documents_to_process SET status = '%s' WHERE status = '%s'"
             .formatted(DocumentStatus.PENDING_VALUE, DocumentStatus.PROCESSING_VALUE);
         return databaseClient.sql(sql)
             .fetch()
             .rowsUpdated()
             .doOnNext(count -> {
                 if (count > 0) {
-                    log.info("Crash recovery: reset {} PROCESSING documents to PENDING", count);
+                    log.info("Crash recovery: reset {} PROCESSING product documents to PENDING", count);
                 } else {
-                    log.info("No PROCESSING documents to reset");
+                    log.info("No PROCESSING product documents to reset");
                 }
             })
             .then()
@@ -62,11 +63,29 @@ public class DatabaseInitializer implements ApplicationRunner {
             });
     }
 
-    private Mono<Void> createDocumentsToProcessTable() {
-        log.info("Creating documents_to_process table...");
+    private Mono<Void> createProductsToProcessTable() {
+        log.info("Creating products_to_process table...");
         return databaseClient.sql("""
-                CREATE TABLE IF NOT EXISTS documents_to_process (
+                CREATE TABLE IF NOT EXISTS products_to_process (
+                    product_id VARCHAR(255) PRIMARY KEY,
+                    name VARCHAR(500),
+                    status VARCHAR(50) NOT NULL,
+                    trace_id VARCHAR(255),
+                    created_at TIMESTAMP NOT NULL,
+                    processed_at TIMESTAMP
+                )
+                """)
+            .fetch()
+            .first()
+            .then();
+    }
+
+    private Mono<Void> createProductDocumentsToProcessTable() {
+        log.info("Creating product_documents_to_process table...");
+        return databaseClient.sql("""
+                CREATE TABLE IF NOT EXISTS product_documents_to_process (
                     document_id VARCHAR(255) PRIMARY KEY,
+                    product_id VARCHAR(255) NOT NULL,
                     filename VARCHAR(255),
                     origin VARCHAR(500),
                     status VARCHAR(50) NOT NULL,
@@ -101,9 +120,10 @@ public class DatabaseInitializer implements ApplicationRunner {
 
     private Mono<Void> createIndexes() {
         log.info("Creating indexes...");
-        return databaseClient.sql("CREATE INDEX IF NOT EXISTS idx_documents_status ON documents_to_process(status)")
-            .fetch()
-            .first()
-            .then();
+        return Mono.when(
+            databaseClient.sql("CREATE INDEX IF NOT EXISTS idx_product_documents_status ON product_documents_to_process(status)").fetch().first(),
+            databaseClient.sql("CREATE INDEX IF NOT EXISTS idx_product_documents_product_id ON product_documents_to_process(product_id)").fetch().first(),
+            databaseClient.sql("CREATE INDEX IF NOT EXISTS idx_products_status ON products_to_process(status)").fetch().first()
+        ).then();
     }
 }

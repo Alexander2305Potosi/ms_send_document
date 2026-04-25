@@ -1,19 +1,19 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.entity.DocumentInfo;
-import com.example.fileprocessor.domain.entity.DocumentToProcess;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
+import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.entity.SoapCommunicationLog;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.entity.ZipArchive;
-import com.example.fileprocessor.domain.port.out.DocumentRestGateway;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
-import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
+import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
+import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,29 +23,30 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
-public class ProcessFileUseCase {
+public class ProcessProductDocumentsUseCase {
 
-    private static final Logger log = LoggerFactory.getLogger(ProcessFileUseCase.class);
+    private static final Logger log = LoggerFactory.getLogger(ProcessProductDocumentsUseCase.class);
 
     private static final String DEFAULT_ERROR_CODE = "UNKNOWN_ERROR";
     private static final int DEFAULT_RETRY_COUNT = 0;
     private static final long MB_TO_BYTES = 1024 * 1024;
 
-    private final DocumentRestGateway documentGateway;
-    private final DocumentRepository documentRepository;
+    private final ProductRestGateway productGateway;
+    private final ProductDocumentRepository documentRepository;
     private final ExternalSoapGateway soapGateway;
     private final FileValidator fileValidator;
     private final SoapCommunicationLogRepository logRepository;
     private final FileValidationConfig validationConfig;
 
-    public ProcessFileUseCase(DocumentRestGateway documentGateway,
-                              DocumentRepository documentRepository,
-                              ExternalSoapGateway soapGateway,
-                              FileValidator fileValidator,
-                              SoapCommunicationLogRepository logRepository,
-                              FileValidationConfig validationConfig) {
-        this.documentGateway = documentGateway;
+    public ProcessProductDocumentsUseCase(ProductRestGateway productGateway,
+                                        ProductDocumentRepository documentRepository,
+                                        ExternalSoapGateway soapGateway,
+                                        FileValidator fileValidator,
+                                        SoapCommunicationLogRepository logRepository,
+                                        FileValidationConfig validationConfig) {
+        this.productGateway = productGateway;
         this.documentRepository = documentRepository;
         this.soapGateway = soapGateway;
         this.fileValidator = fileValidator;
@@ -54,7 +55,7 @@ public class ProcessFileUseCase {
     }
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        log.info("Fetching pending documents from database...");
+        log.info("Fetching pending product documents from database...");
 
         return documentRepository.findPendingDocuments()
             .flatMap(this::processPendingDocument)
@@ -62,26 +63,31 @@ public class ProcessFileUseCase {
             .doOnError(error -> log.error("Error processing document: {}", error.getMessage()));
     }
 
-    private Mono<FileUploadResult> processPendingDocument(DocumentToProcess pending) {
+    private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
         return documentRepository.claimDocument(pending.getDocumentId())
             .filter(Boolean::booleanValue)
             .flatMap(claimed -> processDocumentClaimed(pending))
             .switchIfEmpty(Mono.defer(() -> {
-                log.info("Document {} already claimed by another process or not pending, skipping", pending.getDocumentId());
+                log.info("Document {} already claimed by another process or not pending, skipping",
+                    pending.getDocumentId());
                 return Mono.empty();
             }));
     }
 
-    private Mono<FileUploadResult> processDocumentClaimed(DocumentToProcess pending) {
-        String traceId = java.util.UUID.randomUUID().toString();
-        log.info("Processing pending document: {}, origin: {}, traceId: {}",
-            pending.getDocumentId(), pending.getOrigin(), traceId);
+    private Mono<FileUploadResult> processDocumentClaimed(ProductDocumentToProcess pending) {
+        String traceId = UUID.randomUUID().toString();
+        log.info("Processing pending document: {}, productId: {}, traceId: {}",
+            pending.getDocumentId(), pending.getProductId(), traceId);
 
-        // Rule 1: Check if origin contains a folder to skip
         if (shouldSkipFolder(pending.getOrigin())) {
             log.info("Document {} skipped due to folder rule, origin: {}",
                 pending.getDocumentId(), pending.getOrigin());
-            return documentRepository.updateStatus(pending.getDocumentId(), DocumentStatus.SKIPPED_VALUE, traceId, null, "SKIPPED_FOLDER")
+            return documentRepository.updateStatus(
+                    pending.getDocumentId(),
+                    DocumentStatus.SKIPPED_VALUE,
+                    traceId,
+                    null,
+                    "SKIPPED_FOLDER")
                 .thenReturn(FileUploadResult.builder()
                     .status(DocumentStatus.SKIPPED_VALUE)
                     .message("Document skipped due to folder rule: " + pending.getOrigin())
@@ -93,15 +99,9 @@ public class ProcessFileUseCase {
                     .build());
         }
 
-        return documentGateway.getDocument(pending.getDocumentId(), traceId)
-            .flatMap(doc -> processDocument(doc, traceId, pending.getDocumentId(), pending.getOrigin()))
-            .flatMap(result -> {
-                // Only update DB if not SKIPPED (SKIPPED already updated inside processFile)
-                if (DocumentStatus.SKIPPED_VALUE.equals(result.getStatus())) {
-                    return Mono.just(result);
-                }
-                return updateDocumentStatus(pending.getDocumentId(), result, traceId).thenReturn(result);
-            })
+        return productGateway.getDocument(pending.getProductId(), pending.getDocumentId(), traceId)
+            .flatMap(doc -> processDocument(doc, traceId, pending.getDocumentId(), pending.getProductId(), pending.getOrigin()))
+            .flatMap(result -> updateDocumentStatus(pending.getDocumentId(), result, traceId).thenReturn(result))
             .onErrorResume(error -> handleDocumentError(pending.getDocumentId(), error, traceId));
     }
 
@@ -117,12 +117,13 @@ public class ProcessFileUseCase {
             .anyMatch(folder -> origin.contains(folder));
     }
 
-    private Mono<FileUploadResult> processDocument(DocumentInfo doc, String traceId, String documentId, String origin) {
+    private Mono<FileUploadResult> processDocument(ProductDocumentInfo doc, String traceId,
+                                                  String documentId, String productId, String origin) {
         if (doc.isZipArchive()) {
-            log.info("Document {} is a ZIP archive, extracting and processing contents", doc.getDocumentId());
-            return processZipDocument(doc, traceId, origin);
+            log.info("Document {} is a ZIP archive, extracting and processing contents", documentId);
+            return processZipDocument(doc, traceId, productId, origin);
         }
-        return processFile(toFileData(doc), origin);
+        return processFile(toFileData(doc, traceId), origin);
     }
 
     private Mono<FileUploadResult> updateDocumentStatus(String documentId, FileUploadResult result, String traceId) {
@@ -166,8 +167,17 @@ public class ProcessFileUseCase {
             .build();
     }
 
+    private FileData toFileData(ProductDocumentInfo doc, String traceId) {
+        return FileData.builder()
+            .content(doc.content())
+            .filename(doc.filename())
+            .size(doc.size())
+            .contentType(doc.contentType())
+            .traceId(traceId)
+            .build();
+    }
+
     private Mono<FileUploadResult> processFile(FileData fileData, String origin) {
-        // Rule 2: Check file size - if >= 50MB, don't send to SOAP
         if (shouldSkipBySize(fileData.getSize())) {
             log.info("Document {} skipped due to size rule: {} bytes (>= {} MB)",
                 fileData.getFilename(), fileData.getSize(), validationConfig.maxFileSizeMb());
@@ -182,7 +192,6 @@ public class ProcessFileUseCase {
                 .build());
         }
 
-        // Get folder info based on keywords (Rule 3)
         FolderInfo folderInfo = extractFolderInfo(origin);
 
         return fileValidator.validate(fileData)
@@ -225,54 +234,44 @@ public class ProcessFileUseCase {
 
     private record FolderInfo(String folderPadre, String folderChild) {}
 
-    private Mono<FileUploadResult> processZipDocument(DocumentInfo doc, String traceId, String origin) {
+    private Mono<FileUploadResult> processZipDocument(ProductDocumentInfo doc, String traceId, String productId, String origin) {
         ZipArchive zipArchive = ZipArchive.builder()
-            .zipContent(doc.getContent())
-            .originalFilename(doc.getFilename())
+            .zipContent(doc.content())
+            .originalFilename(doc.filename())
             .build();
 
         try {
             var extractedDocs = zipArchive.extractDocuments();
 
             if (extractedDocs.isEmpty()) {
-                log.warn("ZIP archive {} is empty", doc.getFilename());
-                return Mono.error(new IllegalStateException("ZIP archive is empty: " + doc.getFilename()));
+                log.warn("ZIP archive {} is empty", doc.filename());
+                return Mono.error(new IllegalStateException("ZIP archive is empty: " + doc.filename()));
             }
 
-            log.info("ZIP archive {} contains {} documents", doc.getFilename(), extractedDocs.size());
+            log.info("ZIP archive {} contains {} documents", doc.filename(), extractedDocs.size());
 
             return Flux.fromIterable(extractedDocs)
-                .map(extracted -> toFileData(extracted))
+                .map(extracted -> toFileDataFromExtracted(extracted, UUID.randomUUID().toString()))
                 .flatMap(fileData -> processFile(fileData, origin))
                 .collectList()
-                .map(results -> aggregateResults(results, doc.getDocumentId()));
+                .map(results -> aggregateResults(results, doc.documentId()));
         } catch (IOException e) {
-            log.error("Failed to extract ZIP archive {}: {}", doc.getFilename(), e.getMessage());
-            return Mono.error(new IllegalStateException("Failed to extract ZIP: " + doc.getFilename(), e));
+            log.error("Failed to extract ZIP archive {}: {}", doc.filename(), e.getMessage());
+            return Mono.error(new IllegalStateException("Failed to extract ZIP: " + doc.filename(), e));
         }
     }
 
-    private FileData toFileData(DocumentInfo doc) {
-        return FileData.builder()
-            .content(doc.getContent())
-            .filename(doc.getFilename())
-            .size(doc.getSize())
-            .contentType(doc.getContentType())
-            .traceId(java.util.UUID.randomUUID().toString())
-            .build();
-    }
-
-    private FileData toFileData(ZipArchive.ExtractedDocument extracted) {
+    private FileData toFileDataFromExtracted(ZipArchive.ExtractedDocument extracted, String traceId) {
         return FileData.builder()
             .content(extracted.getContent())
             .filename(extracted.getFilename())
             .size(extracted.getSize())
             .contentType(extracted.getContentType())
-            .traceId(java.util.UUID.randomUUID().toString())
+            .traceId(traceId)
             .build();
     }
 
-    private FileUploadResult aggregateResults(java.util.List<FileUploadResult> results, String documentId) {
+    private FileUploadResult aggregateResults(List<FileUploadResult> results, String documentId) {
         if (results.isEmpty()) {
             return FileUploadResult.builder()
                 .status(DocumentStatus.FAILURE_VALUE)
@@ -339,9 +338,6 @@ public class ProcessFileUseCase {
         }
         if (error.getCause() instanceof SoapCommunicationException sce) {
             return sce.getErrorCode();
-        }
-        if (error instanceof com.example.fileprocessor.domain.exception.FileValidationException fve) {
-            return fve.getErrorCode();
         }
         return DEFAULT_ERROR_CODE;
     }

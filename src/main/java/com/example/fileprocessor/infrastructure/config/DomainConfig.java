@@ -1,13 +1,14 @@
 package com.example.fileprocessor.infrastructure.config;
 
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
-import com.example.fileprocessor.domain.port.out.DocumentRestGateway;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.usecase.FileValidator;
-import com.example.fileprocessor.domain.usecase.LoadDocumentsUseCase;
-import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
+import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
+import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
+import com.example.fileprocessor.domain.usecase.FileValidator;
+import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
+import com.example.fileprocessor.domain.usecase.ProcessProductDocumentsUseCase;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,18 +21,19 @@ public class DomainConfig {
     }
 
     @Bean
-    public ProcessFileUseCase processFileUseCase(DocumentRestGateway documentGateway,
-                                                  DocumentRepository documentRepository,
-                                                  ExternalSoapGateway soapGateway,
-                                                  FileValidator fileValidator,
-                                                  SoapCommunicationLogRepository logRepository,
-                                                  FileValidationConfig validationConfig) {
-        return new ProcessFileUseCase(documentGateway, documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
+    public LoadProductsUseCase loadProductsUseCase(ProductRestGateway productGateway,
+                                                  ProductRepository productRepository,
+                                                  ProductDocumentRepository documentRepository) {
+        return new LoadProductsUseCase(productGateway, productRepository, documentRepository);
     }
 
     @Bean
-    public LoadDocumentsUseCase loadDocumentsUseCase(DocumentRestGateway documentGateway,
-                                                     DocumentRepository documentRepository) {
-        return new LoadDocumentsUseCase(documentGateway, documentRepository);
+    public ProcessProductDocumentsUseCase processProductDocumentsUseCase(ProductRestGateway productGateway,
+                                                                      ProductDocumentRepository documentRepository,
+                                                                      ExternalSoapGateway soapGateway,
+                                                                      FileValidator fileValidator,
+                                                                      SoapCommunicationLogRepository logRepository,
+                                                                      FileValidationConfig validationConfig) {
+        return new ProcessProductDocumentsUseCase(productGateway, documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
     }
 }

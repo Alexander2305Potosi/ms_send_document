@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "File Processor Service",
-    "description": "Colección para consumir el microservicio File Processor - Subida de archivos con envío SOAP",
+    "description": "Colección para consumir el microservicio File Processor - Productos con documentos",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "12345"
   },
@@ -30,18 +30,18 @@
       ]
     },
     {
-      "name": "2. POST /api/v1/files/load - Cargar Documentos",
+      "name": "2. POST /api/v1/products/load - Cargar Productos",
       "request": {
         "method": "POST",
         "header": [
           {"key": "Accept", "value": "application/json", "type": "text"}
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/files/load",
+          "raw": "{{baseUrl}}/api/v1/products/load",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "files", "load"]
+          "path": ["api", "v1", "products", "load"]
         },
-        "description": "Carga documentos desde la API REST externa y los guarda en la base de datos para su procesamiento posterior.\n\n**PASO 1** del flujo de dos pasos:\n1. POST /api/v1/files/load - Carga documentos a la BD (status=PENDING)\n2. GET /api/v1/files - Procesa los documentos pendientes\n\n**Nota:** Requiere que el Document REST Mock esté corriendo en puerto 3001 (Mockoon) o 8081 (mock Java)."
+        "description": "Carga productos y sus documentos asociados desde la API REST externa y los guarda en la base de datos.\n\n**PASO 1** del flujo:\n1. POST /api/v1/products/load - Carga productos y documentos\n2. GET /api/v1/products - Procesa los documentos pendientes\n\n**Nota:** Requiere que el Product REST Mock esté corriendo en puerto 3001."
       },
       "response": [
         {
@@ -49,85 +49,23 @@
           "status": "Accepted",
           "code": 202,
           "header": [{"key": "Content-Type", "value": "application/json"}],
-          "body": "{\n  \"status\": \"LOADING\",\n  \"message\": \"Document loading from REST API started\",\n  \"correlationId\": null,\n  \"traceId\": \"uuid-generado\",\n  \"externalReference\": null,\n  \"processedAt\": \"2024-01-15T10:30:00Z\",\n  \"errorCode\": null,\n  \"success\": true\n}"
+          "body": "{\n  \"status\": \"LOADING\",\n  \"message\": \"Product loading from REST API started\",\n  \"correlationId\": null,\n  \"traceId\": \"uuid-generado\",\n  \"externalReference\": null,\n  \"processedAt\": \"2024-01-15T10:30:00Z\",\n  \"errorCode\": null,\n  \"success\": true\n}"
         }
       ]
     },
     {
-      "name": "3. POST /api/v1/files/load - Upload PDF",
-      "request": {
-        "method": "POST",
-        "header": [
-          {"key": "Accept", "value": "application/json", "type": "text"}
-        ],
-        "body": {
-          "mode": "formdata",
-          "formdata": [
-            {"key": "file", "type": "file", "src": "samples/sample.pdf"}
-          ]
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/v1/files/load",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "files", "load"]
-        },
-        "description": "Subir archivo PDF para cargar a la base de datos.\n\nVe a Body > form-data y selecciona samples/sample.pdf"
-      },
-      "response": []
-    },
-    {
-      "name": "4. POST /api/v1/files/load - Upload DOCX",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "body": {
-          "mode": "formdata",
-          "formdata": [
-            {"key": "file", "type": "file", "src": "samples/sample.docx"}
-          ]
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/v1/files/load",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "files", "load"]
-        },
-        "description": "Subir archivo DOCX para cargar a la base de datos.\n\nVe a Body > form-data y selecciona samples/sample.docx"
-      },
-      "response": []
-    },
-    {
-      "name": "5. POST /api/v1/files/load - Upload TXT",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "body": {
-          "mode": "formdata",
-          "formdata": [
-            {"key": "file", "type": "file", "src": "samples/sample.txt"}
-          ]
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/v1/files/load",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "files", "load"]
-        },
-        "description": "Subir archivo TXT para cargar a la base de datos.\n\nVe a Body > form-data y selecciona samples/sample.txt"
-      },
-      "response": []
-    },
-    {
-      "name": "6. GET /api/v1/files - Procesar Documentos Pendientes",
+      "name": "3. GET /api/v1/products - Procesar Documentos",
       "request": {
         "method": "GET",
         "header": [
           {"key": "Accept", "value": "application/json", "type": "text"}
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/files",
+          "raw": "{{baseUrl}}/api/v1/products",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "files"]
+          "path": ["api", "v1", "products"]
         },
-        "description": "Procesa los documentos que están en estado PENDING en la base de datos.\n\n**PASO 2** del flujo de dos pasos:\n1. POST /api/v1/files/load - Carga documentos a la BD (status=PENDING)\n2. GET /api/v1/files - Procesa los documentos pendientes\n\n**Nota:** Requiere que el SOAP mock esté corriendo en puerto 9000."
+        "description": "Procesa los documentos pendientes de todos los productos.\n\n**PASO 2** del flujo:\n1. POST /api/v1/products/load - Carga productos y documentos\n2. GET /api/v1/products - Procesa los documentos pendientes\n\n**Resiliencia:** Si el MS cae durante el procesamiento, al reiniciar solo se reprocesa el documento que quedó en PROCESSING.\n\n**Nota:** Requiere que el SOAP mock esté corriendo en puerto 9000."
       },
       "response": [
         {
@@ -135,12 +73,12 @@
           "status": "Accepted",
           "code": 202,
           "header": [{"key": "Content-Type", "value": "application/json"}],
-          "body": "{\n  \"status\": \"PROCESSING\",\n  \"message\": \"Pending documents processing started\",\n  \"correlationId\": null,\n  \"traceId\": \"uuid-generado\",\n  \"externalReference\": null,\n  \"processedAt\": \"2024-01-15T10:30:00Z\",\n  \"errorCode\": null,\n  \"success\": true\n}"
+          "body": "{\n  \"status\": \"PROCESSING\",\n  \"message\": \"Pending product documents processing started\",\n  \"correlationId\": null,\n  \"traceId\": \"uuid-generado\",\n  \"externalReference\": null,\n  \"processedAt\": \"2024-01-15T10:30:00Z\",\n  \"errorCode\": null,\n  \"success\": true\n}"
         }
       ]
     },
     {
-      "name": "7. Config - Instrucciones",
+      "name": "4. Config - Instrucciones",
       "request": {
         "method": "GET",
         "header": [],
@@ -148,7 +86,7 @@
           "raw": "{{baseUrl}}/",
           "host": ["{{baseUrl}}"]
         },
-        "description": "PASOS PARA CONFIGURAR:\n\n1. Asegurate de que el Document REST Mock esté corriendo (puerto 3001 o 8081)\n2. Asegurate de que el SOAP Mock esté corriendo (puerto 9000)\n3. Primero: POST /api/v1/files/load para cargar documentos\n4. Segundo: GET /api/v1/files para procesar los documentos"
+        "description": "PASOS PARA CONFIGURAR:\n\n1. Asegurate de que el Product REST Mock esté corriendo (puerto 3001)\n   - Java: ./scripts/start-product-mock.sh\n   - Mockoon: Importar mockoon/document-rest-mock.json\n2. Asegurate de que el SOAP Mock esté corriendo (puerto 9000)\n   - ./scripts/start-mock.sh\n3. Primero: POST /api/v1/products/load para cargar productos y documentos\n4. Segundo: GET /api/v1/products para procesar los documentos"
       },
       "response": []
     }

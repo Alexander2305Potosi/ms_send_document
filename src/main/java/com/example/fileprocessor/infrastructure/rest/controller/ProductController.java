@@ -1,8 +1,8 @@
 package com.example.fileprocessor.infrastructure.rest.controller;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.usecase.LoadDocumentsUseCase;
-import com.example.fileprocessor.domain.usecase.ProcessFileUseCase;
+import com.example.fileprocessor.domain.usecase.ProcessProductDocumentsUseCase;
+import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -18,27 +18,29 @@ import java.time.Instant;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/files")
-public class FileController {
+@RequestMapping("/api/v1/products")
+public class ProductController {
 
-    private static final Logger log = LoggerFactory.getLogger(FileController.class);
-    private final ProcessFileUseCase processFileUseCase;
-    private final LoadDocumentsUseCase loadDocumentsUseCase;
+    private static final Logger log = LoggerFactory.getLogger(ProductController.class);
+    private final ProcessProductDocumentsUseCase processProductDocumentsUseCase;
+    private final LoadProductsUseCase loadProductsUseCase;
 
-    public FileController(ProcessFileUseCase processFileUseCase, LoadDocumentsUseCase loadDocumentsUseCase) {
-        this.processFileUseCase = processFileUseCase;
-        this.loadDocumentsUseCase = loadDocumentsUseCase;
+    public ProductController(ProcessProductDocumentsUseCase processProductDocumentsUseCase,
+                            LoadProductsUseCase loadProductsUseCase) {
+        this.processProductDocumentsUseCase = processProductDocumentsUseCase;
+        this.loadProductsUseCase = loadProductsUseCase;
     }
 
     @PostMapping(value = "/load", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<AsyncProcessResponse> loadDocuments() {
+    public ResponseEntity<AsyncProcessResponse> loadProducts() {
         String traceId = UUID.randomUUID().toString();
         MDC.put("traceId", traceId);
 
-        log.info("Starting documents load from REST API, traceId: {}", traceId);
+        log.info("Starting products load from REST API, traceId: {}", traceId);
 
-        loadDocumentsUseCase.execute()
-            .doOnNext(result -> log.info("Document loaded: {} -> {}", result.getDocumentId(), result.getStatus()))
+        loadProductsUseCase.execute()
+            .doOnNext(result -> log.info("Product loaded: {} -> {} ({} documents)",
+                result.getProductId(), result.getStatus(), result.getDocumentCount()))
             .doOnError(error -> log.error("Load failed: {}", error.getMessage()))
             .doFinally(signal -> MDC.remove("traceId"))
             .subscribe();
@@ -47,7 +49,7 @@ public class FileController {
             .status(HttpStatus.ACCEPTED)
             .body(new AsyncProcessResponse(
                 "LOADING",
-                "Document loading from REST API started",
+                "Product loading from REST API started",
                 null,
                 traceId,
                 null,
@@ -58,13 +60,13 @@ public class FileController {
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<AsyncProcessResponse> processPendingDocuments() {
+    public ResponseEntity<AsyncProcessResponse> processPendingProducts() {
         String traceId = UUID.randomUUID().toString();
         MDC.put("traceId", traceId);
 
-        log.info("Starting pending documents processing, traceId: {}", traceId);
+        log.info("Starting pending product documents processing, traceId: {}", traceId);
 
-        processFileUseCase.executePendingDocuments()
+        processProductDocumentsUseCase.executePendingDocuments()
             .doOnNext(result -> log.info("Document processed: correlationId={}, status={}",
                 result.getCorrelationId(), result.getStatus()))
             .doOnError(error -> log.error("Processing failed: {}", error.getMessage()))
@@ -75,7 +77,7 @@ public class FileController {
             .status(HttpStatus.ACCEPTED)
             .body(new AsyncProcessResponse(
                 DocumentStatus.PROCESSING_VALUE,
-                "Pending documents processing started",
+                "Pending product documents processing started",
                 null,
                 traceId,
                 null,

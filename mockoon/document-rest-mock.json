@@ -1,7 +1,7 @@
 {
     "uuid": "266df6a5-2d61-462b-81fe-b4fbb2e85fc9",
     "lastMigration": 33,
-    "name": "Document REST Mock",
+    "name": "Product REST Mock",
     "endpointPrefix": "",
     "latency": 0,
     "port": 3001,
@@ -13,11 +13,11 @@
             "type": "http",
             "documentation": "",
             "method": "get",
-            "endpoint": "api/documents",
+            "endpoint": "api/products",
             "responses": [
                 {
                     "uuid": "11d98d0b-7107-45ac-a533-e955cde27167",
-                    "body": "[\n  {\n    \"documentId\": \"doc-001\",\n    \"filename\": \"test-document.pdf\",\n    \"content\": \"JVBERi0x\",\n    \"contentType\": \"application/pdf\",\n    \"size\": 1024,\n    \"isZip\": false,\n    \"origin\": \"folderA/incoming\"\n  },\n  {\n    \"documentId\": \"doc-002\",\n    \"filename\": \"test-document.docx\",\n    \"content\": \"UEsDBBQ=\",\n    \"contentType\": \"application/vnd.openxmlformats-officedocument.wordprocessingml.document\",\n    \"size\": 2048,\n    \"isZip\": false,\n    \"origin\": \"folderB/incoming\"\n  },\n  {\n    \"documentId\": \"doc-003\",\n    \"filename\": \"test-document.txt\",\n    \"content\": \"VGhpcyBpcyBhIHRlc3Q=\",\n    \"contentType\": \"text/plain\",\n    \"size\": 512,\n    \"isZip\": false,\n    \"origin\": \"folderA/special\"\n  }\n]",
+                    "body": "[\n  {\n    \"productId\": \"prod-001\",\n    \"name\": \"Laptop Dell XPS 15\",\n    \"documents\": [\n      {\n        \"documentId\": \"doc-001\",\n        \"filename\": \"manual.pdf\",\n        \"content\": \"JVBERi0x\",\n        \"contentType\": \"application/pdf\",\n        \"size\": 1024,\n        \"isZip\": false,\n        \"origin\": \"folderA/incoming\"\n      },\n      {\n        \"documentId\": \"doc-002\",\n        \"filename\": \"specs.pdf\",\n        \"content\": \"UEsDBBQ=\",\n        \"contentType\": \"application/pdf\",\n        \"size\": 2048,\n        \"isZip\": false,\n        \"origin\": \"folderA/specs\"\n      }\n    ]\n  },\n  {\n    \"productId\": \"prod-002\",\n    \"name\": \"TV Samsung 55\\\"\",\n    \"documents\": [\n      {\n        \"documentId\": \"doc-003\",\n        \"filename\": \"manual.txt\",\n        \"content\": \"VGhpcyBpcyBhIHRlc3Q=\",\n        \"contentType\": \"text/plain\",\n        \"size\": 512,\n        \"isZip\": false,\n        \"origin\": \"folderB/incoming\"\n      }\n    ]\n  }\n]",
                     "latency": 0,
                     "statusCode": 200,
                     "label": "",
@@ -43,12 +43,12 @@
             "uuid": "fa39d0ab-83a2-4dfd-ac7f-1f59249999ad",
             "type": "http",
             "documentation": "",
-            "method": "post",
-            "endpoint": "api/document/:id",
+            "method": "get",
+            "endpoint": "api/products/:productId/documents/:documentId",
             "responses": [
                 {
                     "uuid": "78d52d13-1857-4d9a-a4b8-31af5e7746f9",
-                    "body": "{\n  \"documentId\": \"doc-001\",\n  \"filename\": \"test-document.pdf\",\n  \"content\": \"JVBERi0x\",\n  \"contentType\": \"application/pdf\",\n  \"size\": 1024,\n  \"isZip\": false,\n    \"origin\": \"folderA/incoming\"\n}",
+                    "body": "{\n  \"documentId\": \"doc-001\",\n  \"filename\": \"manual.pdf\",\n  \"content\": \"JVBERi0x\",\n  \"contentType\": \"application/pdf\",\n  \"size\": 1024,\n  \"isZip\": false,\n  \"origin\": \"folderA/incoming\"\n}",
                     "latency": 0,
                     "statusCode": 200,
                     "label": "",
