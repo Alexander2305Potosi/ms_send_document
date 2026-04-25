@@ -70,7 +70,23 @@
       "WebFetch(domain:github.com)",
       "Bash(curl -s \"https://api.github.com/repos/mockoon/mockoon/contents/packages%2Fcommons%2Fsrc%2Fconstants%2Fenvironment-schema.constants.ts\")",
       "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data['content']\\)\")",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew build *)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew test --tests \"ProcessProductDocumentsUseCaseTest.executePendingDocuments_shouldSkipDocumentsByFolder\" --info)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew test)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew test --tests \"ProcessProductDocumentsUseCaseTest.executePendingDocuments_shouldProcessDocumentsPerDocument\" --info)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew test --tests \"LoadProductsUseCaseTest.execute_shouldHandleMultipleProducts\" --info)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew test --tests \"ProcessProductDocumentsUseCaseTest.executePendingDocuments_shouldProcessZipDocument\" --info)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew test *)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew clean *)",
+      "Bash(JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew *)",
+      "Bash(chmod -R 755 /Users/alexander2305/Downloads/file-processor-service/build)",
+      "Bash(export JAVA_HOME=/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home)",
+      "Bash(pkill -f \"GradleDaemon|gradle\")",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }

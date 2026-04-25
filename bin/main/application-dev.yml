@@ -14,4 +14,6 @@ app:
     endpoint: http://localhost:3001
     list-path: /api/documents
     get-path: /api/document
+    products-path: /api/products
+    product-documents-path: /api/products/{productId}/documents
     timeout-seconds: 5

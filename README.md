@@ -117,7 +117,7 @@ Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multip
 
 ## API Endpoints
 
-### POST /api/v1/products/load
+### GET /api/v1/products/load
 
 Carga productos y sus documentos asociados desde la API REST externa.
 

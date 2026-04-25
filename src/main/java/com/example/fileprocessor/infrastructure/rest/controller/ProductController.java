@@ -31,7 +31,7 @@ public class ProductController {
         this.loadProductsUseCase = loadProductsUseCase;
     }
 
-    @PostMapping(value = "/load", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/load", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AsyncProcessResponse> loadProducts() {
         String traceId = UUID.randomUUID().toString();
         MDC.put("traceId", traceId);

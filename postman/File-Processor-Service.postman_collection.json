@@ -30,9 +30,9 @@
       ]
     },
     {
-      "name": "2. POST /api/v1/products/load - Cargar Productos",
+      "name": "2. GET /api/v1/products/load - Cargar Productos",
       "request": {
-        "method": "POST",
+        "method": "GET",
         "header": [
           {"key": "Accept", "value": "application/json", "type": "text"}
         ],
