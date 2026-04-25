@@ -1,6 +1,6 @@
 # File Processor Service
 
-Microservicio reactivo basado en Spring WebFlux que obtiene productos con sus documentos asociados desde una API REST externa y los envia a un servicio SOAP externo.
+Microservicio reactivo basado en Spring WebFlux que obtiene productos con sus documentos asociados desde una API REST externa y los envia a un servicio SOAP externo o AWS S3.
 
 ## Arquitectura (Clean Architecture Light)
 
@@ -22,8 +22,13 @@ com.example.fileprocessor/
 │   │   └── ZipArchive.java             # ZIP con documentos extraibles
 │   ├── usecase/              # Casos de uso (logica de negocio)
 │   │   ├── LoadProductsUseCase.java          # Carga productos y documentos
-│   │   ├── ProcessProductDocumentsUseCase.java # Procesa documentos pendientes
+│   │   ├── AbstractProcessDocumentsUseCase.java # Procesa documentos (template method)
+│   │   ├── SoapDocumentUseCase.java          # Implementacion SOAP
+│   │   ├── S3DocumentUseCase.java            # Implementacion S3
+│   │   ├── DocumentValidationRules.java     # Reglas de validacion
 │   │   └── FileValidator.java
+│   ├── util/                 # Utilidades de dominio
+│   │   └── Base64Utils.java            # Encoding/decoding Base64
 │   ├── port/
 │   │   ├── in/
 │   │   │   └── FileValidationConfig.java
@@ -52,21 +57,21 @@ com.example.fileprocessor/
     │   │   └── ProductController.java
     │   └── exception/
     │       └── GlobalErrorHandler.java
-    └── soap/                 # Adapter SOAP (salida)
-        ├── adapter/
-        │   └── ExternalSoapGatewayImpl.java
-        ├── config/
-        │   └── SoapProperties.java
-        ├── mapper/
-        │   └── SoapMapper.java
-        ├── xml/
-        │   ├── SoapEnvelopeWrapper.java
-        │   ├── SoapNamespaces.java
-        │   └── model/
-        │       ├── UploadFileRequest.java
-        │       └── UploadFileResponse.java
-        └── exception/
-            └── SoapCommunicationException.java
+    ├── soap/                 # Adapter SOAP (salida)
+    │   ├── adapter/
+    │   │   └── ExternalSoapGatewayImpl.java
+    │   ├── config/
+    │   │   └── SoapProperties.java
+    │   ├── mapper/
+    │   │   └── SoapMapper.java
+    │   ├── xml/
+    │   │   ├── SoapEnvelopeWrapper.java
+    │   │   ├── SoapNamespaces.java
+    │   │   └── model/
+    │   │       ├── UploadFileRequest.java
+    │   │       └── UploadFileResponse.java
+    │   └── exception/
+    │       └── SoapCommunicationException.java
     └── aws/                  # Adapter AWS S3 (salida)
         ├── adapter/
         │   └── S3GatewayImpl.java
@@ -166,7 +171,7 @@ Carga productos y sus documentos asociados desde la API REST externa. **Los docu
 │    - Por cada ProductInfo recibido:                                           │
 │      a) Crea ProductToProcess con status=PENDING                             │
 │      b) Invoca createDocumentsFlux() para crear documentos                    │
-│         - Si doc.isZipArchive() -> expandZipDocument()                        │
+│         - Si doc.isZipArchive() -> expandZipDocument()                       │
 │         - Si no -> createProductDocument()                                   │
 │      c) Guarda product en ProductRepository.save()                          │
 │      d) Guarda todos los documentos en documentRepository.saveAll()         │
@@ -234,13 +239,13 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 
 **Reglas de Negocio:**
 
-1. **Tamano de archivo:** Solo archivos **< 50 MB** se envian a SOAP. Archivos de 50MB o mayores se marcan como `NOT_SENT` con trazabilidad del motivo.
+1. **Tamano de archivo:** Solo archivos **< 50 MB** se envian a SOAP/S3. Archivos de 50MB o mayores se marcan como `NOT_SENT` con trazabilidad del motivo.
 
 2. **Tipos de archivo permitidos:** Solo `pdf`, `txt`, `csv` se procesan. Otros tipos se marcan como `NOT_SENT` con el motivo.
 
 3. **Carpetas excluidas:** Archivos en carpetas `/tmp` o `/transient` se marcan como `SKIPPED`.
 
-4. **Patrones de origen:** Solo archivos cuyo `origin` contenga alguno de los patrones configurados en `origin-patterns-to-send` se envian a SOAP. Archivos con origin que no matcheen ningun patron se marcan como `NOT_SENT`.
+4. **Patrones de origen:** Solo archivos cuyo `origin` contenga alguno de los patrones configurados en `origin-patterns-to-send` se envian a SOAP/S3. Archivos con origin que no matcheen ningun patron se marcan como `NOT_SENT`.
 
 **Flujo de Ejecucion (Step-by-Step):**
 
@@ -249,15 +254,15 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 │ 1. ProductController.processPendingProducts()                               │
 │    - Genera traceId UUID                                                     │
 │    - Registra traceId en MDC                                                 │
-│    - Invoca ProcessProductDocumentsUseCase.executePendingDocuments()         │
+│    - Invoca AbstractProcessDocumentsUseCase.executePendingDocuments()        │
 │    - Retorna HTTP 202 ACCEPTED inmediatamente                                │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. ProcessProductDocumentsUseCase.executePendingDocuments()                  │
+│ 2. AbstractProcessDocumentsUseCase.executePendingDocuments()                │
 │    - Invoca documentRepository.findPendingDocuments()                        │
-│    - Retorna Flux<ProductDocumentToProcess> con statuses:                   │
+│    - Retorna Flux<ProductDocumentToProcess> con statuses:                    │
 │      PENDING, RETRY, PROCESSING (crash recovery)                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -284,7 +289,7 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 5. R2dbcProductDocumentRepository.claimDocument(documentId)                  │
 │    - SQL: UPDATE product_documents_to_process                               │
-│      SET status = 'PROCESSING', trace_id = $2, processed_at = $3            │
+│      SET status = 'PROCESSING', trace_id = $2, processed_at = $3          │
 │      WHERE document_id = $1 AND status = 'PENDING'                          │
 │    - Retorna TRUE si rowsUpdated > 0, FALSE si no hubo match                 │
 │    - Este mecanismo previene duplicacion de envio                            │
@@ -294,7 +299,7 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 6. processDocumentClaimed(ProductDocumentToProcess)                         │
 │    - Genera traceId UUID para este documento                                 │
-│    - Evalua reglas de negocio en orden:                                      │
+│    - Evalua reglas de negocio en orden (usando DocumentValidationRules):     │
 │                                                                             │
 │    REGLA 1 - Carpeta Excluida (shouldSkipFolder):                          │
 │    ┌─────────────────────────────────────────────────────────────────────┐  │
@@ -317,7 +322,7 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 │    ┌─────────────────────────────────────────────────────────────────────┐  │
 │    │ maxSizeMb = 50 (configurable)                                      │  │
 │    │ if sizeBytes >= (maxSizeMb * 1MB)                                   │  │
-│    │   -> UPDATE status = 'NOT_SENT', error_code = 'SIZE_EXCEEDED'       │  │
+│    │   -> UPDATE status = 'NOT_SENT', error_code = 'SIZE_EXCEEDED'      │  │
 │    │   -> RETURN FileUploadResult con status=NOT_SENT, message con tamano│  │
 │    └─────────────────────────────────────────────────────────────────────┘  │
 │                                    │                                         │
@@ -342,65 +347,43 @@ Procesa los documentos pendientes de todos los productos. **El contenido ya esta
 │    - Extrae folderInfo del origin (keywords: "test", "mock")                │
 │      - parentFolder = parts[length-2]                                       │
 │      - childFolder = parts[length-1]                                        │
-│    - Construye SoapRequest via SoapRequest.fromFileData()                  │
-│      - Base64.encode(content)                                              │
+│    - Construye SoapRequest via SoapRequest.fromFileData()                   │
+│      - Base64.encode(content) via Base64Utils                               │
 │      - Incluye parentFolder y childFolder                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 8. ExternalSoapGatewayImpl.sendFile(SoapRequest)                            │
-│    - SoapMapper.toFullSoapMessage(request) -> XML completo SOAP             │
-│    - WebClient.post() al endpoint SOAP                                      │
-│    - Header: SOAPAction = "fileService/UploadFile"                          │
-│    - Content-Type: TEXT_XML                                                 │
-│    - Timeout: configurable (default 30s)                                    │
-│    - Retry: backoff 3 intentos (1s, 2s, 4s)                                 │
-│    - Filtro de reintento: TimeoutException, 5xx Server Error                │
+│ 8. sendDocument(SoapRequest) - Template Method                              │
+│    - Subclases SoapDocumentUseCase o S3DocumentUseCase                      │
+│    - Delegan al gateway correspondiente (SOAP o S3)                        │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
-                                    ▼
+              ┌─────────────────────┴─────────────────────┐
+              ▼                                           ▼
+┌─────────────────────────────┐         ┌─────────────────────────────┐
+│ SoapDocumentUseCase         │         │ S3DocumentUseCase            │
+│  - ExternalSoapGateway      │         │  - S3Gateway                 │
+│  - soapGateway.sendFile()   │         │  - s3Gateway.upload()        │
+└─────────────────────────────┘         └─────────────────────────────┘
+              │                                           │
+              ▼                                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 9. SoapMapper.toFullSoapMessage(SoapRequest)                                 │
-│    - Crea UploadFileRequest JAXB object                                     │
-│      - fileContentBase64: Base64 encoded content                            │
-│      - filename, contentType, fileSize                                      │
-│      - traceId, timestamp                                                   │
-│      - parentFolder, childFolder                                            │
-│    - Marshalls a XML con format:                                           │
-│      <file:UploadFileRequest>                                              │
-│        <file:fileContentBase64>...</file:fileContentBase64>                │
-│        <file:filename>...</file:filename>                                   │
-│        ...                                                                 │
-│      </file:UploadFileRequest>                                             │
-│    - Envuelve en envelope SOAP:                                             │
-│      <?xml version="1.0"?>                                                  │
-│      <soap:Envelope>                                                        │
-│        <soap:Body>                                                          │
-│          ...upload request...                                               │
-│        </soap:Body>                                                         │
-│      </soap:Envelope>                                                       │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 10. Respuesta SOAP y actualizacion de estado                                 │
-│     - SOAP Response parseado via SoapMapper.fromSoapXml()                   │
-│     - Extrae correlationId, status, message                                 │
-│     - Invoca documentRepository.updateStatus():                             │
+│ 9. Respuesta y actualizacion de estado                                       │
+│     - Actualiza documentRepository.updateStatus():                          │
 │       UPDATE product_documents_to_process                                   │
 │       SET status = 'SUCCESS',                                              │
 │           soap_correlation_id = 'correlationId',                            │
 │           trace_id = 'traceId',                                             │
 │           processed_at = NOW()                                              │
-│       WHERE document_id = 'doc-xxx'                                         │
+│       WHERE document_id = 'doc-xxx'                                        │
 │     - Guarda SoapCommunicationLog (success)                                 │
 │     - Retorna FileUploadResult al flux                                      │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 11. Manejo de Errores                                                        │
+│ 10. Manejo de Errores                                                        │
 │                                                                             │
 │  TIMEOUT / 5xx ERROR:                                                       │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -457,17 +440,43 @@ Los documentos ZIP son expandidos durante la carga (`/load`):
 |--------|-------------|
 | `PENDING` | Documento esperando procesamiento |
 | `PROCESSING` | Documento siendo procesado |
-| `SUCCESS` | Enviado a SOAP exitosamente |
-| `FAILURE` | Error permanente en SOAP |
+| `SUCCESS` | Enviado exitosamente (SOAP o S3) |
+| `FAILURE` | Error permanente |
 | `RETRY` | Error reintentable (timeout) |
 | `SKIPPED` | Saltado por regla de carpeta |
 | `NOT_SENT` | No enviado (tamano >= 50MB, tipo no permitido, o origin no matchea patrones) |
+
+## Patrones de Diseño
+
+### Template Method (AbstractProcessDocumentsUseCase)
+
+`AbstractProcessDocumentsUseCase` implementa el flujo completo de procesamiento:
+
+```
+executePendingDocuments()
+    └── findPendingDocuments()
+            └── flatMap(processPendingDocument)
+                    ├── claimDocument()
+                    ├── validateRules()          <- reglas de negocio
+                    ├── fileValidator.validate() <- tipo archivo
+                    ├── sendDocument()           <- ABSTRACT (subclasses)
+                    └── updateStatus()
+```
+
+Las subclases solo definen `sendDocument()` y `getImplementationName()`:
+- **SoapDocumentUseCase**: envia via `ExternalSoapGateway`
+- **S3DocumentUseCase**: sube via `S3Gateway`
+
+### Record Utilities
+
+- **DocumentValidationRules**: encapsulate validation rules as immutable record
+- **Base64Utils**: utility class for Base64 encoding/decoding (no instance needed)
 
 ## Configuracion
 
 | Variable | Default | Descripcion |
 |----------|---------|-------------|
-| `app.file.max-file-size-mb` | 50 | Tamano maximo para enviar a SOAP |
+| `app.file.max-file-size-mb` | 50 | Tamano maximo para enviar |
 | `app.file.allowed-types` | `pdf,txt,csv` | Tipos de archivo permitidos (regex) |
 | `app.file.folders-to-skip` | `/tmp,/transient` | Carpetas a excluir |
 | `app.file.origin-patterns-to-send` | `incoming,documents` | Patrones de origin que deben contener los archivos para ser enviados |
@@ -511,6 +520,14 @@ Importar `mockoon/document-rest-mock.json` en Mockoon Desktop.
 ./scripts/start-s3-mock.sh
 ```
 
+## Perfiles Spring
+
+| Perfil | Implementacion | Uso |
+|--------|---------------|-----|
+| `soap` (default) | SoapDocumentUseCase | Envio via SOAP |
+| `s3` | S3DocumentUseCase | Upload a AWS S3 |
+| sin perfil | SoapDocumentUseCase | Default igual que soap |
+
 ## Configuracion
 
 | Variable | Default | Descripcion |
@@ -522,6 +539,14 @@ Importar `mockoon/document-rest-mock.json` en Mockoon Desktop.
 | `AWS_REGION` | `us-east-1` | Region AWS |
 
 ## Changelog
+
+### 2026-04-25 - Refactorizacion + S3 Support
+- **Refactor:** `ProcessProductDocumentsUseCase` eliminado, logica movida a `AbstractProcessDocumentsUseCase`
+- **Refactor:** Creado `DocumentValidationRules` para encapsular reglas de validacion
+- **Refactor:** Creado `Base64Utils` utility para encoding/decoding
+- **Nuevo:** `S3DocumentUseCase` para uploads a AWS S3
+- **Nuevo:** Perfil Spring "s3" para activar procesamiento via S3
+- **Actualizado:** `SoapDocumentUseCase` y `S3DocumentUseCase` ahora extienden `AbstractProcessDocumentsUseCase`
 
 ### 2026-04-25 - Refactorizacion Product-Centric + S3 Support
 - **Nuevo:** Entidades ProductToProcess, ProductDocumentToProcess, ProductInfo, ProductDocumentInfo
