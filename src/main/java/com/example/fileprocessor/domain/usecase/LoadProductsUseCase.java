@@ -45,8 +45,9 @@ public class LoadProductsUseCase {
 
     private Flux<LoadProductsResult> loadProductAndDocuments(ProductInfo productInfo) {
         String traceId = UUID.randomUUID().toString();
+        int docCount = productInfo.getDocuments() != null ? productInfo.getDocuments().size() : 0;
         log.info("Loading product: {} with {} documents",
-            productInfo.getProductId(), productInfo.getDocuments().size());
+            productInfo.getProductId(), docCount);
 
         ProductToProcess product = ProductToProcess.builder()
             .productId(productInfo.getProductId())
@@ -61,20 +62,13 @@ public class LoadProductsUseCase {
         return productRepository.save(product)
             .then(documentRepository.saveAll(documentsFlux))
             .thenMany(Mono.fromCallable(() -> {
-                int docCount = productInfo.getDocuments().stream()
-                    .mapToInt(doc -> {
-                        if (doc.isZipArchive()) {
-                            // For ZIP, we can't know the actual count without expanding
-                            // Return 1 as approximation (the actual children count is in DB)
-                            return 1;
-                        }
-                        return 1;
-                    })
-                    .sum();
+                int documentCount = productInfo.getDocuments() != null
+                    ? productInfo.getDocuments().size()
+                    : 0;
                 return LoadProductsResult.builder()
                     .productId(productInfo.getProductId())
                     .name(productInfo.getName())
-                    .documentCount(docCount)
+                    .documentCount(documentCount)
                     .status(DocumentStatus.PENDING_VALUE)
                     .message("Product and documents loaded successfully")
                     .traceId(traceId)

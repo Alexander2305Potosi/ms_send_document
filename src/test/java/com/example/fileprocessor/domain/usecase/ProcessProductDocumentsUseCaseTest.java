@@ -69,9 +69,9 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldProcessDocumentsPerDocument() {
-        // Files must be < 50MB to be sent to SOAP
-        byte[] smallContent1 = new byte[40 * 1024 * 1024]; // 40MB
-        byte[] smallContent2 = new byte[35 * 1024 * 1024]; // 35MB
+        // Files must be < 50MB to be sent to SOAP (use small arrays to avoid OOM in tests)
+        byte[] smallContent1 = new byte[1024 * 1024]; // 1MB
+        byte[] smallContent2 = new byte[512 * 1024]; // 512KB
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -161,7 +161,7 @@ class ProcessProductDocumentsUseCaseTest {
     @Test
     void executePendingDocuments_shouldSkipDocumentsByFolder() {
         // File must be < 50MB to pass size check, then folder rule applies
-        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB
+        byte[] smallContent = new byte[1024 * 1024]; // 1MB
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -193,8 +193,8 @@ class ProcessProductDocumentsUseCaseTest {
 
     @Test
     void executePendingDocuments_shouldNotSendFilesLargerThan50MB() {
-        // File with size >= 50MB should be marked as NOT_SENT
-        byte[] largeContent = new byte[55 * 1024 * 1024]; // 55MB
+        // Test with max file size of 1MB - so files >= 1MB are NOT_SENT
+        byte[] largeContent = new byte[2 * 1024 * 1024]; // 2MB (>= 1MB threshold)
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -207,6 +207,7 @@ class ProcessProductDocumentsUseCaseTest {
             .createdAt(Instant.now())
             .build();
 
+        when(validationConfig.maxFileSizeMb()).thenReturn(1); // 1MB threshold
         when(documentRepository.findPendingDocuments()).thenReturn(Flux.just(doc1));
         when(documentRepository.claimDocument("doc-001")).thenReturn(Mono.just(true));
         when(documentRepository.updateStatus(anyString(), anyString(), anyString(), nullable(String.class), nullable(String.class)))
@@ -230,7 +231,7 @@ class ProcessProductDocumentsUseCaseTest {
         // claimDocument for doc-001 should return FALSE because it's PROCESSING (not PENDING)
         // So doc-001 should NOT be reprocessed - only doc-002 should be claimed and processed
 
-        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB (< 50MB, should be sent)
+        byte[] smallContent = new byte[1024 * 1024]; // 1MB (< 50MB, should be sent)
 
         ProductDocumentToProcess docProcessing = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -282,7 +283,7 @@ class ProcessProductDocumentsUseCaseTest {
     @Test
     void executePendingDocuments_shouldSendFilesSmallerThan50MB() {
         // File with size < 50MB should be sent to SOAP
-        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB
+        byte[] smallContent = new byte[1024 * 1024]; // 1MB
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")
@@ -321,7 +322,7 @@ class ProcessProductDocumentsUseCaseTest {
     @Test
     void executePendingDocuments_shouldNotSendIfOriginDoesNotMatchPattern() {
         // Origin "other/folder" doesn't match patterns (incoming, documents)
-        byte[] smallContent = new byte[40 * 1024 * 1024]; // 40MB
+        byte[] smallContent = new byte[1024 * 1024]; // 1MB
 
         ProductDocumentToProcess doc1 = ProductDocumentToProcess.builder()
             .documentId("doc-001")

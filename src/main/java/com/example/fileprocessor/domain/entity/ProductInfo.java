@@ -25,10 +25,6 @@ public class ProductInfo {
         return documents;
     }
 
-    public String extension() {
-        return null;
-    }
-
     public static Builder builder() {
         return new Builder();
     }

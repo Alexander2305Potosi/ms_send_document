@@ -208,7 +208,7 @@ public class ProcessProductDocumentsUseCase {
         FolderInfo folderInfo = extractFolderInfo(document.getOrigin());
 
         return fileValidator.validate(fileData)
-            .map(validData -> SoapRequest.fromFileData(validData, folderInfo.folderPadre(), folderInfo.folderChild()))
+            .map(validData -> SoapRequest.fromFileData(validData, folderInfo.parentFolder(), folderInfo.childFolder()))
             .flatMap(soapGateway::sendFile)
             .flatMap(response -> saveSoapLog(fileData.getFilename(), fileData.getTraceId(), response).thenReturn(response))
             .map(this::toResult)
@@ -254,9 +254,9 @@ public class ProcessProductDocumentsUseCase {
             if (origin.contains(keyword)) {
                 String[] parts = origin.split("/");
                 if (parts.length >= 2) {
-                    String folderChild = parts[parts.length - 1];
-                    String folderPadre = parts.length > 1 ? parts[parts.length - 2] : ".";
-                    return new FolderInfo(folderPadre, folderChild);
+                    String childFolder = parts[parts.length - 1];
+                    String parentFolder = parts.length > 1 ? parts[parts.length - 2] : ".";
+                    return new FolderInfo(parentFolder, childFolder);
                 }
                 return new FolderInfo(origin, ".");
             }
@@ -264,7 +264,7 @@ public class ProcessProductDocumentsUseCase {
         return new FolderInfo(".", ".");
     }
 
-    private record FolderInfo(String folderPadre, String folderChild) {}
+    private record FolderInfo(String parentFolder, String childFolder) {}
 
     private Mono<Void> saveSoapLog(String filename, String traceId, SoapResponse response) {
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
