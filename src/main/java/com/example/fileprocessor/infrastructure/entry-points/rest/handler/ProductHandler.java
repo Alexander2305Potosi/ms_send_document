@@ -36,7 +36,7 @@ public class ProductHandler {
 
     public Mono<ServerResponse> loadProducts(ServerRequest request) {
         String traceId = UUID.randomUUID().toString();
-        MDC.put("traceId", traceId);
+        MDC.put(RestApiConstants.MDC_TRACE_ID, traceId);
 
         log.info("Starting products load from REST API, traceId: {}", traceId);
 
@@ -44,7 +44,7 @@ public class ProductHandler {
             .doOnNext(result -> log.info("Product loaded: {} -> {} ({} documents)",
                 result.getProductId(), result.getStatus(), result.getDocumentCount()))
             .doOnError(error -> log.error("Load failed: {}", error.getMessage()))
-            .doFinally(signal -> MDC.remove("traceId"))
+            .doFinally(signal -> MDC.remove(RestApiConstants.MDC_TRACE_ID))
             .subscribe();
 
         return ServerResponse.accepted()
@@ -61,10 +61,10 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
-        String processorType = request.queryParam("processor").orElse(RestApiConstants.PROCESSOR_SOAP);
+        String processorType = request.queryParam(RestApiConstants.PARAM_PROCESSOR).orElse(RestApiConstants.PROCESSOR_SOAP);
 
         String traceId = UUID.randomUUID().toString();
-        MDC.put("traceId", traceId);
+        MDC.put(RestApiConstants.MDC_TRACE_ID, traceId);
 
         AbstractProcessDocumentsUseCase useCase = resolveUseCase(processorType);
         log.info("Starting pending product documents processing with {} processor, traceId: {}",
@@ -74,7 +74,7 @@ public class ProductHandler {
             .doOnNext(result -> log.info("Document processed: correlationId={}, status={}",
                 result.getCorrelationId(), result.getStatus()))
             .doOnError(error -> log.error("Processing failed: {}", error.getMessage()))
-            .doFinally(signal -> MDC.remove("traceId"))
+            .doFinally(signal -> MDC.remove(RestApiConstants.MDC_TRACE_ID))
             .subscribe();
 
         return ServerResponse.accepted()
@@ -94,13 +94,13 @@ public class ProductHandler {
         return switch (processorType.toLowerCase()) {
             case RestApiConstants.PROCESSOR_S3 -> {
                 if (s3DocumentUseCase == null) {
-                    throw new IllegalStateException("S3 processor is not available. Please enable the 's3' profile.");
+                    throw new IllegalStateException(RestApiConstants.MSG_S3_NOT_AVAILABLE);
                 }
                 yield s3DocumentUseCase;
             }
             case RestApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
             default -> {
-                log.warn("Unknown processor type '{}', defaulting to SOAP", processorType);
+                log.warn(RestApiConstants.MSG_UNKNOWN_PROCESSOR, processorType);
                 yield soapDocumentUseCase;
             }
         };

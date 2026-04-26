@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.entity.ProductInfo;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -42,7 +43,7 @@ public class ProductRestGatewayImpl implements ProductRestGateway {
         return webClient.get()
             .uri(properties.productsPath())
             .accept(MediaType.APPLICATION_JSON)
-            .header("X-Trace-Id", traceId)
+            .header(RestApiConstants.HEADER_TRACE_ID, traceId)
             .retrieve()
             .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
             .map(list -> list.stream().map(this::mapToProductInfo).toList())
@@ -59,7 +60,7 @@ public class ProductRestGatewayImpl implements ProductRestGateway {
         return webClient.get()
             .uri(path + "/{documentId}", documentId)
             .accept(MediaType.APPLICATION_JSON)
-            .header("X-Trace-Id", traceId)
+            .header(RestApiConstants.HEADER_TRACE_ID, traceId)
             .retrieve()
             .bodyToMono(MAP_TYPE_REF)
             .map(this::mapToProductDocumentInfo)

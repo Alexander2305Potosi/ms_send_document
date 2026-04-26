@@ -110,7 +110,14 @@
       "Bash(./gradlew compileJava compileTestJava test --no-daemon)",
       "Bash(git reset *)",
       "Bash(./gradlew compileJava --quiet)",
-      "WebFetch(domain:bancolombia.github.io)"
+      "WebFetch(domain:bancolombia.github.io)",
+      "Bash(brew install *)",
+      "Bash(sudo brew *)",
+      "Bash(curl -s http://localhost:8080/actuator/health)",
+      "Bash(./gradlew bootRun --stacktrace)",
+      "Bash(xargs kill *)",
+      "Bash(awk -F: '{print $1\":\"$2\":\"$3}')",
+      "Bash(git pull *)"
     ]
   }
 }

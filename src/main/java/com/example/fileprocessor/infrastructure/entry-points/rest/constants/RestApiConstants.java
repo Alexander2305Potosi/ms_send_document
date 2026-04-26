@@ -11,6 +11,19 @@ public final class RestApiConstants {
     public static final String PROCESSOR_SOAP = "soap";
     public static final String PROCESSOR_S3 = "s3";
 
+    // Query parameter names
+    public static final String PARAM_PROCESSOR = "processor";
+
+    // Error messages
+    public static final String MSG_S3_NOT_AVAILABLE = "S3 processor is not available. Please enable the 's3' profile.";
+    public static final String MSG_UNKNOWN_PROCESSOR = "Unknown processor type '{}', defaulting to SOAP";
+
+    // HTTP headers
+    public static final String HEADER_TRACE_ID = "X-Trace-Id";
+
+    // MDC keys
+    public static final String MDC_TRACE_ID = "traceId";
+
     // Status values
     public static final String STATUS_LOADING = "LOADING";
     public static final String STATUS_PROCESSING = "PROCESSING";
