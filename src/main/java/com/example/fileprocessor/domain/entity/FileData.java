@@ -9,6 +9,7 @@ import lombok.Getter;
 @Getter
 @Builder
 public class FileData {
+    private final String documentId;  // Added for tracking
     private final byte[] content;
     private final String filename;
     private final long size;

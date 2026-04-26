@@ -27,12 +27,11 @@ class SoapMapperTest {
     @Test
     void toSoapXml_shouldGenerateValidSoapBody() {
         SoapRequest request = SoapRequest.builder()
-            .fileContentBase64("dGVzdENvbnRlbnQ=")
+            .fileContent("testContent".getBytes())  // FIX #5: raw bytes instead of Base64 string
             .filename("test.pdf")
             .contentType("application/pdf")
             .fileSize(1234)
             .traceId("trace-123")
-            .timestamp(Instant.now())
             .build();
 
         String xml = soapMapper.toSoapXml(request);

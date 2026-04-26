@@ -22,4 +22,5 @@ public final class DocumentErrorCodes {
     public static final String SKIPPED_FOLDER = "SKIPPED_FOLDER";
     public static final String NOT_SENT_ORIGIN = "NOT_SENT_ORIGIN";
     public static final String SIZE_EXCEEDED = "SIZE_EXCEEDED";
+    public static final String CIRCUIT_BREAKER_OPEN = "CIRCUIT_BREAKER_OPEN";
 }

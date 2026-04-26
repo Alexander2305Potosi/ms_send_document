@@ -76,12 +76,11 @@ class ExternalSoapGatewayImplTest {
             .addHeader("Content-Type", "text/xml"));
 
         SoapRequest request = SoapRequest.builder()
-            .fileContentBase64("base64content")
+            .fileContent("base64content".getBytes())  // FIX #5: raw bytes
             .filename("test.pdf")
             .contentType("application/pdf")
             .fileSize(100)
             .traceId("trace-123")
-            .timestamp(Instant.now())
             .build();
 
         StepVerifier.create(gateway.sendFile(request))
@@ -99,12 +98,11 @@ class ExternalSoapGatewayImplTest {
             .setBody("<?xml version=\"1.0\"?><soap:Fault></faultstring>Server Error</faultstring></soap:Fault>"));
 
         SoapRequest request = SoapRequest.builder()
-            .fileContentBase64("base64content")
+            .fileContent("base64content".getBytes())  // FIX #5: raw bytes
             .filename("test.pdf")
             .contentType("application/pdf")
             .fileSize(100)
             .traceId("trace-123")
-            .timestamp(Instant.now())
             .build();
 
         StepVerifier.create(gateway.sendFile(request))
@@ -119,12 +117,11 @@ class ExternalSoapGatewayImplTest {
             .setHeadersDelay(10, java.util.concurrent.TimeUnit.SECONDS));
 
         SoapRequest request = SoapRequest.builder()
-            .fileContentBase64("base64content")
+            .fileContent("base64content".getBytes())  // FIX #5: raw bytes
             .filename("test.pdf")
             .contentType("application/pdf")
             .fileSize(100)
             .traceId("trace-123")
-            .timestamp(Instant.now())
             .build();
 
         StepVerifier.create(gateway.sendFile(request))

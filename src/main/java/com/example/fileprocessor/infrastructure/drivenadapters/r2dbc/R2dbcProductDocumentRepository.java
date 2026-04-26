@@ -91,6 +91,22 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     }
 
     @Override
+    public Flux<ProductDocumentToProcess> findByProductId(String productId) {
+        String sql = """
+            SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
+                   trace_id, soap_correlation_id, error_code
+            FROM product_documents_to_process
+            WHERE product_id = $1
+            ORDER BY created_at ASC
+            """;
+
+        return databaseClient.sql(sql)
+            .bind("$1", productId)
+            .map(this::mapRowToDocument)
+            .all();
+    }
+
+    @Override
     public Mono<Boolean> claimDocument(String documentId) {
         String sql = """
             UPDATE product_documents_to_process

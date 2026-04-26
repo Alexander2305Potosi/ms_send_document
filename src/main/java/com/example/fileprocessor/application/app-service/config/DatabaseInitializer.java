@@ -109,6 +109,7 @@ public class DatabaseInitializer implements ApplicationRunner {
         return databaseClient.sql("""
                 CREATE TABLE IF NOT EXISTS soap_communication_log (
                     trace_id VARCHAR(255) PRIMARY KEY,
+                    document_id VARCHAR(255),  -- Added for audit traceability
                     status VARCHAR(50) NOT NULL,
                     retry_count INT NOT NULL,
                     error_code VARCHAR(100),

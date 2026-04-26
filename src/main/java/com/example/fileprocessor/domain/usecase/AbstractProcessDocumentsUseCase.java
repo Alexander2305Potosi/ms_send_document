@@ -4,14 +4,21 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileData;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
+import com.example.fileprocessor.domain.entity.ProductStatus;
 import com.example.fileprocessor.domain.entity.SoapCommunicationLog;
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -22,53 +29,89 @@ import java.util.UUID;
  * Abstract base class for document processing use cases.
  * Provides shared validation logic, status management, and error handling.
  * Subclasses must implement sendDocument() to define the actual sending mechanism (SOAP, S3, etc.)
+ *
+ * FIX #3: TraceId propagation via MDC (instead of Reactor Context) to maintain
+ * domain purity. MDC is set at entry point and flows through the reactive chain.
  */
 public abstract class AbstractProcessDocumentsUseCase {
 
     protected static final Logger log = LoggerFactory.getLogger(AbstractProcessDocumentsUseCase.class);
     protected static final int DEFAULT_RETRY_COUNT = 0;
+    private static final int DEFAULT_MAX_CONCURRENCY = 10;
 
     private static final String MSG_SKIPPED_FOLDER = "Document skipped due to folder rule: ";
     private static final String MSG_NOT_SENT_ORIGIN = "Document not sent: origin does not match required patterns: ";
     private static final String MSG_SIZE_EXCEEDED = "Document not sent: file size "; private static final String MSG_SIZE_EXCEEDED_SUFFIX = " bytes exceeds limit";
+    private static final String MSG_CIRCUIT_BREAKER_OPEN = "Circuit breaker is OPEN, document will be retried later";
 
     protected final ProductDocumentRepository documentRepository;
+    protected final ProductRepository productRepository;
     protected final FileValidator fileValidator;
     protected final SoapCommunicationLogRepository logRepository;
     protected final DocumentValidationRules validationRules;
+    protected final CircuitBreaker circuitBreaker;
 
     protected AbstractProcessDocumentsUseCase(
             ProductDocumentRepository documentRepository,
+            ProductRepository productRepository,
+            FileValidator fileValidator,
+            SoapCommunicationLogRepository logRepository,
+            FileValidationConfig validationConfig,
+            CircuitBreaker circuitBreaker) {
+        this.documentRepository = documentRepository;
+        this.productRepository = productRepository;
+        this.fileValidator = fileValidator;
+        this.logRepository = logRepository;
+        this.validationRules = new DocumentValidationRules(validationConfig);
+        this.circuitBreaker = circuitBreaker;
+    }
+
+    /**
+     * Constructor por defecto con CircuitBreaker configurado via registry.
+     */
+    protected AbstractProcessDocumentsUseCase(
+            ProductDocumentRepository documentRepository,
+            ProductRepository productRepository,
             FileValidator fileValidator,
             SoapCommunicationLogRepository logRepository,
             FileValidationConfig validationConfig) {
         this.documentRepository = documentRepository;
+        this.productRepository = productRepository;
         this.fileValidator = fileValidator;
         this.logRepository = logRepository;
         this.validationRules = new DocumentValidationRules(validationConfig);
+        this.circuitBreaker = CircuitBreakerRegistry.ofDefaults()
+            .circuitBreaker(getImplementationName());
     }
 
     public Flux<FileUploadResult> executePendingDocuments() {
         log.info("Fetching pending product documents from database...");
+        String rootTraceId = UUID.randomUUID().toString();
+        // FIX #2: flatMap con maxConcurrency para evitar saturar conexiones externas
+        // FIX #3: Propagation de traceId via MDC (domain-pure, compatible con SLF4J)
+        MDC.put("traceId", rootTraceId);
         return documentRepository.findPendingDocuments()
-            .flatMap(this::processPendingDocument)
+            .flatMap(this::processPendingDocument, DEFAULT_MAX_CONCURRENCY)
             .doOnNext(response -> log.info("Document processed: correlationId={}", response.getCorrelationId()))
-            .doOnError(error -> log.error("Error processing document: {}", error.getMessage()));
+            .doOnError(error -> log.error("Error processing document: {}", error.getMessage()))
+            .doFinally(signal -> MDC.remove("traceId"));
     }
 
     private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
+        String traceId = UUID.randomUUID().toString();
+        MDC.put("traceId", traceId);
         return documentRepository.claimDocument(pending.getDocumentId())
             .filter(Boolean::booleanValue)
-            .flatMap(claimed -> processDocumentClaimed(pending))
+            .flatMap(claimed -> processDocumentClaimed(pending, traceId))
             .switchIfEmpty(Mono.defer(() -> {
                 log.info("Document {} already claimed by another process or not pending, skipping",
                     pending.getDocumentId());
                 return Mono.empty();
-            }));
+            }))
+            .doFinally(signal -> MDC.remove("traceId"));
     }
 
-    private Mono<FileUploadResult> processDocumentClaimed(ProductDocumentToProcess pending) {
-        String traceId = UUID.randomUUID().toString();
+    private Mono<FileUploadResult> processDocumentClaimed(ProductDocumentToProcess pending, String traceId) {
         log.info("Processing pending document: {}, productId: {}, traceId: {}",
             pending.getDocumentId(), pending.getProductId(), traceId);
 
@@ -84,6 +127,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     traceId,
                     null,
                     DocumentErrorCodes.SKIPPED_FOLDER)
+                .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
                 .thenReturn(buildResult(DocumentStatus.SKIPPED_VALUE,
                     MSG_SKIPPED_FOLDER + pending.getOrigin(),
                     null, traceId, pending.getDocumentId(), true));
@@ -99,6 +143,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     traceId,
                     null,
                     DocumentErrorCodes.NOT_SENT_ORIGIN)
+                .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
                 .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
                     MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
                     null, traceId, pending.getDocumentId(), true));
@@ -114,6 +159,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     traceId,
                     null,
                     DocumentErrorCodes.SIZE_EXCEEDED)
+                .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
                 .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
                     MSG_SIZE_EXCEEDED + fileSize + MSG_SIZE_EXCEEDED_SUFFIX,
                     null, traceId, pending.getFilename(), true));
@@ -121,6 +167,7 @@ public abstract class AbstractProcessDocumentsUseCase {
 
         // Build FileData for validation
         FileData fileData = FileData.builder()
+            .documentId(pending.getDocumentId())
             .content(pending.getContent())
             .filename(pending.getFilename())
             .size(fileSize)
@@ -130,32 +177,93 @@ public abstract class AbstractProcessDocumentsUseCase {
 
         DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(pending.getOrigin());
 
+        // FIX #4: Circuit Breaker para prevenir cascading failures
         return fileValidator.validate(fileData)
             .flatMap(validData -> {
-                SoapRequest request = SoapRequest.fromFileData(validData,
-                    folderInfo.parentFolder(), folderInfo.childFolder());
-                return sendDocument(request)
-                    .flatMap(result -> updateDocumentStatus(pending.getDocumentId(), result, traceId))
+                SoapRequest request = SoapRequest.builder()
+                    .documentId(pending.getDocumentId())
+                    .fileContent(validData.getContent())
+                    .filename(validData.getFilename())
+                    .contentType(validData.getContentType())
+                    .fileSize(validData.getSize())
+                    .traceId(traceId)
+                    .parentFolder(folderInfo.parentFolder())
+                    .childFolder(folderInfo.childFolder())
+                    .build();
+                return sendDocumentWithCircuitBreaker(request, traceId, pending.getDocumentId())
+                    .flatMap(result -> updateDocumentStatus(pending, result, traceId))
                     .doOnNext(result -> log.info("Document {} sent via {}: correlationId={}",
                         pending.getFilename(), getImplementationName(), result.getCorrelationId()));
             })
-            .onErrorResume(error -> handleDocumentError(pending.getDocumentId(), error, traceId));
+            .onErrorResume(error -> handleDocumentError(pending, error, traceId));
+    }
+
+    /**
+     * Envía el documento usando Circuit Breaker para resiliencia.
+     * FIX #4: Previene cascading failures cuando el servicio externo está degradado.
+     */
+    private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request, String traceId, String documentId) {
+        return Mono.fromCallable(() -> request)
+            .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+            .flatMap(req -> sendDocument(req))
+            .onErrorResume(CallNotPermittedException.class, e -> {
+                log.warn("Circuit breaker OPEN for document {}: {}", documentId, MSG_CIRCUIT_BREAKER_OPEN);
+                return Mono.error(new SoapCommunicationException(
+                    MSG_CIRCUIT_BREAKER_OPEN,
+                    DocumentErrorCodes.CIRCUIT_BREAKER_OPEN,
+                    traceId, 0));
+            });
     }
 
     // ============== Status Management ==============
 
-    protected Mono<FileUploadResult> updateDocumentStatus(String documentId, DocumentResult result, String traceId) {
+    /**
+     * Updates document status and recalculates product status.
+     * CA-01, CA-02, CA-03: Product status is recalculated after each document update.
+     */
+    protected Mono<FileUploadResult> updateDocumentStatus(ProductDocumentToProcess document,
+                                                          DocumentResult result, String traceId) {
         String status = result.getStatus();
         String soapCorrelationId = DocumentStatus.SUCCESS_VALUE.equals(status) ? result.getCorrelationId() : null;
         String errorCode = DocumentStatus.SUCCESS_VALUE.equals(status) ? null : extractErrorCodeFromMessage(result.getMessage());
 
-        return documentRepository.updateStatus(documentId, status, traceId, soapCorrelationId, errorCode)
+        return documentRepository.updateStatus(document.getDocumentId(), status, traceId, soapCorrelationId, errorCode)
+            .then(updateProductStatusIfComplete(document.getProductId(), traceId))
             .thenReturn(toFileUploadResult(result));
     }
 
-    protected Mono<Void> saveSuccessLog(String filename, String traceId, DocumentResult result) {
+    /**
+     * Recalculates product status based on all its documents.
+     * Called after each document status change.
+     */
+    private Mono<Void> updateProductStatusIfComplete(String productId, String traceId) {
+        return documentRepository.findByProductId(productId)
+            .collectList()
+            .flatMap(docs -> {
+                ProductStatus newStatus = ProductStatusAggregator.calculateStatus(docs);
+                boolean shouldUpdate = docs.stream()
+                    .allMatch(doc -> isTerminalStatus(doc.getStatus()));
+
+                if (shouldUpdate) {
+                    log.info("All documents for product {} are in terminal state. Updating to: {}",
+                        productId, newStatus);
+                    return productRepository.updateStatus(productId, newStatus.name(), traceId);
+                }
+                return Mono.empty();
+            });
+    }
+
+    private boolean isTerminalStatus(String status) {
+        return DocumentStatus.SUCCESS_VALUE.equals(status)
+            || DocumentStatus.FAILURE_VALUE.equals(status)
+            || DocumentStatus.SKIPPED_VALUE.equals(status)
+            || DocumentStatus.NOT_SENT_VALUE.equals(status);
+    }
+
+    protected Mono<Void> saveSuccessLog(String documentId, String filename, String traceId, DocumentResult result) {
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
             .traceId(traceId)
+            .documentId(documentId)
             .status(DocumentStatus.SUCCESS_VALUE)
             .retryCount(DEFAULT_RETRY_COUNT)
             .filename(filename)
@@ -164,9 +272,10 @@ public abstract class AbstractProcessDocumentsUseCase {
         return logRepository.save(dbLog).then();
     }
 
-    protected Mono<Void> saveErrorLog(String filename, String traceId, String errorCode, int retries) {
+    protected Mono<Void> saveErrorLog(String documentId, String filename, String traceId, String errorCode, int retries) {
         SoapCommunicationLog dbLog = SoapCommunicationLog.builder()
             .traceId(traceId)
+            .documentId(documentId)
             .status(DocumentStatus.FAILURE_VALUE)
             .retryCount(retries)
             .errorCode(errorCode)
@@ -178,16 +287,18 @@ public abstract class AbstractProcessDocumentsUseCase {
 
     // ============== Error Handling ==============
 
-    protected Mono<FileUploadResult> handleDocumentError(String documentId, Throwable error, String traceId) {
+    protected Mono<FileUploadResult> handleDocumentError(ProductDocumentToProcess document,
+                                                         Throwable error, String traceId) {
         String errorCode = extractErrorCode(error);
         String status = isRetryableError(error) ? DocumentStatus.RETRY_VALUE : DocumentStatus.FAILURE_VALUE;
         log.error("Failed to process document {}: {} (status={}, errorCode={})",
-            documentId, error.getMessage(), status, errorCode);
+            document.getDocumentId(), error.getMessage(), status, errorCode);
 
         int retries = error instanceof SoapCommunicationException sce ? sce.getRetryCount() : 0;
-        return saveErrorLog(documentId, traceId, errorCode, retries)
-            .then(documentRepository.updateStatus(documentId, status, traceId, null, errorCode))
-            .thenReturn(buildResult(status, error.getMessage(), null, traceId, documentId, false));
+        return saveErrorLog(document.getDocumentId(), document.getFilename(), traceId, errorCode, retries)
+            .then(documentRepository.updateStatus(document.getDocumentId(), status, traceId, null, errorCode))
+            .then(updateProductStatusIfComplete(document.getProductId(), traceId))
+            .thenReturn(buildResult(status, error.getMessage(), null, traceId, document.getDocumentId(), false));
     }
 
     protected boolean isRetryableError(Throwable error) {

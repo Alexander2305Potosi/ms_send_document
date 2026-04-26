@@ -7,6 +7,7 @@ import reactor.core.publisher.Mono;
 public interface ProductDocumentRepository {
     Flux<ProductDocumentToProcess> findPendingDocuments();
     Flux<ProductDocumentToProcess> findPendingDocumentsByProduct(String productId);
+    Flux<ProductDocumentToProcess> findByProductId(String productId);
     Mono<Boolean> claimDocument(String documentId);
     Mono<Void> save(ProductDocumentToProcess document);
     Mono<Void> saveAll(Flux<ProductDocumentToProcess> documents);

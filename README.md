@@ -29,6 +29,9 @@ com.example.fileprocessor/
 │   │   └── FileValidator.java
 │   ├── util/                 # Utilidades de dominio
 │   │   └── Base64Utils.java            # Encoding/decoding Base64
+│   ├── valueobject/           # Value Objects (tipo seguro, validado) - Code Review #7
+│   │   ├── TraceId.java              # Validación UUID y no-null
+│   │   └── DocumentId.java           # Validación no-blank
 │   ├── port/
 │   │   ├── in/
 │   │   │   └── FileValidationConfig.java
@@ -457,6 +460,36 @@ Los documentos ZIP son expandidos durante la carga (`/load`):
 | `SKIPPED` | Saltado por regla de carpeta |
 | `NOT_SENT` | No enviado (tamano >= 50MB, tipo no permitido, o origin no matchea patrones) |
 
+## Estados de Producto (CA-01, CA-02, CA-03)
+
+El sistema calcula automáticamente el estado del producto basado en sus documentos:
+
+| Estado | Descripcion | Condicion |
+|--------|-------------|-----------|
+| `PENDING` | Producto con documentos pendientes | Al menos 1 doc PENDING/PROCESSING/RETRY |
+| `SUCCESS` | Todos los documentos enviados | Todos los docs SUCCESS |
+| `PARTIAL_FAILURE` | Algunos documentos fallaron | Al menos 1 doc FAILURE (pero no todos) |
+| `COMPLETED_WITH_SKIPS` | Completado con documentos saltados | Todos procesados, algunos SKIPPED |
+| `COMPLETED_WITH_NOT_SENT` | Completado con documentos no enviados | Todos SUCCESS/SKIPPED/NOT_SENT |
+| `COMPLETED_WITH_FAILURES` | Todos los documentos fallaron | Todos los docs FAILURE |
+
+**Lógica de Agregación:**
+
+```java
+// ProductStatusAggregator.calculateStatus(documents)
+1. Si hay docs PENDING/PROCESSING/RETRY → PENDING
+2. Si hay al menos 1 FAILURE → PARTIAL_FAILURE
+3. Si todos SUCCESS → SUCCESS
+4. Si todos SUCCESS/SKIPPED (sin FAILURE) → COMPLETED_WITH_SKIPS
+5. Si todos SUCCESS/SKIPPED/NOT_SENT → COMPLETED_WITH_NOT_SENT
+6. Si todos FAILURE → COMPLETED_WITH_FAILURES
+```
+
+**Actualización Automática:**
+- El estado del producto se recalcula después de cada documento
+- Se llama a `updateProductStatusIfComplete()` cuando el documento alcanza estado terminal
+- El `SoapCommunicationLog` ahora incluye `document_id` para auditoria trazable
+
 ## Patrones de Diseño
 
 ### Template Method (AbstractProcessDocumentsUseCase)
@@ -592,22 +625,43 @@ El servicio implementa **3 reintentos maximos** con backoff exponencial:
 
 ## Resiliencia
 
-### Circuit Breaker (Resilience4j)
+### Circuit Breaker (Resilience4j) - Code Review #4
 
-El servicio está preparado para usar Resilience4j como circuit breaker:
+El servicio implementa Circuit Breaker con Resilience4j integrado en `AbstractProcessDocumentsUseCase`:
+
+```java
+private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request,
+    String traceId, String documentId) {
+    return Mono.fromCallable(() -> request)
+        .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+        .flatMap(req -> sendDocument(req))
+        .onErrorResume(CallNotPermittedException.class, e -> {
+            log.warn("Circuit breaker OPEN for document {}", documentId);
+            return Mono.error(new SoapCommunicationException(
+                "Circuit breaker is OPEN",
+                DocumentErrorCodes.CIRCUIT_BREAKER_OPEN, traceId, 0));
+        });
+}
+```
+
+**Estados del Circuit Breaker:**
+- `CLOSED`: Funcionamiento normal, solicitudes procesadas
+- `OPEN`: Demasiados errores, solicitudes rejected inmediatamente con `CIRCUIT_BREAKER_OPEN`
+- `HALF_OPEN`: Prueba con pocas solicitudes si el servicio recuperó
+
+**Configuración sugerida en `application.yml`:**
 
 ```yaml
-# application.yml
 resilience4j:
   circuitbreaker:
     instances:
-      soapGateway:
+      SoapDocumentUseCase:  # Nombre del use case
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 60s
         permittedNumberOfCallsInHalfOpenState: 3
         slidingWindowType: COUNT_BASED
-      s3Gateway:
+      S3DocumentUseCase:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 60s
@@ -823,6 +877,232 @@ curl -s http://localhost:8080/actuator/health \
 | `AWS_REGION` | `us-east-1` | Region AWS |
 
 ## Changelog
+
+### 2026-04-25 - Code Review Staff Engineer - Performance & Resilience Improvements
+
+#### Antipatterns Fixed (1-9)
+
+**#1 - Subscribe() dentro del Pipeline Reactivo (CRÍTICO)**
+- **Ubicación:** `SoapDocumentUseCase.java:39`
+- **Problema:** `.subscribe()` dentro del pipeline reactivo rompe backpressure y puede perder logs
+- **Solución:** Encadenar `saveSuccessLog()` con `.thenReturn(result)` como parte del flujo reactivo
+- **Impacto:** Logs de éxito ahora se guardan de forma confiable
+
+**#2 - flatMap sin Control de Concurrencia (CRÍTICO)**
+- **Ubicación:** `AbstractProcessDocumentsUseCase.java:54`
+- **Problema:** 10,000 documentos = 10,000 conexiones simultáneas, saturando el pool HTTP
+- **Solución:** `flatMap(this::processPendingDocument, 10)` limita a 10 operaciones simultáneas
+- **Impacto:** Previene saturación de conexiones y `OutOfMemoryError`
+
+**#3 - Propagación de TraceId via MDC (ALTO)**
+- **Ubicación:** `AbstractProcessDocumentsUseCase.java`
+- **Problema:** TraceId como variable local, no propagable a través de operaciones async
+- **Solución:** Uso de MDC (`MDC.put("traceId", ...)`) antes del flujo reactivo, limpiado con `doFinally()`
+- **Impacto:** Trazabilidad completa en logs correlacionados
+
+**#4 - Circuit Breaker con Resilience4j (ALTO)**
+- **Ubicación:** `AbstractProcessDocumentsUseCase.java`
+- **Problema:** Sin circuit breaker, un servicio caído causa cascading failures
+- **Solución:** Integración de Resilience4j `CircuitBreakerOperator` en `sendDocumentWithCircuitBreaker()`
+- **Impacto:** Previene cascadas de errores, documento marcado como `CIRCUIT_BREAKER_OPEN` cuando el CB está abierto
+
+**#5 - Separación Domain/Infraestructura - Base64 Encoding (ALTO)**
+- **Ubicación:** `SoapRequest.java`, `SoapMapper.java`, `S3GatewayImpl.java`
+- **Problema:** Encoding Base64 ocurría en el domain (`SoapRequest.fromFileData()`)
+- **Solución:**
+  - `SoapRequest` ahora usa `byte[] fileContent` (raw bytes, sin encoding)
+  - `SoapMapper.toSoapXml()` realiza el encoding en infraestructura
+  - `S3GatewayImpl.upload()` usa bytes directamente
+- **Impacto:** Domain puro Java, sin lógica de frameworks
+
+**#6 - MapStruct Eliminado (MEDIO)**
+- **Ubicación:** `build.gradle.kts`
+- **Problema:** MapStruct en dependencias pero no se usaba
+- **Solución:** Eliminado de build.gradle.kts (comentado para futuro uso)
+- **Impacto:** Menos dependencias, build más limpio
+
+**#7 - Value Objects para Campos Críticos (MEDIO)**
+- **Ubicación:** Nuevo paquete `domain/valueobject/`
+- **Problema:** Campos como `documentId` y `traceId` eran `String` sin validación
+- **Solución:** Creados `TraceId.java` y `DocumentId.java` como records con validación
+- **Impacto:** Tipo seguro y validación centralizada
+
+**#8 - Optimización Build.gradle (MEDIO)**
+- **Ubicación:** `build.gradle.kts`
+- **Problema:** Build lento sin paralelismo ni cache optimizado
+- **Solución:** Agregada configuración de annotation processor y JVM flags
+- **Impacto:** Build incremental más rápido
+
+**#9 - Virtual Threads Analysis (INFO)**
+- **Análisis:** Virtual Threads no recomendados actualmente - modelo reactivo es válido
+- **Recomendación:** Considerar Virtual Threads solo si profiling demuestra bottleneck en threads blocking
+
+---
+
+### Code Review: CA-01, CA-02, CA-03 - Product Status Aggregation
+
+**CA-01 - SUCCESS cuando TODOS los documentos son SUCCESS:**
+```java
+// Después de procesar el último documento SUCCESS:
+if (allDocumentsAreSuccess) {
+    productRepository.updateStatus(productId, "SUCCESS", traceId);
+}
+```
+
+**CA-02 - PARTIAL_FAILURE si al menos 1 documento falló:**
+```java
+// Si un documento FAILURE:
+if (hasAtLeastOneFailure && !allAreFailure) {
+    productRepository.updateStatus(productId, "PARTIAL_FAILURE", traceId);
+}
+```
+
+**CA-03 - COMPLETED_WITH_SKIPS si todos procesados pero algunos SKIPPED:**
+```java
+// Si todos SUCCESS o SKIPPED (sin FAILURE):
+if (allProcessed && hasSomeSkipped && noFailures) {
+    productRepository.updateStatus(productId, "COMPLETED_WITH_SKIPS", traceId);
+}
+```
+
+**Implementación en AbstractProcessDocumentsUseCase:**
+```java
+private Mono<Void> updateProductStatusIfComplete(String productId, String traceId) {
+    return documentRepository.findByProductId(productId)
+        .collectList()
+        .flatMap(docs -> {
+            ProductStatus newStatus = ProductStatusAggregator.calculateStatus(docs);
+            boolean shouldUpdate = docs.stream()
+                .allMatch(doc -> isTerminalStatus(doc.getStatus()));
+            if (shouldUpdate) {
+                return productRepository.updateStatus(productId, newStatus.name(), traceId);
+            }
+            return Mono.empty();
+        });
+}
+```
+
+---
+
+### Code Review: Estructura de Archivos Actualizada
+
+```
+com.example.fileprocessor/
+├── domain/
+│   ├── valueobject/              # NUEVO: Value Objects para tipo seguro
+│   │   ├── TraceId.java          # Validación de UUID y no-null
+│   │   └── DocumentId.java       # Validación de no-blank
+│   ├── entity/
+│   │   ├── ProductStatus.java    # NUEVO: Estados de producto
+│   │   └── SoapCommunicationLog.java  # MODIFICADO: +documentId
+│   ├── usecase/
+│   │   ├── ProductStatusAggregator.java  # NUEVO: Agregación de estado
+│   │   └── ProductStatusSummary.java      # NUEVO: Resumen de estado
+│   └── entity/
+│       └── SoapRequest.java      # MODIFICADO: fileContent bytes (no Base64)
+...
+└── infrastructure/
+    ├── helpers/soap/
+    │   └── mapper/
+    │       └── SoapMapper.java    # MODIFICADO: Base64 encoding aquí
+    └── drivenadapters/aws/
+        └── S3GatewayImpl.java     # MODIFICADO: bytes directos
+```
+
+---
+
+### Code Review: Flujo Reactivo Corregido
+
+```java
+// ANTES (ANTI-PATRÓN)
+.flatMap(this::processPendingDocument)  // Sin límite
+.doOnNext(result -> saveLog().subscribe())  // subscribe() rompe backpressure
+
+// DESPUÉS (CORRECTO)
+.flatMap(this::processPendingDocument, 10)  // maxConcurrency = 10
+.flatMap(result -> saveLog().thenReturn(result))  // Encadenado correctamente
+```
+
+---
+
+### Code Review: Circuit Breaker Integration
+
+```java
+private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request, ...) {
+    return Mono.fromCallable(() -> request)
+        .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+        .flatMap(req -> sendDocument(req))
+        .onErrorResume(CallNotPermittedException.class, e -> {
+            log.warn("Circuit breaker OPEN for document {}", documentId);
+            return Mono.error(new SoapCommunicationException(
+                "Circuit breaker is OPEN",
+                DocumentErrorCodes.CIRCUIT_BREAKER_OPEN, traceId, 0));
+        });
+}
+```
+
+---
+
+### Code Review: TraceId Propagation
+
+```java
+public Flux<FileUploadResult> executePendingDocuments() {
+    String rootTraceId = UUID.randomUUID().toString();
+    MDC.put("traceId", rootTraceId);  // Establecer al inicio
+
+    return documentRepository.findPendingDocuments()
+        .flatMap(this::processPendingDocument, DEFAULT_MAX_CONCURRENCY)
+        .doFinally(signal -> MDC.remove("traceId"));  // Limpiar al final
+}
+
+private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
+    String traceId = UUID.randomUUID().toString();
+    MDC.put("traceId", traceId);  // Cada documento con su trace
+    // ... procesamiento
+    .doFinally(signal -> MDC.remove("traceId"));
+}
+```
+
+---
+
+### Tests de Recuperación (Crash Recovery)
+
+```java
+@Test
+void shouldResumeFromFailedDocumentOnRestart() {
+    // GIVEN: 5 documentos, el documento #3 falla
+    when(documentRepository.findPendingDocuments())
+        .thenReturn(Flux.just(doc1, doc2, doc3, doc4, doc5));
+
+    // Doc1, Doc2 succeed, Doc3 falla con timeout
+    when(soapGateway.sendFile(any()))
+        .thenReturn(Mono.just(successResponse("corr-1")))
+        .thenReturn(Mono.just(successResponse("corr-2")))
+        .thenReturn(Mono.error(new SoapCommunicationException("Timeout")))
+        .thenReturn(Mono.just(successResponse("corr-4")))
+        .thenReturn(Mono.just(successResponse("corr-5")));
+
+    // WHEN: Primera ejecución
+    useCase.executePendingDocuments().block();
+
+    // THEN: Doc3 quedó en RETRY
+    verify(documentRepository).updateStatus(
+        eq("doc-3"), eq("RETRY"), anyString(), isNull(), eq("GATEWAY_TIMEOUT"));
+
+    // WHEN: Simular restart (claim returns FALSE para PENDING=false)
+    when(documentRepository.claimDocument("doc-3"))
+        .thenReturn(false)  // Primero no puede (aún RETRY)
+        .thenReturn(true);  // Luego se reclama
+
+    // WHEN: Segunda ejecución
+    useCase.executePendingDocuments().block();
+
+    // THEN: Solo se procesó doc-3
+    verify(soapGateway, times(1)).sendFile(any());
+}
+```
+
+---
 
 ### 2026-04-25 - Refactorizacion + S3 Support
 - **Refactor:** `ProcessProductDocumentsUseCase` eliminado, logica movida a `AbstractProcessDocumentsUseCase`

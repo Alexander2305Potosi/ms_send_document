@@ -22,21 +22,22 @@ public class R2dbcSoapCommunicationLogRepository implements SoapCommunicationLog
     @Override
     public Mono<SoapCommunicationLog> save(SoapCommunicationLog entry) {
         String sql = """
-            INSERT INTO soap_communication_log (trace_id, status, retry_count, error_code, filename, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO soap_communication_log (trace_id, document_id, status, retry_count, error_code, filename, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             """;
 
         return databaseClient.sql(sql)
             .bind("$1", entry.getTraceId())
-            .bind("$2", entry.getStatus())
-            .bind("$3", entry.getRetryCount())
-            .bind("$4", entry.getErrorCode() != null ? entry.getErrorCode() : "")
-            .bind("$5", entry.getFilename())
-            .bind("$6", entry.getCreatedAt())
+            .bind("$2", entry.getDocumentId() != null ? entry.getDocumentId() : "")
+            .bind("$3", entry.getStatus())
+            .bind("$4", entry.getRetryCount())
+            .bind("$5", entry.getErrorCode() != null ? entry.getErrorCode() : "")
+            .bind("$6", entry.getFilename())
+            .bind("$7", entry.getCreatedAt())
             .fetch()
             .first()
             .thenReturn(entry)
-            .doOnSuccess(saved -> log.info("Logged SOAP communication: traceId={}, status={}, retries={}",
-                saved.getTraceId(), saved.getStatus(), saved.getRetryCount()));
+            .doOnSuccess(saved -> log.info("Logged SOAP communication: traceId={}, documentId={}, status={}, retries={}",
+                saved.getTraceId(), saved.getDocumentId(), saved.getStatus(), saved.getRetryCount()));
     }
 }

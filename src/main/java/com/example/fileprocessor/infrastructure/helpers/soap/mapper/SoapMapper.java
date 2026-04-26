@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.StringWriter;
 import java.time.Instant;
+import java.util.Base64;
 
 @Component
 public class SoapMapper {
@@ -48,13 +49,18 @@ public class SoapMapper {
     public String toSoapXml(SoapRequest request) {
         log.debug("Converting SoapRequest to XML body for traceId: {}", request.getTraceId());
 
+        // FIX #5: Base64 encoding happens HERE in infrastructure, not in domain
+        String base64Content = request.getFileContent() != null
+            ? Base64.getEncoder().encodeToString(request.getFileContent())
+            : "";
+
         UploadFileRequest uploadRequest = new UploadFileRequest(
-            request.getFileContentBase64(),
+            base64Content,  // Now properly encoded here in infrastructure
             request.getFilename(),
             request.getContentType(),
             request.getFileSize(),
             request.getTraceId(),
-            request.getTimestamp().toString(),
+            Instant.now().toString(),  // Timestamp generated in infrastructure
             request.getParentFolder(),
             request.getChildFolder()
         );

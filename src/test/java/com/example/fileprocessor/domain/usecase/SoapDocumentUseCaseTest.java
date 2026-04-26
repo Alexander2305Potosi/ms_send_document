@@ -8,6 +8,7 @@ import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,9 @@ class SoapDocumentUseCaseTest {
     private ProductDocumentRepository documentRepository;
 
     @Mock
+    private ProductRepository productRepository;
+
+    @Mock
     private ExternalSoapGateway soapGateway;
 
     @Mock
@@ -57,7 +61,13 @@ class SoapDocumentUseCaseTest {
         lenient().when(validationConfig.maxFileSizeMb()).thenReturn(50);
         lenient().when(validationConfig.originPatternsToSend()).thenReturn(List.of("incoming", "documents"));
 
-        useCase = new SoapDocumentUseCase(documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
+        // Default mocks for product status aggregation
+        lenient().when(productRepository.updateStatus(anyString(), anyString(), anyString()))
+            .thenReturn(Mono.empty());
+        lenient().when(documentRepository.findByProductId(anyString()))
+            .thenReturn(Flux.empty());
+
+        useCase = new SoapDocumentUseCase(documentRepository, productRepository, soapGateway, fileValidator, logRepository, validationConfig);
     }
 
     @Test

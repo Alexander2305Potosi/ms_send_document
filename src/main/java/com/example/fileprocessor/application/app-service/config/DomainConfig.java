@@ -31,20 +31,22 @@ public class DomainConfig {
 
     @Bean
     public SoapDocumentUseCase soapDocumentUseCase(ProductDocumentRepository documentRepository,
+                                                  ProductRepository productRepository,
                                                   ExternalSoapGateway soapGateway,
                                                   FileValidator fileValidator,
                                                   SoapCommunicationLogRepository logRepository,
                                                   FileValidationConfig validationConfig) {
-        return new SoapDocumentUseCase(documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
+        return new SoapDocumentUseCase(documentRepository, productRepository, soapGateway, fileValidator, logRepository, validationConfig);
     }
 
     @org.springframework.context.annotation.Profile("s3")
     @Bean
     public S3DocumentUseCase s3DocumentUseCase(ProductDocumentRepository documentRepository,
+                                              ProductRepository productRepository,
                                               S3Gateway s3Gateway,
                                               FileValidator fileValidator,
                                               SoapCommunicationLogRepository logRepository,
                                               FileValidationConfig validationConfig) {
-        return new S3DocumentUseCase(documentRepository, s3Gateway, fileValidator, logRepository, validationConfig);
+        return new S3DocumentUseCase(documentRepository, productRepository, s3Gateway, fileValidator, logRepository, validationConfig);
     }
 }

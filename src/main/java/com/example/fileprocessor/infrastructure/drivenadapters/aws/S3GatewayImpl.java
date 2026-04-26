@@ -30,7 +30,8 @@ public class S3GatewayImpl implements S3Gateway {
 
     @Override
     public Mono<S3UploadResult> upload(SoapRequest request) {
-        byte[] content = Base64.getDecoder().decode(request.getFileContentBase64());
+        // FIX #5: request.getFileContent() now returns raw bytes, no decode needed
+        byte[] content = request.getFileContent();
         String key = buildKey(request);
 
         PutObjectRequest putRequest = PutObjectRequest.builder()
@@ -40,8 +41,7 @@ public class S3GatewayImpl implements S3Gateway {
             .contentLength((long) content.length)
             .metadata(java.util.Map.of(
                 "traceId", request.getTraceId(),
-                "originalFilename", request.getFilename(),
-                "timestamp", request.getTimestamp().toString()
+                "originalFilename", request.getFilename()
             ))
             .build();
 
@@ -65,7 +65,7 @@ public class S3GatewayImpl implements S3Gateway {
     }
 
     private String buildKey(SoapRequest request) {
-        String timestamp = request.getTimestamp().toString().replace(":", "-");
+        String timestamp = java.time.Instant.now().toString().replace(":", "-");
         String uniqueId = UUID.randomUUID().toString().substring(0, 8);
         return String.format("documents/%s/%s_%s",
             timestamp.substring(0, 10),

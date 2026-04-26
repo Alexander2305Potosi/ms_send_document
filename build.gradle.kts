@@ -47,9 +47,8 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok:1.18.30")
     implementation("org.projectlombok:lombok:1.18.30")
 
-    // MapStruct
-    implementation("org.mapstruct:mapstruct:1.5.5.Final")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    // FIX #6: MapStruct removed - not used in current implementation
+    // If needed in future, add: implementation("org.mapstruct:mapstruct:1.5.5.Final")
 
     // Logging
     implementation("org.slf4j:slf4j-api")
@@ -67,6 +66,10 @@ dependencies {
     // AWS S3
     implementation("software.amazon.awssdk:s3:2.28.29")
     implementation("software.amazon.awssdk:netty-nio-client:2.28.29")
+
+    // Resilience4j - Circuit Breaker (FIX #4)
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-reactor:2.2.0")
 
     // Monitoring & Tracing
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
