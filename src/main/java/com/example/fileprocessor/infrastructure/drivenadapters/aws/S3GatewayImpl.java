@@ -15,6 +15,7 @@ import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+@org.springframework.context.annotation.Profile("s3")
 @Slf4j
 @Component
 public class S3GatewayImpl implements S3Gateway {

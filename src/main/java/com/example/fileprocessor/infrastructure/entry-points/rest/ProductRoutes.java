@@ -1,4 +1,4 @@
-package com.example.fileprocessor.infrastructure.entrypoints.rest.config;
+package com.example.fileprocessor.infrastructure.entrypoints.rest;
 
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiPaths;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.handler.ProductHandler;

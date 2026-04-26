@@ -9,6 +9,9 @@ public final class DocumentErrorCodes {
 
     public static final String UNKNOWN_ERROR = "UNKNOWN_ERROR";
     public static final String TIMEOUT = "TIMEOUT";
+    public static final String MSG_TIMEOUT = "timeout";
+    public static final String MSG_TIMEOUT_TITLE = "Timeout";
+    public static final String MSG_VALIDATION = "validation";
     public static final String GATEWAY_TIMEOUT = "GATEWAY_TIMEOUT";
     public static final String BAD_GATEWAY = "BAD_GATEWAY";
     public static final String CLIENT_ERROR = "CLIENT_ERROR";

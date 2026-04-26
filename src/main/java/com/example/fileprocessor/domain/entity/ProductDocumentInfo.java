@@ -20,7 +20,9 @@ public record ProductDocumentInfo(
         return lastDot >= 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
     }
 
+    private static final String EXTENSION_ZIP = "zip";
+
     public boolean isZipArchive() {
-        return isZip || "zip".equalsIgnoreCase(extension());
+        return isZip || EXTENSION_ZIP.equalsIgnoreCase(extension());
     }
 }

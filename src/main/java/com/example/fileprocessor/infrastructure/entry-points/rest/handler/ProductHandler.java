@@ -8,6 +8,7 @@ import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestA
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -27,7 +28,7 @@ public class ProductHandler {
 
     public ProductHandler(LoadProductsUseCase loadProductsUseCase,
                          SoapDocumentUseCase soapDocumentUseCase,
-                         S3DocumentUseCase s3DocumentUseCase) {
+                         @Autowired(required = false) S3DocumentUseCase s3DocumentUseCase) {
         this.loadProductsUseCase = loadProductsUseCase;
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCase = s3DocumentUseCase;
@@ -91,7 +92,12 @@ public class ProductHandler {
 
     private AbstractProcessDocumentsUseCase resolveUseCase(String processorType) {
         return switch (processorType.toLowerCase()) {
-            case RestApiConstants.PROCESSOR_S3 -> s3DocumentUseCase;
+            case RestApiConstants.PROCESSOR_S3 -> {
+                if (s3DocumentUseCase == null) {
+                    throw new IllegalStateException("S3 processor is not available. Please enable the 's3' profile.");
+                }
+                yield s3DocumentUseCase;
+            }
             case RestApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
             default -> {
                 log.warn("Unknown processor type '{}', defaulting to SOAP", processorType);

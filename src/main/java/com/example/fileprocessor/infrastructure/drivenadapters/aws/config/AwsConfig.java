@@ -1,0 +1,40 @@
+package com.example.fileprocessor.infrastructure.drivenadapters.aws.config;
+
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
+
+import java.net.URI;
+
+@org.springframework.context.annotation.Profile("s3")
+@Configuration
+@EnableConfigurationProperties(S3Properties.class)
+public class AwsConfig {
+
+    private static final String DUMMY_ACCESS_KEY = "dummy";
+    private static final String DUMMY_SECRET_KEY = "dummy";
+
+    @Bean
+    public S3AsyncClient s3AsyncClient(S3Properties s3Properties) {
+        S3AsyncClientBuilder builder = S3AsyncClient.builder()
+            .region(Region.of(s3Properties.region()))
+            .credentialsProvider(StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(DUMMY_ACCESS_KEY, DUMMY_SECRET_KEY)
+            ));
+
+        if (s3Properties.endpoint() != null && !s3Properties.endpoint().isBlank()) {
+            builder.endpointOverride(URI.create(s3Properties.endpoint()));
+        }
+
+        if (s3Properties.pathStyleAccess()) {
+            builder.serviceConfiguration(config -> config.pathStyleAccessEnabled(true));
+        }
+
+        return builder.build();
+    }
+}

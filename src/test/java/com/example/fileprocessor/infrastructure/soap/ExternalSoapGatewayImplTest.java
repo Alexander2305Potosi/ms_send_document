@@ -1,11 +1,11 @@
 package com.example.fileprocessor.infrastructure.soap;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
-import com.example.fileprocessor.infrastructure.soap.adapter.ExternalSoapGatewayImpl;
-import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
-import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
-import com.example.fileprocessor.infrastructure.soap.mapper.SoapMapper;
-import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
+import com.example.fileprocessor.infrastructure.drivenadapters.soap.ExternalSoapGatewayImpl;
+import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;

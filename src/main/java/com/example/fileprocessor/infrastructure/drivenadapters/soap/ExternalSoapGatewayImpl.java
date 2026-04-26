@@ -59,7 +59,7 @@ public class ExternalSoapGatewayImpl implements ExternalSoapGateway {
 
         Mono<SoapResponse> soapCall = webClient.post()
             .contentType(MediaType.TEXT_XML)
-            .header("SOAPAction", SoapNamespaces.FILE_SERVICE + "/UploadFile")
+            .header("SOAPAction", SoapNamespaces.FILE_SERVICE + SoapNamespaces.SOAP_ACTION_UPLOAD)
             .bodyValue(soapEnvelope)
             .retrieve()
             .onStatus(HttpStatusCode::isError, response ->

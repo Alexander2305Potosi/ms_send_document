@@ -1,11 +1,11 @@
-package com.example.fileprocessor.infrastructure.soap.mapper;
+package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
-import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
-import com.example.fileprocessor.infrastructure.soap.xml.SoapEnvelopeWrapper;
-import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileRequest;
-import com.example.fileprocessor.infrastructure.soap.xml.model.UploadFileResponse;
+import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

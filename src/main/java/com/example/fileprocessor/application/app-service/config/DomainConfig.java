@@ -38,6 +38,7 @@ public class DomainConfig {
         return new SoapDocumentUseCase(documentRepository, soapGateway, fileValidator, logRepository, validationConfig);
     }
 
+    @org.springframework.context.annotation.Profile("s3")
     @Bean
     public S3DocumentUseCase s3DocumentUseCase(ProductDocumentRepository documentRepository,
                                               S3Gateway s3Gateway,

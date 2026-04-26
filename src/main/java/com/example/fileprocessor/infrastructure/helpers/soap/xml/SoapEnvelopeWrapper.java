@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
+import com.example.fileprocessor.domain.usecase.DocumentErrorCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
@@ -25,6 +26,10 @@ import java.io.StringWriter;
 public class SoapEnvelopeWrapper {
 
     private static final Logger log = LoggerFactory.getLogger(SoapEnvelopeWrapper.class);
+
+    private static final String MSG_SOAP_BODY_NOT_FOUND = "SOAP Body not found";
+    private static final String MSG_RESPONSE_ELEMENT_NOT_FOUND = "Response element not found in SOAP Body";
+    private static final String MSG_PARSE_ERROR = "Failed to parse SOAP response";
 
     private final JAXBContext jaxbContext;
     private final DocumentBuilderFactory documentBuilderFactory;
@@ -53,12 +58,12 @@ public class SoapEnvelopeWrapper {
 
             Node body = doc.getElementsByTagNameNS(SoapNamespaces.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
-                throw new SoapCommunicationException("SOAP Body not found", "INVALID_RESPONSE", null);
+                throw new SoapCommunicationException(MSG_SOAP_BODY_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
             }
 
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
-                throw new SoapCommunicationException("Response element not found in SOAP Body", "INVALID_RESPONSE", null);
+                throw new SoapCommunicationException(MSG_RESPONSE_ELEMENT_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
             }
 
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
@@ -74,7 +79,7 @@ public class SoapEnvelopeWrapper {
             throw e;
         } catch (Exception e) {
             log.error("Error unmarshalling SOAP response: {}", e.getMessage());
-            throw new SoapCommunicationException("Failed to parse SOAP response", "INVALID_RESPONSE", null, e);
+            throw new SoapCommunicationException(MSG_PARSE_ERROR, DocumentErrorCodes.INVALID_RESPONSE, null, e);
         }
     }
 

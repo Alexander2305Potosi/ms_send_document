@@ -197,7 +197,7 @@ public abstract class AbstractProcessDocumentsUseCase {
         }
         String message = error.getMessage();
         if (message == null) return false;
-        return message.contains("timeout") || message.contains("Timeout") || message.contains("TIMEOUT");
+        return message.contains(DocumentErrorCodes.MSG_TIMEOUT) || message.contains(DocumentErrorCodes.MSG_TIMEOUT_TITLE) || message.contains(DocumentErrorCodes.TIMEOUT);
     }
 
     protected String extractErrorCode(Throwable error) {
@@ -212,8 +212,8 @@ public abstract class AbstractProcessDocumentsUseCase {
 
     protected String extractErrorCodeFromMessage(String message) {
         if (message == null) return DocumentErrorCodes.UNKNOWN_ERROR;
-        if (message.contains("timeout")) return DocumentErrorCodes.TIMEOUT;
-        if (message.contains("validation")) return DocumentErrorCodes.VALIDATION_ERROR;
+        if (message.contains(DocumentErrorCodes.MSG_TIMEOUT)) return DocumentErrorCodes.TIMEOUT;
+        if (message.contains(DocumentErrorCodes.MSG_VALIDATION)) return DocumentErrorCodes.VALIDATION_ERROR;
         return DocumentErrorCodes.UNKNOWN_ERROR;
     }
 

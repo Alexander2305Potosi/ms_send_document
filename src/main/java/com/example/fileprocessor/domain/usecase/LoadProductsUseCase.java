@@ -21,6 +21,7 @@ import java.util.UUID;
 public class LoadProductsUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(LoadProductsUseCase.class);
+    private static final String MSG_PRODUCT_LOADED = "Product and documents loaded successfully";
 
     private final ProductRestGateway productGateway;
     private final ProductRepository productRepository;
@@ -70,7 +71,7 @@ public class LoadProductsUseCase {
                     .name(productInfo.getName())
                     .documentCount(documentCount)
                     .status(DocumentStatus.PENDING_VALUE)
-                    .message("Product and documents loaded successfully")
+                    .message(MSG_PRODUCT_LOADED)
                     .traceId(traceId)
                     .processedAt(Instant.now())
                     .success(true)

@@ -18,7 +18,9 @@ public class SoapResponse {
     private final Instant processedAt;
     private final String externalReference;
 
+    private static final String STATUS_OK = "OK";
+
     public boolean isSuccess() {
-        return DocumentStatus.SUCCESS_VALUE.equalsIgnoreCase(status) || "OK".equalsIgnoreCase(status);
+        return DocumentStatus.SUCCESS_VALUE.equalsIgnoreCase(status) || STATUS_OK.equalsIgnoreCase(status);
     }
 }

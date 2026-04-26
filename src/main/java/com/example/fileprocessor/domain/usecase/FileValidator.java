@@ -14,6 +14,10 @@ import java.util.stream.Collectors;
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
+    private static final String PATH_DOUBLE_DOT = "..";
+    private static final String PATH_SLASH = "/";
+    private static final String PATH_BACKSLASH = "\\";
+
     private final FileValidationConfig config;
     private final Set<String> allowedTypes;
 
@@ -64,7 +68,7 @@ public class FileValidator {
                 FileValidationErrorCodes.MSG_FILENAME_TOO_LONG + config.maxFilenameLength(),
                 FileValidationErrorCodes.FILENAME_TOO_LONG));
         }
-        if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+        if (filename.contains(PATH_DOUBLE_DOT) || filename.contains(PATH_SLASH) || filename.contains(PATH_BACKSLASH)) {
             log.warn("Filename contains invalid characters: {}", filename);
             return Mono.error(new FileValidationException(
                 FileValidationErrorCodes.MSG_FILENAME_INVALID,

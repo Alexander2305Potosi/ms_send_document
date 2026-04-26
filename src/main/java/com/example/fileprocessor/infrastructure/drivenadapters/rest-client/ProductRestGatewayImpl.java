@@ -67,9 +67,12 @@ public class ProductRestGatewayImpl implements ProductRestGateway {
     }
 
     private ProductInfo mapToProductInfo(Map<String, Object> json) {
-        List<Map<String, Object>> docsList = (List<Map<String, Object>>) json.get("documents");
-        List<ProductDocumentInfo> documents = docsList != null
-            ? docsList.stream().map(this::mapToProductDocumentInfo).toList()
+        Object docsObj = json.get("documents");
+        List<ProductDocumentInfo> documents = (docsObj instanceof List<?>)
+            ? ((List<?>) docsObj).stream()
+                .filter(m -> m instanceof Map)
+                .map(m -> mapToProductDocumentInfo((Map<String, Object>) m))
+                .toList()
             : List.of();
 
         return ProductInfo.builder()

@@ -3,6 +3,8 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -36,22 +38,26 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             """.formatted(DocumentStatus.PENDING_VALUE, DocumentStatus.RETRY_VALUE, DocumentStatus.PROCESSING_VALUE);
 
         return databaseClient.sql(sql)
-            .map((row, metadata) -> ProductDocumentToProcess.builder()
-                .documentId(row.get("document_id", String.class))
-                .productId(row.get("product_id", String.class))
-                .parentDocumentId(row.get("parent_document_id", String.class))
-                .filename(row.get("filename", String.class))
-                .content(decodeContent(row.get("content", String.class)))
-                .contentType(row.get("content_type", String.class))
-                .origin(row.get("origin", String.class))
-                .status(row.get("status", String.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .processedAt(row.get("processed_at", Instant.class))
-                .traceId(row.get("trace_id", String.class))
-                .soapCorrelationId(row.get("soap_correlation_id", String.class))
-                .errorCode(row.get("error_code", String.class))
-                .build())
+            .map(this::mapRowToDocument)
             .all();
+    }
+
+    private ProductDocumentToProcess mapRowToDocument(Row row, RowMetadata metadata) {
+        return ProductDocumentToProcess.builder()
+            .documentId(row.get("document_id", String.class))
+            .productId(row.get("product_id", String.class))
+            .parentDocumentId(row.get("parent_document_id", String.class))
+            .filename(row.get("filename", String.class))
+            .content(decodeContent(row.get("content", String.class)))
+            .contentType(row.get("content_type", String.class))
+            .origin(row.get("origin", String.class))
+            .status(row.get("status", String.class))
+            .createdAt(row.get("created_at", Instant.class))
+            .processedAt(row.get("processed_at", Instant.class))
+            .traceId(row.get("trace_id", String.class))
+            .soapCorrelationId(row.get("soap_correlation_id", String.class))
+            .errorCode(row.get("error_code", String.class))
+            .build();
     }
 
     private byte[] decodeContent(String base64Content) {
@@ -80,21 +86,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
 
         return databaseClient.sql(sql)
             .bind("$1", productId)
-            .map((row, metadata) -> ProductDocumentToProcess.builder()
-                .documentId(row.get("document_id", String.class))
-                .productId(row.get("product_id", String.class))
-                .parentDocumentId(row.get("parent_document_id", String.class))
-                .filename(row.get("filename", String.class))
-                .content(decodeContent(row.get("content", String.class)))
-                .contentType(row.get("content_type", String.class))
-                .origin(row.get("origin", String.class))
-                .status(row.get("status", String.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .processedAt(row.get("processed_at", Instant.class))
-                .traceId(row.get("trace_id", String.class))
-                .soapCorrelationId(row.get("soap_correlation_id", String.class))
-                .errorCode(row.get("error_code", String.class))
-                .build())
+            .map(this::mapRowToDocument)
             .all();
     }
 

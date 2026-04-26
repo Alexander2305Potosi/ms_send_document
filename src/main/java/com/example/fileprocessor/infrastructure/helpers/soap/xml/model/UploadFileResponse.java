@@ -9,19 +9,19 @@ import jakarta.xml.bind.annotation.XmlRootElement;
 @XmlAccessorType(XmlAccessType.FIELD)
 public class UploadFileResponse {
 
-    @XmlElement(name = "status")
+    @XmlElement(name = "status", namespace = "http://example.com/fileservice")
     private String status;
 
-    @XmlElement(name = "message")
+    @XmlElement(name = "message", namespace = "http://example.com/fileservice")
     private String message;
 
-    @XmlElement(name = "correlationId")
+    @XmlElement(name = "correlationId", namespace = "http://example.com/fileservice")
     private String correlationId;
 
-    @XmlElement(name = "processedAt")
+    @XmlElement(name = "processedAt", namespace = "http://example.com/fileservice")
     private String processedAt;
 
-    @XmlElement(name = "externalReference")
+    @XmlElement(name = "externalReference", namespace = "http://example.com/fileservice")
     private String externalReference;
 
     public UploadFileResponse() {}
