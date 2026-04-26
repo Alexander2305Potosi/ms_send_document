@@ -18,10 +18,12 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Use case for loading products and documents from external REST API.
+ */
 public class LoadProductsUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(LoadProductsUseCase.class);
-    private static final String MSG_PRODUCT_LOADED = "Product and documents loaded successfully";
 
     private final ProductRestGateway productGateway;
     private final ProductRepository productRepository;
@@ -71,7 +73,7 @@ public class LoadProductsUseCase {
                     .name(productInfo.getName())
                     .documentCount(documentCount)
                     .status(DocumentStatus.PENDING_VALUE)
-                    .message(MSG_PRODUCT_LOADED)
+                    .message(LoadProductsConstants.MSG_PRODUCT_LOADED)
                     .traceId(traceId)
                     .processedAt(Instant.now())
                     .success(true)

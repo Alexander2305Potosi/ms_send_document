@@ -29,27 +29,17 @@ import java.util.UUID;
  * Abstract base class for document processing use cases.
  * Provides shared validation logic, status management, and error handling.
  * Subclasses must implement sendDocument() to define the actual sending mechanism (SOAP, S3, etc.)
- *
- * FIX #3: TraceId propagation via MDC (instead of Reactor Context) to maintain
- * domain purity. MDC is set at entry point and flows through the reactive chain.
  */
 public abstract class AbstractProcessDocumentsUseCase {
 
     protected static final Logger log = LoggerFactory.getLogger(AbstractProcessDocumentsUseCase.class);
-    protected static final int DEFAULT_RETRY_COUNT = 0;
-    private static final int DEFAULT_MAX_CONCURRENCY = 10;
 
-    private static final String MSG_SKIPPED_FOLDER = "Document skipped due to folder rule: ";
-    private static final String MSG_NOT_SENT_ORIGIN = "Document not sent: origin does not match required patterns: ";
-    private static final String MSG_SIZE_EXCEEDED = "Document not sent: file size "; private static final String MSG_SIZE_EXCEEDED_SUFFIX = " bytes exceeds limit";
-    private static final String MSG_CIRCUIT_BREAKER_OPEN = "Circuit breaker is OPEN, document will be retried later";
-
-    protected final ProductDocumentRepository documentRepository;
-    protected final ProductRepository productRepository;
-    protected final FileValidator fileValidator;
-    protected final SoapCommunicationLogRepository logRepository;
-    protected final DocumentValidationRules validationRules;
-    protected final CircuitBreaker circuitBreaker;
+    private final ProductDocumentRepository documentRepository;
+    private final ProductRepository productRepository;
+    private final FileValidator fileValidator;
+    private final SoapCommunicationLogRepository logRepository;
+    private final DocumentValidationRules validationRules;
+    private final CircuitBreaker circuitBreaker;
 
     protected AbstractProcessDocumentsUseCase(
             ProductDocumentRepository documentRepository,
@@ -87,11 +77,9 @@ public abstract class AbstractProcessDocumentsUseCase {
     public Flux<FileUploadResult> executePendingDocuments() {
         log.info("Fetching pending product documents from database...");
         String rootTraceId = UUID.randomUUID().toString();
-        // FIX #2: flatMap con maxConcurrency para evitar saturar conexiones externas
-        // FIX #3: Propagation de traceId via MDC (domain-pure, compatible con SLF4J)
         MDC.put("traceId", rootTraceId);
         return documentRepository.findPendingDocuments()
-            .flatMap(this::processPendingDocument, DEFAULT_MAX_CONCURRENCY)
+            .flatMap(this::processPendingDocument, DocumentProcessingConstants.DEFAULT_MAX_CONCURRENCY)
             .doOnNext(response -> log.info("Document processed: correlationId={}", response.getCorrelationId()))
             .doOnError(error -> log.error("Error processing document: {}", error.getMessage()))
             .doFinally(signal -> MDC.remove("traceId"));
@@ -129,7 +117,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     DocumentErrorCodes.SKIPPED_FOLDER)
                 .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
                 .thenReturn(buildResult(DocumentStatus.SKIPPED_VALUE,
-                    MSG_SKIPPED_FOLDER + pending.getOrigin(),
+                    DocumentProcessingConstants.MSG_SKIPPED_FOLDER + pending.getOrigin(),
                     null, traceId, pending.getDocumentId(), true));
         }
 
@@ -145,7 +133,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     DocumentErrorCodes.NOT_SENT_ORIGIN)
                 .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
                 .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
-                    MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
+                    DocumentProcessingConstants.MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
                     null, traceId, pending.getDocumentId(), true));
         }
 
@@ -161,7 +149,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     DocumentErrorCodes.SIZE_EXCEEDED)
                 .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
                 .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
-                    MSG_SIZE_EXCEEDED + fileSize + MSG_SIZE_EXCEEDED_SUFFIX,
+                    DocumentProcessingConstants.MSG_SIZE_EXCEEDED + fileSize + DocumentProcessingConstants.MSG_SIZE_EXCEEDED_SUFFIX,
                     null, traceId, pending.getFilename(), true));
         }
 
@@ -177,7 +165,6 @@ public abstract class AbstractProcessDocumentsUseCase {
 
         DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(pending.getOrigin());
 
-        // FIX #4: Circuit Breaker para prevenir cascading failures
         return fileValidator.validate(fileData)
             .flatMap(validData -> {
                 SoapRequest request = SoapRequest.builder()
@@ -200,16 +187,15 @@ public abstract class AbstractProcessDocumentsUseCase {
 
     /**
      * Envía el documento usando Circuit Breaker para resiliencia.
-     * FIX #4: Previene cascading failures cuando el servicio externo está degradado.
      */
     private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request, String traceId, String documentId) {
         return Mono.fromCallable(() -> request)
             .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
             .flatMap(req -> sendDocument(req))
             .onErrorResume(CallNotPermittedException.class, e -> {
-                log.warn("Circuit breaker OPEN for document {}: {}", documentId, MSG_CIRCUIT_BREAKER_OPEN);
+                log.warn("Circuit breaker OPEN for document {}: {}", documentId, DocumentProcessingConstants.MSG_CIRCUIT_BREAKER_OPEN);
                 return Mono.error(new SoapCommunicationException(
-                    MSG_CIRCUIT_BREAKER_OPEN,
+                    DocumentProcessingConstants.MSG_CIRCUIT_BREAKER_OPEN,
                     DocumentErrorCodes.CIRCUIT_BREAKER_OPEN,
                     traceId, 0));
             });
@@ -265,7 +251,7 @@ public abstract class AbstractProcessDocumentsUseCase {
             .traceId(traceId)
             .documentId(documentId)
             .status(DocumentStatus.SUCCESS_VALUE)
-            .retryCount(DEFAULT_RETRY_COUNT)
+            .retryCount(DocumentProcessingConstants.DEFAULT_RETRY_COUNT)
             .filename(filename)
             .createdAt(Instant.now())
             .build();

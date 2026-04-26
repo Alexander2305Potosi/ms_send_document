@@ -5,6 +5,10 @@ import lombok.Getter;
 
 import java.time.Instant;
 
+/**
+ * Represents a document to be processed in the database.
+ * Contains content (Base64 encoded in storage), metadata, and processing status.
+ */
 @Getter
 @Builder
 public class ProductDocumentToProcess {

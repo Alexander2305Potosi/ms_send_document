@@ -3,7 +3,8 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.ProductStatus;
 
 /**
- * Summary of product status with document counts.
+ * Immutable summary of product status with document counts.
+ * Used for monitoring and reporting.
  */
 public record ProductStatusSummary(
     String productId,

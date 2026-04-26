@@ -4,12 +4,13 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * Represents file data for processing.
+ * Holds file content and metadata for document processing.
+ * Used to transfer file data through the processing pipeline.
  */
 @Getter
 @Builder
 public class FileData {
-    private final String documentId;  // Added for tracking
+    private final String documentId;
     private final byte[] content;
     private final String filename;
     private final long size;

@@ -24,11 +24,18 @@ public final class RestApiConstants {
     // MDC keys
     public static final String MDC_TRACE_ID = "traceId";
 
+    // Operation types
+    public static final String OPERATION_LOAD = "LOAD";
+    public static final String OPERATION_PROCESS = "PROCESS";
+
     // Status values
     public static final String STATUS_LOADING = "LOADING";
     public static final String STATUS_PROCESSING = "PROCESSING";
+    public static final String STATUS_COMPLETED = "COMPLETED";
+    public static final String STATUS_FAILED = "FAILED";
 
     // Message constants
     public static final String MSG_LOADING = "Product loading from REST API started";
     public static final String MSG_PROCESSING = "Pending product documents processing started";
+    public static final String MSG_NOT_FOUND = "Operation not found for traceId: ";
 }

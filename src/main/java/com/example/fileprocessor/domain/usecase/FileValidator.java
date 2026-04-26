@@ -11,12 +11,13 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Validates file data before processing.
+ * Ensures files meet size, type, and naming requirements.
+ */
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
-    private static final String PATH_DOUBLE_DOT = "..";
-    private static final String PATH_SLASH = "/";
-    private static final String PATH_BACKSLASH = "\\";
 
     private final FileValidationConfig config;
     private final Set<String> allowedTypes;
@@ -29,6 +30,11 @@ public class FileValidator {
             .collect(Collectors.toUnmodifiableSet());
     }
 
+    /**
+     * Validates a file against all rules.
+     * @param fileData the file to validate
+     * @return Mono with validated FileData or error
+     */
     public Mono<FileData> validate(FileData fileData) {
         return Mono.just(fileData)
             .flatMap(this::validateSize)
@@ -68,7 +74,7 @@ public class FileValidator {
                 FileValidationErrorCodes.MSG_FILENAME_TOO_LONG + config.maxFilenameLength(),
                 FileValidationErrorCodes.FILENAME_TOO_LONG));
         }
-        if (filename.contains(PATH_DOUBLE_DOT) || filename.contains(PATH_SLASH) || filename.contains(PATH_BACKSLASH)) {
+        if (filename.contains(FileValidatorConstants.PATH_DOUBLE_DOT) || filename.contains(FileValidatorConstants.PATH_SLASH) || filename.contains(FileValidatorConstants.PATH_BACKSLASH)) {
             log.warn("Filename contains invalid characters: {}", filename);
             return Mono.error(new FileValidationException(
                 FileValidationErrorCodes.MSG_FILENAME_INVALID,

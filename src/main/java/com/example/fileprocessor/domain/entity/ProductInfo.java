@@ -5,6 +5,10 @@ import lombok.Getter;
 
 import java.util.List;
 
+/**
+ * Product information received from external REST API.
+ * Contains product metadata and associated documents.
+ */
 @Getter
 @Builder
 public class ProductInfo {

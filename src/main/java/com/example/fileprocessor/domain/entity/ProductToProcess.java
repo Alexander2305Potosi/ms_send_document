@@ -5,6 +5,10 @@ import lombok.Getter;
 
 import java.time.Instant;
 
+/**
+ * Represents a product to be processed.
+ * Products contain multiple documents that may need to be sent via SOAP or S3.
+ */
 @Getter
 @Builder
 public class ProductToProcess {

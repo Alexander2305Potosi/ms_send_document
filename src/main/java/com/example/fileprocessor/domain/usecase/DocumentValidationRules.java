@@ -1,5 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.ProductDocumentConstants;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 
 import java.util.List;
@@ -9,8 +10,6 @@ import java.util.List;
  * Used by AbstractProcessDocumentsUseCase to validate documents before sending.
  */
 public record DocumentValidationRules(FileValidationConfig config) {
-
-    private static final String DEFAULT_FOLDER = ".";
 
     public boolean shouldSkipFolder(String origin) {
         if (origin == null || origin.isBlank()) {
@@ -45,7 +44,7 @@ public record DocumentValidationRules(FileValidationConfig config) {
     public FolderInfo extractFolderInfo(String origin) {
         List<String> keywords = config.keywords();
         if (keywords == null || keywords.isEmpty() || origin == null || origin.isBlank()) {
-            return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
+            return new FolderInfo(ProductDocumentConstants.DEFAULT_FOLDER, ProductDocumentConstants.DEFAULT_FOLDER);
         }
 
         for (String keyword : keywords) {
@@ -53,13 +52,13 @@ public record DocumentValidationRules(FileValidationConfig config) {
                 String[] parts = origin.split("/");
                 if (parts.length >= 2) {
                     String childFolder = parts[parts.length - 1];
-                    String parentFolder = parts.length > 1 ? parts[parts.length - 2] : DEFAULT_FOLDER;
+                    String parentFolder = parts.length > 1 ? parts[parts.length - 2] : ProductDocumentConstants.DEFAULT_FOLDER;
                     return new FolderInfo(parentFolder, childFolder);
                 }
-                return new FolderInfo(origin, DEFAULT_FOLDER);
+                return new FolderInfo(origin, ProductDocumentConstants.DEFAULT_FOLDER);
             }
         }
-        return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
+        return new FolderInfo(ProductDocumentConstants.DEFAULT_FOLDER, ProductDocumentConstants.DEFAULT_FOLDER);
     }
 
     public record FolderInfo(String parentFolder, String childFolder) {}

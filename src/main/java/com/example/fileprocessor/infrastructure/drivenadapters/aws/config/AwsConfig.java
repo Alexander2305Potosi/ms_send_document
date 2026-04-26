@@ -16,15 +16,12 @@ import java.net.URI;
 @EnableConfigurationProperties(S3Properties.class)
 public class AwsConfig {
 
-    private static final String DUMMY_ACCESS_KEY = "dummy";
-    private static final String DUMMY_SECRET_KEY = "dummy";
-
     @Bean
     public S3AsyncClient s3AsyncClient(S3Properties s3Properties) {
         S3AsyncClientBuilder builder = S3AsyncClient.builder()
             .region(Region.of(s3Properties.region()))
             .credentialsProvider(StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(DUMMY_ACCESS_KEY, DUMMY_SECRET_KEY)
+                AwsBasicCredentials.create(AwsConfigConstants.DUMMY_ACCESS_KEY, AwsConfigConstants.DUMMY_SECRET_KEY)
             ));
 
         if (s3Properties.endpoint() != null && !s3Properties.endpoint().isBlank()) {

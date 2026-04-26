@@ -27,10 +27,6 @@ public class SoapEnvelopeWrapper {
 
     private static final Logger log = LoggerFactory.getLogger(SoapEnvelopeWrapper.class);
 
-    private static final String MSG_SOAP_BODY_NOT_FOUND = "SOAP Body not found";
-    private static final String MSG_RESPONSE_ELEMENT_NOT_FOUND = "Response element not found in SOAP Body";
-    private static final String MSG_PARSE_ERROR = "Failed to parse SOAP response";
-
     private final JAXBContext jaxbContext;
     private final DocumentBuilderFactory documentBuilderFactory;
 
@@ -58,12 +54,12 @@ public class SoapEnvelopeWrapper {
 
             Node body = doc.getElementsByTagNameNS(SoapNamespaces.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
-                throw new SoapCommunicationException(MSG_SOAP_BODY_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
+                throw new SoapCommunicationException(SoapEnvelopeConstants.MSG_SOAP_BODY_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
             }
 
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
-                throw new SoapCommunicationException(MSG_RESPONSE_ELEMENT_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
+                throw new SoapCommunicationException(SoapEnvelopeConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
             }
 
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
@@ -79,7 +75,7 @@ public class SoapEnvelopeWrapper {
             throw e;
         } catch (Exception e) {
             log.error("Error unmarshalling SOAP response: {}", e.getMessage());
-            throw new SoapCommunicationException(MSG_PARSE_ERROR, DocumentErrorCodes.INVALID_RESPONSE, null, e);
+            throw new SoapCommunicationException(SoapEnvelopeConstants.MSG_PARSE_ERROR, DocumentErrorCodes.INVALID_RESPONSE, null, e);
         }
     }
 

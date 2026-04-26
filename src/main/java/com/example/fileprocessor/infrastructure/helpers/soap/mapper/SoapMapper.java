@@ -24,16 +24,6 @@ public class SoapMapper {
 
     private static final Logger log = LoggerFactory.getLogger(SoapMapper.class);
 
-    private static final String SOAP_HEADER =
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-        "<soap:Envelope xmlns:soap=\"" + SoapNamespaces.SOAP_ENVELOPE + "\"\n" +
-        "               xmlns:file=\"" + SoapNamespaces.FILE_SERVICE + "\">\n" +
-        "  <soap:Header/>\n" +
-        "  <soap:Body>\n";
-    private static final String SOAP_FOOTER =
-        "  </soap:Body>\n" +
-        "</soap:Envelope>\n";
-
     private final SoapEnvelopeWrapper envelopeWrapper;
     private final JAXBContext jaxbContext;
 
@@ -72,7 +62,12 @@ public class SoapMapper {
         log.debug("Generating full SOAP message for traceId: {}", request.getTraceId());
 
         String soapBody = toSoapXml(request);
-        return SOAP_HEADER + soapBody + SOAP_FOOTER;
+        return SoapMapperConstants.SOAP_HEADER_PREFIX
+            + SoapMapperConstants.SOAP_HEADER_ENVELOPE_START + SoapNamespaces.SOAP_ENVELOPE + "\"\n"
+            + "               xmlns:file=\"" + SoapNamespaces.FILE_SERVICE + "\">\n"
+            + SoapMapperConstants.SOAP_HEADER_ENVELOPE_END
+            + soapBody
+            + SoapMapperConstants.SOAP_FOOTER_ENVELOPE_END;
     }
 
     private String marshalRequest(UploadFileRequest request) {

@@ -117,7 +117,15 @@
       "Bash(./gradlew bootRun --stacktrace)",
       "Bash(xargs kill *)",
       "Bash(awk -F: '{print $1\":\"$2\":\"$3}')",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(git *)",
+      "Bash(./gradlew compileJava --no-daemon -q)",
+      "Bash(./gradlew jacocoTestReport --no-daemon -q)",
+      "Bash(open build/reports/jacoco/test/index.html)",
+      "Bash(open build/reports/jacoco/test/html/index.html)",
+      "Bash(./gradlew jacocoTestReport --info)",
+      "Bash(./gradlew jacocoTestReport)",
+      "Bash(sed -n '/<table/,/<\\\\/table>/p' build/reports/jacoco/test/index.html)"
     ]
   }
 }
