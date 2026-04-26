@@ -1,0 +1,16 @@
+logging:
+  level:
+    com.example.fileprocessor: WARN
+    org.springframework.web.reactive: WARN
+
+server:
+  shutdown: immediate
+
+app:
+  file:
+    max-size: 5242880
+    folders-to-skip: []
+    keywords: []
+  soap:
+    timeout-seconds: 15
+    retry-attempts: 2
