@@ -9,7 +9,7 @@ import com.example.fileprocessor.domain.entity.SoapRequest;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
-import com.example.fileprocessor.infrastructure.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;

@@ -86,7 +86,31 @@
       "Bash(git checkout *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(chmod -R 755 /Users/alexander2305/Downloads/file-processor-service/.gradle)",
+      "Read(//opt/homebrew/**)",
+      "Bash(brew list *)",
+      "Bash(export JAVA_HOME=/usr/local/opt/openjdk@21)",
+      "Bash(/usr/local/opt/openjdk@21/bin/java -version)",
+      "Bash(./gradlew compileJava --no-daemon --rerun-tasks)",
+      "Bash(./gradlew compileJava --no-daemon -Xinfo)",
+      "Bash(./gradlew compileJava --no-daemon --stacktrace)",
+      "Bash(md5 /Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/domain/entity/S3UploadResult.java)",
+      "Bash(/usr/local/opt/openjdk@21/bin/javac -d /tmp/test src/main/java/com/example/fileprocessor/domain/entity/S3UploadResult.java)",
+      "Bash(rm -rf /Users/alexander2305/Downloads/file-processor-service/build /Users/alexander2305/Downloads/file-processor-service/bin ~/.gradle/caches/build-cache-*)",
+      "Bash(./gradlew compileJava --no-daemon --no-build-cache)",
+      "Bash(./gradlew :compileJava --no-daemon --info)",
+      "Bash(/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home/bin/java -version)",
+      "Bash(/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home/bin/javac -sourcepath src/main/java -d /tmp/test2 src/main/java/com/example/fileprocessor/domain/entity/S3UploadResult.java)",
+      "Bash(/Users/alexander2305/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home/bin/javac -sourcepath src/main/java -cp build/classes/java/main -d /tmp/test2 src/main/java/com/example/fileprocessor/domain/entity/S3UploadResult.java)",
+      "Bash(./gradlew compileJava --no-daemon --info)",
+      "Bash(./gradlew :compileJava --no-daemon --rerun-tasks -i)",
+      "Bash(./gradlew compileTestJava --no-daemon)",
+      "Bash(./gradlew compileJava compileTestJava --no-daemon)",
+      "Bash(./gradlew compileJava compileTestJava test --no-daemon)",
+      "Bash(git reset *)",
+      "Bash(./gradlew compileJava --quiet)",
+      "WebFetch(domain:bancolombia.github.io)"
     ]
   }
 }
