@@ -492,11 +492,218 @@ Las subclases solo definen `sendDocument()` y `getImplementationName()`:
 | `app.file.folders-to-skip` | `/tmp,/transient` | Carpetas a excluir |
 | `app.file.origin-patterns-to-send` | `incoming,documents` | Patrones de origin que deben contener los archivos para ser enviados |
 
+## Observabilidad
+
+### Health Checks
+
+El servicio expone endpoints de Actuator para monitoreo de salud:
+
+```bash
+# Health general
+curl -s http://localhost:8080/actuator/health | jq .
+
+# Readiness (verifica conexiones a BD, servicios externos)
+curl -s http://localhost:8080/actuator/health/readiness | jq .
+
+# Liveness (verifica que el MS responde)
+curl -s http://localhost:8080/actuator/health/liveness | jq .
+```
+
+### Métricas (Prometheus)
+
+```bash
+# Métricas en formato Prometheus
+curl -s http://localhost:8080/actuator/prometheus | jq .
+```
+
+**Métricas clave disponibles:**
+
+| Métrica | Tipo | Descripción |
+|---------|------|-------------|
+| `documents_processed_total{status}` | Counter | Documentos procesados por estado (SUCCESS/FAILURE/NOT_SENT/SKIPPED) |
+| `documents_processing_duration_seconds` | Timer | Duración del procesamiento de documentos |
+| `soap_retry_total` | Counter | Número total de reintentos SOAP |
+| `s3_upload_total{status}` | Counter | Uploads a S3 por estado |
+| `product_load_total` | Counter | Productos cargados desde REST API |
+
+### Logs Estructurados
+
+El servicio utiliza MDC (Mapped Diagnostic Context) para logs correlacionados:
+
+```properties
+# Formato actual (console pattern)
+%-5level [%thread] %logger{36} - traceId=%X{traceId} - %msg%n
+```
+
+**Campos de log disponibles:**
+- `traceId`: UUID de correlación entre operaciones
+- `documentId`: ID del documento en proceso
+- `correlationId`: ID de correlación SOAP (cuando aplica)
+
+**Ejemplo de log:**
+```
+INFO [reactor-http-nio-2] c.e.fileprocessor.handler.ProductHandler - traceId=550e8400-e29b-41d4-a716-446655440000 - Processing 3 documents
+INFO [reactor-http-nio-2] c.e.fileprocessor.usecase.SoapDocumentUseCase - traceId=660e8400-e29b-41d4-a716-446655440001 - correlationId=abc123 - Document SUCCESS
+```
+
+### Tracing Distribuido (OpenTelemetry)
+
+Para activar tracing con Jaeger/Zipkin:
+
+```bash
+# Variables de entorno
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+export OTEL_SERVICE_NAME=ms_send_document
+export OTEL_TRACES_SAMPLER=parentbased_traceidratio
+export OTEL_METRICS_EXPORTER=none
+```
+
+**Spans generados:**
+- `LoadProductsUseCase.execute` - Carga desde REST
+- `AbstractProcessDocumentsUseCase.executePendingDocuments` - Procesamiento
+- `ExternalSoapGateway.sendFile` - Invocación SOAP
+- `S3Gateway.upload` - Upload a S3
+
+---
+
+## Requisitos del Sistema
+
+| Componente | Versión | Notas |
+|------------|--------|-------|
+| JDK | 21+ | Requerido para Spring WebFlux 3.x |
+| Gradle | 8.5+ | Wrapper incluido (`./gradlew`) |
+| Docker | 24+ | Solo para ejecutar mocks |
+| Base de datos | H2 (dev), PostgreSQL R2DBC (prod) | H2 en memoria para desarrollo |
+
 ## Reintentos SOAP
 
 El servicio implementa **3 reintentos maximos** con backoff exponencial:
-- **Escenarios reintentables**: Timeout, errores 5xx
-- **Delay**: 1s, 2s, 4s entre intentos
+- **Escenarios reintentables**: Timeout (>30s), errores 5xx
+- **Escenarios NO reintentables**: HTTP 4xx, errores de validación
+- **Delay**: 1s, 2s, 4s entre intentos (configurable via `soap.retry-backoff-millis`)
+
+### Tabla de Reintentos
+
+| Intento | Delay | Acumulado |
+|---------|-------|-----------|
+| 1 | 1s | 1s |
+| 2 | 2s | 3s |
+| 3 | 4s | 7s |
+
+## Resiliencia
+
+### Circuit Breaker (Resilience4j)
+
+El servicio está preparado para usar Resilience4j como circuit breaker:
+
+```yaml
+# application.yml
+resilience4j:
+  circuitbreaker:
+    instances:
+      soapGateway:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slidingWindowType: COUNT_BASED
+      s3Gateway:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+```
+
+### Crash Recovery
+
+Si el servicio cae mientras un documento estaba en procesamiento (`PROCESSING`), al reiniciar:
+
+1. `DatabaseInitializer` detecta documentos con status `PROCESSING`
+2. Los resetea a `PENDING`
+3. El mecanismo de `claimDocument()` previene duplicación
+
+```sql
+-- Reset automático al iniciar
+UPDATE product_documents_to_process
+SET status = 'PENDING'
+WHERE status = 'PROCESSING'
+AND processed_at < NOW() - INTERVAL '5' MINUTE;
+```
+
+## Integración SOAP
+
+> **Nota**: El XSD Schema no está incluido en el proyecto. El contrato SOAP está definido implícitamente por las clases en `infrastructure/soap/xml/model/`:
+> - `UploadFileRequest.java`
+> - `UploadFileResponse.java`
+
+### Estructura del Request SOAP
+
+Los campos del request se mapean desde `SoapRequest.java`:
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `parentFolder` | String | Carpeta padre (ej. `incoming`) |
+| `childFolder` | String | Carpeta hijo (ej. `docs`) |
+| `filename` | String | Nombre del archivo |
+| `fileData` | String | Contenido Base64 |
+| `traceId` | String | UUID de trazabilidad |
+
+### Ejemplo de Envelope SOAP
+
+```xml
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:fil="http://fileprocessor.example.com/fileservice">
+  <soapenv:Header>
+    <fil:traceId>550e8400-e29b-41d4-a716-446655440000</fil:traceId>
+  </soapenv:Header>
+  <soapenv:Body>
+    <fil:uploadFile>
+      <fil:parentFolder>incoming</fil:parentFolder>
+      <fil:childFolder>docs</fil:childFolder>
+      <fil:filename>document.pdf</fil:filename>
+      <fil:fileData>JVBERi0xLjQK...</fil:fileData>
+    </fil:uploadFile>
+  </soapenv:Body>
+</soapenv:Envelope>
+```
+
+### Ejemplo de Response SOAP
+
+```xml
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <fil:uploadFileResponse xmlns:fil="http://fileprocessor.example.com/fileservice">
+      <fil:correlationId>abc123-def456</fil:correlationId>
+      <fil:status>SUCCESS</fil:status>
+      <fil:message>File uploaded successfully</fil:message>
+    </fil:uploadFileResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+```
+
+## Ejemplos de curl
+
+```bash
+# Cargar productos desde REST API
+curl -X GET http://localhost:8080/api/v1/products/load \
+  -H "Accept: application/json" \
+  -w "\nHTTP Status: %{http_code}\n"
+
+# Procesar documentos pendientes (SOAP)
+curl -X GET "http://localhost:8080/api/v1/products?processor=soap" \
+  -H "Accept: application/json" \
+  -w "\nHTTP Status: %{http_code}\n"
+
+# Procesar documentos pendientes (S3)
+curl -X GET "http://localhost:8080/api/v1/products?processor=s3" \
+  -H "Accept: application/json" \
+  -w "\nHTTP Status: %{http_code}\n"
+
+# Verificar health
+curl -s http://localhost:8080/actuator/health | jq .
+
+# Ver métricas
+curl -s http://localhost:8080/actuator/metrics/documents.processed.total | jq .
+```
 
 ## Compilacion y Ejecucion
 
@@ -511,24 +718,90 @@ El servicio implementa **3 reintentos maximos** con backoff exponencial:
 ./gradlew jacocoTestReport
 ```
 
-## Mocks Disponibles
+## Mocks Disponibles y Validación
 
 ### Mock REST de Productos (Java)
 ```bash
+# Iniciar mock
 ./scripts/start-product-mock.sh
+
+# Validar que está corriendo
+curl -s http://localhost:3001/api/products | jq 'length'
+
+# Expected output: array de productos
 ```
 
 ### Mock REST de Productos (Mockoon Desktop)
 Importar `mockoon/document-rest-mock.json` en Mockoon Desktop.
 
+**Validación del contrato:**
+```bash
+# Verificar estructura del mock
+curl -s http://localhost:3001/api/products | jq '.[] | {productId, name, documentsCount: (.documents | length)}'
+```
+
 ### Mock SOAP
 ```bash
+# Iniciar mock
 ./scripts/start-mock.sh
+
+# Validar WSDL
+curl -s http://localhost:9000/soap/fileservice?wsdl | head -20
+
+# Testear upload
+curl -X POST http://localhost:9000/soap/fileservice \
+  -H "Content-Type: text/xml; charset=utf-8" \
+  -d '<soapenv:Envelope>...</soapenv:Envelope>'
 ```
 
 ### Mock S3 (LocalStack-like)
 ```bash
+# Iniciar mock
 ./scripts/start-s3-mock.sh
+
+# Validar que LocalStack está corriendo
+curl -s http://localhost:4566/_localstack/health | jq .
+
+# Listar buckets
+aws --endpoint-url=http://localhost:4566 s3 ls
+```
+
+## Admin Processes
+
+Tareas administrativas para operación y recuperación manual:
+
+### Reset Masivo de Documentos
+
+```bash
+# Resetear todos los documentos en FAILURE/RETRY a PENDING
+curl -X POST http://localhost:8080/api/v1/admin/documents/reset \
+  -H "Content-Type: application/json" \
+  -d '{"statuses": ["FAILURE", "RETRY"]}'
+```
+
+### Ver Estado de Cola
+
+```bash
+# Contar documentos por estado
+curl -s http://localhost:8080/api/v1/admin/documents/stats | jq .
+```
+
+### Forzar Reintento de Documentos Específicos
+
+```bash
+# Reintentar un documento específico por ID
+curl -X POST http://localhost:8080/api/v1/admin/documents/{documentId}/retry
+```
+
+### Migración de Base de Datos
+
+```bash
+# Ejecutar migraciones Flyway (si están configuradas)
+./gradlew flywayMigrate
+
+# Verificar schema
+curl -s http://localhost:8080/actuator/health \
+  | jq '.components.db.details.database'
 ```
 
 ## Perfiles Spring
