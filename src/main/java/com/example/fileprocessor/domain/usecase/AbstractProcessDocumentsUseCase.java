@@ -19,6 +19,7 @@ import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOper
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiConstants;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -41,6 +42,9 @@ public abstract class AbstractProcessDocumentsUseCase {
     private final DocumentValidationRules validationRules;
     private final CircuitBreaker circuitBreaker;
 
+    /**
+     * Constructor with CircuitBreaker. Preferred constructor for production.
+     */
     protected AbstractProcessDocumentsUseCase(
             ProductDocumentRepository documentRepository,
             ProductRepository productRepository,
@@ -57,21 +61,18 @@ public abstract class AbstractProcessDocumentsUseCase {
     }
 
     /**
-     * Constructor por defecto con CircuitBreaker configurado via registry.
+     * @deprecated Use constructor with explicit CircuitBreaker parameter instead.
+     * This constructor uses default registry which creates separate instances per use case.
      */
+    @Deprecated
     protected AbstractProcessDocumentsUseCase(
             ProductDocumentRepository documentRepository,
             ProductRepository productRepository,
             FileValidator fileValidator,
             SoapCommunicationLogRepository logRepository,
             FileValidationConfig validationConfig) {
-        this.documentRepository = documentRepository;
-        this.productRepository = productRepository;
-        this.fileValidator = fileValidator;
-        this.logRepository = logRepository;
-        this.validationRules = new DocumentValidationRules(validationConfig);
-        this.circuitBreaker = CircuitBreakerRegistry.ofDefaults()
-            .circuitBreaker(getImplementationName());
+        this(documentRepository, productRepository, fileValidator, logRepository, validationConfig,
+             CircuitBreakerRegistry.ofDefaults().circuitBreaker(getImplementationName()));
     }
 
     public Flux<FileUploadResult> executePendingDocuments() {
@@ -83,7 +84,7 @@ public abstract class AbstractProcessDocumentsUseCase {
 
     private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
         String traceId = UUID.randomUUID().toString();
-        MDC.put("traceId", traceId);
+        MDC.put(RestApiConstants.MDC_TRACE_ID, traceId);
         return documentRepository.claimDocument(pending.getDocumentId())
             .filter(Boolean::booleanValue)
             .flatMap(claimed -> processDocumentClaimed(pending, traceId))
@@ -92,7 +93,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                     pending.getDocumentId());
                 return Mono.empty();
             }))
-            .doFinally(signal -> MDC.remove("traceId"));
+            .doFinally(signal -> MDC.remove(RestApiConstants.MDC_TRACE_ID))
     }
 
     private Mono<FileUploadResult> processDocumentClaimed(ProductDocumentToProcess pending, String traceId) {

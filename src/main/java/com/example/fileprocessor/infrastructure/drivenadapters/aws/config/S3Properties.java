@@ -16,6 +16,10 @@ public record S3Properties(
 
     String endpoint,
 
-    boolean pathStyleAccess
+    boolean pathStyleAccess,
+
+    String accessKey,
+
+    String secretKey
 ) {
 }

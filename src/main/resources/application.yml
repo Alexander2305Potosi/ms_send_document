@@ -11,7 +11,7 @@ spring:
     password:
   h2:
     console:
-      enabled: true
+      enabled: ${H2_CONSOLE_ENABLED:false}
   webflux:
     multipart:
       max-in-memory-size: 10MB
@@ -70,6 +70,14 @@ app:
       region: ${AWS_REGION:us-east-1}
       endpoint: ${AWS_ENDPOINT:}
       path-style-access: false
+      access-key: ${AWS_ACCESS_KEY:}
+      secret-key: ${AWS_SECRET_KEY:}
+  circuit-breaker:
+    failure-rate-threshold: 50
+    wait-duration-in-open-state-millis: 60000
+    permitted-number-of-calls-in-half-open-state: 10
+    sliding-window-size: 100
+    minimum-number-of-calls: 10
 
 ---
 spring:

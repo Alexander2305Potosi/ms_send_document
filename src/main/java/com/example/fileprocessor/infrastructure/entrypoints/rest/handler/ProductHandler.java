@@ -10,7 +10,6 @@ import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestA
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -34,7 +33,7 @@ public class ProductHandler {
 
     public ProductHandler(LoadProductsUseCase loadProductsUseCase,
                          SoapDocumentUseCase soapDocumentUseCase,
-                         @Autowired(required = false) S3DocumentUseCase s3DocumentUseCase,
+                         S3DocumentUseCase s3DocumentUseCase,
                          AsyncOperationRepository asyncOperationRepository) {
         this.loadProductsUseCase = loadProductsUseCase;
         this.soapDocumentUseCase = soapDocumentUseCase;
@@ -49,19 +48,20 @@ public class ProductHandler {
         log.info("Starting async products load from REST API, traceId: {}", traceId);
 
         AsyncOperationStatus initialStatus = AsyncOperationStatus.startLoading(traceId);
-        asyncOperationRepository.save(initialStatus);
 
-        loadProductsUseCase.execute()
-            .doOnNext(result -> {
-                log.info("Product loaded: {} -> {} ({} documents)",
-                    result.getProductId(), result.getStatus(), result.getDocumentCount());
-            })
-            .doOnError(error -> log.error("Load failed for traceId {}: {}", traceId, error.getMessage()))
-            .doFinally(signal -> MDC.remove(RestApiConstants.MDC_TRACE_ID))
-            .subscribe();
-
-        return ServerResponse.accepted()
-            .bodyValue(initialStatus);
+        return asyncOperationRepository.save(initialStatus)
+            .then(Mono.fromRunnable(() -> {
+                loadProductsUseCase.execute()
+                    .doOnNext(result -> {
+                        log.info("Product loaded: {} -> {} ({} documents)",
+                            result.getProductId(), result.getStatus(), result.getDocumentCount());
+                    })
+                    .doOnError(error -> log.error("Load failed for traceId {}: {}", traceId, error.getMessage()))
+                    .doFinally(signal -> MDC.remove(RestApiConstants.MDC_TRACE_ID))
+                    .subscribe();
+            }))
+            .thenReturn(initialStatus)
+            .flatMap(status -> ServerResponse.accepted().bodyValue(status));
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
@@ -75,44 +75,38 @@ public class ProductHandler {
             useCase.implementationName(), traceId);
 
         AsyncOperationStatus initialStatus = AsyncOperationStatus.startProcessing(traceId);
-        asyncOperationRepository.save(initialStatus);
 
-        useCase.executePendingDocuments()
-            .doOnNext(result -> {
-                log.info("Document processed: correlationId={}, status={}",
-                    result.getCorrelationId(), result.getStatus());
-                AsyncOperationStatus current = asyncOperationRepository.findByTraceId(traceId);
-                if (current != null) {
-                    asyncOperationRepository.updateProgress(
-                        traceId,
-                        current.getProcessedItems() + 1,
-                        current.getSuccessItems() + (result.isSuccess() ? 1 : 0),
-                        current.getFailedItems() + (result.isSuccess() ? 0 : 1)
-                    );
-                }
-            })
-            .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
-            .doFinally(signal -> {
-                asyncOperationRepository.markCompleted(traceId);
-                MDC.remove(RestApiConstants.MDC_TRACE_ID);
-            })
-            .subscribe();
-
-        return ServerResponse.accepted()
-            .bodyValue(initialStatus);
+        return asyncOperationRepository.save(initialStatus)
+            .then(Mono.fromRunnable(() -> {
+                useCase.executePendingDocuments()
+                    .flatMap(result -> {
+                        log.info("Document processed: correlationId={}, status={}",
+                            result.getCorrelationId(), result.getStatus());
+                        return asyncOperationRepository.findByTraceId(traceId)
+                            .flatMap(current -> asyncOperationRepository.updateProgress(
+                                traceId,
+                                current.getProcessedItems() + 1,
+                                current.getSuccessItems() + (result.isSuccess() ? 1 : 0),
+                                current.getFailedItems() + (result.isSuccess() ? 0 : 1)
+                            ));
+                    })
+                    .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
+                    .doFinally(signal -> {
+                        asyncOperationRepository.markCompleted(traceId).subscribe();
+                        MDC.remove(RestApiConstants.MDC_TRACE_ID);
+                    })
+                    .subscribe();
+            }))
+            .thenReturn(initialStatus)
+            .flatMap(status -> ServerResponse.accepted().bodyValue(status));
     }
 
     public Mono<ServerResponse> getOperationStatus(ServerRequest request) {
         String traceId = request.pathVariable("traceId");
 
-        AsyncOperationStatus status = asyncOperationRepository.findByTraceId(traceId);
-
-        if (status == null) {
-            return ServerResponse.notFound().build();
-        }
-
-        return ServerResponse.ok()
-            .bodyValue(status);
+        return asyncOperationRepository.findByTraceId(traceId)
+            .flatMap(status -> ServerResponse.ok().bodyValue(status))
+            .switchIfEmpty(ServerResponse.notFound().build());
     }
 
     private AbstractProcessDocumentsUseCase resolveUseCase(String processorType) {

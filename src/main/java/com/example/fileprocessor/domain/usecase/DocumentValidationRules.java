@@ -11,6 +11,8 @@ import java.util.List;
  */
 public record DocumentValidationRules(FileValidationConfig config) {
 
+    public static final long BYTES_PER_MEGABYTE = 1024L * 1024L;
+
     public boolean shouldSkipFolder(String origin) {
         if (origin == null || origin.isBlank()) {
             return false;
@@ -38,7 +40,7 @@ public record DocumentValidationRules(FileValidationConfig config) {
         if (maxSizeMb <= 0) {
             return false;
         }
-        return sizeBytes >= (long) maxSizeMb * 1024 * 1024;
+        return sizeBytes >= (long) maxSizeMb * BYTES_PER_MEGABYTE;
     }
 
     public FolderInfo extractFolderInfo(String origin) {

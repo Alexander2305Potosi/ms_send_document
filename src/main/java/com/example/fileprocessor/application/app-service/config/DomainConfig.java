@@ -11,6 +11,7 @@ import com.example.fileprocessor.domain.usecase.FileValidator;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentUseCase;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -35,8 +36,9 @@ public class DomainConfig {
                                                   ExternalSoapGateway soapGateway,
                                                   FileValidator fileValidator,
                                                   SoapCommunicationLogRepository logRepository,
-                                                  FileValidationConfig validationConfig) {
-        return new SoapDocumentUseCase(documentRepository, productRepository, soapGateway, fileValidator, logRepository, validationConfig);
+                                                  FileValidationConfig validationConfig,
+                                                  CircuitBreaker soapCircuitBreaker) {
+        return new SoapDocumentUseCase(documentRepository, productRepository, soapGateway, fileValidator, logRepository, validationConfig, soapCircuitBreaker);
     }
 
     @org.springframework.context.annotation.Profile("s3")
@@ -46,7 +48,8 @@ public class DomainConfig {
                                               S3Gateway s3Gateway,
                                               FileValidator fileValidator,
                                               SoapCommunicationLogRepository logRepository,
-                                              FileValidationConfig validationConfig) {
-        return new S3DocumentUseCase(documentRepository, productRepository, s3Gateway, fileValidator, logRepository, validationConfig);
+                                              FileValidationConfig validationConfig,
+                                              CircuitBreaker s3CircuitBreaker) {
+        return new S3DocumentUseCase(documentRepository, productRepository, s3Gateway, fileValidator, logRepository, validationConfig, s3CircuitBreaker);
     }
 }

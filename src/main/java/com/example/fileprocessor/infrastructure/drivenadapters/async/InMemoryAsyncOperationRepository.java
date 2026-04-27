@@ -5,13 +5,14 @@ import com.example.fileprocessor.domain.port.out.AsyncOperationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * In-memory implementation of AsyncOperationRepository.
- * Uses ConcurrentHashMap for thread-safe operations.
+ * Uses ConcurrentHashMap with atomic operations for thread-safe reactive operations.
  */
 @Component
 public class InMemoryAsyncOperationRepository implements AsyncOperationRepository {
@@ -21,41 +22,50 @@ public class InMemoryAsyncOperationRepository implements AsyncOperationRepositor
     private final Map<String, AsyncOperationStatus> operations = new ConcurrentHashMap<>();
 
     @Override
-    public void save(AsyncOperationStatus status) {
-        operations.put(status.getTraceId(), status);
-        log.info("Async operation saved: traceId={}, operationType={}, status={}",
-            status.getTraceId(), status.getOperationType(), status.getStatus());
+    public Mono<Void> save(AsyncOperationStatus status) {
+        return Mono.fromRunnable(() -> {
+            operations.put(status.getTraceId(), status);
+            log.info("Async operation saved: traceId={}, operationType={}, status={}",
+                status.getTraceId(), status.getOperationType(), status.getStatus());
+        });
     }
 
     @Override
-    public void updateProgress(String traceId, int processed, int success, int failed) {
-        AsyncOperationStatus current = operations.get(traceId);
-        if (current != null) {
-            AsyncOperationStatus updated = current.withProgress(
-                current.getTotalItems() > 0 ? current.getTotalItems() : processed,
-                processed,
-                success,
-                failed
-            );
-            operations.put(traceId, updated);
+    public Mono<Void> updateProgress(String traceId, int processed, int success, int failed) {
+        return Mono.fromRunnable(() -> {
+            operations.compute(traceId, (key, current) -> {
+                if (current == null) {
+                    log.warn("Cannot update progress - operation not found: traceId={}", traceId);
+                    return null;
+                }
+                return current.withProgress(
+                    current.getTotalItems() > 0 ? current.getTotalItems() : processed,
+                    processed,
+                    success,
+                    failed
+                );
+            });
             log.debug("Progress updated: traceId={}, processed={}, success={}, failed={}",
                 traceId, processed, success, failed);
-        }
+        });
     }
 
     @Override
-    public void markCompleted(String traceId) {
-        AsyncOperationStatus current = operations.get(traceId);
-        if (current != null) {
-            AsyncOperationStatus completed = current.completed();
-            operations.put(traceId, completed);
-            log.info("Async operation completed: traceId={}, success={}, failed={}",
-                traceId, completed.getSuccessItems(), completed.getFailedItems());
-        }
+    public Mono<Void> markCompleted(String traceId) {
+        return Mono.fromRunnable(() -> {
+            operations.compute(traceId, (key, current) -> {
+                if (current == null) {
+                    log.warn("Cannot mark completed - operation not found: traceId={}", traceId);
+                    return null;
+                }
+                return current.completed();
+            });
+            log.info("Async operation completed: traceId={}", traceId);
+        });
     }
 
     @Override
-    public AsyncOperationStatus findByTraceId(String traceId) {
-        return operations.get(traceId);
+    public Mono<AsyncOperationStatus> findByTraceId(String traceId) {
+        return Mono.fromSupplier(() -> operations.get(traceId));
     }
 }
