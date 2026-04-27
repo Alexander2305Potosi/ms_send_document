@@ -40,7 +40,6 @@ dependencies {
 
     // Reactive
     implementation("io.projectreactor:reactor-core")
-    implementation("io.projectreactor.addons:reactor-extra")
 
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.30")

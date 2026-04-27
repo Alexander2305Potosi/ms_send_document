@@ -80,25 +80,21 @@ public class ProductHandler {
         AsyncOperationStatus initialStatus = AsyncOperationStatus.startProcessing(traceId);
 
         return asyncOperationRepository.save(initialStatus)
-            .then(Mono.fromRunnable(() -> {
-                final String currentTraceId = traceId;
-                useCase.executePendingDocuments()
-                    .flatMap(result -> {
-                        log.info("Document processed: correlationId={}, status={}",
-                            result.getCorrelationId(), result.getStatus());
-                        return asyncOperationRepository.findByTraceId(currentTraceId)
-                            .flatMap(current -> asyncOperationRepository.updateProgress(
-                                currentTraceId,
-                                current.getProcessedItems() + 1,
-                                current.getSuccessItems() + (result.isSuccess() ? 1 : 0),
-                                current.getFailedItems() + (result.isSuccess() ? 0 : 1)
-                            ));
-                    })
-                    .doOnError(error -> log.error("Processing failed for traceId {}: {}", currentTraceId, error.getMessage()))
-                    .doFinally(signal -> asyncOperationRepository.markCompleted(currentTraceId).subscribe())
-                    .subscribe();
-            }))
-            .thenReturn(initialStatus)
+            .thenMany(useCase.executePendingDocuments()
+                .flatMap(result -> {
+                    log.info("Document processed: correlationId={}, status={}",
+                        result.getCorrelationId(), result.getStatus());
+                    return asyncOperationRepository.findByTraceId(traceId)
+                        .flatMap(current -> asyncOperationRepository.updateProgress(
+                            traceId,
+                            current.getProcessedItems() + 1,
+                            current.getSuccessItems() + (result.isSuccess() ? 1 : 0),
+                            current.getFailedItems() + (result.isSuccess() ? 0 : 1)
+                        ));
+                })
+                .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
+                .doOnComplete(() -> asyncOperationRepository.markCompleted(traceId).subscribe()))
+            .then(asyncOperationRepository.findByTraceId(traceId))
             .flatMap(status -> ServerResponse.accepted().bodyValue(status));
     }
 
