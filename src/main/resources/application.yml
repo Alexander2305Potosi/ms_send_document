@@ -52,6 +52,36 @@ app:
     origin-patterns-to-send:
       - "incoming"
       - "documents"
+  processors:
+    soap:
+      max-size: 10485760
+      allowed-types: pdf,txt,csv
+      max-filename-length: 255
+      max-file-size-mb: 50
+      folders-to-skip:
+        - "/tmp"
+        - "/transient"
+      keywords:
+        - "test"
+        - "mock"
+      origin-patterns-to-send:
+        - "incoming"
+        - "documents"
+    s3:
+      max-size: 52428800
+      allowed-types: pdf,txt,csv,zip
+      max-filename-length: 255
+      max-file-size-mb: 100
+      folders-to-skip:
+        - "/tmp"
+      keywords:
+        - "test"
+        - "mock"
+        - "archive"
+      origin-patterns-to-send:
+        - "incoming"
+        - "documents"
+        - "archive"
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
