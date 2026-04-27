@@ -14,7 +14,6 @@ import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,21 +55,6 @@ public abstract class AbstractProcessDocumentsUseCase {
         this.logRepository = logRepository;
         this.validationRules = new DocumentValidationRules(validationConfig);
         this.circuitBreaker = circuitBreaker;
-    }
-
-    /**
-     * @deprecated Use constructor with explicit CircuitBreaker parameter instead.
-     * This constructor uses default registry which creates separate instances per use case.
-     */
-    @Deprecated
-    protected AbstractProcessDocumentsUseCase(
-            ProductDocumentRepository documentRepository,
-            ProductRepository productRepository,
-            FileValidator fileValidator,
-            SoapCommunicationLogRepository logRepository,
-            FileValidationConfig validationConfig) {
-        this(documentRepository, productRepository, fileValidator, logRepository, validationConfig,
-             CircuitBreakerRegistry.ofDefaults().circuitBreaker(getImplementationName()));
     }
 
     public Flux<FileUploadResult> executePendingDocuments() {
