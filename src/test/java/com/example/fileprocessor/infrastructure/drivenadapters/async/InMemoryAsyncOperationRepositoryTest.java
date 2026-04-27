@@ -75,15 +75,21 @@ class InMemoryAsyncOperationRepositoryTest {
         AsyncOperationStatus status1 = AsyncOperationStatus.startLoading("trace-a");
         AsyncOperationStatus status2 = AsyncOperationStatus.startProcessing("trace-b");
 
-        // Chain operations to ensure sequential execution
+        // Save both operations
         StepVerifier.create(
             repository.save(status1)
                 .then(repository.save(status2))
-                .then(repository.findByTraceId("trace-a"))
-                .assertNext(found -> assertNotNull(found))
-                .then(repository.findByTraceId("trace-b"))
-                .assertNext(found -> assertNotNull(found))
         ).verifyComplete();
+
+        // Verify trace-a exists
+        StepVerifier.create(repository.findByTraceId("trace-a"))
+            .assertNext(found -> assertNotNull(found))
+            .verifyComplete();
+
+        // Verify trace-b exists
+        StepVerifier.create(repository.findByTraceId("trace-b"))
+            .assertNext(found -> assertNotNull(found))
+            .verifyComplete();
 
         // Verify trace-c doesn't exist
         StepVerifier.create(repository.findByTraceId("trace-c"))
