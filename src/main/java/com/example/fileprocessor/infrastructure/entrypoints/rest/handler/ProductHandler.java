@@ -41,10 +41,10 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> loadProducts(ServerRequest request) {
-        String traceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
-        if (traceId == null || traceId.isBlank()) {
-            traceId = UUID.randomUUID().toString();
-        }
+        String headerTraceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
+        final String traceId = (headerTraceId != null && !headerTraceId.isBlank())
+            ? headerTraceId
+            : UUID.randomUUID().toString();
 
         log.info("Starting async products load from REST API, traceId: {}", traceId);
 
@@ -52,12 +52,13 @@ public class ProductHandler {
 
         return asyncOperationRepository.save(initialStatus)
             .then(Mono.fromRunnable(() -> {
+                final String currentTraceId = traceId;
                 loadProductsUseCase.execute()
                     .doOnNext(result -> {
                         log.info("Product loaded: {} -> {} ({} documents)",
                             result.getProductId(), result.getStatus(), result.getDocumentCount());
                     })
-                    .doOnError(error -> log.error("Load failed for traceId {}: {}", traceId, error.getMessage()))
+                    .doOnError(error -> log.error("Load failed for traceId {}: {}", currentTraceId, error.getMessage()))
                     .subscribe();
             }))
             .thenReturn(initialStatus)
@@ -67,10 +68,10 @@ public class ProductHandler {
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
         String processorType = request.queryParam(RestApiConstants.PARAM_PROCESSOR).orElse(RestApiConstants.PROCESSOR_SOAP);
 
-        String traceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
-        if (traceId == null || traceId.isBlank()) {
-            traceId = UUID.randomUUID().toString();
-        }
+        String headerTraceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
+        final String traceId = (headerTraceId != null && !headerTraceId.isBlank())
+            ? headerTraceId
+            : UUID.randomUUID().toString();
 
         AbstractProcessDocumentsUseCase useCase = resolveUseCase(processorType);
         log.info("Starting async pending product documents processing with {} processor, traceId: {}",
@@ -80,20 +81,21 @@ public class ProductHandler {
 
         return asyncOperationRepository.save(initialStatus)
             .then(Mono.fromRunnable(() -> {
+                final String currentTraceId = traceId;
                 useCase.executePendingDocuments()
                     .flatMap(result -> {
                         log.info("Document processed: correlationId={}, status={}",
                             result.getCorrelationId(), result.getStatus());
-                        return asyncOperationRepository.findByTraceId(traceId)
+                        return asyncOperationRepository.findByTraceId(currentTraceId)
                             .flatMap(current -> asyncOperationRepository.updateProgress(
-                                traceId,
+                                currentTraceId,
                                 current.getProcessedItems() + 1,
                                 current.getSuccessItems() + (result.isSuccess() ? 1 : 0),
                                 current.getFailedItems() + (result.isSuccess() ? 0 : 1)
                             ));
                     })
-                    .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
-                    .doFinally(signal -> asyncOperationRepository.markCompleted(traceId).subscribe())
+                    .doOnError(error -> log.error("Processing failed for traceId {}: {}", currentTraceId, error.getMessage()))
+                    .doFinally(signal -> asyncOperationRepository.markCompleted(currentTraceId).subscribe())
                     .subscribe();
             }))
             .thenReturn(initialStatus)
