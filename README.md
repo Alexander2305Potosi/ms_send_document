@@ -8,88 +8,117 @@ El proyecto sigue **Clean Architecture simplificada** con 2 capas principales. L
 
 ```
 com.example.fileprocessor/
-├── domain/                    # Capa de dominio (independiente de frameworks)
-│   ├── entity/               # Entidades de negocio
-│   │   ├── ProductToProcess.java        # Producto en BD
-│   │   ├── ProductDocumentToProcess.java # Documento de producto en BD
-│   │   ├── ProductInfo.java             # Producto desde REST API
-│   │   ├── ProductDocumentInfo.java    # Documento dentro de ProductInfo
-│   │   ├── FileData.java               # Datos de archivo para SOAP
-│   │   ├── FileUploadResult.java       # Resultado de upload
-│   │   ├── SoapCommunicationLog.java    # Log de comunicacion SOAP
+├── domain/                          # Capa de dominio (independiente de frameworks)
+│   ├── entity/                      # Entidades de negocio
+│   │   ├── ProductToProcess.java            # Producto en BD
+│   │   ├── ProductDocumentToProcess.java    # Documento de producto en BD
+│   │   ├── ProductInfo.java                 # Producto desde REST API
+│   │   ├── ProductDocumentInfo.java          # Documento dentro de ProductInfo
+│   │   ├── FileData.java                    # Datos de archivo para SOAP
+│   │   ├── FileUploadResult.java            # Resultado de upload
+│   │   ├── SoapCommunicationLog.java        # Log de comunicacion SOAP
 │   │   ├── SoapRequest.java
 │   │   ├── SoapResponse.java
-│   │   └── ZipArchive.java             # ZIP con documentos extraibles
-│   ├── usecase/              # Casos de uso (logica de negocio)
-│   │   ├── LoadProductsUseCase.java          # Carga productos y documentos
-│   │   ├── AbstractProcessDocumentsUseCase.java # Procesa documentos (template method)
-│   │   ├── SoapDocumentUseCase.java          # Implementacion SOAP
-│   │   ├── S3DocumentUseCase.java            # Implementacion S3
-│   │   ├── DocumentValidationRules.java     # Reglas de validacion
-│   │   └── FileValidator.java
-│   ├── util/                 # Utilidades de dominio
-│   │   └── Base64Utils.java            # Encoding/decoding Base64
-│   ├── valueobject/           # Value Objects (tipo seguro, validado) - Code Review #7
-│   │   ├── TraceId.java              # Validación UUID y no-null
-│   │   └── DocumentId.java           # Validación no-blank
+│   │   ├── ZipArchive.java                  # ZIP con documentos extraibles
+│   │   ├── AsyncOperationStatus.java        # Tracking de operacion async
+│   │   ├── DocumentStatus.java              # Estados de documento (constantes)
+│   │   └── ProductStatus.java               # Estados de producto
+│   ├── usecase/                      # Casos de uso (logica de negocio)
+│   │   ├── LoadProductsUseCase.java                # Carga productos y documentos
+│   │   ├── AbstractProcessDocumentsUseCase.java     # Procesa documentos (template method)
+│   │   ├── SoapDocumentUseCase.java                 # Implementacion SOAP
+│   │   ├── S3DocumentUseCase.java                   # Implementacion S3
+│   │   ├── DocumentValidationRules.java             # Reglas de validacion
+│   │   ├── FileValidator.java
+│   │   ├── DocumentResult.java                     # Resultado de procesamiento
+│   │   ├── DocumentErrorCodes.java                 # Codigos de error
+│   │   ├── ProductStatusAggregator.java            # Agregacion de estado de producto
+│   │   └── ProductStatusSummary.java               # Resumen de estado
+│   ├── util/                        # Utilidades de dominio
+│   │   ├── Base64Utils.java                  # Encoding/decoding Base64
+│   │   └── MediaTypeConstants.java           # Constantes de tipos MIME
+│   ├── valueobject/                  # Value Objects (tipo seguro, validado)
+│   │   ├── TraceId.java                        # Validacion UUID y no-null
+│   │   └── DocumentId.java                     # Validacion no-blank
 │   ├── port/
 │   │   ├── in/
 │   │   │   └── FileValidationConfig.java
 │   │   └── out/
-│   │       ├── ProductRestGateway.java         # Puerto para API REST productos
-│   │       ├── ProductRepository.java          # Puerto para productos
-│   │       ├── ProductDocumentRepository.java  # Puerto para documentos de productos
-│   │       ├── ExternalSoapGateway.java        # Puerto para SOAP
-│   │       ├── S3Gateway.java                 # Puerto para S3
-│   │       └── SoapCommunicationLogRepository.java
-│   └── exception/            # Excepciones de dominio
+│   │       ├── ProductRestGateway.java          # Puerto para API REST productos
+│   │       ├── ProductRepository.java            # Puerto para productos
+│   │       ├── ProductDocumentRepository.java    # Puerto para documentos de productos
+│   │       ├── ExternalSoapGateway.java          # Puerto para SOAP
+│   │       ├── S3Gateway.java                   # Puerto para S3
+│   │       ├── SoapCommunicationLogRepository.java
+│   │       └── AsyncOperationRepository.java     # Puerto para tracking async
+│   └── exception/                   # Excepciones de dominio
 │       ├── DomainException.java
 │       └── FileValidationException.java
 │
-└── infrastructure/            # Capa de infraestructura (frameworks)
-    ├── config/               # Configuracion (Properties, Beans)
-    │   ├── DomainConfig.java          # Beans de casos de uso
-    │   ├── DatabaseInitializer.java   # Schema y crash recovery
-    │   └── WebFluxConfig.java
-    ├── rest/                 # Adapter REST (entrada y Salida)
-    │   ├── adapter/
-    │   │   └── ProductRestGatewayImpl.java  # Cliente REST para productos
-    │   ├── config/
-    │   │   ├── DocumentRestProperties.java
-    │   │   └── ProductRouterConfig.java  # RouterFunction para endpoints
-    │   ├── handler/
-    │   │   └── ProductHandler.java        # Logica de handlers
-    │   └── exception/
-    │       └── GlobalErrorHandler.java
-    ├── soap/                 # Adapter SOAP (salida)
-    │   ├── adapter/
-    │   │   └── ExternalSoapGatewayImpl.java
-    │   ├── config/
-    │   │   └── SoapProperties.java
-    │   ├── mapper/
-    │   │   └── SoapMapper.java
-    │   ├── xml/
-    │   │   ├── SoapEnvelopeWrapper.java
-    │   │   ├── SoapNamespaces.java
-    │   │   └── model/
-    │   │       ├── UploadFileRequest.java
-    │   │       └── UploadFileResponse.java
-    │   └── exception/
-    │       └── SoapCommunicationException.java
-    └── aws/                  # Adapter AWS S3 (salida)
-        ├── adapter/
-        │   └── S3GatewayImpl.java
+├── application/                      # Configuracion de applicacion
+│   └── app-service/
+│       └── config/
+│           ├── DomainConfig.java             # Beans de casos de uso
+│           └── DatabaseInitializer.java       # Schema y crash recovery
+│
+└── infrastructure/                  # Capa de infraestructura (frameworks)
+    ├── entrypoints/
+    │   └── rest/                    # Adapter REST (entrada)
+    │       ├── ProductRoutes.java             # RouterFunction para endpoints
+    │       ├── handler/
+    │       │   └── ProductHandler.java         # Logica de handlers
+    │       ├── config/
+    │       │   └── DocumentRestProperties.java
+    │       └── constants/
+    │           ├── RestApiPaths.java           # Constantes de paths
+    │           └── RestApiConstants.java       # Constantes varias
+    ├── drivenadapters/               # Adapters (implementaciones)
+    │   ├── rest-client/
+    │   │   └── ProductRestGatewayImpl.java    # Cliente REST para productos
+    │   ├── soap/
+    │   │   ├── ExternalSoapGatewayImpl.java    # Gateway SOAP
+    │   │   └── config/
+    │   │       └── SoapProperties.java         # Configuracion SOAP
+    │   ├── aws/
+    │   │   ├── S3GatewayImpl.java              # Adapter S3
+    │   │   └── config/
+    │   │       ├── AwsConfig.java
+    │   │       └── S3Properties.java
+    │   ├── r2dbc/
+    │   │   ├── R2dbcProductRepository.java
+    │   │   ├── R2dbcProductDocumentRepository.java
+    │   │   └── R2dbcSoapCommunicationLogRepository.java
+    │   └── async/
+    │       └── InMemoryAsyncOperationRepository.java  # Repo in-memory para tracking
+    └── helpers/
         ├── config/
-        │   └── AwsConfig.java
-        └── S3Properties.java
+        │   ├── FileUploadProperties.java
+        │   ├── SoapProcessorProperties.java     # Config validacion SOAP
+        │   ├── S3ProcessorProperties.java       # Config validacion S3
+        │   ├── CircuitBreakerProperties.java
+        │   └── CircuitBreakerConfiguration.java
+        └── soap/
+            ├── mapper/
+            │   ├── SoapMapper.java
+            │   ├── SoapMapperConstants.java
+            │   └── SoapResponseDefaults.java
+            ├── xml/
+            │   ├── SoapEnvelopeWrapper.java
+            │   ├── SoapEnvelopeConstants.java
+            │   ├── SoapNamespaces.java
+            │   └── model/
+            │       ├── UploadFileRequest.java
+            │       └── UploadFileResponse.java
+            └── exception/
+                └── SoapCommunicationException.java
 ```
 
 ### Reglas de Dependencia
 
 - **Domain** no depende de ninguna otra capa (puro Java, sin frameworks, sin Spring)
 - **Domain** no contiene anotaciones de framework (`@Component`, `@Service`, etc.)
-- **Infrastructure** depende de Domain (acceso a casos de uso y entidades)
-- **Infrastructure** expone los beans de dominio via `DomainConfig.java`
+- **Infrastructure** y **Application** dependen de Domain
+- **Application** expone los beans de dominio via `DomainConfig.java`
 
 ## Modelo de Datos
 
@@ -118,7 +147,7 @@ Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multip
 | content | TEXT | Contenido del archivo (Base64) |
 | content_type | VARCHAR(255) | Tipo MIME |
 | origin | VARCHAR(500) | Origen (ej. folderA/incoming) |
-| status | VARCHAR(50) | PENDING, PROCESSING, SUCCESS, FAILURE, RETRY, SKIPPED |
+| status | VARCHAR(50) | PENDING, PROCESSING, SUCCESS, FAILURE, RETRY, SKIPPED, NOT_SENT |
 | created_at | TIMESTAMP | Fecha de creacion |
 | processed_at | TIMESTAMP | Fecha de procesamiento |
 | trace_id | VARCHAR(255) | UUID de traza |
@@ -129,6 +158,7 @@ Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multip
 | Campo | Tipo | Descripcion |
 |-------|------|-------------|
 | trace_id | VARCHAR(255) | PK |
+| document_id | VARCHAR(255) | ID del documento (para auditoria) |
 | status | VARCHAR(50) | SUCCESS o FAILURE |
 | retry_count | INT | Numero de reintentos |
 | error_code | VARCHAR(100) | Codigo de error |
@@ -152,92 +182,84 @@ Carga productos y sus documentos asociados desde la API REST externa. **Los docu
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. ProductController.loadProducts()                                          │
-│    - Genera traceId UUID                                                     │
-│    - Registra traceId en MDC para logging                                    │
-│    - Invoca LoadProductsUseCase.execute()                                    │
-│    - Retorna HTTP 202 ACCEPTED inmediatamente (operacion async)               │
+│ 1. ProductHandler.loadProducts()                                           │
+│    - Genera traceId UUID                                                    │
+│    - Crea AsyncOperationStatus (LOADING)                                   │
+│    - Guarda estado en AsyncOperationRepository                             │
+│    - Retorna HTTP 202 ACCEPTED inmediatamente (operacion async)             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. LoadProductsUseCase.execute()                                             │
-│    - Genera traceId para la operacion                                        │
-│    - Invoca ProductRestGateway.getAllProducts(traceId)                       │
+│ 2. LoadProductsUseCase.execute()                                          │
+│    - Invoca ProductRestGateway.getAllProducts(traceId)                     │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. ProductRestGatewayImpl.getAllProducts()                                   │
-│    - WebClient GET /api/products                                              │
-│    - Header X-Trace-Id: {traceId}                                             │
-│    - Parsea JSON response a List<Map<String, Object>>                        │
-│    - Convierte cada Map a ProductInfo via mapToProductInfo()                 │
-│    - Retorna Flux<ProductInfo>                                               │
+│ 3. ProductRestGatewayImpl.getAllProducts()                                 │
+│    - WebClient GET /api/products                                            │
+│    - Header X-Trace-Id: {traceId}                                            │
+│    - Parsea JSON response a List<Map<String, Object>>                       │
+│    - Convierte cada Map a ProductInfo via mapToProductInfo()               │
+│    - Retorna Flux<ProductInfo>                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. LoadProductsUseCase.loadProductAndDocuments(ProductInfo)                  │
-│    - Por cada ProductInfo recibido:                                           │
-│      a) Crea ProductToProcess con status=PENDING                             │
-│      b) Invoca createDocumentsFlux() para crear documentos                    │
-│         - Si doc.isZipArchive() -> expandZipDocument()                       │
-│         - Si no -> createProductDocument()                                   │
+│ 4. LoadProductsUseCase.loadProductAndDocuments(ProductInfo)                 │
+│    - Por cada ProductInfo recibido:                                          │
+│      a) Crea ProductToProcess con status=PENDING                            │
+│      b) Invoca createDocumentsFlux() para crear documentos                   │
+│         - Si doc.isZipArchive() -> expandZipDocument()                      │
+│         - Si no -> createProductDocument()                                  │
 │      c) Guarda product en ProductRepository.save()                          │
 │      d) Guarda todos los documentos en documentRepository.saveAll()         │
-│      e) Retorna LoadProductsResult                                           │
+│      e) Retorna LoadProductsResult                                          │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 5. ZIP Expansion (expandZipDocument)                                         │
-│    - ByteArrayInputStream del contenido ZIP                                   │
+│ 5. ZIP Expansion (expandZipDocument)                                        │
+│    - ByteArrayInputStream del contenido ZIP                                  │
 │    - ZipInputStream para iterar entradas                                     │
-│    - Por cada entrada:                                                        │
-│      - Extrae nombre archivo y contenido                                     │
-│      - Crea ProductDocumentToProcess con:                                   │
+│    - Por cada entrada:                                                       │
+│      - Extrae nombre archivo y contenido                                      │
+│      - Crea ProductDocumentToProcess con:                                    │
 │        - documentId: "{zipDocId}_{filename}"                                 │
 │        - parentDocumentId: id del ZIP padre                                  │
 │        - content: bytes del archivo                                          │
 │        - contentType: detectado por nombre                                   │
 │        - origin: mismo origin que el ZIP                                     │
-│        - status: PENDING                                                     │
+│        - status: PENDING                                                    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 6. R2dbcProductRepository.save(ProductToProcess)                            │
+│ 6. R2dbcProductRepository.save(ProductToProcess)                           │
 │    - SQL: INSERT INTO products_to_process (...) VALUES (...)                 │
-│    - Bind: productId, name, status, createdAt, traceId                        │
-│    - Ejecuta en H2 database via DatabaseClient                               │
+│    - Bind: productId, name, status, createdAt, traceId                      │
+│    - Ejecuta en H2 database via DatabaseClient                              │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 7. R2dbcProductDocumentRepository.saveAll(documents)                        │
-│    - Flux<ProductDocumentToProcess> -> flatMap -> save()                    │
-│    - Por cada documento:                                                      │
+│    - Flux<ProductDocumentToProcess> -> flatMap -> save()                     │
+│    - Por cada documento:                                                     │
 │      - SQL: INSERT INTO product_documents_to_process (...)                   │
-│      - Bind: todos los campos incluyendo content (Base64)                    │
+│      - Bind: todos los campos incluyendo content (Base64)                   │
 │    - Content se almacena en texto (Base64 encoded)                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 8. Respuesta al Cliente                                                      │
-│    - HTTP 202 ACCEPTED                                                       │
-│    - Body: { status: "LOADING", message: "...", traceId: "...", success: true }│
-│    - El procesamiento real continua en background                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Response:**
 ```json
 {
+  "traceId": "550e8400-e29b-41d4-a716-446655440000",
+  "operationType": "LOAD",
   "status": "LOADING",
   "message": "Product loading from REST API started",
-  "traceId": "550e8400-e29b-41d4-a716-446655440000",
   "success": true
 }
 ```
@@ -265,46 +287,46 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. ProductController.processPendingProducts()                               │
+│ 1. ProductHandler.processPendingProducts()                                  │
+│    - Resuelve el UseCase segun parametro processor                           │
 │    - Genera traceId UUID                                                     │
-│    - Registra traceId en MDC                                                 │
-│    - Invoca AbstractProcessDocumentsUseCase.executePendingDocuments()        │
-│    - Retorna HTTP 202 ACCEPTED inmediatamente                                │
+│    - Crea AsyncOperationStatus (PROCESSING)                                 │
+│    - Retorna HTTP 202 ACCEPTED inmediatamente                               │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. AbstractProcessDocumentsUseCase.executePendingDocuments()                │
+│ 2. AbstractProcessDocumentsUseCase.executePendingDocuments()                 │
 │    - Invoca documentRepository.findPendingDocuments()                        │
 │    - Retorna Flux<ProductDocumentToProcess> con statuses:                    │
-│      PENDING, RETRY, PROCESSING (crash recovery)                             │
+│      PENDING, RETRY, PROCESSING (crash recovery)                           │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. R2dbcProductDocumentRepository.findPendingDocuments()                    │
-│    - SQL: SELECT * FROM product_documents_to_process                         │
-│      WHERE status IN ('PENDING', 'RETRY', 'PROCESSING')                     │
-│      ORDER BY created_at ASC                                                │
-│    - Por cada row: construye ProductDocumentToProcess                        │
+│ 3. R2dbcProductDocumentRepository.findPendingDocuments()                     │
+│    - SQL: SELECT * FROM product_documents_to_process                        │
+│      WHERE status IN ('PENDING', 'RETRY', 'PROCESSING')                      │
+│      ORDER BY created_at ASC                                                 │
+│    - Por cada row: construye ProductDocumentToProcess                         │
 │    - Decodifica content Base64 -> byte[]                                     │
 │    - Retorna Flux<ProductDocumentToProcess>                                 │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. processPendingDocument(ProductDocumentToProcess)                          │
-│    - Invoca documentRepository.claimDocument(documentId)                   │
+│ 4. processPendingDocument(ProductDocumentToProcess)                         │
+│    - Invoca documentRepository.claimDocument(documentId)                     │
 │    - Solo si claim returns TRUE continua el procesamiento                    │
 │    - Si claim returns FALSE (otro proceso o no PENDING): salta documento     │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 5. R2dbcProductDocumentRepository.claimDocument(documentId)                  │
+│ 5. R2dbcProductDocumentRepository.claimDocument(documentId)                 │
 │    - SQL: UPDATE product_documents_to_process                               │
-│      SET status = 'PROCESSING', trace_id = $2, processed_at = $3          │
-│      WHERE document_id = $1 AND status = 'PENDING'                          │
+│      SET status = 'PROCESSING', trace_id = $2, processed_at = $3            │
+│      WHERE document_id = $1 AND status = 'PENDING'                           │
 │    - Retorna TRUE si rowsUpdated > 0, FALSE si no hubo match                 │
 │    - Este mecanismo previene duplicacion de envio                            │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -315,69 +337,69 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
 │    - Genera traceId UUID para este documento                                 │
 │    - Evalua reglas de negocio en orden (usando DocumentValidationRules):     │
 │                                                                             │
-│    REGLA 1 - Carpeta Excluida (shouldSkipFolder):                          │
+│    REGLA 1 - Carpeta Excluida (shouldSkipFolder):                           │
 │    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ if origin.contains("/tmp") OR origin.contains("/transient")         │  │
+│    │ if origin.contains("/tmp") OR origin.contains("/transient")          │  │
 │    │   -> UPDATE status = 'SKIPPED', error_code = 'SKIPPED_FOLDER'        │  │
-│    │   -> RETURN FileUploadResult con status=SKIPPED                     │  │
+│    │   -> RETURN FileUploadResult con status=SKIPPED                      │  │
 │    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                         │
-│                                    ▼                                         │
-│    REGLA 2 - Patron de Origen (shouldSendByOrigin):                        │
+│                                    │                                        │
+│                                    ▼                                        │
+│    REGLA 2 - Patron de Origen (shouldSendByOrigin):                         │
 │    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ patterns = originPatternsToSend()  // default: ["incoming","docs"] │  │
-│    │ if NOT origin.contains(any(patterns))                               │  │
-│    │   -> UPDATE status = 'NOT_SENT', error_code = 'NOT_SENT_ORIGIN'    │  │
-│    │   -> RETURN FileUploadResult con status=NOT_SENT                    │  │
+│    │ patterns = originPatternsToSend()  // default: ["incoming","docs"]  │  │
+│    │ if NOT origin.contains(any(patterns))                                │  │
+│    │   -> UPDATE status = 'NOT_SENT', error_code = 'NOT_SENT_ORIGIN'     │  │
+│    │   -> RETURN FileUploadResult con status=NOT_SENT                     │  │
 │    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                         │
-│                                    ▼                                         │
+│                                    │                                        │
+│                                    ▼                                        │
 │    REGLA 3 - Tamano de Archivo (shouldNotSendBySize):                       │
 │    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ maxSizeMb = 50 (configurable)                                      │  │
+│    │ maxSizeMb = 50 (configurable)                                       │  │
 │    │ if sizeBytes >= (maxSizeMb * 1MB)                                   │  │
-│    │   -> UPDATE status = 'NOT_SENT', error_code = 'SIZE_EXCEEDED'      │  │
-│    │   -> RETURN FileUploadResult con status=NOT_SENT, message con tamano│  │
+│    │   -> UPDATE status = 'NOT_SENT', error_code = 'SIZE_EXCEEDED'       │  │
+│    │   -> RETURN FileUploadResult con status=NOT_SENT, message con tamano │  │
 │    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                         │
-│                                    ▼                                         │
-│    SI TODAS LAS REGLAS PASAN -> continua a processFile()                     │
+│                                    │                                        │
+│                                    ▼                                        │
+│    SI TODAS LAS REGLAS PASAN -> continua a processFile()                      │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 7. processFile(ProductDocumentToProcess, traceId)                           │
-│    - Construye FileData con: content, filename, size, contentType, traceId   │
+│    - Construye FileData con: content, filename, size, contentType, traceId  │
 │                                                                             │
 │    REGLA 4 - Tipo de Archivo (FileValidator.validate):                      │
 │    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ allowedTypes = "pdf,txt,csv" (regex pattern)                        │  │
-│    │ if NOT filename matches allowedTypes                               │  │
+│    │ allowedTypes = "pdf,txt,csv" (regex pattern)                         │  │
+│    │ if NOT filename matches allowedTypes                                │  │
 │    │   -> Lanza FileValidationException                                  │  │
-│    │   -> En onErrorResume: status='NOT_SENT', message=validation error  │  │
+│    │   -> En onErrorResume: status='NOT_SENT', message=validation error │  │
 │    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                         │
+│                                    │                                        │
 │                                    ▼ (si pasa validacion)                   │
 │    - Extrae folderInfo del origin (keywords: "test", "mock")                │
-│      - parentFolder = parts[length-2]                                       │
+│      - parentFolder = parts[length-2]                                        │
 │      - childFolder = parts[length-1]                                        │
 │    - Construye SoapRequest via SoapRequest.fromFileData()                   │
 │      - Base64.encode(content) via Base64Utils                               │
-│      - Incluye parentFolder y childFolder                                  │
+│      - Incluye parentFolder y childFolder                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 8. sendDocument(SoapRequest) - Template Method                              │
+│ 8. sendDocument(SoapRequest) - Template Method                             │
 │    - Subclases SoapDocumentUseCase o S3DocumentUseCase                      │
-│    - Delegan al gateway correspondiente (SOAP o S3)                        │
+│    - Delegan al gateway correspondiente (SOAP o S3)                           │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
               ┌─────────────────────┴─────────────────────┐
               ▼                                           ▼
 ┌─────────────────────────────┐         ┌─────────────────────────────┐
-│ SoapDocumentUseCase         │         │ S3DocumentUseCase            │
-│  - ExternalSoapGateway      │         │  - S3Gateway                 │
+│ SoapDocumentUseCase         │         │ S3DocumentUseCase             │
+│  - ExternalSoapGateway       │         │  - S3Gateway                 │
 │  - soapGateway.sendFile()   │         │  - s3Gateway.upload()        │
 └─────────────────────────────┘         └─────────────────────────────┘
               │                                           │
@@ -386,12 +408,13 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
 │ 9. Respuesta y actualizacion de estado                                       │
 │     - Actualiza documentRepository.updateStatus():                          │
 │       UPDATE product_documents_to_process                                   │
-│       SET status = 'SUCCESS',                                              │
-│           soap_correlation_id = 'correlationId',                            │
+│       SET status = 'SUCCESS',                                               │
+│           soap_correlation_id = 'correlationId',                           │
 │           trace_id = 'traceId',                                             │
 │           processed_at = NOW()                                              │
 │       WHERE document_id = 'doc-xxx'                                        │
-│     - Guarda SoapCommunicationLog (success)                                 │
+│     - Guarda SoapCommunicationLog (success)                                  │
+│     - Actualiza AsyncOperationStatus (progress tracking)                    │
 │     - Retorna FileUploadResult al flux                                      │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -403,7 +426,7 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │ - Reintenta hasta 3 veces con backoff exponencial                     │   │
 │  │ - Si todos fallan: marca status='RETRY' o 'FAILURE'                   │   │
-│  │ - Guarda SoapCommunicationLog con errorCode y retryCount               │   │
+│  │ - Guarda SoapCommunicationLog con errorCode y retryCount              │   │
 │  │ - Lanza SoapCommunicationException                                    │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
@@ -411,14 +434,14 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │ - Capturado en onErrorResume de processFile                          │   │
 │  │ - status='NOT_SENT', message=validation error                        │   │
-│  │ - No se lanza excepcion (result es exitoso con status NOT_SENT)        │   │
+│  │ - No se lanza excepcion (result es exitoso con status NOT_SENT)       │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  CRASH RECOVERY:                                                            │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │ - Si MS cae mientras documento estaba PROCESSING:                    │   │
-│  │ - Al reiniciar: DatabaseInitializer resetea PROCESSING -> PENDING    │   │
-│  │ - Solo ese documento se reprocesa (claim previene duplicados)         │   │
+│  │ - Al reiniciar: DatabaseInitializer resetea PROCESSING -> PENDING   │   │
+│  │ - Solo ese documento se reprocesa (claim previene duplicados)        │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -426,19 +449,50 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
 **Response:**
 ```json
 {
+  "traceId": "660e8400-e29b-41d4-a716-446655440001",
+  "operationType": "PROCESS",
   "status": "PROCESSING",
   "message": "Pending product documents processing started",
-  "traceId": "660e8400-e29b-41d4-a716-446655440001",
   "success": true
 }
 ```
 
-**Response asincrono (llega via logs, no al cliente HTTP):**
+---
+
+### GET /api/v1/operations/{traceId}/status
+
+Consulta el estado de una operacion asincrona (carga o procesamiento).
+
+**Response:**
+```json
+{
+  "traceId": "660e8400-e29b-41d4-a716-446655440001",
+  "operationType": "PROCESS",
+  "status": "PROCESSING",
+  "message": "Pending product documents processing started",
+  "totalItems": 0,
+  "processedItems": 5,
+  "successItems": 4,
+  "failedItems": 1,
+  "startedAt": "2026-04-27T12:00:00Z",
+  "completedAt": null,
+  "success": true
+}
 ```
-Document processed: correlationId=abc123, status=SUCCESS
-Document processed: correlationId=def456, status=NOT_SENT (file size >= 50MB)
-Document processed: correlationId=ghi789, status=FAILURE (SOAP error)
-```
+
+**Estados de operacion:**
+- `LOADING`: Cargando productos desde REST API
+- `PROCESSING`: Procesando documentos
+- `COMPLETED`: Operacion finalizada
+
+**Tracking de progreso:**
+El handler actualiza el `AsyncOperationStatus` con el progreso:
+- `totalItems`: Total de items a procesar
+- `processedItems`: Items procesados hasta el momento
+- `successItems`: Items exitosos
+- `failedItems`: Items fallidos
+
+---
 
 ## Procesamiento de ZIP
 
@@ -473,7 +527,7 @@ El sistema calcula automáticamente el estado del producto basado en sus documen
 | `COMPLETED_WITH_NOT_SENT` | Completado con documentos no enviados | Todos SUCCESS/SKIPPED/NOT_SENT |
 | `COMPLETED_WITH_FAILURES` | Todos los documentos fallaron | Todos los docs FAILURE |
 
-**Lógica de Agregación:**
+**Logica de Agregacion:**
 
 ```java
 // ProductStatusAggregator.calculateStatus(documents)
@@ -485,12 +539,12 @@ El sistema calcula automáticamente el estado del producto basado en sus documen
 6. Si todos FAILURE → COMPLETED_WITH_FAILURES
 ```
 
-**Actualización Automática:**
-- El estado del producto se recalcula después de cada documento
+**Actualizacion Automatica:**
+- El estado del producto se recalcula despues de cada documento
 - Se llama a `updateProductStatusIfComplete()` cuando el documento alcanza estado terminal
 - El `SoapCommunicationLog` ahora incluye `document_id` para auditoria trazable
 
-## Patrones de Diseño
+## Patrones de Diseno
 
 ### Template Method (AbstractProcessDocumentsUseCase)
 
@@ -499,7 +553,7 @@ El sistema calcula automáticamente el estado del producto basado en sus documen
 ```
 executePendingDocuments()
     └── findPendingDocuments()
-            └── flatMap(processPendingDocument)
+            └── flatMap(processPendingDocument, 10)  // maxConcurrency=10
                     ├── claimDocument()
                     ├── validateRules()          <- reglas de negocio
                     ├── fileValidator.validate() <- tipo archivo
@@ -511,6 +565,13 @@ Las subclases solo definen `sendDocument()` y `getImplementationName()`:
 - **SoapDocumentUseCase**: envia via `ExternalSoapGateway`
 - **S3DocumentUseCase**: sube via `S3Gateway`
 
+### Async Operation Tracking
+
+El servicio utiliza `AsyncOperationRepository` para tracking de operaciones asincronas:
+- `InMemoryAsyncOperationRepository`: implementacion en memoria
+- Permite consultar el estado via `/api/v1/operations/{traceId}/status`
+- Actualiza progreso en cada documento procesado
+
 ### Record Utilities
 
 - **DocumentValidationRules**: encapsulate validation rules as immutable record
@@ -518,12 +579,26 @@ Las subclases solo definen `sendDocument()` y `getImplementationName()`:
 
 ## Configuracion
 
+### Variables de Configuracion
+
 | Variable | Default | Descripcion |
 |----------|---------|-------------|
 | `app.file.max-file-size-mb` | 50 | Tamano maximo para enviar |
 | `app.file.allowed-types` | `pdf,txt,csv` | Tipos de archivo permitidos (regex) |
 | `app.file.folders-to-skip` | `/tmp,/transient` | Carpetas a excluir |
-| `app.file.origin-patterns-to-send` | `incoming,documents` | Patrones de origin que deben contener los archivos para ser enviados |
+| `app.file.origin-patterns-to-send` | `incoming,documents` | Patrones de origin |
+| `app.processors.soap.max-file-size-mb` | 50 | Tamano maximo para SOAP |
+| `app.processors.soap.allowed-types` | `pdf,txt,csv` | Tipos SOAP |
+| `app.processors.s3.max-file-size-mb` | 100 | Tamano maximo para S3 |
+| `app.processors.s3.allowed-types` | `pdf,txt,csv,zip` | Tipos S3 |
+
+### Perfiles Spring
+
+| Perfil | Implementacion | Uso |
+|--------|---------------|-----|
+| `soap` (default) | SoapDocumentUseCase | Envio via SOAP |
+| `s3` | S3DocumentUseCase | Upload a AWS S3 |
+| sin perfil | SoapDocumentUseCase | Default igual que soap |
 
 ## Observabilidad
 
@@ -542,20 +617,20 @@ curl -s http://localhost:8080/actuator/health/readiness | jq .
 curl -s http://localhost:8080/actuator/health/liveness | jq .
 ```
 
-### Métricas (Prometheus)
+### Metricas (Prometheus)
 
 ```bash
-# Métricas en formato Prometheus
+# Metricas en formato Prometheus
 curl -s http://localhost:8080/actuator/prometheus | jq .
 ```
 
-**Métricas clave disponibles:**
+**Metricas clave disponibles:**
 
-| Métrica | Tipo | Descripción |
+| Metrica | Tipo | Descripcion |
 |---------|------|-------------|
 | `documents_processed_total{status}` | Counter | Documentos procesados por estado (SUCCESS/FAILURE/NOT_SENT/SKIPPED) |
-| `documents_processing_duration_seconds` | Timer | Duración del procesamiento de documentos |
-| `soap_retry_total` | Counter | Número total de reintentos SOAP |
+| `documents_processing_duration_seconds` | Timer | Duracion del procesamiento de documentos |
+| `soap_retry_total` | Counter | Numero total de reintentos SOAP |
 | `s3_upload_total{status}` | Counter | Uploads a S3 por estado |
 | `product_load_total` | Counter | Productos cargados desde REST API |
 
@@ -569,9 +644,9 @@ El servicio utiliza MDC (Mapped Diagnostic Context) para logs correlacionados:
 ```
 
 **Campos de log disponibles:**
-- `traceId`: UUID de correlación entre operaciones
+- `traceId`: UUID de correlacion entre operaciones
 - `documentId`: ID del documento en proceso
-- `correlationId`: ID de correlación SOAP (cuando aplica)
+- `correlationId`: ID de correlacion SOAP (cuando aplica)
 
 **Ejemplo de log:**
 ```
@@ -594,15 +669,15 @@ export OTEL_METRICS_EXPORTER=none
 **Spans generados:**
 - `LoadProductsUseCase.execute` - Carga desde REST
 - `AbstractProcessDocumentsUseCase.executePendingDocuments` - Procesamiento
-- `ExternalSoapGateway.sendFile` - Invocación SOAP
+- `ExternalSoapGateway.sendFile` - Invocacion SOAP
 - `S3Gateway.upload` - Upload a S3
 
 ---
 
 ## Requisitos del Sistema
 
-| Componente | Versión | Notas |
-|------------|--------|-------|
+| Componente | Version | Notas |
+|------------|---------|-------|
 | JDK | 21+ | Requerido para Spring WebFlux 3.x |
 | Gradle | 8.5+ | Wrapper incluido (`./gradlew`) |
 | Docker | 24+ | Solo para ejecutar mocks |
@@ -612,7 +687,7 @@ export OTEL_METRICS_EXPORTER=none
 
 El servicio implementa **3 reintentos maximos** con backoff exponencial:
 - **Escenarios reintentables**: Timeout (>30s), errores 5xx
-- **Escenarios NO reintentables**: HTTP 4xx, errores de validación
+- **Escenarios NO reintentables**: HTTP 4xx, errores de validacion
 - **Delay**: 1s, 2s, 4s entre intentos (configurable via `soap.retry-backoff-millis`)
 
 ### Tabla de Reintentos
@@ -625,7 +700,7 @@ El servicio implementa **3 reintentos maximos** con backoff exponencial:
 
 ## Resiliencia
 
-### Circuit Breaker (Resilience4j) - Code Review #4
+### Circuit Breaker (Resilience4j)
 
 El servicio implementa Circuit Breaker con Resilience4j integrado en `AbstractProcessDocumentsUseCase`:
 
@@ -647,15 +722,15 @@ private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request,
 **Estados del Circuit Breaker:**
 - `CLOSED`: Funcionamiento normal, solicitudes procesadas
 - `OPEN`: Demasiados errores, solicitudes rejected inmediatamente con `CIRCUIT_BREAKER_OPEN`
-- `HALF_OPEN`: Prueba con pocas solicitudes si el servicio recuperó
+- `HALF_OPEN`: Prueba con pocas solicitudes si el servicio recupero
 
-**Configuración sugerida en `application.yml`:**
+**Configuracion en `application.yml`:**
 
 ```yaml
 resilience4j:
   circuitbreaker:
     instances:
-      SoapDocumentUseCase:  # Nombre del use case
+      SoapDocumentUseCase:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 60s
@@ -673,19 +748,18 @@ Si el servicio cae mientras un documento estaba en procesamiento (`PROCESSING`),
 
 1. `DatabaseInitializer` detecta documentos con status `PROCESSING`
 2. Los resetea a `PENDING`
-3. El mecanismo de `claimDocument()` previene duplicación
+3. El mecanismo de `claimDocument()` previene duplicacion
 
 ```sql
--- Reset automático al iniciar
+-- Reset automatico al iniciar
 UPDATE product_documents_to_process
 SET status = 'PENDING'
-WHERE status = 'PROCESSING'
-AND processed_at < NOW() - INTERVAL '5' MINUTE;
+WHERE status = 'PROCESSING';
 ```
 
-## Integración SOAP
+## Integracion SOAP
 
-> **Nota**: El XSD Schema no está incluido en el proyecto. El contrato SOAP está definido implícitamente por las clases en `infrastructure/soap/xml/model/`:
+> **Nota**: El XSD Schema no esta incluido en el proyecto. El contrato SOAP esta definido implícitamente por las clases en `infrastructure/helpers/soap/xml/model/`:
 > - `UploadFileRequest.java`
 > - `UploadFileResponse.java`
 
@@ -693,7 +767,7 @@ AND processed_at < NOW() - INTERVAL '5' MINUTE;
 
 Los campos del request se mapean desde `SoapRequest.java`:
 
-| Campo | Tipo | Descripción |
+| Campo | Tipo | Descripcion |
 |-------|------|-------------|
 | `parentFolder` | String | Carpeta padre (ej. `incoming`) |
 | `childFolder` | String | Carpeta hijo (ej. `docs`) |
@@ -752,10 +826,14 @@ curl -X GET "http://localhost:8080/api/v1/products?processor=s3" \
   -H "Accept: application/json" \
   -w "\nHTTP Status: %{http_code}\n"
 
+# Ver estado de operacion
+curl -X GET "http://localhost:8080/api/v1/operations/{traceId}/status" \
+  -H "Accept: application/json"
+
 # Verificar health
 curl -s http://localhost:8080/actuator/health | jq .
 
-# Ver métricas
+# Ver metricas
 curl -s http://localhost:8080/actuator/metrics/documents.processed.total | jq .
 ```
 
@@ -772,14 +850,14 @@ curl -s http://localhost:8080/actuator/metrics/documents.processed.total | jq .
 ./gradlew jacocoTestReport
 ```
 
-## Mocks Disponibles y Validación
+## Mocks Disponibles y Validacion
 
 ### Mock REST de Productos (Java)
 ```bash
 # Iniciar mock
 ./scripts/start-product-mock.sh
 
-# Validar que está corriendo
+# Validar que esta corriendo
 curl -s http://localhost:3001/api/products | jq 'length'
 
 # Expected output: array de productos
@@ -788,7 +866,7 @@ curl -s http://localhost:3001/api/products | jq 'length'
 ### Mock REST de Productos (Mockoon Desktop)
 Importar `mockoon/document-rest-mock.json` en Mockoon Desktop.
 
-**Validación del contrato:**
+**Validacion del contrato:**
 ```bash
 # Verificar estructura del mock
 curl -s http://localhost:3001/api/products | jq '.[] | {productId, name, documentsCount: (.documents | length)}'
@@ -813,49 +891,11 @@ curl -X POST http://localhost:9000/soap/fileservice \
 # Iniciar mock
 ./scripts/start-s3-mock.sh
 
-# Validar que LocalStack está corriendo
+# Validar que LocalStack esta corriendo
 curl -s http://localhost:4566/_localstack/health | jq .
 
 # Listar buckets
 aws --endpoint-url=http://localhost:4566 s3 ls
-```
-
-## Admin Processes
-
-Tareas administrativas para operación y recuperación manual:
-
-### Reset Masivo de Documentos
-
-```bash
-# Resetear todos los documentos en FAILURE/RETRY a PENDING
-curl -X POST http://localhost:8080/api/v1/admin/documents/reset \
-  -H "Content-Type: application/json" \
-  -d '{"statuses": ["FAILURE", "RETRY"]}'
-```
-
-### Ver Estado de Cola
-
-```bash
-# Contar documentos por estado
-curl -s http://localhost:8080/api/v1/admin/documents/stats | jq .
-```
-
-### Forzar Reintento de Documentos Específicos
-
-```bash
-# Reintentar un documento específico por ID
-curl -X POST http://localhost:8080/api/v1/admin/documents/{documentId}/retry
-```
-
-### Migración de Base de Datos
-
-```bash
-# Ejecutar migraciones Flyway (si están configuradas)
-./gradlew flywayMigrate
-
-# Verificar schema
-curl -s http://localhost:8080/actuator/health \
-  | jq '.components.db.details.database'
 ```
 
 ## Perfiles Spring
@@ -878,64 +918,74 @@ curl -s http://localhost:8080/actuator/health \
 
 ## Changelog
 
+### 2026-04-27 - Documentacion Actualizada
+
+- Actualizada estructura de paquetes para reflejar la organizacion real
+- Agregado endpoint `/api/v1/operations/{traceId}/status` para tracking async
+- Removida seccion de Admin endpoints (no implementados)
+- Agregadas entidades: `AsyncOperationStatus`, `DocumentStatus`, `ProductStatus`
+- Agregados use cases: `DocumentResult`, `DocumentErrorCodes`, `ProductStatusAggregator`, `ProductStatusSummary`
+- Actualizado diagrama de arquitectura con rutas correctas
+- Agregada documentacion de `AsyncOperationRepository`
+
 ### 2026-04-25 - Code Review Staff Engineer - Performance & Resilience Improvements
 
 #### Antipatterns Fixed (1-9)
 
-**#1 - Subscribe() dentro del Pipeline Reactivo (CRÍTICO)**
-- **Ubicación:** `SoapDocumentUseCase.java:39`
+**#1 - Subscribe() dentro del Pipeline Reactivo (CRITICO)**
+- **Ubicacion:** `SoapDocumentUseCase.java:39`
 - **Problema:** `.subscribe()` dentro del pipeline reactivo rompe backpressure y puede perder logs
-- **Solución:** Encadenar `saveSuccessLog()` con `.thenReturn(result)` como parte del flujo reactivo
-- **Impacto:** Logs de éxito ahora se guardan de forma confiable
+- **Solucion:** Encadenar `saveSuccessLog()` con `.thenReturn(result)` como parte del flujo reactivo
+- **Impacto:** Logs de exito ahora se guardan de forma confiable
 
-**#2 - flatMap sin Control de Concurrencia (CRÍTICO)**
-- **Ubicación:** `AbstractProcessDocumentsUseCase.java:54`
-- **Problema:** 10,000 documentos = 10,000 conexiones simultáneas, saturando el pool HTTP
-- **Solución:** `flatMap(this::processPendingDocument, 10)` limita a 10 operaciones simultáneas
-- **Impacto:** Previene saturación de conexiones y `OutOfMemoryError`
+**#2 - flatMap sin Control de Concurrencia (CRITICO)**
+- **Ubicacion:** `AbstractProcessDocumentsUseCase.java:54`
+- **Problema:** 10,000 documentos = 10,000 conexiones simultaneas, saturando el pool HTTP
+- **Solucion:** `flatMap(this::processPendingDocument, 10)` limita a 10 operaciones simultaneas
+- **Impacto:** Previene saturacion de conexiones y `OutOfMemoryError`
 
-**#3 - Propagación de TraceId via MDC (ALTO)**
-- **Ubicación:** `AbstractProcessDocumentsUseCase.java`
-- **Problema:** TraceId como variable local, no propagable a través de operaciones async
-- **Solución:** Uso de MDC (`MDC.put("traceId", ...)`) antes del flujo reactivo, limpiado con `doFinally()`
+**#3 - Propagacion de TraceId via MDC (ALTO)**
+- **Ubicacion:** `AbstractProcessDocumentsUseCase.java`
+- **Problema:** TraceId como variable local, no propagable a traves de operaciones async
+- **Solucion:** Uso de MDC (`MDC.put("traceId", ...)`) antes del flujo reactivo, limpiado con `doFinally()`
 - **Impacto:** Trazabilidad completa en logs correlacionados
 
 **#4 - Circuit Breaker con Resilience4j (ALTO)**
-- **Ubicación:** `AbstractProcessDocumentsUseCase.java`
-- **Problema:** Sin circuit breaker, un servicio caído causa cascading failures
-- **Solución:** Integración de Resilience4j `CircuitBreakerOperator` en `sendDocumentWithCircuitBreaker()`
-- **Impacto:** Previene cascadas de errores, documento marcado como `CIRCUIT_BREAKER_OPEN` cuando el CB está abierto
+- **Ubicacion:** `AbstractProcessDocumentsUseCase.java`
+- **Problema:** Sin circuit breaker, un servicio caido causa cascading failures
+- **Solucion:** Integracion de Resilience4j `CircuitBreakerOperator` en `sendDocumentWithCircuitBreaker()`
+- **Impacto:** Previene cascadas de errores, documento marcado como `CIRCUIT_BREAKER_OPEN` cuando el CB esta abierto
 
-**#5 - Separación Domain/Infraestructura - Base64 Encoding (ALTO)**
-- **Ubicación:** `SoapRequest.java`, `SoapMapper.java`, `S3GatewayImpl.java`
+**#5 - Separacion Domain/Infraestructura - Base64 Encoding (ALTO)**
+- **Ubicacion:** `SoapRequest.java`, `SoapMapper.java`, `S3GatewayImpl.java`
 - **Problema:** Encoding Base64 ocurría en el domain (`SoapRequest.fromFileData()`)
-- **Solución:**
+- **Solucion:**
   - `SoapRequest` ahora usa `byte[] fileContent` (raw bytes, sin encoding)
   - `SoapMapper.toSoapXml()` realiza el encoding en infraestructura
   - `S3GatewayImpl.upload()` usa bytes directamente
-- **Impacto:** Domain puro Java, sin lógica de frameworks
+- **Impacto:** Domain puro Java, sin logica de frameworks
 
 **#6 - MapStruct Eliminado (MEDIO)**
-- **Ubicación:** `build.gradle.kts`
+- **Ubicacion:** `build.gradle.kts`
 - **Problema:** MapStruct en dependencias pero no se usaba
-- **Solución:** Eliminado de build.gradle.kts (comentado para futuro uso)
-- **Impacto:** Menos dependencias, build más limpio
+- **Solucion:** Eliminado de build.gradle.kts (comentado para futuro uso)
+- **Impacto:** Menos dependencias, build mas limpio
 
 **#7 - Value Objects para Campos Críticos (MEDIO)**
-- **Ubicación:** Nuevo paquete `domain/valueobject/`
-- **Problema:** Campos como `documentId` y `traceId` eran `String` sin validación
-- **Solución:** Creados `TraceId.java` y `DocumentId.java` como records con validación
-- **Impacto:** Tipo seguro y validación centralizada
+- **Ubicacion:** Nuevo paquete `domain/valueobject/`
+- **Problema:** Campos como `documentId` y `traceId` eran `String` sin validacion
+- **Solucion:** Creados `TraceId.java` y `DocumentId.java` como records con validacion
+- **Impacto:** Tipo seguro y validacion centralizada
 
-**#8 - Optimización Build.gradle (MEDIO)**
-- **Ubicación:** `build.gradle.kts`
+**#8 - Optimizacion Build.gradle (MEDIO)**
+- **Ubicacion:** `build.gradle.kts`
 - **Problema:** Build lento sin paralelismo ni cache optimizado
-- **Solución:** Agregada configuración de annotation processor y JVM flags
-- **Impacto:** Build incremental más rápido
+- **Solucion:** Agregada configuracion de annotation processor y JVM flags
+- **Impacto:** Build incremental mas rapido
 
 **#9 - Virtual Threads Analysis (INFO)**
-- **Análisis:** Virtual Threads no recomendados actualmente - modelo reactivo es válido
-- **Recomendación:** Considerar Virtual Threads solo si profiling demuestra bottleneck en threads blocking
+- **Analisis:** Virtual Threads no recomendados actualmente - modelo reactivo es valido
+- **Recomendacion:** Considerar Virtual Threads solo si profiling demuestra bottleneck en threads blocking
 
 ---
 
@@ -943,13 +993,13 @@ curl -s http://localhost:8080/actuator/health \
 
 **CA-01 - SUCCESS cuando TODOS los documentos son SUCCESS:**
 ```java
-// Después de procesar el último documento SUCCESS:
+// Despues de procesar el ultimo documento SUCCESS:
 if (allDocumentsAreSuccess) {
     productRepository.updateStatus(productId, "SUCCESS", traceId);
 }
 ```
 
-**CA-02 - PARTIAL_FAILURE si al menos 1 documento falló:**
+**CA-02 - PARTIAL_FAILURE si al menos 1 documento fallo:**
 ```java
 // Si un documento FAILURE:
 if (hasAtLeastOneFailure && !allAreFailure) {
@@ -965,7 +1015,7 @@ if (allProcessed && hasSomeSkipped && noFailures) {
 }
 ```
 
-**Implementación en AbstractProcessDocumentsUseCase:**
+**Implementacion en AbstractProcessDocumentsUseCase:**
 ```java
 private Mono<Void> updateProductStatusIfComplete(String productId, String traceId) {
     return documentRepository.findByProductId(productId)
@@ -990,13 +1040,13 @@ private Mono<Void> updateProductStatusIfComplete(String productId, String traceI
 com.example.fileprocessor/
 ├── domain/
 │   ├── valueobject/              # NUEVO: Value Objects para tipo seguro
-│   │   ├── TraceId.java          # Validación de UUID y no-null
-│   │   └── DocumentId.java       # Validación de no-blank
+│   │   ├── TraceId.java          # Validacion de UUID y no-null
+│   │   └── DocumentId.java       # Validacion de no-blank
 │   ├── entity/
 │   │   ├── ProductStatus.java    # NUEVO: Estados de producto
 │   │   └── SoapCommunicationLog.java  # MODIFICADO: +documentId
 │   ├── usecase/
-│   │   ├── ProductStatusAggregator.java  # NUEVO: Agregación de estado
+│   │   ├── ProductStatusAggregator.java  # NUEVO: Agregacion de estado
 │   │   └── ProductStatusSummary.java      # NUEVO: Resumen de estado
 │   └── entity/
 │       └── SoapRequest.java      # MODIFICADO: fileContent bytes (no Base64)
@@ -1004,7 +1054,7 @@ com.example.fileprocessor/
 └── infrastructure/
     ├── helpers/soap/
     │   └── mapper/
-    │       └── SoapMapper.java    # MODIFICADO: Base64 encoding aquí
+    │       └── SoapMapper.java    # MODIFICADO: Base64 encoding aqui
     └── drivenadapters/aws/
         └── S3GatewayImpl.java     # MODIFICADO: bytes directos
 ```
@@ -1014,11 +1064,11 @@ com.example.fileprocessor/
 ### Code Review: Flujo Reactivo Corregido
 
 ```java
-// ANTES (ANTI-PATRÓN)
-.flatMap(this::processPendingDocument)  // Sin límite
+// ANTES (ANTI-PATRON)
+.flatMap(this::processPendingDocument)  // Sin limite
 .doOnNext(result -> saveLog().subscribe())  // subscribe() rompe backpressure
 
-// DESPUÉS (CORRECTO)
+// DESPUES (CORRECTO)
 .flatMap(this::processPendingDocument, 10)  // maxConcurrency = 10
 .flatMap(result -> saveLog().thenReturn(result))  // Encadenado correctamente
 ```
@@ -1065,7 +1115,7 @@ private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess p
 
 ---
 
-### Tests de Recuperación (Crash Recovery)
+### Tests de Recuperacion (Crash Recovery)
 
 ```java
 @Test
@@ -1082,22 +1132,22 @@ void shouldResumeFromFailedDocumentOnRestart() {
         .thenReturn(Mono.just(successResponse("corr-4")))
         .thenReturn(Mono.just(successResponse("corr-5")));
 
-    // WHEN: Primera ejecución
+    // WHEN: Primera ejecucion
     useCase.executePendingDocuments().block();
 
-    // THEN: Doc3 quedó en RETRY
+    // THEN: Doc3 quedo en RETRY
     verify(documentRepository).updateStatus(
         eq("doc-3"), eq("RETRY"), anyString(), isNull(), eq("GATEWAY_TIMEOUT"));
 
     // WHEN: Simular restart (claim returns FALSE para PENDING=false)
     when(documentRepository.claimDocument("doc-3"))
-        .thenReturn(false)  // Primero no puede (aún RETRY)
+        .thenReturn(false)  // Primero no puede (aun RETRY)
         .thenReturn(true);  // Luego se reclama
 
-    // WHEN: Segunda ejecución
+    // WHEN: Segunda ejecucion
     useCase.executePendingDocuments().block();
 
-    // THEN: Solo se procesó doc-3
+    // THEN: Solo se proceso doc-3
     verify(soapGateway, times(1)).sendFile(any());
 }
 ```

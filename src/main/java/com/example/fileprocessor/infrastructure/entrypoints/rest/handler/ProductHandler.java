@@ -14,6 +14,7 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,12 +28,12 @@ public class ProductHandler {
 
     private final LoadProductsUseCase loadProductsUseCase;
     private final SoapDocumentUseCase soapDocumentUseCase;
-    private final S3DocumentUseCase s3DocumentUseCase;
+    private final Optional<S3DocumentUseCase> s3DocumentUseCase;
     private final AsyncOperationRepository asyncOperationRepository;
 
     public ProductHandler(LoadProductsUseCase loadProductsUseCase,
                          SoapDocumentUseCase soapDocumentUseCase,
-                         S3DocumentUseCase s3DocumentUseCase,
+                         Optional<S3DocumentUseCase> s3DocumentUseCase,
                          AsyncOperationRepository asyncOperationRepository) {
         this.loadProductsUseCase = loadProductsUseCase;
         this.soapDocumentUseCase = soapDocumentUseCase;
@@ -109,10 +110,10 @@ public class ProductHandler {
     private AbstractProcessDocumentsUseCase resolveUseCase(String processorType) {
         return switch (processorType.toLowerCase()) {
             case RestApiConstants.PROCESSOR_S3 -> {
-                if (s3DocumentUseCase == null) {
+                if (s3DocumentUseCase.isEmpty()) {
                     throw new IllegalStateException(RestApiConstants.MSG_S3_NOT_AVAILABLE);
                 }
-                yield s3DocumentUseCase;
+                yield s3DocumentUseCase.get();
             }
             case RestApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
             default -> {
