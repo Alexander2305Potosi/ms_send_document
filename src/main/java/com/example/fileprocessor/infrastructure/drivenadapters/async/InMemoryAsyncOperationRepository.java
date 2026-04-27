@@ -33,7 +33,7 @@ public class InMemoryAsyncOperationRepository implements AsyncOperationRepositor
     @Override
     public Mono<Void> updateProgress(String traceId, int processed, int success, int failed) {
         return Mono.fromRunnable(() -> {
-            operations.compute(traceId, (key, current) -> {
+            AsyncOperationStatus updated = operations.compute(traceId, (key, current) -> {
                 if (current == null) {
                     log.warn("Cannot update progress - operation not found: traceId={}", traceId);
                     return null;
@@ -45,27 +45,31 @@ public class InMemoryAsyncOperationRepository implements AsyncOperationRepositor
                     failed
                 );
             });
-            log.debug("Progress updated: traceId={}, processed={}, success={}, failed={}",
-                traceId, processed, success, failed);
+            if (updated != null) {
+                log.debug("Progress updated: traceId={}, processed={}, success={}, failed={}",
+                    traceId, processed, success, failed);
+            }
         });
     }
 
     @Override
     public Mono<Void> markCompleted(String traceId) {
         return Mono.fromRunnable(() -> {
-            operations.compute(traceId, (key, current) -> {
+            AsyncOperationStatus completed = operations.compute(traceId, (key, current) -> {
                 if (current == null) {
                     log.warn("Cannot mark completed - operation not found: traceId={}", traceId);
                     return null;
                 }
                 return current.completed();
             });
-            log.info("Async operation completed: traceId={}", traceId);
+            if (completed != null) {
+                log.info("Async operation completed: traceId={}", traceId);
+            }
         });
     }
 
     @Override
     public Mono<AsyncOperationStatus> findByTraceId(String traceId) {
-        return Mono.justOrEmpty(operations.get(traceId));
+        return Mono.defer(() -> Mono.justOrEmpty(operations.get(traceId)));
     }
 }
