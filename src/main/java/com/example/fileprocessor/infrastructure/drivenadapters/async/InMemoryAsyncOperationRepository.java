@@ -66,6 +66,6 @@ public class InMemoryAsyncOperationRepository implements AsyncOperationRepositor
 
     @Override
     public Mono<AsyncOperationStatus> findByTraceId(String traceId) {
-        return Mono.fromSupplier(() -> operations.get(traceId));
+        return Mono.justOrEmpty(operations.get(traceId));
     }
 }

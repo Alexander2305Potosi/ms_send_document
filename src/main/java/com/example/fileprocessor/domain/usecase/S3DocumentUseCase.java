@@ -7,6 +7,7 @@ import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -31,8 +32,9 @@ public class S3DocumentUseCase extends AbstractProcessDocumentsUseCase {
                            S3Gateway s3Gateway,
                            FileValidator fileValidator,
                            SoapCommunicationLogRepository logRepository,
-                           FileValidationConfig validationConfig) {
-        super(documentRepository, productRepository, fileValidator, logRepository, validationConfig);
+                           FileValidationConfig validationConfig,
+                           CircuitBreaker circuitBreaker) {
+        super(documentRepository, productRepository, fileValidator, logRepository, validationConfig, circuitBreaker);
         this.s3Gateway = s3Gateway;
     }
 
