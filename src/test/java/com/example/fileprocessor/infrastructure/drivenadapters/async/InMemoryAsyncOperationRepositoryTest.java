@@ -3,7 +3,6 @@ package com.example.fileprocessor.infrastructure.drivenadapters.async;
 import com.example.fileprocessor.domain.entity.AsyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -76,21 +75,17 @@ class InMemoryAsyncOperationRepositoryTest {
         AsyncOperationStatus status1 = AsyncOperationStatus.startLoading("trace-a");
         AsyncOperationStatus status2 = AsyncOperationStatus.startProcessing("trace-b");
 
+        // Chain operations to ensure sequential execution
         StepVerifier.create(
-            Mono.zip(
-                repository.save(status1),
-                repository.save(status2)
-            )
+            repository.save(status1)
+                .then(repository.save(status2))
+                .then(repository.findByTraceId("trace-a"))
+                .assertNext(found -> assertNotNull(found))
+                .then(repository.findByTraceId("trace-b"))
+                .assertNext(found -> assertNotNull(found))
         ).verifyComplete();
 
-        StepVerifier.create(repository.findByTraceId("trace-a"))
-            .assertNext(found -> assertNotNull(found))
-            .verifyComplete();
-
-        StepVerifier.create(repository.findByTraceId("trace-b"))
-            .assertNext(found -> assertNotNull(found))
-            .verifyComplete();
-
+        // Verify trace-c doesn't exist
         StepVerifier.create(repository.findByTraceId("trace-c"))
             .verifyComplete();
     }
