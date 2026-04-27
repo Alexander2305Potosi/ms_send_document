@@ -10,6 +10,8 @@ import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,7 +69,8 @@ class SoapDocumentUseCaseTest {
         lenient().when(documentRepository.findByProductId(anyString()))
             .thenReturn(Flux.empty());
 
-        useCase = new SoapDocumentUseCase(documentRepository, productRepository, soapGateway, fileValidator, logRepository, validationConfig);
+        CircuitBreaker circuitBreaker = CircuitBreakerRegistry.ofDefaults().circuitBreaker("SOAP");
+        useCase = new SoapDocumentUseCase(documentRepository, productRepository, soapGateway, fileValidator, logRepository, validationConfig, circuitBreaker);
     }
 
     @Test

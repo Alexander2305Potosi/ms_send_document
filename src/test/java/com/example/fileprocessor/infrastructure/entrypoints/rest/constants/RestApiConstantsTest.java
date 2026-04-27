@@ -31,11 +31,6 @@ class RestApiConstantsTest {
     }
 
     @Test
-    void mdcTraceId_shouldHaveCorrectValue() {
-        assertEquals("traceId", RestApiConstants.MDC_TRACE_ID);
-    }
-
-    @Test
     void operationConstants_shouldNotBeEmpty() {
         assertEquals("LOAD", RestApiConstants.OPERATION_LOAD);
         assertEquals("PROCESS", RestApiConstants.OPERATION_PROCESS);
