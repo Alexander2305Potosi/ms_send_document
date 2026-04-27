@@ -6,6 +6,7 @@ import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import reactor.core.publisher.Mono;
 
 /**
@@ -24,8 +25,9 @@ public class SoapDocumentUseCase extends AbstractProcessDocumentsUseCase {
                               ExternalSoapGateway soapGateway,
                               FileValidator fileValidator,
                               SoapCommunicationLogRepository logRepository,
-                              FileValidationConfig validationConfig) {
-        super(documentRepository, productRepository, fileValidator, logRepository, validationConfig);
+                              FileValidationConfig validationConfig,
+                              CircuitBreaker circuitBreaker) {
+        super(documentRepository, productRepository, fileValidator, logRepository, validationConfig, circuitBreaker);
         this.soapGateway = soapGateway;
     }
 
@@ -42,8 +44,6 @@ public class SoapDocumentUseCase extends AbstractProcessDocumentsUseCase {
                     .externalReference(response.getExternalReference())
                     .success(response.isSuccess())
                     .build();
-                // FIX #1: Encadenar el log como parte del flujo reactivo (no subscribe())
-                // CA-07: Include documentId for audit traceability
                 return saveSuccessLog(request.getDocumentId(), request.getFilename(), request.getTraceId(), result)
                     .thenReturn(result);
             });
