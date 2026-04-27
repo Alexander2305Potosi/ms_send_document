@@ -75,14 +75,10 @@ public abstract class AbstractProcessDocumentsUseCase {
     }
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        log.info("Fetching pending product documents from database...");
-        String rootTraceId = UUID.randomUUID().toString();
-        MDC.put("traceId", rootTraceId);
         return documentRepository.findPendingDocuments()
             .flatMap(this::processPendingDocument, DocumentProcessingConstants.DEFAULT_MAX_CONCURRENCY)
             .doOnNext(response -> log.info("Document processed: correlationId={}", response.getCorrelationId()))
-            .doOnError(error -> log.error("Error processing document: {}", error.getMessage()))
-            .doFinally(signal -> MDC.remove("traceId"));
+            .doOnError(error -> log.error("Error processing document: {}", error.getMessage()));
     }
 
     private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
@@ -100,60 +96,46 @@ public abstract class AbstractProcessDocumentsUseCase {
     }
 
     private Mono<FileUploadResult> processDocumentClaimed(ProductDocumentToProcess pending, String traceId) {
-        log.info("Processing pending document: {}, productId: {}, traceId: {}",
-            pending.getDocumentId(), pending.getProductId(), traceId);
+        log.info("Processing pending document: {}, productId: {}", pending.getDocumentId(), pending.getProductId());
 
         long fileSize = pending.getContent() != null ? pending.getContent().length : 0;
 
-        // Rule 1: Check if folder should be skipped
+        // Validation rules
         if (validationRules.shouldSkipFolder(pending.getOrigin())) {
-            log.info("Document {} skipped due to folder rule, origin: {}",
-                pending.getDocumentId(), pending.getOrigin());
-            return documentRepository.updateStatus(
-                    pending.getDocumentId(),
-                    DocumentStatus.SKIPPED_VALUE,
-                    traceId,
-                    null,
-                    DocumentErrorCodes.SKIPPED_FOLDER)
-                .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
-                .thenReturn(buildResult(DocumentStatus.SKIPPED_VALUE,
-                    DocumentProcessingConstants.MSG_SKIPPED_FOLDER + pending.getOrigin(),
-                    null, traceId, pending.getDocumentId(), true));
+            return skipDueToFolderRule(pending, traceId);
         }
-
-        // Rule 2: Check if origin matches required patterns
         if (!validationRules.shouldSendByOrigin(pending.getOrigin())) {
-            log.info("Document {} NOT SENT due to origin pattern rule, origin: {}",
-                pending.getDocumentId(), pending.getOrigin());
-            return documentRepository.updateStatus(
-                    pending.getDocumentId(),
-                    DocumentStatus.NOT_SENT_VALUE,
-                    traceId,
-                    null,
-                    DocumentErrorCodes.NOT_SENT_ORIGIN)
-                .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
-                .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
-                    DocumentProcessingConstants.MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
-                    null, traceId, pending.getDocumentId(), true));
+            return skipDueToOriginRule(pending, traceId);
         }
-
-        // Rule 3: Check file size
         if (validationRules.shouldNotSendBySize(fileSize)) {
-            log.info("Document {} NOT SENT due to size rule: {} bytes (>= {} MB). Trace: {}",
-                pending.getFilename(), fileSize, validationRules.extractFolderInfo(pending.getOrigin()), traceId);
-            return documentRepository.updateStatus(
-                    pending.getDocumentId(),
-                    DocumentStatus.NOT_SENT_VALUE,
-                    traceId,
-                    null,
-                    DocumentErrorCodes.SIZE_EXCEEDED)
-                .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
-                .thenReturn(buildResult(DocumentStatus.NOT_SENT_VALUE,
-                    DocumentProcessingConstants.MSG_SIZE_EXCEEDED + fileSize + DocumentProcessingConstants.MSG_SIZE_EXCEEDED_SUFFIX,
-                    null, traceId, pending.getFilename(), true));
+            return skipDueToSizeRule(pending, traceId, fileSize);
         }
 
-        // Build FileData for validation
+        return validateAndSend(pending, traceId, fileSize);
+    }
+
+    private Mono<FileUploadResult> skipDueToFolderRule(ProductDocumentToProcess pending, String traceId) {
+        log.info("Document {} skipped due to folder rule, origin: {}", pending.getDocumentId(), pending.getOrigin());
+        return documentRepository.updateStatus(pending.getDocumentId(), DocumentStatus.SKIPPED_VALUE, traceId, null, DocumentErrorCodes.SKIPPED_FOLDER)
+            .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
+            .thenReturn(buildSkippedResult(pending.getDocumentId(), DocumentProcessingConstants.MSG_SKIPPED_FOLDER + pending.getOrigin(), DocumentStatus.SKIPPED_VALUE));
+    }
+
+    private Mono<FileUploadResult> skipDueToOriginRule(ProductDocumentToProcess pending, String traceId) {
+        log.info("Document {} NOT SENT due to origin pattern rule, origin: {}", pending.getDocumentId(), pending.getOrigin());
+        return documentRepository.updateStatus(pending.getDocumentId(), DocumentStatus.NOT_SENT_VALUE, traceId, null, DocumentErrorCodes.NOT_SENT_ORIGIN)
+            .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
+            .thenReturn(buildSkippedResult(pending.getDocumentId(), DocumentProcessingConstants.MSG_NOT_SENT_ORIGIN + pending.getOrigin(), DocumentStatus.NOT_SENT_VALUE));
+    }
+
+    private Mono<FileUploadResult> skipDueToSizeRule(ProductDocumentToProcess pending, String traceId, long fileSize) {
+        log.info("Document {} NOT SENT due to size rule: {} bytes", pending.getFilename(), fileSize);
+        return documentRepository.updateStatus(pending.getDocumentId(), DocumentStatus.NOT_SENT_VALUE, traceId, null, DocumentErrorCodes.SIZE_EXCEEDED)
+            .then(updateProductStatusIfComplete(pending.getProductId(), traceId))
+            .thenReturn(buildSkippedResult(pending.getFilename(), DocumentProcessingConstants.MSG_SIZE_EXCEEDED + fileSize + DocumentProcessingConstants.MSG_SIZE_EXCEEDED_SUFFIX, DocumentStatus.NOT_SENT_VALUE));
+    }
+
+    private Mono<FileUploadResult> validateAndSend(ProductDocumentToProcess pending, String traceId, long fileSize) {
         FileData fileData = FileData.builder()
             .documentId(pending.getDocumentId())
             .content(pending.getContent())
@@ -166,23 +148,27 @@ public abstract class AbstractProcessDocumentsUseCase {
         DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(pending.getOrigin());
 
         return fileValidator.validate(fileData)
-            .flatMap(validData -> {
-                SoapRequest request = SoapRequest.builder()
-                    .documentId(pending.getDocumentId())
-                    .fileContent(validData.getContent())
-                    .filename(validData.getFilename())
-                    .contentType(validData.getContentType())
-                    .fileSize(validData.getSize())
-                    .traceId(traceId)
-                    .parentFolder(folderInfo.parentFolder())
-                    .childFolder(folderInfo.childFolder())
-                    .build();
-                return sendDocumentWithCircuitBreaker(request, traceId, pending.getDocumentId())
-                    .flatMap(result -> updateDocumentStatus(pending, result, traceId))
-                    .doOnNext(result -> log.info("Document {} sent via {}: correlationId={}",
-                        pending.getFilename(), getImplementationName(), result.getCorrelationId()));
-            })
+            .flatMap(validData -> createAndSendRequest(pending, validData, folderInfo, traceId))
             .onErrorResume(error -> handleDocumentError(pending, error, traceId));
+    }
+
+    private Mono<FileUploadResult> createAndSendRequest(ProductDocumentToProcess pending, FileData validData,
+                                                        DocumentValidationRules.FolderInfo folderInfo, String traceId) {
+        SoapRequest request = SoapRequest.builder()
+            .documentId(pending.getDocumentId())
+            .fileContent(validData.getContent())
+            .filename(validData.getFilename())
+            .contentType(validData.getContentType())
+            .fileSize(validData.getSize())
+            .traceId(traceId)
+            .parentFolder(folderInfo.parentFolder())
+            .childFolder(folderInfo.childFolder())
+            .build();
+
+        return sendDocumentWithCircuitBreaker(request, traceId, pending.getDocumentId())
+            .flatMap(result -> updateDocumentStatus(pending, result, traceId))
+            .doOnNext(result -> log.info("Document {} sent via {}: correlationId={}",
+                pending.getFilename(), getImplementationName(), result.getCorrelationId()));
     }
 
     /**
@@ -203,10 +189,6 @@ public abstract class AbstractProcessDocumentsUseCase {
 
     // ============== Status Management ==============
 
-    /**
-     * Updates document status and recalculates product status.
-     * CA-01, CA-02, CA-03: Product status is recalculated after each document update.
-     */
     protected Mono<FileUploadResult> updateDocumentStatus(ProductDocumentToProcess document,
                                                           DocumentResult result, String traceId) {
         String status = result.getStatus();
@@ -326,6 +308,17 @@ public abstract class AbstractProcessDocumentsUseCase {
             .processedAt(Instant.now())
             .externalReference(externalReference)
             .success(success)
+            .build();
+    }
+
+    private FileUploadResult buildSkippedResult(String externalReference, String message, String status) {
+        return FileUploadResult.builder()
+            .status(status)
+            .message(message)
+            .traceId(UUID.randomUUID().toString())
+            .processedAt(Instant.now())
+            .externalReference(externalReference)
+            .success(true)
             .build();
     }
 
