@@ -18,8 +18,6 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiConstants;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -84,7 +82,6 @@ public abstract class AbstractProcessDocumentsUseCase {
 
     private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
         String traceId = UUID.randomUUID().toString();
-        MDC.put(RestApiConstants.MDC_TRACE_ID, traceId);
         return documentRepository.claimDocument(pending.getDocumentId())
             .filter(Boolean::booleanValue)
             .flatMap(claimed -> processDocumentClaimed(pending, traceId))
@@ -92,8 +89,7 @@ public abstract class AbstractProcessDocumentsUseCase {
                 log.info("Document {} already claimed by another process or not pending, skipping",
                     pending.getDocumentId());
                 return Mono.empty();
-            }))
-            .doFinally(signal -> MDC.remove(RestApiConstants.MDC_TRACE_ID))
+            }));
     }
 
     private Mono<FileUploadResult> processDocumentClaimed(ProductDocumentToProcess pending, String traceId) {
@@ -101,7 +97,6 @@ public abstract class AbstractProcessDocumentsUseCase {
 
         long fileSize = pending.getContent() != null ? pending.getContent().length : 0;
 
-        // Validation rules
         if (validationRules.shouldSkipFolder(pending.getOrigin())) {
             return skipDueToFolderRule(pending, traceId);
         }
@@ -172,9 +167,6 @@ public abstract class AbstractProcessDocumentsUseCase {
                 pending.getFilename(), getImplementationName(), result.getCorrelationId()));
     }
 
-    /**
-     * Envía el documento usando Circuit Breaker para resiliencia.
-     */
     private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request, String traceId, String documentId) {
         return Mono.fromCallable(() -> request)
             .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
@@ -201,10 +193,6 @@ public abstract class AbstractProcessDocumentsUseCase {
             .thenReturn(toFileUploadResult(result));
     }
 
-    /**
-     * Recalculates product status based on all its documents.
-     * Called after each document status change.
-     */
     private Mono<Void> updateProductStatusIfComplete(String productId, String traceId) {
         return documentRepository.findByProductId(productId)
             .collectList()

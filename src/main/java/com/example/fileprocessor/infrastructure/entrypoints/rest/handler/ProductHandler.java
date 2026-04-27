@@ -9,7 +9,6 @@ import com.example.fileprocessor.domain.port.out.AsyncOperationRepository;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -42,8 +41,10 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> loadProducts(ServerRequest request) {
-        String traceId = UUID.randomUUID().toString();
-        MDC.put(RestApiConstants.MDC_TRACE_ID, traceId);
+        String traceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString();
+        }
 
         log.info("Starting async products load from REST API, traceId: {}", traceId);
 
@@ -57,7 +58,6 @@ public class ProductHandler {
                             result.getProductId(), result.getStatus(), result.getDocumentCount());
                     })
                     .doOnError(error -> log.error("Load failed for traceId {}: {}", traceId, error.getMessage()))
-                    .doFinally(signal -> MDC.remove(RestApiConstants.MDC_TRACE_ID))
                     .subscribe();
             }))
             .thenReturn(initialStatus)
@@ -67,8 +67,10 @@ public class ProductHandler {
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
         String processorType = request.queryParam(RestApiConstants.PARAM_PROCESSOR).orElse(RestApiConstants.PROCESSOR_SOAP);
 
-        String traceId = UUID.randomUUID().toString();
-        MDC.put(RestApiConstants.MDC_TRACE_ID, traceId);
+        String traceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString();
+        }
 
         AbstractProcessDocumentsUseCase useCase = resolveUseCase(processorType);
         log.info("Starting async pending product documents processing with {} processor, traceId: {}",
@@ -91,10 +93,7 @@ public class ProductHandler {
                             ));
                     })
                     .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
-                    .doFinally(signal -> {
-                        asyncOperationRepository.markCompleted(traceId).subscribe();
-                        MDC.remove(RestApiConstants.MDC_TRACE_ID);
-                    })
+                    .doFinally(signal -> asyncOperationRepository.markCompleted(traceId).subscribe())
                     .subscribe();
             }))
             .thenReturn(initialStatus)
