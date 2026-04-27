@@ -11,7 +11,7 @@ import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.domain.exception.CommunicationException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
@@ -157,7 +157,7 @@ public abstract class AbstractProcessDocumentsUseCase {
             .flatMap(req -> sendDocument(req))
             .onErrorResume(CallNotPermittedException.class, e -> {
                 log.warn("Circuit breaker OPEN for document {}: {}", documentId, DocumentProcessingConstants.MSG_CIRCUIT_BREAKER_OPEN);
-                return Mono.error(new SoapCommunicationException(
+                return Mono.error(new CommunicationException(
                     DocumentProcessingConstants.MSG_CIRCUIT_BREAKER_OPEN,
                     DocumentErrorCodes.CIRCUIT_BREAKER_OPEN,
                     traceId, 0));
@@ -235,7 +235,7 @@ public abstract class AbstractProcessDocumentsUseCase {
         log.error("Failed to process document {}: {} (status={}, errorCode={})",
             document.getDocumentId(), error.getMessage(), status, errorCode);
 
-        int retries = error instanceof SoapCommunicationException sce ? sce.getRetryCount() : 0;
+        int retries = error instanceof CommunicationException ce ? ce.getRetryCount() : 0;
         return saveErrorLog(document.getDocumentId(), document.getFilename(), traceId, errorCode, retries)
             .then(documentRepository.updateStatus(document.getDocumentId(), status, traceId, null, errorCode))
             .then(updateProductStatusIfComplete(document.getProductId(), traceId))
@@ -243,8 +243,8 @@ public abstract class AbstractProcessDocumentsUseCase {
     }
 
     protected boolean isRetryableError(Throwable error) {
-        if (error instanceof SoapCommunicationException sce) {
-            String code = sce.getErrorCode();
+        if (error instanceof CommunicationException ce) {
+            String code = ce.getErrorCode();
             return DocumentErrorCodes.TIMEOUT.equals(code) || DocumentErrorCodes.GATEWAY_TIMEOUT.equals(code);
         }
         String message = error.getMessage();
@@ -253,11 +253,11 @@ public abstract class AbstractProcessDocumentsUseCase {
     }
 
     protected String extractErrorCode(Throwable error) {
-        if (error instanceof SoapCommunicationException sce) {
-            return sce.getErrorCode();
+        if (error instanceof CommunicationException ce) {
+            return ce.getErrorCode();
         }
-        if (error.getCause() instanceof SoapCommunicationException sce) {
-            return sce.getErrorCode();
+        if (error.getCause() instanceof CommunicationException ce) {
+            return ce.getErrorCode();
         }
         return DocumentErrorCodes.UNKNOWN_ERROR;
     }

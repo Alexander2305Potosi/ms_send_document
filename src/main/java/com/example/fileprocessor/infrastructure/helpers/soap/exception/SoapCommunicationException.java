@@ -1,38 +1,18 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.exception;
 
-public class SoapCommunicationException extends RuntimeException {
+import com.example.fileprocessor.domain.exception.CommunicationException;
 
-    private final String errorCode;
-    private final String traceId;
-    private final int retryCount;
+public class SoapCommunicationException extends CommunicationException {
 
     public SoapCommunicationException(String message, String errorCode, String traceId) {
-        this(message, errorCode, traceId, 0);
+        super(message, errorCode, traceId, 0);
     }
 
     public SoapCommunicationException(String message, String errorCode, String traceId, int retryCount) {
-        super(message);
-        this.errorCode = errorCode;
-        this.traceId = traceId;
-        this.retryCount = retryCount;
+        super(message, errorCode, traceId, retryCount);
     }
 
     public SoapCommunicationException(String message, String errorCode, String traceId, Throwable cause) {
-        super(message, cause);
-        this.errorCode = errorCode;
-        this.traceId = traceId;
-        this.retryCount = 0;
-    }
-
-    public String getErrorCode() {
-        return errorCode;
-    }
-
-    public String getTraceId() {
-        return traceId;
-    }
-
-    public int getRetryCount() {
-        return retryCount;
+        super(message, errorCode, traceId, cause);
     }
 }
