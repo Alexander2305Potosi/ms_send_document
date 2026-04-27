@@ -21,9 +21,6 @@ public final class RestApiConstants {
     // HTTP headers
     public static final String HEADER_TRACE_ID = "X-Trace-Id";
 
-    // MDC keys
-    public static final String MDC_TRACE_ID = "traceId";
-
     // Operation types
     public static final String OPERATION_LOAD = "LOAD";
     public static final String OPERATION_PROCESS = "PROCESS";

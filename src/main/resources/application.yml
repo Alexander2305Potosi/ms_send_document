@@ -35,7 +35,7 @@ logging:
     com.example.fileprocessor: INFO
     reactor.netty: INFO
   pattern:
-    console: "%-5level [%thread] %logger{36} - traceId=%X{traceId} - %msg%n"
+    console: "%-5level [%thread] %logger{36} - %msg%n"
 
 app:
   file:
