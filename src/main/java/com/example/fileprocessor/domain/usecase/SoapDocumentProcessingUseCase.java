@@ -57,7 +57,6 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
         return fileValidator.validate(pending);
     }
 
-    @Override
     protected int maxConcurrency() {
         return settings.getMaxConcurrency();
     }

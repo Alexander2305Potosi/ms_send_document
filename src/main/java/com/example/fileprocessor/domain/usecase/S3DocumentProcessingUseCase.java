@@ -58,7 +58,6 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
         return fileValidator.validate(pending);
     }
 
-    @Override
     protected int maxConcurrency() {
         return settings.getMaxConcurrency();
     }
