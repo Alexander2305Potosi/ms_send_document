@@ -2,7 +2,6 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
-import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -16,8 +15,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     public SoapDocumentProcessingUseCase(
             ProcessingDependencies deps,
-            FileValidator fileValidator,
-            ProcessorSettings settings) {
+            FileValidator fileValidator) {
         super(deps, fileValidator, new CommunicationLogFactory("SOAP"));
     }
 

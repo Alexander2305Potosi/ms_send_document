@@ -3,7 +3,6 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
-import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -19,8 +18,7 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     public S3DocumentProcessingUseCase(
             ProcessingDependencies deps,
             FileValidator fileValidator,
-            FolderExclusionRegexConfig folderExclusionRegex,
-            ProcessorSettings settings) {
+            FolderExclusionRegexConfig folderExclusionRegex) {
         super(deps, fileValidator, new CommunicationLogFactory("S3"));
         this.folderExclusionRegex = folderExclusionRegex;
     }
