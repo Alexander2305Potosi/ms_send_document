@@ -22,7 +22,8 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
             FileGateway fileGateway,
             CommunicationLogRepository logRepository,
             FileValidator fileValidator) {
-        super(documentRepository, statusAggregator, fileGateway, logRepository, fileValidator);
+        super(documentRepository, statusAggregator, fileGateway, logRepository, fileValidator,
+            new CommunicationLogFactory("SOAP"));
     }
 
     @Override
