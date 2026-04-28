@@ -33,7 +33,6 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final FileGateway fileGateway;
     protected final CommunicationLogRepository logRepository;
     protected final FileValidator fileValidator;
-    protected final CommunicationLogFactory logFactory;
 
     // ============ TEMPLATE METHOD (final) ============
 
@@ -112,13 +111,28 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected Mono<FileUploadResult> sendWithResilience(DocumentSendRequest request) {
         Instant start = Instant.now();
         return fileGateway.send(request)
-            .flatMap(result -> saveCommunicationLog(request, result, 0, start)
-                .thenReturn(result))
+            .flatMap(result -> logRepository.save(createLog(request, result, 0, start)).thenReturn(result))
             .doOnError(error -> {
                 String errorCode = extractErrorCode(error);
                 FileUploadResult failureResult = buildFailureResult(errorCode, request.getTraceId());
-                saveCommunicationLog(request, failureResult, 0, start).subscribe();
+                logRepository.save(createLog(request, failureResult, 0, start)).subscribe();
             });
+    }
+
+    private CommunicationLog createLog(DocumentSendRequest request, FileUploadResult result, int retryCount, Instant startTime) {
+        long latencyMs = java.time.Duration.between(startTime, Instant.now()).toMillis();
+        return CommunicationLog.builder()
+            .traceId(request.getTraceId())
+            .documentId(request.getDocumentId())
+            .status(result.getStatus())
+            .retryCount(retryCount)
+            .errorCode(result.getErrorCode())
+            .filename(request.getFilename())
+            .createdAt(Instant.now())
+            .latencyMs(latencyMs)
+            .gatewayName(implementationName())
+            .metadata("{}")
+            .build();
     }
 
     protected Mono<FileUploadResult> checkpoint(
@@ -138,12 +152,6 @@ public abstract class AbstractDocumentProcessingUseCase {
             ProductDocumentToProcess pending, FileUploadResult result, String traceId) {
         return statusAggregator.updateProductStatus(pending.getProductId(), traceId)
             .thenReturn(result);
-    }
-
-    protected Mono<Void> saveCommunicationLog(
-            DocumentSendRequest request, FileUploadResult result, int retryCount, Instant startTime) {
-        CommunicationLog logEntry = logFactory.create(request, result, retryCount, startTime, Map.of());
-        return logRepository.save(logEntry).then();
     }
 
     // ============ REQUEST BUILDING (shared - override only if gateway-specific) ============

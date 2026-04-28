@@ -25,8 +25,7 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             CommunicationLogRepository logRepository,
             FileValidator fileValidator,
             FolderExclusionRegexConfig folderExclusionRegex) {
-        super(documentRepository, statusAggregator, fileGateway, logRepository, fileValidator,
-            new CommunicationLogFactory("S3"));
+        super(documentRepository, statusAggregator, fileGateway, logRepository, fileValidator);
         this.folderExclusionRegex = folderExclusionRegex;
     }
 
