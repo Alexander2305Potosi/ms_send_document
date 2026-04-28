@@ -67,26 +67,6 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     }
 
     @Override
-    protected Mono<DocumentSendRequest> buildRequest(ProductDocumentToProcess validDoc, String traceId) {
-        DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(validDoc.getOrigin());
-        String idempotencyKey = IdempotencyKey.forFirstAttempt(validDoc.getDocumentId(), traceId).value();
-
-        DocumentSendRequest request = DocumentSendRequest.builder()
-            .documentId(validDoc.getDocumentId())
-            .fileContent(validDoc.getContent())
-            .filename(validDoc.getFilename())
-            .contentType(validDoc.getContentType())
-            .fileSize(validDoc.getContent() != null ? validDoc.getContent().length : 0)
-            .traceId(traceId)
-            .parentFolder(folderInfo.parentFolder())
-            .childFolder(folderInfo.childFolder())
-            .idempotencyKey(idempotencyKey)
-            .build();
-
-        return Mono.just(request);
-    }
-
-    @Override
     protected int maxConcurrency() {
         return settings.getMaxConcurrency();
     }

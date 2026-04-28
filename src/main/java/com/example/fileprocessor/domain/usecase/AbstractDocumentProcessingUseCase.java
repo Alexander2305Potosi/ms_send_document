@@ -16,7 +16,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -61,16 +60,9 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     @Timed("document.processing")
     public final Flux<FileUploadResult> executePendingDocuments() {
-        Duration drainTimeout = Duration.ofSeconds(drainTimeoutSeconds());
-
         return documentRepository.findPendingDocuments()
-            .takeWhile(doc -> !isShuttingDown())
             .flatMap(this::processPendingDocument, maxConcurrency())
-            .take(drainTimeout)
-            .doOnTerminate(() -> log.info("Pipeline {} drained. {} in flight",
-                implementationName(), countInFlight()))
-            .doOnCancel(() -> log.warn("Pipeline {} force-cancelled due to shutdown timeout",
-                implementationName()))
+            .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnNext(r -> log.info("Document processed: correlationId={}, status={}",
                 r.getCorrelationId(), r.getStatus()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()));
@@ -132,18 +124,18 @@ public abstract class AbstractDocumentProcessingUseCase {
             ProductDocumentToProcess pending, String traceId);
 
     /**
-     * Builds the gateway-specific DocumentSendRequest.
-     */
-    protected abstract Mono<DocumentSendRequest> buildRequest(
-            ProductDocumentToProcess validDoc, String traceId);
-
-    /**
      * Returns the processor implementation name for logging.
      */
     protected abstract String implementationName();
 
     public String getImplementationName() {
         return implementationName();
+    }
+
+    // ============ CONCURRENCY CONFIG ============
+
+    protected int maxConcurrency() {
+        return ProcessingMessages.DEFAULT_MAX_CONCURRENCY;
     }
 
     // ============ SHARED CONCRETE METHODS ============
@@ -211,30 +203,23 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .build());
     }
 
-    protected Mono<ProductDocumentToProcess> skipFolderCheck(
-            ProductDocumentToProcess pending, String traceId, String reason) {
-        return Mono.just(skipDocument(pending, traceId, DocumentStatus.SKIPPED.name(),
-            reason, ProcessingResultCodes.SKIPPED_FOLDER))
-            .thenMany(Mono.empty())
-            .then(Mono.just(pending)); // Return original to signal skip
-    }
+    // ============ REQUEST BUILDING (shared - override only if gateway-specific) ============
 
-    // ============ HOOK METHODS (can be overridden) ============
+    protected Mono<DocumentSendRequest> buildRequest(ProductDocumentToProcess validDoc, String traceId) {
+        DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(validDoc.getOrigin());
+        String idempotencyKey = IdempotencyKey.forFirstAttempt(validDoc.getDocumentId(), traceId).value();
 
-    protected boolean isShuttingDown() {
-        return false;
-    }
-
-    protected int drainTimeoutSeconds() {
-        return 20;
-    }
-
-    protected long countInFlight() {
-        return 0;
-    }
-
-    protected int maxConcurrency() {
-        return ProcessingMessages.DEFAULT_MAX_CONCURRENCY;
+        return Mono.just(DocumentSendRequest.builder()
+            .documentId(validDoc.getDocumentId())
+            .fileContent(validDoc.getContent())
+            .filename(validDoc.getFilename())
+            .contentType(validDoc.getContentType())
+            .fileSize(validDoc.getContent() != null ? validDoc.getContent().length : 0)
+            .traceId(traceId)
+            .parentFolder(folderInfo.parentFolder())
+            .childFolder(folderInfo.childFolder())
+            .idempotencyKey(idempotencyKey)
+            .build());
     }
 
     // ============ ERROR HELPERS ============

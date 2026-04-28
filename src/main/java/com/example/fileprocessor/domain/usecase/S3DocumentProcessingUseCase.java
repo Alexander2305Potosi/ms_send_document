@@ -1,6 +1,5 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.ResilienceOperator;
@@ -60,26 +59,6 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
         // Delegate to common file validator
         return fileValidator.validate(pending);
-    }
-
-    @Override
-    protected Mono<DocumentSendRequest> buildRequest(ProductDocumentToProcess validDoc, String traceId) {
-        DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(validDoc.getOrigin());
-        String idempotencyKey = IdempotencyKey.forFirstAttempt(validDoc.getDocumentId(), traceId).value();
-
-        DocumentSendRequest request = DocumentSendRequest.builder()
-            .documentId(validDoc.getDocumentId())
-            .fileContent(validDoc.getContent())
-            .filename(validDoc.getFilename())
-            .contentType(validDoc.getContentType())
-            .fileSize(validDoc.getContent() != null ? validDoc.getContent().length : 0)
-            .traceId(traceId)
-            .parentFolder(folderInfo.parentFolder())
-            .childFolder(folderInfo.childFolder())
-            .idempotencyKey(idempotencyKey)
-            .build();
-
-        return Mono.just(request);
     }
 
     @Override
