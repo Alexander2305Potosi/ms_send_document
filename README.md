@@ -54,7 +54,8 @@ com.example.fileprocessor/
 │   └── exception/                   # Excepciones de dominio
 │       ├── DomainException.java
 │       ├── FileValidationException.java
-│       └── CommunicationException.java
+│       ├── CommunicationException.java
+│       └── InvalidBase64Exception.java  # Excepcion para validacion Base64 (P10)
 │
 ├── application/                      # Configuracion de applicacion
 │   └── app-service/
