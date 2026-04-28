@@ -25,14 +25,11 @@ class SoapDocumentProcessingUseCaseTest {
     private CommunicationLogRepository logRepository;
 
     private SoapDocumentProcessingUseCase useCase;
-    private ProcessingDependencies deps;
 
     @BeforeEach
     void setUp() {
-        deps = new ProcessingDependencies(documentRepository, statusAggregator, fileGateway, logRepository);
-
         useCase = new SoapDocumentProcessingUseCase(
-            deps,
+            documentRepository, statusAggregator, fileGateway, logRepository,
             new FileValidator(createFileValidationConfig())
         );
     }

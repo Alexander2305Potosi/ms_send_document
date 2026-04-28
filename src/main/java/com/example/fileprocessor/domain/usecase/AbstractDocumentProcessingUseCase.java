@@ -8,8 +8,8 @@ import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
-import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import io.micrometer.core.annotation.Timed;
+import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -23,6 +23,7 @@ import java.util.UUID;
  * Abstract base class for document processing use cases.
  * Handles shared orchestration logic; subclasses implement gateway-specific behavior.
  */
+@AllArgsConstructor
 public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
@@ -33,18 +34,6 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final CommunicationLogRepository logRepository;
     protected final FileValidator fileValidator;
     protected final CommunicationLogFactory logFactory;
-
-    protected AbstractDocumentProcessingUseCase(
-            ProcessingDependencies deps,
-            FileValidator fileValidator,
-            CommunicationLogFactory logFactory) {
-        this.documentRepository = deps.documentRepository();
-        this.statusAggregator = deps.statusAggregator();
-        this.fileGateway = deps.fileGateway();
-        this.logRepository = deps.logRepository();
-        this.fileValidator = fileValidator;
-        this.logFactory = logFactory;
-    }
 
     // ============ TEMPLATE METHOD (final) ============
 

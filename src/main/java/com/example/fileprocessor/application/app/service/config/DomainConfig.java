@@ -5,9 +5,9 @@ import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.FileValidator;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
-import com.example.fileprocessor.domain.usecase.ProcessingDependencies;
 import com.example.fileprocessor.domain.usecase.ProductStatusAggregator;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
@@ -18,18 +18,6 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class DomainConfig {
-
-    // ============ Shared Components ============
-
-    @Bean
-    public ProcessingDependencies processingDependencies(
-            ProductDocumentRepository documentRepository,
-            ProductStatusAggregator statusAggregator,
-            FileGateway fileGateway,
-            CommunicationLogRepository logRepository) {
-        return new ProcessingDependencies(
-            documentRepository, statusAggregator, fileGateway, logRepository);
-    }
 
     @Bean
     public LoadProductsUseCase loadProductsUseCase(ProductRestGateway productGateway,
@@ -48,10 +36,14 @@ public class DomainConfig {
 
     @Bean
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
-            ProcessingDependencies deps,
+            ProductDocumentRepository documentRepository,
+            ProductStatusAggregator statusAggregator,
+            FileGateway fileGateway,
+            CommunicationLogRepository logRepository,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
-        return new SoapDocumentProcessingUseCase(deps, fileValidator);
+        return new SoapDocumentProcessingUseCase(
+            documentRepository, statusAggregator, fileGateway, logRepository, fileValidator);
     }
 
     // ============ S3 Processor ============
@@ -63,10 +55,14 @@ public class DomainConfig {
 
     @Bean
     public S3DocumentProcessingUseCase s3DocumentUseCase(
-            ProcessingDependencies deps,
+            ProductDocumentRepository documentRepository,
+            ProductStatusAggregator statusAggregator,
+            FileGateway fileGateway,
+            CommunicationLogRepository logRepository,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getS3());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
-        return new S3DocumentProcessingUseCase(deps, fileValidator, folderRegex);
+        return new S3DocumentProcessingUseCase(
+            documentRepository, statusAggregator, fileGateway, logRepository, fileValidator, folderRegex);
     }
 }
