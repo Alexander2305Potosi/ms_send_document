@@ -2,8 +2,6 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -11,10 +9,18 @@ import reactor.core.publisher.Mono;
 /**
  * SOAP-specific document processing use case.
  */
-@AllArgsConstructor
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(SoapDocumentProcessingUseCase.class);
+
+    public SoapDocumentProcessingUseCase(
+            ProductDocumentRepository documentRepository,
+            ProductStatusAggregator statusAggregator,
+            FileGateway fileGateway,
+            CommunicationLogRepository logRepository,
+            FileValidator fileValidator) {
+        super(documentRepository, statusAggregator, fileGateway, logRepository, fileValidator);
+    }
 
     @Override
     protected String implementationName() {
