@@ -50,8 +50,9 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     @Timed("document.processing")
     public final Flux<FileUploadResult> executePendingDocuments() {
+        int concurrency = maxConcurrency();
         return documentRepository.findPendingDocuments()
-            .flatMap(this::processPendingDocument, maxConcurrency())
+            .flatMap(this::processPendingDocument, concurrency)
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnNext(r -> log.info("Document processed: correlationId={}, status={}",
                 r.getCorrelationId(), r.getStatus()))
@@ -118,16 +119,6 @@ public abstract class AbstractDocumentProcessingUseCase {
      */
     protected abstract String implementationName();
 
-    public String getImplementationName() {
-        return implementationName();
-    }
-
-    // ============ CONCURRENCY CONFIG ============
-
-    protected int maxConcurrency() {
-        return ProcessingMessages.DEFAULT_MAX_CONCURRENCY;
-    }
-
     // ============ SHARED CONCRETE METHODS ============
 
     protected Mono<FileUploadResult> sendWithResilience(DocumentSendRequest request) {
@@ -165,24 +156,6 @@ public abstract class AbstractDocumentProcessingUseCase {
             DocumentSendRequest request, FileUploadResult result, int retryCount, Instant startTime) {
         CommunicationLog logEntry = logFactory.create(request, result, retryCount, startTime, Map.of());
         return logRepository.save(logEntry).then();
-    }
-
-    protected Mono<FileUploadResult> skipDocument(
-            ProductDocumentToProcess pending, String traceId,
-            String status, String message, String errorCode) {
-        log.info("Document {} skipped: status={}, errorCode={}",
-            pending.getDocumentId(), status, errorCode);
-
-        return documentRepository.updateStatus(
-            pending.getDocumentId(), status, traceId, null, errorCode)
-            .flatMap(v -> statusAggregator.updateProductStatus(pending.getProductId(), traceId))
-            .thenReturn(FileUploadResult.builder()
-                .status(status)
-                .message(message)
-                .traceId(traceId)
-                .processedAt(Instant.now())
-                .success(true)
-                .build());
     }
 
     // ============ REQUEST BUILDING (shared - override only if gateway-specific) ============
