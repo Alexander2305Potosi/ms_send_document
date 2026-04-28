@@ -51,7 +51,7 @@ public class DomainConfig {
             ProcessingDependencies deps,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
-        return new SoapDocumentProcessingUseCase(deps, fileValidator, config.getSoap());
+        return new SoapDocumentProcessingUseCase(deps, fileValidator);
     }
 
     // ============ S3 Processor ============
@@ -67,6 +67,6 @@ public class DomainConfig {
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getS3());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
-        return new S3DocumentProcessingUseCase(deps, fileValidator, folderRegex, config.getS3());
+        return new S3DocumentProcessingUseCase(deps, fileValidator, folderRegex);
     }
 }

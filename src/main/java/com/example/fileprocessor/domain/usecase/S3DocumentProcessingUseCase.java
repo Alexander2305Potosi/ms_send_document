@@ -14,7 +14,6 @@ import reactor.core.publisher.Mono;
 public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(S3DocumentProcessingUseCase.class);
-    private final ProcessorSettings settings;
     private final FolderExclusionRegexConfig folderExclusionRegex;
 
     public S3DocumentProcessingUseCase(
@@ -24,7 +23,6 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             ProcessorSettings settings) {
         super(deps, fileValidator, new CommunicationLogFactory("S3"));
         this.folderExclusionRegex = folderExclusionRegex;
-        this.settings = settings;
     }
 
     @Override
@@ -56,9 +54,5 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             pending.getDocumentId(), pending.getProductId());
 
         return fileValidator.validate(pending);
-    }
-
-    protected int maxConcurrency() {
-        return settings.getMaxConcurrency();
     }
 }

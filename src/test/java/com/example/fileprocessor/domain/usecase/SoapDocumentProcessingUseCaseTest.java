@@ -31,14 +31,9 @@ class SoapDocumentProcessingUseCaseTest {
     void setUp() {
         deps = new ProcessingDependencies(documentRepository, statusAggregator, fileGateway, logRepository);
 
-        ProcessorSettings settings = new ProcessorSettings();
-        settings.setMaxConcurrency(5);
-        settings.setMaxFileSizeMb(50);
-
         useCase = new SoapDocumentProcessingUseCase(
             deps,
-            new FileValidator(createFileValidationConfig()),
-            settings
+            new FileValidator(createFileValidationConfig())
         );
     }
 
@@ -48,5 +43,10 @@ class SoapDocumentProcessingUseCaseTest {
         config.setMaxSize(10485760L);
         config.setMaxFilenameLength(255);
         return config;
+    }
+
+    @Test
+    void implementationName_shouldReturnSoap() {
+        assertThat(useCase.implementationName()).isEqualTo("SOAP");
     }
 }

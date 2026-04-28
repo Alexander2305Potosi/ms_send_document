@@ -13,14 +13,12 @@ import reactor.core.publisher.Mono;
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(SoapDocumentProcessingUseCase.class);
-    private final ProcessorSettings settings;
 
     public SoapDocumentProcessingUseCase(
             ProcessingDependencies deps,
             FileValidator fileValidator,
             ProcessorSettings settings) {
         super(deps, fileValidator, new CommunicationLogFactory("SOAP"));
-        this.settings = settings;
     }
 
     @Override
@@ -31,7 +29,6 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     @Override
     protected Mono<ProductDocumentToProcess> filterByFolder(
             ProductDocumentToProcess pending, String traceId) {
-        // SOAP-specific: no additional folder filtering
         return Mono.just(pending);
     }
 
@@ -42,7 +39,6 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
         log.info("Validating SOAP document: {}, productId: {}",
             pending.getDocumentId(), pending.getProductId());
 
-        // SOAP-specific validation: only XML, text, and PDF content types
         String contentType = pending.getContentType();
         if (contentType == null ||
             (!contentType.contains("xml") && !contentType.contains("text") && !contentType.contains("pdf"))) {
@@ -53,11 +49,6 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                 ProcessingResultCodes.INVALID_FILE_TYPE));
         }
 
-        // Delegate to common file validator
         return fileValidator.validate(pending);
-    }
-
-    protected int maxConcurrency() {
-        return settings.getMaxConcurrency();
     }
 }
