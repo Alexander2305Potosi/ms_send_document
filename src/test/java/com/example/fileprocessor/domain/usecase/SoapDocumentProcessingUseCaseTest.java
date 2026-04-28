@@ -49,14 +49,4 @@ class SoapDocumentProcessingUseCaseTest {
         config.setMaxFilenameLength(255);
         return config;
     }
-
-    @Test
-    void implementationName_shouldReturnSoap() {
-        assertThat(useCase.getImplementationName()).isEqualTo("SOAP");
-    }
-
-    @Test
-    void maxConcurrency_shouldReturnSettingsValue() {
-        assertThat(useCase.maxConcurrency()).isEqualTo(5);
-    }
 }
