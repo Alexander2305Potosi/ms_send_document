@@ -165,7 +165,7 @@ class LoadProductsUseCaseTest {
     }
 
     @Test
-    void execute_shouldExpandZipAndCreateChildDocuments() throws Exception {
+    void execute_shouldSaveZipDocumentWithoutExpanding() throws Exception {
         // Create a ZIP with 2 files inside
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {
@@ -205,8 +205,8 @@ class LoadProductsUseCaseTest {
         StepVerifier.create(useCase.execute())
             .assertNext(result -> {
                 assert result.getProductId().equals("prod-001");
-                // ZIP with 2 files expands to 2 child documents in DB
-                // but documentCount reflects original documents from REST API (1 ZIP)
+                // ZIP is saved as single document (no expansion during load)
+                // Expansion happens during processing in /api/v1/products
                 assert result.getDocumentCount() == 1;
                 assert result.isSuccess();
             })
@@ -215,9 +215,11 @@ class LoadProductsUseCaseTest {
         verify(productRepository).save(any());
         verify(documentRepository).saveAll(any(Flux.class));
 
-        assert capturedDocuments.size() == 2 : "Expected 2 child documents from ZIP expansion, got " + capturedDocuments.size();
-        assert capturedDocuments.stream().anyMatch(d -> d.getFilename().equals("file1.txt")) : "Expected file1.txt";
-        assert capturedDocuments.stream().anyMatch(d -> d.getFilename().equals("file2.txt")) : "Expected file2.txt";
-        assert capturedDocuments.stream().allMatch(d -> "doc-zip".equals(d.getParentDocumentId())) : "All should have parent doc-zip";
+        // ZIP is saved as single document, not expanded
+        assert capturedDocuments.size() == 1 : "Expected 1 ZIP document, got " + capturedDocuments.size();
+        ProductDocumentToProcess savedDoc = capturedDocuments.get(0);
+        assert savedDoc.getFilename().equals("documents.zip") : "Expected documents.zip";
+        assert savedDoc.isZipArchive() : "Expected isZipArchive=true";
+        assert savedDoc.getContent() == null : "Content should be null (downloaded on-demand during processing)";
     }
 }

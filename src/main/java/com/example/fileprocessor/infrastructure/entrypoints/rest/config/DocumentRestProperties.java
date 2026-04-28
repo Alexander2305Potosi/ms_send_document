@@ -12,10 +12,6 @@ public record DocumentRestProperties(
     @NotBlank
     String endpoint,
 
-    String listPath,
-
-    String getPath,
-
     @NotBlank
     String productsPath,
 

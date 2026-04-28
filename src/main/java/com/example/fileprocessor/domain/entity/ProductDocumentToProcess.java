@@ -25,4 +25,6 @@ public class ProductDocumentToProcess {
     private final String traceId;
     private final String correlationId;
     private final String errorCode;
+    @Builder.Default
+    private final boolean isZipArchive = false;
 }

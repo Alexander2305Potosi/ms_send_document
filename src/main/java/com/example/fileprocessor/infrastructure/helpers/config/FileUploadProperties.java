@@ -17,16 +17,6 @@ public record FileUploadProperties(
     @NotBlank
     String allowedTypes,
 
-    @Min(10)
-    int maxFilenameLength,
-
-    List<String> foldersToSkip,
-
-    @Min(1)
-    int maxFileSizeMb,
-
-    List<String> keywords,
-
-    List<String> originPatternsToSend
+    List<String> keywords
 ) implements FileValidationConfig {
 }

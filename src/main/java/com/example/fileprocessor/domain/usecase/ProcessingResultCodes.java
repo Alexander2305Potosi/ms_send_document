@@ -11,6 +11,10 @@ public final class ProcessingResultCodes {
     // Business error codes - document processing
     public static final String SKIPPED_FOLDER = "SKIPPED_FOLDER";
 
+    // ZIP processing error codes
+    public static final String ZIP_EXTRACTION_FAILED = "ZIP_EXTRACTION_FAILED";
+    public static final String ZIP_PARTIAL_FAILURE = "ZIP_PARTIAL_FAILURE";
+
     // File validation error codes
     public static final String FILE_SIZE_EXCEEDED = "FILE_SIZE_EXCEEDED";
     public static final String INVALID_FILE_TYPE = "INVALID_FILE_TYPE";

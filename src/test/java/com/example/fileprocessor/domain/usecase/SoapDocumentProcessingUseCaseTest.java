@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,8 @@ class SoapDocumentProcessingUseCaseTest {
     private ProductStatusAggregator statusAggregator;
     @Mock
     private FileGateway fileGateway;
+    @Mock
+    private ProductRestGateway productRestGateway;
 
     private SoapDocumentProcessingUseCase useCase;
 
@@ -27,7 +30,8 @@ class SoapDocumentProcessingUseCaseTest {
     void setUp() {
         useCase = new SoapDocumentProcessingUseCase(
             documentRepository, statusAggregator, fileGateway,
-            new FileValidator(createFileValidationConfig())
+            new FileValidator(createFileValidationConfig()),
+            productRestGateway
         );
     }
 
@@ -35,7 +39,6 @@ class SoapDocumentProcessingUseCaseTest {
         ProcessorSettings config = new ProcessorSettings();
         config.setAllowedTypes("pdf,txt,csv");
         config.setMaxSize(10485760L);
-        config.setMaxFilenameLength(255);
         return config;
     }
 

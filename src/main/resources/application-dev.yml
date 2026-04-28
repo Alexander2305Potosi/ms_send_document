@@ -5,6 +5,10 @@ logging:
     reactor.netty: DEBUG
 
 app:
+  processors:
+    soap:
+      max-size: 10485760
+      allowed-types: pdf,txt,csv
   soap:
     endpoint: http://localhost:9000/soap/fileservice
     timeout-seconds: 5
@@ -12,8 +16,6 @@ app:
     retry-backoff-millis: 500
   document-rest:
     endpoint: http://localhost:3001
-    list-path: /api/documents
-    get-path: /api/document
     products-path: /api/products
     product-documents-path: /api/products/{productId}/documents
     timeout-seconds: 5

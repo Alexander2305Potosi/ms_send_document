@@ -45,37 +45,18 @@ app:
     soap:
       max-size: 10485760
       allowed-types: pdf,txt,csv
-      max-filename-length: 255
-      max-file-size-mb: 50
-      folders-to-skip:
-        - "/tmp"
-        - "/transient"
       keywords:
         - "test"
         - "mock"
-      origin-patterns-to-send:
-        - "incoming"
-        - "documents"
-      content-type-patterns:
-        - "xml"
-        - "text"
-        - "pdf"
     s3:
       max-size: 52428800
       allowed-types: pdf,txt,csv,zip
-      max-filename-length: 255
-      max-file-size-mb: 100
-      folders-to-skip:
-        - "/tmp"
+      folder-exclusion-regex:
+        - "_"
       keywords:
         - "test"
         - "mock"
         - "archive"
-      origin-patterns-to-send:
-        - "incoming"
-        - "documents"
-        - "archive"
-      content-type-patterns: []
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
@@ -83,8 +64,6 @@ app:
     retry-backoff-millis: 1000
   document-rest:
     endpoint: ${DOCUMENT_REST_ENDPOINT:http://localhost:3001}
-    list-path: /api/documents
-    get-path: /api/document
     products-path: /api/products
     product-documents-path: /api/products/{productId}/documents
     timeout-seconds: 15

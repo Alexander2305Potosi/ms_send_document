@@ -3,6 +3,7 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
+import com.example.fileprocessor.domain.usecase.FileValidator.FolderInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,14 +31,8 @@ class FileValidatorTest {
     void setUp() {
         when(config.maxSize()).thenReturn(1000L);
         when(config.allowedTypes()).thenReturn("pdf,txt,csv");
-        when(config.maxFilenameLength()).thenReturn(100);
-        when(config.maxFileSizeMb()).thenReturn(10);
-        when(config.contentTypePatterns()).thenReturn(java.util.List.of());
-        when(config.allowedContentTypeTokens()).thenReturn(java.util.Set.of());
-        when(config.shouldValidateContentType()).thenReturn(true);
         when(config.shouldValidateSize()).thenReturn(true);
         when(config.shouldValidateExtension()).thenReturn(true);
-        when(config.shouldValidateFilename()).thenReturn(true);
         validator = new FileValidator(config);
     }
 
@@ -71,44 +66,23 @@ class FileValidatorTest {
     }
 
     @Test
-    void validate_shouldRejectFilenameTooLong() {
-        String longName = "a".repeat(150) + ".pdf";
-        ProductDocumentToProcess doc = createDocument("doc-4", longName);
+    void extractFolderInfo_shouldReturnDefaultWhenNoKeywords() {
+        when(config.keywords()).thenReturn(java.util.List.of());
 
-        StepVerifier.create(validator.validate(doc))
-            .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("exceeds max"))
-            .verify();
+        FolderInfo info = validator.extractFolderInfo("/incoming/file.pdf");
+
+        assertEquals(".", info.parentFolder());
+        assertEquals(".", info.childFolder());
     }
 
     @Test
-    void validate_shouldRejectPathTraversal() {
-        ProductDocumentToProcess doc = createDocument("doc-5", "../../../etc/passwd.pdf");
+    void extractFolderInfo_shouldExtractParentAndChildFromMatchingKeyword() {
+        when(config.keywords()).thenReturn(java.util.List.of("incoming"));
 
-        StepVerifier.create(validator.validate(doc))
-            .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("invalid path"))
-            .verify();
-    }
+        FolderInfo info = validator.extractFolderInfo("/incoming/documents/file.pdf");
 
-    @Test
-    void validate_shouldRejectBackslashInFilename() {
-        ProductDocumentToProcess doc = createDocument("doc-6", "file\\name.pdf");
-
-        StepVerifier.create(validator.validate(doc))
-            .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("invalid path"))
-            .verify();
-    }
-
-    @Test
-    void validate_shouldRejectSlashInFilename() {
-        ProductDocumentToProcess doc = createDocument("doc-7", "folder/file.pdf");
-
-        StepVerifier.create(validator.validate(doc))
-            .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("invalid path"))
-            .verify();
+        assertEquals("documents", info.parentFolder());
+        assertEquals("file.pdf", info.childFolder());
     }
 
     private ProductDocumentToProcess createDocument(String docId, String filename) {

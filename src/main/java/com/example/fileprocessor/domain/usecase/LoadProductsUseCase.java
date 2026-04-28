@@ -5,7 +5,6 @@ import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.entity.ProductInfo;
 import com.example.fileprocessor.domain.entity.ProductToProcess;
-import com.example.fileprocessor.domain.entity.ZipArchive;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -14,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -85,58 +83,7 @@ public class LoadProductsUseCase {
 
     private Flux<ProductDocumentToProcess> createDocumentsFlux(ProductInfo productInfo, String traceId) {
         return Flux.fromIterable(productInfo.getDocuments())
-            .flatMap(docInfo -> {
-                if (docInfo.isZipArchive()) {
-                    return expandZipDocument(productInfo.getProductId(), docInfo, traceId);
-                } else {
-                    return Flux.just(createProductDocument(productInfo.getProductId(), docInfo, null, traceId));
-                }
-            });
-    }
-
-    private Flux<ProductDocumentToProcess> expandZipDocument(String productId, ProductDocumentInfo docInfo, String traceId) {
-        if (docInfo.content() == null || docInfo.content().length == 0) {
-            log.warn("ZIP document {} has no content, skipping", docInfo.documentId());
-            return Flux.empty();
-        }
-
-        try {
-            ZipArchive zipArchive = ZipArchive.builder()
-                .zipContent(docInfo.content())
-                .originalFilename(docInfo.filename())
-                .build();
-
-            var extractedDocs = zipArchive.extractDocuments();
-
-            if (extractedDocs.isEmpty()) {
-                log.warn("ZIP archive {} is empty, skipping", docInfo.filename());
-                return Flux.empty();
-            }
-
-            log.info("ZIP archive {} contains {} documents", docInfo.filename(), extractedDocs.size());
-
-            return Flux.fromIterable(extractedDocs)
-                .map(extracted -> {
-                    String childDocId = docInfo.documentId() + "_" + extracted.getFilename();
-                    return ProductDocumentToProcess.builder()
-                        .documentId(childDocId)
-                        .productId(productId)
-                        .parentDocumentId(docInfo.documentId())
-                        .filename(extracted.getFilename())
-                        .content(extracted.getContent())
-                        .contentType(extracted.getContentType())
-                        .origin(docInfo.origin())
-                        .status(DocumentStatus.PENDING.name())
-                        .createdAt(Instant.now())
-                        .build();
-                });
-        } catch (IOException e) {
-            log.error("Failed to extract ZIP {} for product {}: {}",
-                docInfo.filename(), productId, e.getMessage());
-            // Return empty - ZIP extraction failure is logged but silent to avoid failing entire product load
-            // The product will be saved without this document's children
-            return Flux.empty();
-        }
+            .map(docInfo -> createProductDocument(productInfo.getProductId(), docInfo, null, traceId));
     }
 
     private ProductDocumentToProcess createProductDocument(String productId, ProductDocumentInfo docInfo,
@@ -146,11 +93,12 @@ public class LoadProductsUseCase {
             .productId(productId)
             .parentDocumentId(parentId)
             .filename(docInfo.filename())
-            .content(docInfo.content())
+            .content(null) // Content will be downloaded on-demand during processing
             .contentType(docInfo.contentType())
             .origin(docInfo.origin())
             .status(DocumentStatus.PENDING.name())
             .createdAt(Instant.now())
+            .isZipArchive(docInfo.isZipArchive())
             .build();
     }
 }

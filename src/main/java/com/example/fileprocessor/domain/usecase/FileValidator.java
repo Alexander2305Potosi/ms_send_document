@@ -11,16 +11,11 @@ import java.util.Set;
 
 /**
  * Unified file and document validation.
- * Uses FileValidationConfig values for all thresholds and rules.
- * Each validation is conditional - only runs if config enables it.
+ * Only three validations: format, size, and folder exclusion (handled separately).
  */
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
-
-    private static final String PATH_DOUBLE_DOT = "..";
-    private static final String PATH_SLASH = "/";
-    private static final String PATH_BACKSLASH = "\\";
     private static final String DEFAULT_FOLDER = ".";
 
     private final FileValidationConfig config;
@@ -32,18 +27,14 @@ public class FileValidator {
     }
 
     /**
-     * Runs all enabled validations in sequence:
-     * 1. Content type (if shouldValidateContentType)
-     * 2. File size (if shouldValidateSize)
-     * 3. Extension (if shouldValidateExtension)
-     * 4. Filename (if shouldValidateFilename)
+     * Runs enabled validations:
+     * 1. Extension/Format validation
+     * 2. File size validation
      */
     public Mono<ProductDocumentToProcess> validate(ProductDocumentToProcess document) {
         return Mono.just(document)
-            .flatMap(doc -> maybeValidate(doc, config.shouldValidateContentType(), this::validateContentType))
-            .flatMap(doc -> maybeValidate(doc, config.shouldValidateSize(), this::validateSize))
             .flatMap(doc -> maybeValidate(doc, config.shouldValidateExtension(), this::validateExtension))
-            .flatMap(doc -> maybeValidate(doc, config.shouldValidateFilename(), this::validateFilename));
+            .flatMap(doc -> maybeValidate(doc, config.shouldValidateSize(), this::validateSize));
     }
 
     private Mono<ProductDocumentToProcess> maybeValidate(
@@ -53,32 +44,17 @@ public class FileValidator {
         return shouldValidate ? validator.apply(doc) : Mono.just(doc);
     }
 
-    // ============ CONTENT TYPE VALIDATION ============
+    // ============ EXTENSION VALIDATION ============
 
-    private Mono<ProductDocumentToProcess> validateContentType(ProductDocumentToProcess document) {
-        Set<String> allowedTokens = config.allowedContentTypeTokens();
-        if (allowedTokens.isEmpty()) {
-            return Mono.just(document);
-        }
-
-        String contentType = document.getContentType();
-        if (contentType == null) {
-            log.warn("Document {} has no content type", document.getFilename());
+    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess document) {
+        String ext = extension(document);
+        if (!allowedExtensions.contains(ext.toLowerCase())) {
+            log.warn("Document {} rejected: extension '{}' not in allowed list {}",
+                document.getFilename(), ext, allowedExtensions);
             return Mono.error(new FileValidationException(
-                "Missing content type",
+                "File type '" + ext + "' not allowed. Allowed: " + config.allowedTypes(),
                 ProcessingResultCodes.INVALID_FILE_TYPE));
         }
-
-        boolean matches = allowedTokens.stream()
-            .anyMatch(token -> contentType.contains(token));
-        if (!matches) {
-            log.warn("Document {} rejected: content type '{}' not in allowed list {}",
-                document.getFilename(), contentType, allowedTokens);
-            return Mono.error(new FileValidationException(
-                "Unsupported content type: " + contentType,
-                ProcessingResultCodes.INVALID_FILE_TYPE));
-        }
-
         return Mono.just(document);
     }
 
@@ -98,46 +74,7 @@ public class FileValidator {
         return Mono.just(document);
     }
 
-    // ============ EXTENSION VALIDATION ============
-
-    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess document) {
-        String ext = extension(document);
-        if (!allowedExtensions.contains(ext.toLowerCase())) {
-            log.warn("Document {} rejected: extension '{}' not in allowed list {}",
-                document.getFilename(), ext, allowedExtensions);
-            return Mono.error(new FileValidationException(
-                "File type '" + ext + "' not allowed. Allowed: " + config.allowedTypes(),
-                ProcessingResultCodes.INVALID_FILE_TYPE));
-        }
-        return Mono.just(document);
-    }
-
-    // ============ FILENAME VALIDATION ============
-
-    private Mono<ProductDocumentToProcess> validateFilename(ProductDocumentToProcess document) {
-        String filename = document.getFilename();
-        int maxLen = config.maxFilenameLength();
-
-        if (filename.length() > maxLen) {
-            log.warn("Document {} rejected: filename length {} > max {}",
-                document.getFilename(), filename.length(), maxLen);
-            return Mono.error(new FileValidationException(
-                "Filename length " + filename.length() + " exceeds max " + maxLen,
-                ProcessingResultCodes.FILENAME_TOO_LONG));
-        }
-
-        if (containsPathTraversal(filename)) {
-            log.warn("Document {} rejected: filename contains path traversal chars",
-                document.getFilename());
-            return Mono.error(new FileValidationException(
-                "Filename contains invalid path characters",
-                ProcessingResultCodes.INVALID_FILENAME));
-        }
-
-        return Mono.just(document);
-    }
-
-    // ============ ROUTING HELPERS ============
+    // ============ FOLDER INFO EXTRACTION ============
 
     public FolderInfo extractFolderInfo(String origin) {
         var keywords = config.keywords();
@@ -169,12 +106,6 @@ public class FileValidator {
         String filename = p.getFilename();
         int lastDot = filename != null ? filename.lastIndexOf('.') : -1;
         return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
-    }
-
-    private boolean containsPathTraversal(String filename) {
-        return filename.contains(PATH_DOUBLE_DOT)
-            || filename.contains(PATH_SLASH)
-            || filename.contains(PATH_BACKSLASH);
     }
 
     private Set<String> parseAllowedExtensions(String allowedTypes) {

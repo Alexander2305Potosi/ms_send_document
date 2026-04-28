@@ -38,10 +38,11 @@ public class DomainConfig {
             ProductDocumentRepository documentRepository,
             ProductStatusAggregator statusAggregator,
             FileGateway fileGateway,
-            ProcessorConfig config) {
+            ProcessorConfig config,
+            ProductRestGateway productRestGateway) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
         return new SoapDocumentProcessingUseCase(
-            documentRepository, statusAggregator, fileGateway, fileValidator);
+            documentRepository, statusAggregator, fileGateway, fileValidator, productRestGateway);
     }
 
     // ============ S3 Processor ============
@@ -56,10 +57,11 @@ public class DomainConfig {
             ProductDocumentRepository documentRepository,
             ProductStatusAggregator statusAggregator,
             FileGateway fileGateway,
-            ProcessorConfig config) {
+            ProcessorConfig config,
+            ProductRestGateway productRestGateway) {
         FileValidator fileValidator = new FileValidator(config.getS3());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
         return new S3DocumentProcessingUseCase(
-            documentRepository, statusAggregator, fileGateway, fileValidator, folderRegex);
+            documentRepository, statusAggregator, fileGateway, fileValidator, folderRegex, productRestGateway);
     }
 }

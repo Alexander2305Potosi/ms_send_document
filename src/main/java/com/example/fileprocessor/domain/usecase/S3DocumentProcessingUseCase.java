@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,8 +23,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             ProductStatusAggregator statusAggregator,
             FileGateway fileGateway,
             FileValidator fileValidator,
-            FolderExclusionRegexConfig folderExclusionRegex) {
-        super(documentRepository, statusAggregator, fileGateway, fileValidator);
+            FolderExclusionRegexConfig folderExclusionRegex,
+            ProductRestGateway productRestGateway) {
+        super(documentRepository, statusAggregator, fileGateway, fileValidator, productRestGateway);
         this.folderExclusionRegex = folderExclusionRegex;
     }
 

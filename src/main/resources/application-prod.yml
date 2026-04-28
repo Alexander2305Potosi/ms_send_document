@@ -7,10 +7,11 @@ server:
   shutdown: immediate
 
 app:
-  file:
-    max-size: 5242880
-    folders-to-skip: []
-    keywords: []
+  processors:
+    soap:
+      max-size: 5242880
+      allowed-types: pdf,txt,csv
   soap:
+    endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 15
     retry-attempts: 2

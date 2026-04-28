@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.usecase.ClaimResult;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -17,13 +16,6 @@ public interface ProductDocumentRepository {
     Flux<ProductDocumentToProcess> findPendingDocuments();
 
     /**
-     * Finds pending documents for a specific product.
-     * @param productId the product identifier
-     * @return Flux of documents for the product
-     */
-    Flux<ProductDocumentToProcess> findPendingDocumentsByProduct(String productId);
-
-    /**
      * Finds all documents for a specific product.
      * @param productId the product identifier
      * @return Flux of all documents for the product
@@ -37,15 +29,6 @@ public interface ProductDocumentRepository {
      * @return Mono<Boolean> true if claimed successfully
      */
     Mono<Boolean> claimDocument(String documentId);
-
-    /**
-     * Claims a document with recovery support for stale PROCESSING documents.
-     * Atomically claims documents in PENDING, stale PROCESSING (>staleThreshold), or RETRY status.
-     * @param documentId the document identifier
-     * @param staleThresholdMinutes documents in PROCESSING for longer than this are considered stale
-     * @return Mono<ClaimResult> with claim details
-     */
-    Mono<ClaimResult> claimDocumentWithRecovery(String documentId, int staleThresholdMinutes);
 
     /**
      * Saves a single document.
@@ -72,4 +55,12 @@ public interface ProductDocumentRepository {
      */
     Mono<Void> updateStatus(String documentId, String status, String traceId,
                             String correlationId, String errorCode);
+
+    /**
+     * Updates document content after on-demand download from REST API.
+     * @param documentId the document identifier
+     * @param content the downloaded file content
+     * @return Mono that completes when updated
+     */
+    Mono<Void> updateContent(String documentId, byte[] content);
 }

@@ -13,19 +13,11 @@ class ProcessorConfigTest {
         ProcessorSettings settings = new ProcessorSettings();
         settings.setMaxSize(10485760L);
         settings.setAllowedTypes("pdf,txt,csv");
-        settings.setMaxFilenameLength(255);
-        settings.setMaxFileSizeMb(50);
-        settings.setFoldersToSkip(java.util.List.of());
         settings.setKeywords(java.util.List.of());
-        settings.setOriginPatternsToSend(java.util.List.of());
 
         assertEquals(10485760L, settings.maxSize());
         assertEquals("pdf,txt,csv", settings.allowedTypes());
-        assertEquals(255, settings.maxFilenameLength());
-        assertEquals(50, settings.maxFileSizeMb());
-        assertTrue(settings.foldersToSkip().isEmpty());
         assertTrue(settings.keywords().isEmpty());
-        assertTrue(settings.originPatternsToSend().isEmpty());
     }
 
     @Test
@@ -33,19 +25,12 @@ class ProcessorConfigTest {
         ProcessorSettings settings = new ProcessorSettings();
         settings.setMaxSize(52428800L);
         settings.setAllowedTypes("pdf,txt,csv,zip");
-        settings.setMaxFilenameLength(255);
-        settings.setMaxFileSizeMb(100);
-        settings.setFoldersToSkip(java.util.List.of("/tmp"));
         settings.setKeywords(java.util.List.of("test", "mock", "archive"));
-        settings.setOriginPatternsToSend(java.util.List.of("incoming", "documents", "archive"));
 
         assertEquals(52428800L, settings.maxSize());
         assertEquals("pdf,txt,csv,zip", settings.allowedTypes());
-        assertEquals(255, settings.maxFilenameLength());
-        assertEquals(100, settings.maxFileSizeMb());
-        assertTrue(settings.foldersToSkip().contains("/tmp"));
         assertTrue(settings.keywords().contains("test"));
-        assertTrue(settings.originPatternsToSend().contains("archive"));
+        assertTrue(settings.keywords().contains("archive"));
     }
 
     @Test
