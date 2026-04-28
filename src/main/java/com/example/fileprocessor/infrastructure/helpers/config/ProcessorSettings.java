@@ -29,6 +29,11 @@ public class ProcessorSettings implements FileValidationConfig {
 
     private List<String> originPatternsToSend = List.of();
 
+    private List<String> folderExclusionRegex = List.of();
+
+    @Min(1)
+    private int maxConcurrency = 10;
+
     // ============ Getters/Setters for Spring property binding ============
 
     public long getMaxSize() { return maxSize; }
@@ -56,6 +61,14 @@ public class ProcessorSettings implements FileValidationConfig {
     public List<String> getOriginPatternsToSend() { return originPatternsToSend; }
     public void setOriginPatternsToSend(List<String> originPatternsToSend) {
         this.originPatternsToSend = originPatternsToSend != null ? originPatternsToSend : List.of();
+    }
+
+    public int getMaxConcurrency() { return maxConcurrency; }
+    public void setMaxConcurrency(int maxConcurrency) { this.maxConcurrency = maxConcurrency > 0 ? maxConcurrency : 10; }
+
+    public List<String> getFolderExclusionRegex() { return folderExclusionRegex; }
+    public void setFolderExclusionRegex(List<String> folderExclusionRegex) {
+        this.folderExclusionRegex = folderExclusionRegex != null ? folderExclusionRegex : List.of();
     }
 
     // ============ FileValidationConfig ============

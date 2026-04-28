@@ -3,6 +3,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.aws.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 
 @Validated
@@ -20,6 +21,16 @@ public record S3Properties(
 
     String accessKey,
 
-    String secretKey
+    String secretKey,
+
+    @Min(0)
+    int retryAttempts,
+
+    @Min(100)
+    int retryBackoffMillis
 ) {
+    public S3Properties {
+        if (retryAttempts < 0) retryAttempts = 3;
+        if (retryBackoffMillis < 100) retryBackoffMillis = 500;
+    }
 }

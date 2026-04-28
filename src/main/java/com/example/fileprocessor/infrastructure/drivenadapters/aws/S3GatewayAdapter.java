@@ -9,6 +9,7 @@ import io.micrometer.core.annotation.Timed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -55,6 +56,16 @@ public class S3GatewayAdapter implements FileGateway {
 
         return Mono.fromFuture(future)
             .timeout(DEFAULT_TIMEOUT)
+            .retryWhen(Retry.backoff(s3Properties.retryAttempts(), Duration.ofMillis(s3Properties.retryBackoffMillis()))
+                .filter(this::isRetryableException)
+                .doBeforeRetry(retrySignal -> {
+                    long attempt = retrySignal.totalRetries() + 1;
+                    log.warn("Retrying S3 upload for traceId={}, attempt {}/{} (backoff={}ms)",
+                        request.getTraceId(),
+                        attempt,
+                        s3Properties.retryAttempts(),
+                        s3Properties.retryBackoffMillis() * attempt);
+                }))
             .map(completed -> {
                 log.info("S3 upload successful: {} -> {}/{}",
                     request.getFilename(), s3Properties.bucketName(), key);
@@ -84,6 +95,19 @@ public class S3GatewayAdapter implements FileGateway {
                     "S3_ERROR",
                     request.getTraceId()));
             });
+    }
+
+    private boolean isRetryableException(Throwable throwable) {
+        if (throwable instanceof java.util.concurrent.TimeoutException) {
+            return true;
+        }
+        if (throwable instanceof software.amazon.awssdk.core.exception.SdkException e) {
+            // S3 SDK exceptions that are retryable
+            String name = e.getClass().getSimpleName();
+            return name.contains("ServiceException") || name.contains("SocketTimeoutException")
+                || name.contains("ConnectTimeoutException");
+        }
+        return false;
     }
 
     private String buildKey(DocumentSendRequest request) {

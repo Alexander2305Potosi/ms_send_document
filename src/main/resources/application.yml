@@ -88,6 +88,8 @@ app:
       path-style-access: false
       access-key: ${AWS_ACCESS_KEY:}
       secret-key: ${AWS_SECRET_KEY:}
+      retry-attempts: 3
+      retry-backoff-millis: 500
   circuit-breaker:
     failure-rate-threshold: 50
     wait-duration-in-open-state-millis: 60000
@@ -112,3 +114,5 @@ spring:
       region: us-east-1
       endpoint: http://localhost:4566
       path-style-access: true
+      retry-attempts: 3
+      retry-backoff-millis: 500

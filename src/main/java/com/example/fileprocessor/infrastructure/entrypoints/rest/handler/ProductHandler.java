@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
 import com.example.fileprocessor.domain.entity.AsyncOperationStatus;
-import com.example.fileprocessor.domain.usecase.DocumentProcessingOrchestrator;
+import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.port.out.AsyncOperationRepository;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -25,13 +25,13 @@ public class ProductHandler {
     private static final Logger log = LoggerFactory.getLogger(ProductHandler.class);
 
     private final LoadProductsUseCase loadProductsUseCase;
-    private final DocumentProcessingOrchestrator soapDocumentUseCase;
-    private final Optional<DocumentProcessingOrchestrator> s3DocumentUseCase;
+    private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
+    private final Optional<AbstractDocumentProcessingUseCase> s3DocumentUseCase;
     private final AsyncOperationRepository asyncOperationRepository;
 
     public ProductHandler(LoadProductsUseCase loadProductsUseCase,
-                         DocumentProcessingOrchestrator soapDocumentUseCase,
-                         Optional<DocumentProcessingOrchestrator> s3DocumentUseCase,
+                         AbstractDocumentProcessingUseCase soapDocumentUseCase,
+                         Optional<AbstractDocumentProcessingUseCase> s3DocumentUseCase,
                          AsyncOperationRepository asyncOperationRepository) {
         this.loadProductsUseCase = loadProductsUseCase;
         this.soapDocumentUseCase = soapDocumentUseCase;
@@ -63,7 +63,7 @@ public class ProductHandler {
 
         String traceId = resolveTraceId(request);
 
-        DocumentProcessingOrchestrator useCase = resolveUseCase(processorType);
+        AbstractDocumentProcessingUseCase useCase = resolveUseCase(processorType);
         log.info("Starting async pending product documents processing with {} processor, traceId: {}",
             useCase.getImplementationName(), traceId);
 
@@ -91,7 +91,7 @@ public class ProductHandler {
             .switchIfEmpty(ServerResponse.notFound().build());
     }
 
-    private DocumentProcessingOrchestrator resolveUseCase(String processorType) {
+    private AbstractDocumentProcessingUseCase resolveUseCase(String processorType) {
         return switch (processorType.toLowerCase()) {
             case ApiConstants.PROCESSOR_S3 -> {
                 if (s3DocumentUseCase.isEmpty()) {

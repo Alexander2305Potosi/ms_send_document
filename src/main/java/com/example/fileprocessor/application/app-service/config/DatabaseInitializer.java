@@ -1,4 +1,4 @@
-package com.example.fileprocessor.application.app.service.config;
+package com.example.fileprocessor.application.app_service.config;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import org.slf4j.Logger;
@@ -114,7 +114,10 @@ public class DatabaseInitializer implements ApplicationRunner {
                     retry_count INT NOT NULL,
                     error_code VARCHAR(100),
                     filename VARCHAR(255),
-                    created_at TIMESTAMP NOT NULL
+                    created_at TIMESTAMP NOT NULL,
+                    latency_ms BIGINT,
+                    gateway_name VARCHAR(50),
+                    metadata VARCHAR(1000)
                 )
                 """)
             .fetch()

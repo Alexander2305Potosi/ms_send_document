@@ -19,4 +19,7 @@ public class CommunicationLog {
     private final String errorCode;
     private final String filename;
     private final Instant createdAt;
+    private final Long latencyMs;
+    private final String gatewayName;
+    private final String metadata;
 }
