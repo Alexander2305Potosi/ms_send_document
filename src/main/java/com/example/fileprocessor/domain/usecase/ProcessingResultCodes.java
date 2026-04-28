@@ -23,6 +23,10 @@ public final class ProcessingResultCodes {
     public static final String FILENAME_TOO_LONG = "FILENAME_TOO_LONG";
     public static final String INVALID_FILENAME = "INVALID_FILENAME";
 
+    // Base64 validation error codes (P10)
+    public static final String EMPTY_CONTENT = "EMPTY_CONTENT";
+    public static final String INVALID_BASE64 = "INVALID_BASE64";
+
     // HTTP-related error codes (shared between domain and infrastructure)
     public static final String GATEWAY_TIMEOUT = "GATEWAY_TIMEOUT";
     public static final String BAD_GATEWAY = "BAD_GATEWAY";

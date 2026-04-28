@@ -10,6 +10,7 @@ import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ResilienceOperator;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
+import com.example.fileprocessor.infrastructure.helpers.shutdown.GracefulShutdownManager;
 import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,14 +70,47 @@ public abstract class AbstractDocumentProcessingUseCase {
     /**
      * Entry point - orchestrates processing of all pending documents.
      * This method is final to ensure the template algorithm is not modified.
+     * Supports graceful shutdown via takeWhile + drain timeout.
      */
     @Timed("document.processing")
     public final Flux<FileUploadResult> executePendingDocuments() {
+        Duration drainTimeout = Duration.ofSeconds(drainTimeoutSeconds());
+
         return documentRepository.findPendingDocuments()
+            .takeWhile(doc -> !isShuttingDown())
             .flatMap(this::processPendingDocument, maxConcurrency())
+            .take(drainTimeout)
+            .doOnTerminate(() -> log.info("Pipeline {} drained. {} in flight",
+                implementationName(), countInFlight()))
+            .doOnCancel(() -> log.warn("Pipeline {} force-cancelled due to shutdown timeout",
+                implementationName()))
             .doOnNext(r -> log.info("Document processed: correlationId={}, status={}",
                 r.getCorrelationId(), r.getStatus()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()));
+    }
+
+    /**
+     * Returns true if the application is shutting down.
+     * Override in subclasses if needed.
+     */
+    protected boolean isShuttingDown() {
+        return false;
+    }
+
+    /**
+     * Returns the drain timeout in seconds.
+     * Override to configure via GracefulShutdownManager.
+     */
+    protected int drainTimeoutSeconds() {
+        return 20;
+    }
+
+    /**
+     * Returns approximate count of documents in flight.
+     * For logging purposes during shutdown.
+     */
+    protected long countInFlight() {
+        return 0;
     }
 
     /**

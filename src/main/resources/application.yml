@@ -38,6 +38,9 @@ logging:
     console: "%-5level [%thread] [%X{traceId}] %logger{36} - %msg%n"
 
 app:
+  shutdown:
+    drain-timeout-seconds: 20
+    termination-grace-period: 30s
   processors:
     soap:
       max-size: 10485760
