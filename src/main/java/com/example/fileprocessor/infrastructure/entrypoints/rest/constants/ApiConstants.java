@@ -25,19 +25,19 @@ public final class ApiConstants {
     // HTTP headers
     public static final String HEADER_TRACE_ID = "X-Trace-Id";
 
-    // Operation types
-    public static final String OPERATION_LOAD = "LOAD";
-    public static final String OPERATION_PROCESS = "PROCESS";
+    // Operation types - reference domain constants
+    public static final String OPERATION_LOAD = com.example.fileprocessor.domain.entity.AsyncOperationStatus.OPERATION_LOAD;
+    public static final String OPERATION_PROCESS = com.example.fileprocessor.domain.entity.AsyncOperationStatus.OPERATION_PROCESS;
 
-    // Status values
-    public static final String STATUS_LOADING = "LOADING";
-    public static final String STATUS_PROCESSING = "PROCESSING";
-    public static final String STATUS_COMPLETED = "COMPLETED";
+    // Status values - reference domain constants
+    public static final String STATUS_LOADING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_LOADING;
+    public static final String STATUS_PROCESSING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_PROCESSING;
+    public static final String STATUS_COMPLETED = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_COMPLETED;
     public static final String STATUS_FAILED = "FAILED";
 
-    // REST operation messages
-    public static final String MSG_LOADING = "Product loading from REST API started";
-    public static final String MSG_PROCESSING = "Pending product documents processing started";
+    // REST operation messages - reference domain constants
+    public static final String MSG_LOADING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.MSG_LOADING;
+    public static final String MSG_PROCESSING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.MSG_PROCESSING;
     public static final String MSG_NOT_FOUND = "Operation not found for traceId: ";
 
     // SOAP response constants

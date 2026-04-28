@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.ResilienceOperator;
 import com.example.fileprocessor.domain.usecase.DocumentProcessingOrchestrator;
 import com.example.fileprocessor.domain.usecase.DocumentProcessingPipeline;
 import com.example.fileprocessor.domain.usecase.DocumentSender;
@@ -15,9 +16,10 @@ import com.example.fileprocessor.domain.usecase.FileValidator;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.usecase.ProductStatusAggregator;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorConfig;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.function.Supplier;
 
 @Configuration
 public class DomainConfig {
@@ -46,8 +48,8 @@ public class DomainConfig {
     }
 
     @Bean
-    public DocumentSkipHandler soapDocumentSkipHandler(ProductDocumentRepository documentRepository,
-                                                      ProductStatusAggregator statusAggregator) {
+    public DocumentSkipHandler documentSkipHandler(ProductDocumentRepository documentRepository,
+                                                   ProductStatusAggregator statusAggregator) {
         return new DocumentSkipHandler(documentRepository, statusAggregator);
     }
 
@@ -72,17 +74,17 @@ public class DomainConfig {
             ProductDocumentRepository documentRepository,
             FileValidator soapFileValidator,
             DocumentValidationRules soapDocumentValidationRules,
-            DocumentSkipHandler soapDocumentSkipHandler,
+            DocumentSkipHandler documentSkipHandler,
             ProductStatusAggregator productStatusAggregator,
-            CircuitBreaker soapCircuitBreaker,
+            ResilienceOperator soapResilienceOperator,
             DocumentSender documentSender) {
         return new DocumentProcessingPipeline(
             documentRepository,
             soapFileValidator,
             soapDocumentValidationRules,
-            soapDocumentSkipHandler,
+            documentSkipHandler,
             productStatusAggregator,
-            soapCircuitBreaker,
+            soapResilienceOperator,
             documentSender);
     }
 
@@ -92,17 +94,17 @@ public class DomainConfig {
             ProductDocumentRepository documentRepository,
             FileValidator s3FileValidator,
             DocumentValidationRules s3DocumentValidationRules,
-            DocumentSkipHandler soapDocumentSkipHandler,
+            DocumentSkipHandler documentSkipHandler,
             ProductStatusAggregator productStatusAggregator,
-            CircuitBreaker s3CircuitBreaker,
+            ResilienceOperator s3ResilienceOperator,
             DocumentSender documentSender) {
         return new DocumentProcessingPipeline(
             documentRepository,
             s3FileValidator,
             s3DocumentValidationRules,
-            soapDocumentSkipHandler,
+            documentSkipHandler,
             productStatusAggregator,
-            s3CircuitBreaker,
+            s3ResilienceOperator,
             documentSender);
     }
 

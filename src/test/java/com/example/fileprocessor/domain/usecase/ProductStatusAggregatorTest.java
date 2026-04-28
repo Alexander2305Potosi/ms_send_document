@@ -14,9 +14,9 @@ class ProductStatusAggregatorTest {
     @Test
     void calculateStatus_withAllSuccess_shouldReturnSuccess() {
         List<ProductDocumentToProcess> docs = List.of(
-            createDoc("d1", DocumentStatus.SUCCESS_VALUE),
-            createDoc("d2", DocumentStatus.SUCCESS_VALUE),
-            createDoc("d3", DocumentStatus.SUCCESS_VALUE)
+            createDoc("d1", DocumentStatus.SUCCESS.name()),
+            createDoc("d2", DocumentStatus.SUCCESS.name()),
+            createDoc("d3", DocumentStatus.SUCCESS.name())
         );
 
         ProductStatus result = ProductStatusAggregator.calculateStatus(docs);
@@ -27,8 +27,8 @@ class ProductStatusAggregatorTest {
     @Test
     void calculateStatus_withPendingDocument_shouldReturnPending() {
         List<ProductDocumentToProcess> docs = List.of(
-            createDoc("d1", DocumentStatus.SUCCESS_VALUE),
-            createDoc("d2", DocumentStatus.PENDING_VALUE)
+            createDoc("d1", DocumentStatus.SUCCESS.name()),
+            createDoc("d2", DocumentStatus.PENDING.name())
         );
 
         ProductStatus result = ProductStatusAggregator.calculateStatus(docs);
@@ -39,9 +39,9 @@ class ProductStatusAggregatorTest {
     @Test
     void calculateStatus_withPartialFailure_shouldReturnPartialFailure() {
         List<ProductDocumentToProcess> docs = List.of(
-            createDoc("d1", DocumentStatus.SUCCESS_VALUE),
-            createDoc("d2", DocumentStatus.FAILURE_VALUE),
-            createDoc("d3", DocumentStatus.SUCCESS_VALUE)
+            createDoc("d1", DocumentStatus.SUCCESS.name()),
+            createDoc("d2", DocumentStatus.FAILURE.name()),
+            createDoc("d3", DocumentStatus.SUCCESS.name())
         );
 
         ProductStatus result = ProductStatusAggregator.calculateStatus(docs);
@@ -68,8 +68,8 @@ class ProductStatusAggregatorTest {
     @Test
     void calculateStatus_withProcessingStatus_shouldReturnPending() {
         List<ProductDocumentToProcess> docs = List.of(
-            createDoc("d1", DocumentStatus.SUCCESS_VALUE),
-            createDoc("d2", DocumentStatus.PROCESSING_VALUE)
+            createDoc("d1", DocumentStatus.SUCCESS.name()),
+            createDoc("d2", DocumentStatus.PROCESSING.name())
         );
 
         ProductStatus result = ProductStatusAggregator.calculateStatus(docs);
@@ -80,10 +80,10 @@ class ProductStatusAggregatorTest {
     @Test
     void createSummary_shouldCalculateCorrectCounts() {
         List<ProductDocumentToProcess> docs = List.of(
-            createDoc("d1", DocumentStatus.SUCCESS_VALUE),
-            createDoc("d2", DocumentStatus.SUCCESS_VALUE),
-            createDoc("d3", DocumentStatus.FAILURE_VALUE),
-            createDoc("d4", DocumentStatus.PENDING_VALUE)
+            createDoc("d1", DocumentStatus.SUCCESS.name()),
+            createDoc("d2", DocumentStatus.SUCCESS.name()),
+            createDoc("d3", DocumentStatus.FAILURE.name()),
+            createDoc("d4", DocumentStatus.PENDING.name())
         );
 
         ProductStatusSummary summary = ProductStatusAggregator.createSummary("prod-1", docs);

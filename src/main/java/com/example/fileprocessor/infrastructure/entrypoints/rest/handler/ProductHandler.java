@@ -40,37 +40,28 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> loadProducts(ServerRequest request) {
-        String headerTraceId = request.headers().firstHeader(ApiConstants.HEADER_TRACE_ID);
-        final String traceId = (headerTraceId != null && !headerTraceId.isBlank())
-            ? headerTraceId
-            : UUID.randomUUID().toString();
+        String traceId = resolveTraceId(request);
 
         log.info("Starting async products load from REST API, traceId: {}", traceId);
 
         AsyncOperationStatus initialStatus = AsyncOperationStatus.startLoading(traceId);
 
         return asyncOperationRepository.save(initialStatus)
-            .then(Mono.fromRunnable(() -> {
-                final String currentTraceId = traceId;
-                loadProductsUseCase.execute()
-                    .doOnNext(result -> {
-                        log.info("Product loaded: {} -> {} ({} documents)",
-                            result.getProductId(), result.getStatus(), result.getDocumentCount());
-                    })
-                    .doOnError(error -> log.error("Load failed for traceId {}: {}", currentTraceId, error.getMessage()))
-                    .subscribe();
-            }))
-            .thenReturn(initialStatus)
+            .then(loadProductsUseCase.execute()
+                .doOnNext(result -> {
+                    log.info("Product loaded: {} -> {} ({} documents)",
+                        result.getProductId(), result.getStatus(), result.getDocumentCount());
+                })
+                .doOnError(error -> log.error("Load failed for traceId {}: {}", traceId, error.getMessage()))
+                .then())
+            .then(Mono.fromSupplier(() -> initialStatus))
             .flatMap(status -> ServerResponse.accepted().bodyValue(status));
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
         String processorType = request.queryParam(ApiConstants.PARAM_PROCESSOR).orElse(ApiConstants.PROCESSOR_SOAP);
 
-        String headerTraceId = request.headers().firstHeader(ApiConstants.HEADER_TRACE_ID);
-        final String traceId = (headerTraceId != null && !headerTraceId.isBlank())
-            ? headerTraceId
-            : UUID.randomUUID().toString();
+        String traceId = resolveTraceId(request);
 
         DocumentProcessingOrchestrator useCase = resolveUseCase(processorType);
         log.info("Starting async pending product documents processing with {} processor, traceId: {}",
@@ -83,16 +74,11 @@ public class ProductHandler {
                 .flatMap(result -> {
                     log.info("Document processed: correlationId={}, status={}",
                         result.getCorrelationId(), result.getStatus());
-                    return asyncOperationRepository.findByTraceId(traceId)
-                        .flatMap(current -> asyncOperationRepository.updateProgress(
-                            traceId,
-                            current.getProcessedItems() + 1,
-                            current.getSuccessItems() + (result.isSuccess() ? 1 : 0),
-                            current.getFailedItems() + (result.isSuccess() ? 0 : 1)
-                        ));
+                    return asyncOperationRepository.incrementProgress(traceId, result.isSuccess());
                 })
                 .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
-                .doOnComplete(() -> asyncOperationRepository.markCompleted(traceId).subscribe()))
+                .then())
+            .then(asyncOperationRepository.markCompleted(traceId))
             .then(asyncOperationRepository.findByTraceId(traceId))
             .flatMap(status -> ServerResponse.accepted().bodyValue(status));
     }
@@ -119,5 +105,10 @@ public class ProductHandler {
                 yield soapDocumentUseCase;
             }
         };
+    }
+
+    private static String resolveTraceId(ServerRequest request) {
+        String header = request.headers().firstHeader(ApiConstants.HEADER_TRACE_ID);
+        return (header != null && !header.isBlank()) ? header : UUID.randomUUID().toString();
     }
 }

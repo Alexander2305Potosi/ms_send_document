@@ -1,12 +1,15 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
+import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.entity.ProductInfo;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -14,11 +17,13 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -35,6 +40,9 @@ class LoadProductsUseCaseTest {
 
     @Mock
     private ProductDocumentRepository documentRepository;
+
+    @Captor
+    private ArgumentCaptor<Flux<ProductDocumentToProcess>> fluxCaptor;
 
     @Test
     void execute_shouldLoadProductsAndDocuments() {
@@ -186,9 +194,16 @@ class LoadProductsUseCaseTest {
             .documents(List.of(zipDoc))
             .build();
 
+        List<ProductDocumentToProcess> capturedDocuments = new ArrayList<>();
+
         when(productGateway.getAllProducts(any())).thenReturn(Flux.just(product));
         when(productRepository.save(any())).thenReturn(Mono.empty());
-        when(documentRepository.saveAll(any())).thenReturn(Mono.empty());
+        doAnswer(invocation -> {
+            Flux<ProductDocumentToProcess> docs = invocation.getArgument(0);
+            return docs.collectList()
+                .doOnNext(capturedDocuments::addAll)
+                .then();
+        }).when(documentRepository).saveAll(any(Flux.class));
 
         LoadProductsUseCase useCase = new LoadProductsUseCase(productGateway, productRepository, documentRepository);
 
@@ -203,7 +218,11 @@ class LoadProductsUseCaseTest {
             .verifyComplete();
 
         verify(productRepository).save(any());
-        // ZIP expands to 2 child documents, each saved individually
-        verify(documentRepository).saveAll(any());
+        verify(documentRepository).saveAll(any(Flux.class));
+
+        assert capturedDocuments.size() == 2 : "Expected 2 child documents from ZIP expansion, got " + capturedDocuments.size();
+        assert capturedDocuments.stream().anyMatch(d -> d.getFilename().equals("file1.txt")) : "Expected file1.txt";
+        assert capturedDocuments.stream().anyMatch(d -> d.getFilename().equals("file2.txt")) : "Expected file2.txt";
+        assert capturedDocuments.stream().allMatch(d -> "doc-zip".equals(d.getParentDocumentId())) : "All should have parent doc-zip";
     }
 }

@@ -47,11 +47,11 @@ public class ProductStatusAggregator {
                 ProductStatus newStatus = calculateStatus(docs);
                 log.info("Calculated status for product {}: {} (docs: success={}, failure={}, pending={}, skipped={}, notSent={})",
                     productId, newStatus,
-                    countByStatus(docs, DocumentStatus.SUCCESS_VALUE),
-                    countByStatus(docs, DocumentStatus.FAILURE_VALUE),
-                    countByStatus(docs, DocumentStatus.PENDING_VALUE),
-                    countByStatus(docs, DocumentStatus.SKIPPED_VALUE),
-                    countByStatus(docs, DocumentStatus.NOT_SENT_VALUE));
+                    countByStatus(docs, DocumentStatus.SUCCESS.name()),
+                    countByStatus(docs, DocumentStatus.FAILURE.name()),
+                    countByStatus(docs, DocumentStatus.PENDING.name()),
+                    countByStatus(docs, DocumentStatus.SKIPPED.name()),
+                    countByStatus(docs, DocumentStatus.NOT_SENT.name()));
 
                 return productRepository.updateStatus(productId, newStatus.name(), traceId);
             });
@@ -65,13 +65,13 @@ public class ProductStatusAggregator {
             return ProductStatus.PENDING;
         }
 
-        int success = countByStatus(documents, DocumentStatus.SUCCESS_VALUE);
-        int failure = countByStatus(documents, DocumentStatus.FAILURE_VALUE);
-        int pending = countByStatus(documents, DocumentStatus.PENDING_VALUE);
-        int processing = countByStatus(documents, DocumentStatus.PROCESSING_VALUE);
-        int retry = countByStatus(documents, DocumentStatus.RETRY_VALUE);
-        int skipped = countByStatus(documents, DocumentStatus.SKIPPED_VALUE);
-        int notSent = countByStatus(documents, DocumentStatus.NOT_SENT_VALUE);
+        int success = countByStatus(documents, DocumentStatus.SUCCESS.name());
+        int failure = countByStatus(documents, DocumentStatus.FAILURE.name());
+        int pending = countByStatus(documents, DocumentStatus.PENDING.name());
+        int processing = countByStatus(documents, DocumentStatus.PROCESSING.name());
+        int retry = countByStatus(documents, DocumentStatus.RETRY.name());
+        int skipped = countByStatus(documents, DocumentStatus.SKIPPED.name());
+        int notSent = countByStatus(documents, DocumentStatus.NOT_SENT.name());
         int total = documents.size();
 
         // If any document is still being processed or pending, product is not complete
@@ -133,13 +133,13 @@ public class ProductStatusAggregator {
                 .build();
         }
 
-        int success = countByStatus(documents, DocumentStatus.SUCCESS_VALUE);
-        int failure = countByStatus(documents, DocumentStatus.FAILURE_VALUE);
-        int pending = countByStatus(documents, DocumentStatus.PENDING_VALUE);
-        int processing = countByStatus(documents, DocumentStatus.PROCESSING_VALUE);
-        int retry = countByStatus(documents, DocumentStatus.RETRY_VALUE);
-        int skipped = countByStatus(documents, DocumentStatus.SKIPPED_VALUE);
-        int notSent = countByStatus(documents, DocumentStatus.NOT_SENT_VALUE);
+        int success = countByStatus(documents, DocumentStatus.SUCCESS.name());
+        int failure = countByStatus(documents, DocumentStatus.FAILURE.name());
+        int pending = countByStatus(documents, DocumentStatus.PENDING.name());
+        int processing = countByStatus(documents, DocumentStatus.PROCESSING.name());
+        int retry = countByStatus(documents, DocumentStatus.RETRY.name());
+        int skipped = countByStatus(documents, DocumentStatus.SKIPPED.name());
+        int notSent = countByStatus(documents, DocumentStatus.NOT_SENT.name());
 
         return ProductStatusSummary.builder()
             .productId(productId)

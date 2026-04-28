@@ -35,7 +35,7 @@ public class DocumentSkipHandler {
             String status, String message, String errorCode, String externalReference) {
         log.info("Document {} skipped: status={}, errorCode={}", pending.getDocumentId(), status, errorCode);
         return documentRepository.updateStatus(pending.getDocumentId(), status, traceId, null, errorCode)
-            .then(statusAggregator.updateProductStatus(pending.getProductId(), traceId))
+            .flatMap(v -> statusAggregator.updateProductStatus(pending.getProductId(), traceId))
             .thenReturn(buildSkippedResult(status, message, traceId, externalReference));
     }
 

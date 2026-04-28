@@ -23,6 +23,6 @@ public class ProductDocumentToProcess {
     private final Instant createdAt;
     private final Instant processedAt;
     private final String traceId;
-    private final String soapCorrelationId;
+    private final String correlationId;
     private final String errorCode;
 }

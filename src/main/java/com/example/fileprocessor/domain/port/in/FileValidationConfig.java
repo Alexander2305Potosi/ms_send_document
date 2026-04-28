@@ -11,8 +11,17 @@ public interface FileValidationConfig {
     long maxSize();
     String allowedTypes();
     int maxFilenameLength();
-    List<String> foldersToSkip();
     int maxFileSizeMb();
-    List<String> keywords();
-    List<String> originPatternsToSend();
+
+    default List<String> foldersToSkip() {
+        return List.of();
+    }
+
+    default List<String> keywords() {
+        return List.of();
+    }
+
+    default List<String> originPatternsToSend() {
+        return List.of();
+    }
 }

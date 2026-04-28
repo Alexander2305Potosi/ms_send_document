@@ -24,15 +24,10 @@ public final class ProcessingMessages {
     public static final String MSG_FILENAME_TOO_LONG = "Filename exceeds maximum length: ";
     public static final String MSG_FILENAME_INVALID = "Filename contains invalid characters";
 
-    // S3 messages
-    public static final String MSG_UPLOAD_SUCCESS = "Uploaded to S3: ";
-    public static final String MSG_UPLOAD_FAILURE = "S3 upload failed: ";
-
     // Load products messages
     public static final String MSG_PRODUCT_LOADED = "Product and documents loaded successfully";
 
     // Validation message fragments (for error code extraction)
     public static final String MSG_TIMEOUT = "timeout";
-    public static final String MSG_TIMEOUT_TITLE = "Timeout";
     public static final String MSG_VALIDATION = "validation";
 }

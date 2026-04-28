@@ -55,7 +55,7 @@ public class LoadProductsUseCase {
         ProductToProcess product = ProductToProcess.builder()
             .productId(productInfo.getProductId())
             .name(productInfo.getName())
-            .status(DocumentStatus.PENDING_VALUE)
+            .status(DocumentStatus.PENDING.name())
             .createdAt(Instant.now())
             .traceId(traceId)
             .build();
@@ -72,7 +72,7 @@ public class LoadProductsUseCase {
                     .productId(productInfo.getProductId())
                     .name(productInfo.getName())
                     .documentCount(documentCount)
-                    .status(DocumentStatus.PENDING_VALUE)
+                    .status(DocumentStatus.PENDING.name())
                     .message(ProcessingMessages.MSG_PRODUCT_LOADED)
                     .traceId(traceId)
                     .processedAt(Instant.now())
@@ -126,7 +126,7 @@ public class LoadProductsUseCase {
                         .content(extracted.getContent())
                         .contentType(extracted.getContentType())
                         .origin(docInfo.origin())
-                        .status(DocumentStatus.PENDING_VALUE)
+                        .status(DocumentStatus.PENDING.name())
                         .createdAt(Instant.now())
                         .build();
                 });
@@ -146,7 +146,7 @@ public class LoadProductsUseCase {
             .content(docInfo.content())
             .contentType(docInfo.contentType())
             .origin(docInfo.origin())
-            .status(DocumentStatus.PENDING_VALUE)
+            .status(DocumentStatus.PENDING.name())
             .createdAt(Instant.now())
             .build();
     }

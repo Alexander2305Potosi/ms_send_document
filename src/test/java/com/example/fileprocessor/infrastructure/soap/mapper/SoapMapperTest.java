@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
-import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +41,7 @@ class SoapMapperTest {
     }
 
     @Test
-    void fromSoapXml_shouldParseValidSoapResponse() {
+    void fromSoapXml_shouldParseValidExternalServiceResponse() {
         String soapResponse = """
             <?xml version="1.0" encoding="UTF-8"?>
             <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
@@ -59,7 +59,7 @@ class SoapMapperTest {
             </soap:Envelope>
             """;
 
-        SoapResponse response = soapMapper.fromSoapXml(soapResponse, "trace-123");
+        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse, "trace-123");
 
         assertNotNull(response);
         assertEquals("SUCCESS", response.getStatus());
@@ -87,7 +87,7 @@ class SoapMapperTest {
             </soap:Envelope>
             """;
 
-        SoapResponse response = soapMapper.fromSoapXml(soapResponse, "trace-456");
+        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse, "trace-456");
 
         assertNotNull(response);
         assertEquals("OK", response.getStatus());
@@ -112,7 +112,7 @@ class SoapMapperTest {
             </soap:Envelope>
             """;
 
-        SoapResponse response = soapMapper.fromSoapXml(soapResponse, "trace-789");
+        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse, "trace-789");
 
         assertNotNull(response);
         assertEquals("ERROR", response.getStatus());

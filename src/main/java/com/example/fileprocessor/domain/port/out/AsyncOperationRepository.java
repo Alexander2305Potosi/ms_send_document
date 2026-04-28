@@ -19,6 +19,12 @@ public interface AsyncOperationRepository {
     Mono<Void> updateProgress(String traceId, int processed, int success, int failed);
 
     /**
+     * Atomically increments progress counters for a successful or failed document.
+     * This avoids race conditions when multiple documents are processed concurrently.
+     */
+    Mono<Void> incrementProgress(String traceId, boolean success);
+
+    /**
      * Marks an async operation as completed.
      */
     Mono<Void> markCompleted(String traceId);

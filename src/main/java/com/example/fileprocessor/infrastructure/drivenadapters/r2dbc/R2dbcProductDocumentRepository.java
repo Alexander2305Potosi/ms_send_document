@@ -31,11 +31,11 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Flux<ProductDocumentToProcess> findPendingDocuments() {
         String sql = """
             SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
-                   trace_id, soap_correlation_id, error_code
+                   trace_id, correlation_id, error_code
             FROM product_documents_to_process
             WHERE status IN ('%s', '%s', '%s')
             ORDER BY created_at ASC
-            """.formatted(DocumentStatus.PENDING_VALUE, DocumentStatus.RETRY_VALUE, DocumentStatus.PROCESSING_VALUE);
+            """.formatted(DocumentStatus.PENDING.name(), DocumentStatus.RETRY.name(), DocumentStatus.PROCESSING.name());
 
         return databaseClient.sql(sql)
             .map(this::mapRowToDocument)
@@ -55,7 +55,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .createdAt(row.get("created_at", Instant.class))
             .processedAt(row.get("processed_at", Instant.class))
             .traceId(row.get("trace_id", String.class))
-            .soapCorrelationId(row.get("soap_correlation_id", String.class))
+            .correlationId(row.get("correlation_id", String.class))
             .errorCode(row.get("error_code", String.class))
             .build();
     }
@@ -78,11 +78,11 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Flux<ProductDocumentToProcess> findPendingDocumentsByProduct(String productId) {
         String sql = """
             SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
-                   trace_id, soap_correlation_id, error_code
+                   trace_id, correlation_id, error_code
             FROM product_documents_to_process
             WHERE product_id = $1 AND status IN ('%s', '%s', '%s')
             ORDER BY created_at ASC
-            """.formatted(DocumentStatus.PENDING_VALUE, DocumentStatus.RETRY_VALUE, DocumentStatus.PROCESSING_VALUE);
+            """.formatted(DocumentStatus.PENDING.name(), DocumentStatus.RETRY.name(), DocumentStatus.PROCESSING.name());
 
         return databaseClient.sql(sql)
             .bind("$1", productId)
@@ -94,7 +94,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Flux<ProductDocumentToProcess> findByProductId(String productId) {
         String sql = """
             SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
-                   trace_id, soap_correlation_id, error_code
+                   trace_id, correlation_id, error_code
             FROM product_documents_to_process
             WHERE product_id = $1
             ORDER BY created_at ASC
@@ -112,7 +112,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             UPDATE product_documents_to_process
             SET status = '%s', trace_id = $2, processed_at = $3
             WHERE document_id = $1 AND status = '%s'
-            """.formatted(DocumentStatus.PROCESSING_VALUE, DocumentStatus.PENDING_VALUE);
+            """.formatted(DocumentStatus.PROCESSING.name(), DocumentStatus.PENDING.name());
 
         String traceId = UUID.randomUUID().toString();
 
@@ -130,7 +130,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Mono<Void> save(ProductDocumentToProcess document) {
         String sql = """
             INSERT INTO product_documents_to_process (document_id, product_id, parent_document_id, filename, content, content_type, origin, status,
-                                                    created_at, processed_at, trace_id, soap_correlation_id, error_code)
+                                                    created_at, processed_at, trace_id, correlation_id, error_code)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             """;
 
@@ -146,7 +146,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .bind("$9", document.getCreatedAt() != null ? document.getCreatedAt() : Instant.now())
             .bind("$10", document.getProcessedAt() != null ? document.getProcessedAt() : Instant.now())
             .bind("$11", document.getTraceId() != null ? document.getTraceId() : "")
-            .bind("$12", document.getSoapCorrelationId() != null ? document.getSoapCorrelationId() : "")
+            .bind("$12", document.getCorrelationId() != null ? document.getCorrelationId() : "")
             .bind("$13", document.getErrorCode() != null ? document.getErrorCode() : "")
             .fetch()
             .first()
@@ -163,10 +163,10 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
 
     @Override
     public Mono<Void> updateStatus(String documentId, String status, String traceId,
-                                   String soapCorrelationId, String errorCode) {
+                                   String correlationId, String errorCode) {
         String sql = """
             UPDATE product_documents_to_process
-            SET status = $2, trace_id = $3, soap_correlation_id = $4, error_code = $5, processed_at = $6
+            SET status = $2, trace_id = $3, correlation_id = $4, error_code = $5, processed_at = $6
             WHERE document_id = $1
             """;
 
@@ -174,7 +174,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .bind("$1", documentId)
             .bind("$2", status)
             .bind("$3", traceId != null ? traceId : "")
-            .bind("$4", soapCorrelationId != null ? soapCorrelationId : "")
+            .bind("$4", correlationId != null ? correlationId : "")
             .bind("$5", errorCode != null ? errorCode : "")
             .bind("$6", Instant.now())
             .fetch()

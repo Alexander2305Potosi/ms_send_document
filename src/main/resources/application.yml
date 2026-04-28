@@ -35,23 +35,9 @@ logging:
     com.example.fileprocessor: INFO
     reactor.netty: INFO
   pattern:
-    console: "%-5level [%thread] %logger{36} - %msg%n"
+    console: "%-5level [%thread] [%X{traceId}] %logger{36} - %msg%n"
 
 app:
-  file:
-    max-size: 10485760
-    allowed-types: pdf,txt,csv
-    max-filename-length: 255
-    max-file-size-mb: 50
-    folders-to-skip:
-      - "/tmp"
-      - "/transient"
-    keywords:
-      - "test"
-      - "mock"
-    origin-patterns-to-send:
-      - "incoming"
-      - "documents"
   processors:
     soap:
       max-size: 10485760

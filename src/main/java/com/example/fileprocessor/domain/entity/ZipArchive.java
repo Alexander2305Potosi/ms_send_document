@@ -19,6 +19,14 @@ import java.util.zip.ZipInputStream;
 @Getter
 @Builder
 public class ZipArchive {
+    private static final java.util.Map<String, String> EXT_TO_MIME = java.util.Map.of(
+        ".pdf", MediaTypeConstants.APPLICATION_PDF,
+        ".docx", MediaTypeConstants.APPLICATION_WORD,
+        ".txt", MediaTypeConstants.TEXT_PLAIN,
+        ".xml", MediaTypeConstants.APPLICATION_XML,
+        ".json", MediaTypeConstants.APPLICATION_JSON
+    );
+
     private final byte[] zipContent;
     private final String originalFilename;
 
@@ -73,19 +81,11 @@ public class ZipArchive {
     }
 
     private String detectContentType(String filename) {
-        String lower = filename.toLowerCase();
-        if (lower.endsWith(".pdf")) {
-            return MediaTypeConstants.APPLICATION_PDF;
-        } else if (lower.endsWith(".docx")) {
-            return MediaTypeConstants.APPLICATION_WORD;
-        } else if (lower.endsWith(".txt")) {
-            return MediaTypeConstants.TEXT_PLAIN;
-        } else if (lower.endsWith(".xml")) {
-            return MediaTypeConstants.APPLICATION_XML;
-        } else if (lower.endsWith(".json")) {
-            return MediaTypeConstants.APPLICATION_JSON;
-        }
-        return MediaTypeConstants.APPLICATION_OCTET_STREAM;
+        return EXT_TO_MIME.entrySet().stream()
+            .filter(entry -> filename.toLowerCase().endsWith(entry.getKey()))
+            .map(java.util.Map.Entry::getValue)
+            .findFirst()
+            .orElse(MediaTypeConstants.APPLICATION_OCTET_STREAM);
     }
 
     @Getter

@@ -19,4 +19,5 @@ public class FileUploadResult {
     private final Instant processedAt;
     private final String externalReference;
     private final boolean success;
+    private final String errorCode;
 }

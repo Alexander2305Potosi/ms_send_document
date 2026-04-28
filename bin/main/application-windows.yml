@@ -1,7 +1,0 @@
-# Perfil para Windows sin permisos de admin - usa puerto 9000
-app:
-  soap:
-    endpoint: http://localhost:9000/soap/fileservice
-    timeout-seconds: 5
-    retry-attempts: 1
-    retry-backoff-millis: 500

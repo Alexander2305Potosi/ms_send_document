@@ -10,7 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DocumentValidationRulesTest {
@@ -27,14 +27,14 @@ class DocumentValidationRulesTest {
 
     @Test
     void shouldSkipFolder_withTmpOrigin_shouldReturnTrue() {
-        lenient().when(config.foldersToSkip()).thenReturn(List.of("/tmp", "/transient"));
+        when(config.foldersToSkip()).thenReturn(List.of("/tmp", "/transient"));
 
         assertTrue(rules.shouldSkipFolder("/tmp/doc.pdf"));
     }
 
     @Test
     void shouldSkipFolder_withNormalOrigin_shouldReturnFalse() {
-        lenient().when(config.foldersToSkip()).thenReturn(List.of("/tmp", "/transient"));
+        when(config.foldersToSkip()).thenReturn(List.of("/tmp", "/transient"));
 
         assertFalse(rules.shouldSkipFolder("incoming/docs/file.pdf"));
     }
@@ -46,42 +46,42 @@ class DocumentValidationRulesTest {
 
     @Test
     void shouldSendByOrigin_withMatchingPattern_shouldReturnTrue() {
-        lenient().when(config.originPatternsToSend()).thenReturn(List.of("incoming", "docs"));
+        when(config.originPatternsToSend()).thenReturn(List.of("incoming", "docs"));
 
         assertTrue(rules.shouldSendByOrigin("incoming/file.pdf"));
     }
 
     @Test
     void shouldSendByOrigin_withNoMatchingPattern_shouldReturnFalse() {
-        lenient().when(config.originPatternsToSend()).thenReturn(List.of("incoming", "docs"));
+        when(config.originPatternsToSend()).thenReturn(List.of("incoming", "docs"));
 
         assertFalse(rules.shouldSendByOrigin("other/folder/file.pdf"));
     }
 
     @Test
     void shouldSendByOrigin_withEmptyPatterns_shouldReturnTrue() {
-        lenient().when(config.originPatternsToSend()).thenReturn(List.of());
+        when(config.originPatternsToSend()).thenReturn(List.of());
 
         assertTrue(rules.shouldSendByOrigin("any/path/file.pdf"));
     }
 
     @Test
     void shouldNotSendBySize_withLargeFile_shouldReturnTrue() {
-        lenient().when(config.maxFileSizeMb()).thenReturn(50);
+        when(config.maxFileSizeMb()).thenReturn(50);
 
         assertTrue(rules.shouldNotSendBySize(50 * 1024 * 1024));
     }
 
     @Test
     void shouldNotSendBySize_withSmallFile_shouldReturnFalse() {
-        lenient().when(config.maxFileSizeMb()).thenReturn(50);
+        when(config.maxFileSizeMb()).thenReturn(50);
 
         assertFalse(rules.shouldNotSendBySize(10 * 1024 * 1024));
     }
 
     @Test
     void extractFolderInfo_withNullKeywords_shouldReturnDefaultFolder() {
-        lenient().when(config.keywords()).thenReturn(null);
+        when(config.keywords()).thenReturn(null);
 
         var info = rules.extractFolderInfo("incoming/test/myfile.pdf");
 

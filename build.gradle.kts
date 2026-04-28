@@ -11,8 +11,9 @@ group = "com.example"
 version = "1.0.0"
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
 }
 
 configurations {
@@ -71,7 +72,9 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-reactor:2.2.0")
 
     // Monitoring & Tracing
+    implementation("io.micrometer:micrometer-core")
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
+    implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.projectreactor:reactor-tools")
 
     // Testing

@@ -1,6 +1,5 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 
 import java.util.List;
@@ -21,6 +20,9 @@ public record DocumentValidationRules(FileValidationConfig config) {
 
     /** Conversion factor: bytes per megabyte */
     public static final long BYTES_PER_MEGABYTE = 1024L * 1024L;
+
+    /** Default folder when no routing keyword matches */
+    private static final String DEFAULT_FOLDER = ".";
 
     /**
      * Determines if a document should be skipped based on its folder path.
@@ -83,7 +85,7 @@ public record DocumentValidationRules(FileValidationConfig config) {
     public FolderInfo extractFolderInfo(String origin) {
         List<String> keywords = config.keywords();
         if (keywords == null || keywords.isEmpty() || origin == null || origin.isBlank()) {
-            return new FolderInfo(ApiConstants.DEFAULT_FOLDER, ApiConstants.DEFAULT_FOLDER);
+            return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
         }
 
         for (String keyword : keywords) {
@@ -91,13 +93,13 @@ public record DocumentValidationRules(FileValidationConfig config) {
                 String[] parts = origin.split("/");
                 if (parts.length >= 2) {
                     String childFolder = parts[parts.length - 1];
-                    String parentFolder = parts.length > 1 ? parts[parts.length - 2] : ApiConstants.DEFAULT_FOLDER;
+                    String parentFolder = parts.length > 1 ? parts[parts.length - 2] : DEFAULT_FOLDER;
                     return new FolderInfo(parentFolder, childFolder);
                 }
-                return new FolderInfo(origin, ApiConstants.DEFAULT_FOLDER);
+                return new FolderInfo(origin, DEFAULT_FOLDER);
             }
         }
-        return new FolderInfo(ApiConstants.DEFAULT_FOLDER, ApiConstants.DEFAULT_FOLDER);
+        return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
     }
 
     /**

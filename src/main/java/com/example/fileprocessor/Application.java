@@ -1,6 +1,5 @@
 package com.example.fileprocessor;
 
-import com.example.fileprocessor.infrastructure.helpers.config.FileUploadProperties;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorConfig;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
@@ -10,7 +9,7 @@ import org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguratio
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication(exclude = {WebMvcAutoConfiguration.class})
-@EnableConfigurationProperties({FileUploadProperties.class, SoapProperties.class, DocumentRestProperties.class, ProcessorConfig.class})
+@EnableConfigurationProperties({SoapProperties.class, DocumentRestProperties.class, ProcessorConfig.class})
 public class Application {
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);

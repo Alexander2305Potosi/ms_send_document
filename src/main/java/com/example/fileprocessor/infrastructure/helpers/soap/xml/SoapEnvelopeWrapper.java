@@ -48,6 +48,10 @@ public class SoapEnvelopeWrapper {
         }
     }
 
+    public JAXBContext getJaxbContext() {
+        return jaxbContext;
+    }
+
     public <T> T unwrapResponse(String soapXml, Class<T> responseClass) {
         try {
             DocumentBuilder builder = documentBuilderFactory.newDocumentBuilder();

@@ -56,10 +56,10 @@ public interface ProductDocumentRepository {
      * @param documentId the document identifier
      * @param status the new status
      * @param traceId the trace identifier
-     * @param soapCorrelationId the SOAP correlation ID (if successful)
+     * @param correlationId the correlation ID (if successful)
      * @param errorCode the error code (if failed)
      * @return Mono that completes when updated
      */
     Mono<Void> updateStatus(String documentId, String status, String traceId,
-                            String soapCorrelationId, String errorCode);
+                            String correlationId, String errorCode);
 }

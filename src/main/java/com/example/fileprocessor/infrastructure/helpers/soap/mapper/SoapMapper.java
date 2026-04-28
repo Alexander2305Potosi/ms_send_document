@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
-import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
@@ -19,22 +19,23 @@ import org.springframework.stereotype.Component;
 import java.io.StringWriter;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Objects;
 
 @Component
 public class SoapMapper {
 
     private static final Logger log = LoggerFactory.getLogger(SoapMapper.class);
 
+    private static final String DEFAULT_STATUS = "UNKNOWN";
+    private static final String DEFAULT_MESSAGE = "No message received";
+    private static final String DEFAULT_CORRELATION_ID = "N/A";
+
     private final SoapEnvelopeWrapper envelopeWrapper;
     private final JAXBContext jaxbContext;
 
     public SoapMapper(SoapEnvelopeWrapper envelopeWrapper) {
         this.envelopeWrapper = envelopeWrapper;
-        try {
-            this.jaxbContext = JAXBContext.newInstance(UploadFileRequest.class, UploadFileResponse.class);
-        } catch (jakarta.xml.bind.JAXBException e) {
-            throw new IllegalStateException("Failed to initialize JAXB context", e);
-        }
+        this.jaxbContext = envelopeWrapper.getJaxbContext();
     }
 
     public String toSoapXml(DocumentSendRequest request) {
@@ -86,7 +87,7 @@ public class SoapMapper {
         }
     }
 
-    public SoapResponse fromSoapXml(String xml, String traceId) {
+    public ExternalServiceResponse fromSoapXml(String xml, String traceId) {
         log.debug("Parsing SOAP response for traceId: {}", traceId);
 
         try {
@@ -96,10 +97,10 @@ public class SoapMapper {
                 ? Instant.parse(response.getProcessedAt())
                 : Instant.now();
 
-            return SoapResponse.builder()
-                .status(response.getStatus() != null ? response.getStatus() : SoapResponseDefaults.UNKNOWN)
-                .message(response.getMessage() != null ? response.getMessage() : SoapResponseDefaults.NO_MESSAGE)
-                .correlationId(response.getCorrelationId() != null ? response.getCorrelationId() : SoapResponseDefaults.NOT_AVAILABLE)
+            return ExternalServiceResponse.builder()
+                .status(Objects.requireNonNullElse(response.getStatus(), DEFAULT_STATUS))
+                .message(Objects.requireNonNullElse(response.getMessage(), DEFAULT_MESSAGE))
+                .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), DEFAULT_CORRELATION_ID))
                 .traceId(traceId)
                 .processedAt(processedAt)
                 .externalReference(response.getExternalReference())

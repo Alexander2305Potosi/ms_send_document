@@ -40,11 +40,4 @@ public enum ProductStatus {
      */
     COMPLETED_WITH_FAILURES;
 
-    public static final String PENDING_VALUE = PENDING.name();
-    public static final String PROCESSING_VALUE = PROCESSING.name();
-    public static final String SUCCESS_VALUE = SUCCESS.name();
-    public static final String PARTIAL_FAILURE_VALUE = PARTIAL_FAILURE.name();
-    public static final String COMPLETED_WITH_SKIPS_VALUE = COMPLETED_WITH_SKIPS.name();
-    public static final String COMPLETED_WITH_NOT_SENT_VALUE = COMPLETED_WITH_NOT_SENT.name();
-    public static final String COMPLETED_WITH_FAILURES_VALUE = COMPLETED_WITH_FAILURES.name();
 }

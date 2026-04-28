@@ -1,6 +1,5 @@
 package com.example.fileprocessor.domain.entity;
 
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import lombok.Builder;
 
 @Builder
@@ -13,6 +12,8 @@ public record ProductDocumentInfo(
     boolean isZip,
     String origin
 ) {
+    private static final String EXTENSION_ZIP = "zip";
+
     public String extension() {
         if (filename == null || filename.isBlank()) {
             return "";
@@ -22,6 +23,6 @@ public record ProductDocumentInfo(
     }
 
     public boolean isZipArchive() {
-        return isZip || ApiConstants.EXTENSION_ZIP.equalsIgnoreCase(extension());
+        return isZip || EXTENSION_ZIP.equalsIgnoreCase(extension());
     }
 }

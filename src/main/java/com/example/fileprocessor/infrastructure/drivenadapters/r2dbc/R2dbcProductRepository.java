@@ -30,7 +30,7 @@ public class R2dbcProductRepository implements ProductRepository {
             FROM products_to_process
             WHERE status IN ('%s', '%s', '%s')
             ORDER BY created_at ASC
-            """.formatted(DocumentStatus.PENDING_VALUE, DocumentStatus.RETRY_VALUE, DocumentStatus.PROCESSING_VALUE);
+            """.formatted(DocumentStatus.PENDING.name(), DocumentStatus.RETRY.name(), DocumentStatus.PROCESSING.name());
 
         return databaseClient.sql(sql)
             .map((row, metadata) -> ProductToProcess.builder()

@@ -1,9 +1,8 @@
-package com.example.fileprocessor.infrastructure.soap;
+package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.infrastructure.drivenadapters.soap.SoapGatewayAdapter;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;

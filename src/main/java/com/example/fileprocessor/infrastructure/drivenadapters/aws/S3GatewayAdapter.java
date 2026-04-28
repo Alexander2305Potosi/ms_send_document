@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
+import io.micrometer.core.annotation.Timed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -13,6 +14,7 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -21,6 +23,8 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @Component
 public class S3GatewayAdapter implements FileGateway {
+
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
 
     private final S3AsyncClient s3Client;
     private final S3Properties s3Properties;
@@ -31,6 +35,7 @@ public class S3GatewayAdapter implements FileGateway {
     }
 
     @Override
+    @Timed("s3.gateway")
     public Mono<FileUploadResult> send(DocumentSendRequest request) {
         byte[] content = request.getFileContent();
         String key = buildKey(request);
@@ -49,11 +54,12 @@ public class S3GatewayAdapter implements FileGateway {
         CompletableFuture<PutObjectResponse> future = s3Client.putObject(putRequest, AsyncRequestBody.fromBytes(content));
 
         return Mono.fromFuture(future)
+            .timeout(DEFAULT_TIMEOUT)
             .map(completed -> {
                 log.info("S3 upload successful: {} -> {}/{}",
                     request.getFilename(), s3Properties.bucketName(), key);
                 return FileUploadResult.builder()
-                    .status(DocumentStatus.SUCCESS_VALUE)
+                    .status(DocumentStatus.SUCCESS.name())
                     .message("Uploaded to S3: " + s3Properties.bucketName() + "/" + key)
                     .correlationId(completed.eTag())
                     .traceId(request.getTraceId())
@@ -64,14 +70,20 @@ public class S3GatewayAdapter implements FileGateway {
             })
             .doOnError(error -> log.error("S3 upload failed for {}: {}",
                 request.getFilename(), error.getMessage()))
-            .onErrorResume(error -> Mono.just(
-                FileUploadResult.builder()
-                    .status(DocumentStatus.FAILURE_VALUE)
-                    .message("S3 upload failed: " + error.getMessage())
-                    .traceId(request.getTraceId())
-                    .processedAt(Instant.now())
-                    .success(false)
-                    .build()));
+            .onErrorResume(error -> {
+                // Distinguish infrastructure failures (propagate for CB) from business failures (return result)
+                if (error instanceof java.util.concurrent.TimeoutException) {
+                    return Mono.error(new com.example.fileprocessor.domain.exception.CommunicationException(
+                        "S3 upload timed out: " + error.getMessage(),
+                        "TIMEOUT",
+                        request.getTraceId()));
+                }
+                // Other errors - propagate for CB to react
+                return Mono.error(new com.example.fileprocessor.domain.exception.CommunicationException(
+                    "S3 upload failed: " + error.getMessage(),
+                    "S3_ERROR",
+                    request.getTraceId()));
+            });
     }
 
     private String buildKey(DocumentSendRequest request) {

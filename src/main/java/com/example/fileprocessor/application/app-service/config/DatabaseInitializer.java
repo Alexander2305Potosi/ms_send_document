@@ -45,7 +45,7 @@ public class DatabaseInitializer implements ApplicationRunner {
 
     private Mono<Void> resetProcessingProductDocuments() {
         String sql = "UPDATE product_documents_to_process SET status = '%s' WHERE status = '%s'"
-            .formatted(DocumentStatus.PENDING_VALUE, DocumentStatus.PROCESSING_VALUE);
+            .formatted(DocumentStatus.PENDING.name(), DocumentStatus.PROCESSING.name());
         return databaseClient.sql(sql)
             .fetch()
             .rowsUpdated()
@@ -95,7 +95,7 @@ public class DatabaseInitializer implements ApplicationRunner {
                     created_at TIMESTAMP NOT NULL,
                     processed_at TIMESTAMP,
                     trace_id VARCHAR(255),
-                    soap_correlation_id VARCHAR(255),
+                    correlation_id VARCHAR(255),
                     error_code VARCHAR(100)
                 )
                 """)

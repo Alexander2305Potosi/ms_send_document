@@ -5,15 +5,19 @@ import com.example.fileprocessor.domain.entity.ProductInfo;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -31,12 +35,16 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     public ProductRestGatewayAdapter(WebClient.Builder webClientBuilder,
                                      DocumentRestProperties properties) {
         this.properties = properties;
+        HttpClient httpClient = HttpClient.create()
+            .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
         this.webClient = webClientBuilder
             .baseUrl(properties.endpoint())
+            .clientConnector(new ReactorClientHttpConnector(httpClient))
             .build();
     }
 
     @Override
+    @Timed("product.rest")
     public Flux<ProductInfo> getAllProducts(String traceId) {
         log.info("Fetching all products from REST API, traceId: {}", traceId);
 
@@ -46,6 +54,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .header(ApiConstants.HEADER_TRACE_ID, traceId)
             .retrieve()
             .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+            .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
             .map(list -> list.stream().map(this::mapToProductInfo).toList())
             .flatMapMany(Flux::fromIterable)
             .doOnNext(product -> log.info("Product retrieved: {}", product.getProductId()));
@@ -63,6 +72,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .header(ApiConstants.HEADER_TRACE_ID, traceId)
             .retrieve()
             .bodyToMono(MAP_TYPE_REF)
+            .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
             .map(this::mapToProductDocumentInfo)
             .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
     }

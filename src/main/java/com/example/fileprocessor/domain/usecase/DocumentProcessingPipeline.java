@@ -4,11 +4,9 @@ import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.exception.CommunicationException;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
+import com.example.fileprocessor.domain.port.out.ResilienceOperator;
+import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -33,7 +31,7 @@ public class DocumentProcessingPipeline {
     private final DocumentValidationRules validationRules;
     private final DocumentSkipHandler skipHandler;
     private final ProductStatusAggregator statusAggregator;
-    private final CircuitBreaker circuitBreaker;
+    private final ResilienceOperator resilienceOperator;
     private final DocumentSender documentSender;
 
     public DocumentProcessingPipeline(
@@ -42,17 +40,18 @@ public class DocumentProcessingPipeline {
             DocumentValidationRules validationRules,
             DocumentSkipHandler skipHandler,
             ProductStatusAggregator statusAggregator,
-            CircuitBreaker circuitBreaker,
+            ResilienceOperator resilienceOperator,
             DocumentSender documentSender) {
         this.documentRepository = documentRepository;
         this.fileValidator = fileValidator;
         this.validationRules = validationRules;
         this.skipHandler = skipHandler;
         this.statusAggregator = statusAggregator;
-        this.circuitBreaker = circuitBreaker;
+        this.resilienceOperator = resilienceOperator;
         this.documentSender = documentSender;
     }
 
+    @Timed("document.processing")
     public Mono<FileUploadResult> process(ProductDocumentToProcess pending, String traceId) {
         return Mono.just(pending)
             .flatMap(doc -> validateBusinessRules(doc, traceId))
@@ -71,19 +70,19 @@ public class DocumentProcessingPipeline {
         long fileSize = pending.getContent() != null ? pending.getContent().length : 0;
 
         if (validationRules.shouldSkipFolder(pending.getOrigin())) {
-            return skipHandler.skipDocument(pending, traceId, DocumentStatus.SKIPPED_VALUE,
+            return skipHandler.skipDocument(pending, traceId, DocumentStatus.SKIPPED.name(),
                 ProcessingMessages.MSG_SKIPPED_FOLDER + pending.getOrigin(),
                 ProcessingResultCodes.SKIPPED_FOLDER, pending.getDocumentId())
                 .then(Mono.empty());
         }
         if (!validationRules.shouldSendByOrigin(pending.getOrigin())) {
-            return skipHandler.skipDocument(pending, traceId, DocumentStatus.NOT_SENT_VALUE,
+            return skipHandler.skipDocument(pending, traceId, DocumentStatus.NOT_SENT.name(),
                 ProcessingMessages.MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
                 ProcessingResultCodes.NOT_SENT_ORIGIN, pending.getDocumentId())
                 .then(Mono.empty());
         }
         if (validationRules.shouldNotSendBySize(fileSize)) {
-            return skipHandler.skipDocument(pending, traceId, DocumentStatus.NOT_SENT_VALUE,
+            return skipHandler.skipDocument(pending, traceId, DocumentStatus.NOT_SENT.name(),
                 ProcessingMessages.MSG_SIZE_EXCEEDED + fileSize + ProcessingMessages.MSG_SIZE_EXCEEDED_SUFFIX,
                 ProcessingResultCodes.SIZE_EXCEEDED, pending.getFilename())
                 .then(Mono.empty());
@@ -108,34 +107,26 @@ public class DocumentProcessingPipeline {
     }
 
     private Mono<FileUploadResult> sendWithCircuitBreaker(DocumentSendRequest request) {
-        return Mono.just(request)
-            .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
-            .flatMap(documentSender::send)
-            .onErrorResume(CallNotPermittedException.class, e -> {
-                log.warn("Circuit breaker OPEN for document {}: {}",
-                    request.getDocumentId(), ProcessingMessages.MSG_CIRCUIT_BREAKER_OPEN);
-                return Mono.error(new CommunicationException(
-                    ProcessingMessages.MSG_CIRCUIT_BREAKER_OPEN,
-                    ProcessingResultCodes.CIRCUIT_BREAKER_OPEN,
-                    request.getTraceId(), 0));
-            });
+        @SuppressWarnings("unchecked")
+        Mono<FileUploadResult> result = (Mono<FileUploadResult>) resilienceOperator.decorate(
+            documentSender.send(request),
+            request.getTraceId()
+        );
+        return result;
     }
 
     private Mono<FileUploadResult> updateStatuses(ProductDocumentToProcess pending,
                                                   FileUploadResult result, String traceId) {
         String status = result.getStatus();
-        String correlationId = DocumentStatus.SUCCESS_VALUE.equals(status) ? result.getCorrelationId() : null;
-        String errorCode = DocumentStatus.SUCCESS_VALUE.equals(status) ? null : extractErrorCodeFromMessage(result.getMessage());
+        String correlationId = DocumentStatus.SUCCESS.name().equals(status) ? result.getCorrelationId() : null;
+        String errorCode = DocumentStatus.SUCCESS.name().equals(status) ? null : extractErrorCode(result);
 
         return documentRepository.updateStatus(pending.getDocumentId(), status, traceId, correlationId, errorCode)
             .then(statusAggregator.updateProductStatus(pending.getProductId(), traceId))
             .thenReturn(result);
     }
 
-    private String extractErrorCodeFromMessage(String message) {
-        if (message == null) return ProcessingResultCodes.UNKNOWN_ERROR;
-        if (message.contains(ProcessingMessages.MSG_TIMEOUT)) return ProcessingResultCodes.TIMEOUT;
-        if (message.contains(ProcessingMessages.MSG_VALIDATION)) return ProcessingResultCodes.VALIDATION_ERROR;
-        return ProcessingResultCodes.UNKNOWN_ERROR;
+    private String extractErrorCode(FileUploadResult result) {
+        return result.getErrorCode() != null ? result.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
     }
 }

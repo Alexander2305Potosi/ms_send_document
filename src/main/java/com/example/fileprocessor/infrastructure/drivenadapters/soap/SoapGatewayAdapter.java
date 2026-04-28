@@ -3,13 +3,14 @@ package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.SoapResponse;
+import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapNamespaces;
+import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
@@ -54,13 +55,14 @@ public class SoapGatewayAdapter implements FileGateway {
     }
 
     @Override
+    @Timed("soap.gateway")
     public Mono<FileUploadResult> send(DocumentSendRequest request) {
         log.info("Sending SOAP request for traceId: {}, endpoint: {}",
             request.getTraceId(), properties.endpoint());
 
         String soapEnvelope = soapMapper.toFullSoapMessage(request);
 
-        Mono<SoapResponse> soapCall = webClient.post()
+        Mono<ExternalServiceResponse> soapCall = webClient.post()
             .contentType(MediaType.TEXT_XML)
             .header("SOAPAction", SoapNamespaces.FILE_SERVICE + SoapNamespaces.SOAP_ACTION_UPLOAD)
             .bodyValue(soapEnvelope)
@@ -101,35 +103,49 @@ public class SoapGatewayAdapter implements FileGateway {
                     cause = Exceptions.unwrap(throwable);
                     retries = properties.retryAttempts();
                 }
+                // Distinguish infrastructure failures (propagate error for CB) from business failures (return result)
                 if (cause instanceof TimeoutException) {
                     log.error("SOAP timeout for traceId: {} after {} retries", request.getTraceId(), retries);
-                    return Mono.just(toFileUploadResultError(
+                    return Mono.error(new SoapCommunicationException(
                         "SOAP request timed out after " + retries + " retries",
-                        ProcessingResultCodes.GATEWAY_TIMEOUT, request.getTraceId()));
+                        ProcessingResultCodes.GATEWAY_TIMEOUT,
+                        request.getTraceId()));
                 }
                 if (cause instanceof WebClientResponseException e) {
-                    log.error("WebClient error for traceId: {}: {}", request.getTraceId(), e.getMessage());
+                    // 5xx errors are infrastructure failures - propagate for CB
+                    if (e.getStatusCode().is5xxServerError()) {
+                        log.error("SOAP server error for traceId: {}: {}", request.getTraceId(), e.getMessage());
+                        return Mono.error(new SoapCommunicationException(
+                            "SOAP service error: " + e.getMessage(),
+                            mapHttpStatusToCode(e.getStatusCode()),
+                            request.getTraceId()));
+                    }
+                    // 4xx errors are business failures - return as failure result
+                    log.error("SOAP client error for traceId: {}: {}", request.getTraceId(), e.getMessage());
                     return Mono.just(toFileUploadResultError(
                         "Communication error with SOAP service: " + e.getMessage(),
                         mapHttpStatusToCode(e.getStatusCode()), request.getTraceId()));
                 }
                 if (cause instanceof ConnectException) {
                     log.error("Connection failed for traceId: {}: {}", request.getTraceId(), cause.getMessage());
-                    return Mono.just(toFileUploadResultError(
+                    return Mono.error(new SoapCommunicationException(
                         "Connection failed: " + cause.getMessage(),
-                        ProcessingResultCodes.UNKNOWN_ERROR, request.getTraceId()));
+                        ProcessingResultCodes.UNKNOWN_ERROR,
+                        request.getTraceId()));
                 }
                 if (cause instanceof IOException) {
                     log.error("IO error for traceId: {}: {}", request.getTraceId(), cause.getMessage());
-                    return Mono.just(toFileUploadResultError(
+                    return Mono.error(new SoapCommunicationException(
                         "IO error: " + cause.getMessage(),
-                        ProcessingResultCodes.UNKNOWN_ERROR, request.getTraceId()));
+                        ProcessingResultCodes.UNKNOWN_ERROR,
+                        request.getTraceId()));
                 }
+                // Unknown errors - propagate for CB to react
                 return Mono.error(throwable);
             });
     }
 
-    private FileUploadResult toFileUploadResult(SoapResponse response, String traceId) {
+    private FileUploadResult toFileUploadResult(ExternalServiceResponse response, String traceId) {
         return FileUploadResult.builder()
             .status(response.getStatus())
             .message(response.getMessage())
@@ -143,8 +159,9 @@ public class SoapGatewayAdapter implements FileGateway {
 
     private FileUploadResult toFileUploadResultError(String message, String errorCode, String traceId) {
         return FileUploadResult.builder()
-            .status(DocumentStatus.FAILURE_VALUE)
+            .status(DocumentStatus.FAILURE.name())
             .message(message)
+            .errorCode(errorCode)
             .traceId(traceId)
             .processedAt(Instant.now())
             .success(false)

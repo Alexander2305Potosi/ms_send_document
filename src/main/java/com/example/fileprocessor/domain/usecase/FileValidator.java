@@ -3,7 +3,6 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.in.FileValidationConfig;
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -19,6 +18,10 @@ import java.util.stream.Collectors;
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
+
+    private static final String PATH_DOUBLE_DOT = "..";
+    private static final String PATH_SLASH = "/";
+    private static final String PATH_BACKSLASH = "\\";
 
     private final FileValidationConfig config;
     private final Set<String> allowedTypes;
@@ -68,7 +71,7 @@ public class FileValidator {
     private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess p) {
         String ext = extension(p);
 
-        if (!allowedTypes.contains(ext.toLowerCase())) {
+        if (!allowedTypes.contains(ext)) {
             log.warn("File {} has invalid extension: {}",
                 p.getFilename(), ext);
             return Mono.error(new FileValidationException(
@@ -86,7 +89,7 @@ public class FileValidator {
                 ProcessingMessages.MSG_FILENAME_TOO_LONG + config.maxFilenameLength(),
                 ProcessingResultCodes.FILENAME_TOO_LONG));
         }
-        if (filename.contains(ApiConstants.PATH_DOUBLE_DOT) || filename.contains(ApiConstants.PATH_SLASH) || filename.contains(ApiConstants.PATH_BACKSLASH)) {
+        if (filename.contains(PATH_DOUBLE_DOT) || filename.contains(PATH_SLASH) || filename.contains(PATH_BACKSLASH)) {
             log.warn("Filename contains invalid characters: {}", filename);
             return Mono.error(new FileValidationException(
                 ProcessingMessages.MSG_FILENAME_INVALID,
