@@ -10,7 +10,6 @@ import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ResilienceOperator;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
-import com.example.fileprocessor.infrastructure.helpers.shutdown.GracefulShutdownManager;
 import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +23,7 @@ import java.util.UUID;
 
 /**
  * Abstract base class implementing the Template Method pattern for document processing.
- * Centralizes shared orchestration: claim, preValidate, sendWithResilience, checkpoint, postProcess.
+ * Uses nested strategy classes to group related methods for better readability.
  *
  * <p>Subclasses implement only:
  * <ul>
@@ -67,11 +66,6 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     // ============ TEMPLATE METHOD (final - do not override) ============
 
-    /**
-     * Entry point - orchestrates processing of all pending documents.
-     * This method is final to ensure the template algorithm is not modified.
-     * Supports graceful shutdown via takeWhile + drain timeout.
-     */
     @Timed("document.processing")
     public final Flux<FileUploadResult> executePendingDocuments() {
         Duration drainTimeout = Duration.ofSeconds(drainTimeoutSeconds());
@@ -89,34 +83,6 @@ public abstract class AbstractDocumentProcessingUseCase {
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()));
     }
 
-    /**
-     * Returns true if the application is shutting down.
-     * Override in subclasses if needed.
-     */
-    protected boolean isShuttingDown() {
-        return false;
-    }
-
-    /**
-     * Returns the drain timeout in seconds.
-     * Override to configure via GracefulShutdownManager.
-     */
-    protected int drainTimeoutSeconds() {
-        return 20;
-    }
-
-    /**
-     * Returns approximate count of documents in flight.
-     * For logging purposes during shutdown.
-     */
-    protected long countInFlight() {
-        return 0;
-    }
-
-    /**
-     * Template method for processing a single document.
-     * Defines the algorithm skeleton. Variations are handled by abstract methods.
-     */
     protected final Mono<FileUploadResult> processDocument(ProductDocumentToProcess pending, String traceId) {
         return Mono.just(pending)
             .flatMap(doc -> preValidate(doc, traceId))
@@ -131,87 +97,69 @@ public abstract class AbstractDocumentProcessingUseCase {
                 pending.getFilename(), result.getCorrelationId()));
     }
 
-    // ============ HOOK (can be overridden, default implementation provided) ============
+    // ============ HOOK METHODS (can be overridden) ============
 
-    /**
-     * Pre-validation with shared business rules (folder skip, origin, size).
-     * Returns Mono.just(FileUploadResult) to short-circuit if document should be skipped.
-     * Returns Mono.empty() to continue with normal processing.
-     */
+    protected boolean isShuttingDown() {
+        return false;
+    }
+
+    protected int drainTimeoutSeconds() {
+        return 20;
+    }
+
+    protected long countInFlight() {
+        return 0;
+    }
+
+    protected int maxConcurrency() {
+        return ProcessingMessages.DEFAULT_MAX_CONCURRENCY;
+    }
+
+    // ============ PRE-VALIDATION HOOK (shared business rules) ============
+
     protected Mono<FileUploadResult> preValidate(ProductDocumentToProcess pending, String traceId) {
-        // 1. Legacy folder skip (String.contains)
         if (validationRules.shouldSkipFolder(pending.getOrigin())) {
             return skipDocument(pending, traceId, DocumentStatus.SKIPPED.name(),
                 ProcessingMessages.MSG_SKIPPED_FOLDER + pending.getOrigin(),
                 ProcessingResultCodes.SKIPPED_FOLDER);
         }
-
-        // 2. Regex-based folder exclusion
         if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
             return skipDocument(pending, traceId, DocumentStatus.SKIPPED.name(),
                 "Folder excluded by regex: " + pending.getOrigin(),
                 ProcessingResultCodes.SKIPPED_FOLDER);
         }
-
-        // 3. Origin pattern check
         if (!validationRules.shouldSendByOrigin(pending.getOrigin())) {
             return skipDocument(pending, traceId, DocumentStatus.NOT_SENT.name(),
                 ProcessingMessages.MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
                 ProcessingResultCodes.NOT_SENT_ORIGIN);
         }
-
-        // 4. Size check
         long fileSize = pending.getContent() != null ? pending.getContent().length : 0;
         if (validationRules.shouldNotSendBySize(fileSize)) {
             return skipDocument(pending, traceId, DocumentStatus.NOT_SENT.name(),
                 ProcessingMessages.MSG_SIZE_EXCEEDED + fileSize + ProcessingMessages.MSG_SIZE_EXCEEDED_SUFFIX,
                 ProcessingResultCodes.SIZE_EXCEEDED);
         }
-
         return Mono.empty();
     }
 
     // ============ ABSTRACT METHODS (must be implemented by subclasses) ============
 
-    /**
-     * Validates document according to gateway-specific rules.
-     * @param pending document to validate
-     * @param traceId trace identifier
-     * @return Mono with validated document or error
-     */
     protected abstract Mono<ProductDocumentToProcess> validateDocument(
             ProductDocumentToProcess pending, String traceId);
 
-    /**
-     * Builds the gateway-specific DocumentSendRequest.
-     * @param validDoc validated document
-     * @param traceId trace identifier
-     * @return Mono with built request
-     */
     protected abstract Mono<DocumentSendRequest> buildRequest(
             ProductDocumentToProcess validDoc, String traceId);
 
-    /**
-     * Returns the processor implementation name for logging.
-     */
     protected abstract String implementationName();
 
-    /**
-     * Public accessor for the implementation name.
-     */
     public String getImplementationName() {
         return implementationName();
     }
 
-    // ============ SHARED CONCRETE METHODS ============
+    // ============ CONCRETE SHARED METHODS ============
 
-    /**
-     * Sends document with resilience patterns (circuit breaker, retry).
-     * Logs both success and failure to CommunicationLog.
-     */
     protected Mono<FileUploadResult> sendWithResilience(DocumentSendRequest request) {
         Instant start = Instant.now();
-
         return Mono.defer(() -> {
             @SuppressWarnings("unchecked")
             Mono<FileUploadResult> decorated = (Mono<FileUploadResult>) resilienceOperator.decorate(
@@ -230,10 +178,6 @@ public abstract class AbstractDocumentProcessingUseCase {
         });
     }
 
-    /**
-     * Immediate checkpoint - updates document status atomically.
-     * This is the critical step that must happen right after send.
-     */
     protected Mono<FileUploadResult> checkpoint(
             ProductDocumentToProcess pending, FileUploadResult result, String traceId) {
         String status = result.getStatus();
@@ -243,32 +187,22 @@ public abstract class AbstractDocumentProcessingUseCase {
             ? null : result.getErrorCode();
 
         return documentRepository.updateStatus(
-                pending.getDocumentId(), status, traceId, correlationId, errorCode)
+            pending.getDocumentId(), status, traceId, correlationId, errorCode)
             .thenReturn(result);
     }
 
-    /**
-     * Post-processing - updates product status aggregation.
-     * This is deferrable and should not block the main flow.
-     */
     protected Mono<FileUploadResult> postProcess(
             ProductDocumentToProcess pending, FileUploadResult result, String traceId) {
         return statusAggregator.updateProductStatus(pending.getProductId(), traceId)
             .thenReturn(result);
     }
 
-    /**
-     * Saves communication log for both success and failure outcomes.
-     */
     protected Mono<Void> saveCommunicationLog(
             DocumentSendRequest request, FileUploadResult result, int retryCount, Instant startTime) {
         CommunicationLog logEntry = logFactory.create(request, result, retryCount, startTime, Map.of());
         return logRepository.save(logEntry).then();
     }
 
-    /**
-     * Skips a document and updates its status.
-     */
     protected Mono<FileUploadResult> skipDocument(
             ProductDocumentToProcess pending, String traceId,
             String status, String message, String errorCode) {
@@ -276,7 +210,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             pending.getDocumentId(), status, errorCode);
 
         return documentRepository.updateStatus(
-                pending.getDocumentId(), status, traceId, null, errorCode)
+            pending.getDocumentId(), status, traceId, null, errorCode)
             .flatMap(v -> statusAggregator.updateProductStatus(pending.getProductId(), traceId))
             .thenReturn(FileUploadResult.builder()
                 .status(status)
@@ -287,15 +221,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .build());
     }
 
-    /**
-     * Returns max concurrency for parallel processing.
-     * Default is 10, can be overridden by subclasses.
-     */
-    protected int maxConcurrency() {
-        return ProcessingMessages.DEFAULT_MAX_CONCURRENCY;
-    }
-
-    // ============ PRIVATE HELPERS ============
+    // ============ CLAIMING (private helper) ============
 
     private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
         String traceId = UUID.randomUUID().toString();
@@ -308,8 +234,9 @@ public abstract class AbstractDocumentProcessingUseCase {
             }));
     }
 
+    // ============ ERROR HELPERS ============
+
     private int extractRetryCount(Throwable error) {
-        // Infer retry count from exception if available
         return 0;
     }
 

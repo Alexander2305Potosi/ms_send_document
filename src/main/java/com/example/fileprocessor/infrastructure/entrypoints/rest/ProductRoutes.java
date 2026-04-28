@@ -17,7 +17,6 @@ public class ProductRoutes {
         return route()
             .GET(RestApiPaths.API_V1_PRODUCTS_LOAD, handler::loadProducts)
             .GET(RestApiPaths.API_V1_PRODUCTS, handler::processPendingProducts)
-            .GET(RestApiPaths.API_V1_OPERATIONS_STATUS, handler::getOperationStatus)
             .build();
     }
 }
