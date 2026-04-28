@@ -36,13 +36,13 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     protected Mono<ProductDocumentToProcess> filterByFolder(
             ProductDocumentToProcess pending, String traceId) {
 
-        // S3-specific: check folder exclusion regex
         if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
             log.info("S3 document {} skipped: origin matches exclusion regex: {}",
                 pending.getFilename(), pending.getOrigin());
-            return skipDocumentByOrigin(pending, traceId,
-                "Folder excluded by regex: " + pending.getOrigin(),
-                ProcessingResultCodes.SKIPPED_FOLDER);
+            return documentRepository.updateStatus(
+                pending.getDocumentId(), DocumentStatus.SKIPPED.name(), traceId, null,
+                ProcessingResultCodes.SKIPPED_FOLDER)
+                .thenReturn(pending);
         }
 
         return Mono.just(pending);
@@ -55,20 +55,11 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
         log.info("Validating S3 document: {}, productId: {}",
             pending.getDocumentId(), pending.getProductId());
 
-        // Delegate to common file validator
         return fileValidator.validate(pending);
     }
 
     @Override
     protected int maxConcurrency() {
         return settings.getMaxConcurrency();
-    }
-
-    private Mono<ProductDocumentToProcess> skipDocumentByOrigin(
-            ProductDocumentToProcess pending, String traceId, String message, String errorCode) {
-        log.info("Document {} skipped: {}", pending.getDocumentId(), message);
-        return documentRepository.updateStatus(
-            pending.getDocumentId(), DocumentStatus.SKIPPED.name(), traceId, null, errorCode)
-            .thenReturn(pending);
     }
 }

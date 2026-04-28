@@ -51,7 +51,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     @Timed("document.processing")
     public final Flux<FileUploadResult> executePendingDocuments() {
         return documentRepository.findPendingDocuments()
-            .flatMap(this::processPendingDocument, maxConcurrency())
+            .flatMap(this::processPendingDocument)
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnNext(r -> log.info("Document processed: correlationId={}, status={}",
                 r.getCorrelationId(), r.getStatus()))
