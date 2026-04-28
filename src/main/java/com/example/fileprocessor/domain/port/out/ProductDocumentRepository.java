@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.port.out;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
+import com.example.fileprocessor.domain.usecase.ClaimResult;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -36,6 +37,15 @@ public interface ProductDocumentRepository {
      * @return Mono<Boolean> true if claimed successfully
      */
     Mono<Boolean> claimDocument(String documentId);
+
+    /**
+     * Claims a document with recovery support for stale PROCESSING documents.
+     * Atomically claims documents in PENDING, stale PROCESSING (>staleThreshold), or RETRY status.
+     * @param documentId the document identifier
+     * @param staleThresholdMinutes documents in PROCESSING for longer than this are considered stale
+     * @return Mono<ClaimResult> with claim details
+     */
+    Mono<ClaimResult> claimDocumentWithRecovery(String documentId, int staleThresholdMinutes);
 
     /**
      * Saves a single document.

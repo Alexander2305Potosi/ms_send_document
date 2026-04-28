@@ -11,12 +11,13 @@ import lombok.Getter;
 @Getter
 @Builder
 public class DocumentSendRequest {
-    private final String documentId;  // Added for tracking
-    private final byte[] fileContent;  // Raw bytes, NO Base64 in domain
+    private final String documentId;
+    private final byte[] fileContent;
     private final String filename;
     private final String contentType;
     private final long fileSize;
     private final String traceId;
     private final String parentFolder;
     private final String childFolder;
+    private final String idempotencyKey;
 }

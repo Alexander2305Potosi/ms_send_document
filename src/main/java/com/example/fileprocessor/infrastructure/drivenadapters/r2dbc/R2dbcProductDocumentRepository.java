@@ -3,6 +3,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.usecase.ClaimResult;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import org.slf4j.Logger;
@@ -125,6 +126,71 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .map(rowsUpdated -> rowsUpdated > 0)
             .doOnSuccess(claimed -> log.info("Claim document {}: {}", documentId, claimed));
     }
+
+    @Override
+    public Mono<ClaimResult> claimDocumentWithRecovery(String documentId, int staleThresholdMinutes) {
+        Instant staleTime = Instant.now().minusSeconds(staleThresholdMinutes * 60L);
+        String newTraceId = UUID.randomUUID().toString();
+
+        String sql = """
+            SELECT document_id, status, processed_at
+            FROM product_documents_to_process
+            WHERE document_id = $1
+            """;
+
+        return databaseClient.sql(sql)
+            .bind("$1", documentId)
+            .map((row, metadata) -> {
+                String status = row.get("status", String.class);
+                Instant processedAt = row.get("processed_at", Instant.class);
+                return new StatusCheck(status, processedAt);
+            })
+            .first()
+            .switchIfEmpty(Mono.defer(() -> Mono.just(new StatusCheck("NOT_FOUND", null))))
+            .flatMap(statusCheck -> {
+                String previousStatus = statusCheck.status();
+
+                // Not found
+                if ("NOT_FOUND".equals(previousStatus)) {
+                    return Mono.just(ClaimResult.NOT_CLAIMED);
+                }
+
+                // Check if eligible for claim
+                boolean isPending = DocumentStatus.PENDING.name().equals(previousStatus);
+                boolean isRetry = DocumentStatus.RETRY.name().equals(previousStatus);
+                boolean isStaleProcessing = DocumentStatus.PROCESSING.name().equals(previousStatus)
+                    && statusCheck.processedAt() != null
+                    && statusCheck.processedAt().isBefore(staleTime);
+
+                if (!isPending && !isRetry && !isStaleProcessing) {
+                    return Mono.just(ClaimResult.NOT_CLAIMED);
+                }
+
+                // Perform the claim
+                String updateSql = """
+                    UPDATE product_documents_to_process
+                    SET status = '%s', trace_id = $2, processed_at = $3,
+                        claim_attempts = COALESCE(claim_attempts, 0) + 1
+                    WHERE document_id = $1
+                    """.formatted(DocumentStatus.PROCESSING.name());
+
+                return databaseClient.sql(updateSql)
+                    .bind("$1", documentId)
+                    .bind("$2", newTraceId)
+                    .bind("$3", Instant.now())
+                    .fetch()
+                    .rowsUpdated()
+                    .map(rowsUpdated -> new ClaimResult(rowsUpdated > 0, previousStatus, 1))
+                    .doOnSuccess(result -> {
+                        if (result.claimed()) {
+                            log.info("Claimed document {} (previous: {}, recovery: {})",
+                                documentId, result.previousStatus(), result.isRecovery());
+                        }
+                    });
+            });
+    }
+
+    private record StatusCheck(String status, Instant processedAt) {}
 
     @Override
     public Mono<Void> save(ProductDocumentToProcess document) {
