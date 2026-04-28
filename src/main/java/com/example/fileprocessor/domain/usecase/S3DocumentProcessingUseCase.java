@@ -1,9 +1,8 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.out.ResilienceOperator;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
@@ -13,13 +12,10 @@ import reactor.core.publisher.Mono;
 
 /**
  * S3-specific document processing use case.
- * Implements validation and request building for S3 gateway.
  */
 public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(S3DocumentProcessingUseCase.class);
-    private static final long BYTES_PER_MEGABYTE = 1024L * 1024L;
-
     private final ProcessorSettings settings;
 
     public S3DocumentProcessingUseCase(
@@ -40,18 +36,29 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     }
 
     @Override
+    protected Mono<ProductDocumentToProcess> filterByFolder(
+            ProductDocumentToProcess pending, String traceId) {
+
+        // S3-specific: check folder exclusion regex
+        if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
+            log.info("S3 document {} skipped: origin matches exclusion regex: {}",
+                pending.getFilename(), pending.getOrigin());
+            return skipDocumentByOrigin(pending, traceId,
+                "Folder excluded by regex: " + pending.getOrigin(),
+                ProcessingResultCodes.SKIPPED_FOLDER);
+        }
+
+        return Mono.just(pending);
+    }
+
+    @Override
     protected Mono<ProductDocumentToProcess> validateDocument(
             ProductDocumentToProcess pending, String traceId) {
 
         log.info("Validating S3 document: {}, productId: {}",
             pending.getDocumentId(), pending.getProductId());
 
-        // S3-specific: size validation (preValidate already handles size via validationRules,
-        // but S3 may have different limits, so we check S3-specific max here)
-        // Note: size check via shouldNotSendBySize is already in preValidate via validationRules
-        // This method focuses on gateway-specific validation before delegation
-
-        // Delegate to common file validator (extension, filename, etc.)
+        // Delegate to common file validator
         return fileValidator.validate(pending);
     }
 
@@ -78,5 +85,13 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     @Override
     protected int maxConcurrency() {
         return settings.getMaxConcurrency();
+    }
+
+    private Mono<ProductDocumentToProcess> skipDocumentByOrigin(
+            ProductDocumentToProcess pending, String traceId, String message, String errorCode) {
+        log.info("Document {} skipped: {}", pending.getDocumentId(), message);
+        return documentRepository.updateStatus(
+            pending.getDocumentId(), DocumentStatus.SKIPPED.name(), traceId, null, errorCode)
+            .thenReturn(pending);
     }
 }

@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
 import com.example.fileprocessor.domain.port.out.ResilienceOperator;
@@ -13,12 +12,10 @@ import reactor.core.publisher.Mono;
 
 /**
  * SOAP-specific document processing use case.
- * Implements validation and request building for SOAP gateway.
  */
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(SoapDocumentProcessingUseCase.class);
-
     private final ProcessorSettings settings;
 
     public SoapDocumentProcessingUseCase(
@@ -39,13 +36,22 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     }
 
     @Override
+    protected Mono<ProductDocumentToProcess> filterByFolder(
+            ProductDocumentToProcess pending, String traceId) {
+
+        // SOAP-specific: no additional folder filtering
+        // Shared validation rules already applied in preValidate via validationRules
+        return Mono.just(pending);
+    }
+
+    @Override
     protected Mono<ProductDocumentToProcess> validateDocument(
             ProductDocumentToProcess pending, String traceId) {
 
         log.info("Validating SOAP document: {}, productId: {}",
             pending.getDocumentId(), pending.getProductId());
 
-        // SOAP-specific validation: only XML and text content types
+        // SOAP-specific validation: only XML, text, and PDF content types
         String contentType = pending.getContentType();
         if (contentType == null ||
             (!contentType.contains("xml") && !contentType.contains("text") && !contentType.contains("pdf"))) {

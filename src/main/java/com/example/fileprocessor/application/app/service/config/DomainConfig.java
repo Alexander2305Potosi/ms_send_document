@@ -69,13 +69,11 @@ public class DomainConfig {
 
     // ============ S3 Processor ============
 
-    @org.springframework.context.annotation.Profile("s3")
     @Bean
     public FolderExclusionRegexConfig s3FolderExclusion(ProcessorConfig config) {
         return new FolderExclusionRegexConfig(config.getS3().getFolderExclusionRegex());
     }
 
-    @org.springframework.context.annotation.Profile("s3")
     @Bean
     public S3DocumentProcessingUseCase s3DocumentUseCase(
             ProcessingDependencies deps,

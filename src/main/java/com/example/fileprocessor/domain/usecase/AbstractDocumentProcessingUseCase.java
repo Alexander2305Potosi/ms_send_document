@@ -22,15 +22,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Abstract base class implementing the Template Method pattern for document processing.
- * Uses nested strategy classes to group related methods for better readability.
- *
- * <p>Subclasses implement only:
- * <ul>
- *   <li>{@link #validateDocument(ProductDocumentToProcess, String)} - gateway-specific validation</li>
- *   <li>{@link #buildRequest(ProductDocumentToProcess, String)} - gateway-specific request building</li>
- *   <li>{@link #implementationName()} - processor identification for logging</li>
- * </ul>
+ * Abstract base class for document processing use cases.
+ * Handles shared orchestration logic; subclasses implement gateway-specific behavior.
  */
 public abstract class AbstractDocumentProcessingUseCase {
 
@@ -64,7 +57,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         this.logFactory = logFactory;
     }
 
-    // ============ TEMPLATE METHOD (final - do not override) ============
+    // ============ TEMPLATE METHOD (final) ============
 
     @Timed("document.processing")
     public final Flux<FileUploadResult> executePendingDocuments() {
@@ -83,80 +76,77 @@ public abstract class AbstractDocumentProcessingUseCase {
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()));
     }
 
-    protected final Mono<FileUploadResult> processDocument(ProductDocumentToProcess pending, String traceId) {
-        return Mono.just(pending)
-            .flatMap(doc -> preValidate(doc, traceId))
-            .switchIfEmpty(Mono.defer(() ->
-                validateDocument(pending, traceId)
-                    .flatMap(validDoc -> buildRequest(validDoc, traceId))
-                    .flatMap(this::sendWithResilience)
-                    .flatMap(result -> checkpoint(pending, result, traceId))
-                    .flatMap(result -> postProcess(pending, result, traceId))
-            ))
+    private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
+        String traceId = UUID.randomUUID().toString();
+        return documentRepository.claimDocument(pending.getDocumentId())
+            .filter(Boolean::booleanValue)
+            .flatMap(claimed -> processDocumentInternal(pending, traceId))
+            .switchIfEmpty(Mono.defer(() -> {
+                log.debug("Document {} claimed by another instance", pending.getDocumentId());
+                return Mono.empty();
+            }));
+    }
+
+    // ============ PROCESS INTERNAL (shared orchestration) ============
+
+    /**
+     * Internal orchestration that calls abstract gateway-specific methods.
+     * This is the template method - do not override.
+     */
+    protected final Mono<FileUploadResult> processDocumentInternal(
+            ProductDocumentToProcess pending, String traceId) {
+
+        // Step 1: Filter by folder (abstract - implemented by subclass)
+        Mono<ProductDocumentToProcess> folderFiltered = filterByFolder(pending, traceId);
+
+        // Step 2: Validate document (abstract - implemented by subclass)
+        Mono<ProductDocumentToProcess> validated = folderFiltered
+            .flatMap(doc -> validateDocument(doc, traceId));
+
+        // Step 3: Build request (abstract - implemented by subclass)
+        Mono<DocumentSendRequest> request = validated
+            .flatMap(doc -> buildRequest(doc, traceId));
+
+        // Step 4-6: Shared pipeline (concrete)
+        return request
+            .flatMap(this::sendWithResilience)
+            .flatMap(result -> checkpoint(pending, result, traceId))
+            .flatMap(result -> postProcess(pending, result, traceId))
             .doOnNext(result -> log.info("Document {} processed: correlationId={}",
                 pending.getFilename(), result.getCorrelationId()));
     }
 
-    // ============ HOOK METHODS (can be overridden) ============
+    // ============ ABSTRACT METHODS (gateway-specific) ============
 
-    protected boolean isShuttingDown() {
-        return false;
-    }
+    /**
+     * Filters document based on gateway-specific folder rules.
+     * Returns Mono.empty() to continue, Mono.just(result) to skip.
+     */
+    protected abstract Mono<ProductDocumentToProcess> filterByFolder(
+            ProductDocumentToProcess pending, String traceId);
 
-    protected int drainTimeoutSeconds() {
-        return 20;
-    }
-
-    protected long countInFlight() {
-        return 0;
-    }
-
-    protected int maxConcurrency() {
-        return ProcessingMessages.DEFAULT_MAX_CONCURRENCY;
-    }
-
-    // ============ PRE-VALIDATION HOOK (shared business rules) ============
-
-    protected Mono<FileUploadResult> preValidate(ProductDocumentToProcess pending, String traceId) {
-        if (validationRules.shouldSkipFolder(pending.getOrigin())) {
-            return skipDocument(pending, traceId, DocumentStatus.SKIPPED.name(),
-                ProcessingMessages.MSG_SKIPPED_FOLDER + pending.getOrigin(),
-                ProcessingResultCodes.SKIPPED_FOLDER);
-        }
-        if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
-            return skipDocument(pending, traceId, DocumentStatus.SKIPPED.name(),
-                "Folder excluded by regex: " + pending.getOrigin(),
-                ProcessingResultCodes.SKIPPED_FOLDER);
-        }
-        if (!validationRules.shouldSendByOrigin(pending.getOrigin())) {
-            return skipDocument(pending, traceId, DocumentStatus.NOT_SENT.name(),
-                ProcessingMessages.MSG_NOT_SENT_ORIGIN + pending.getOrigin(),
-                ProcessingResultCodes.NOT_SENT_ORIGIN);
-        }
-        long fileSize = pending.getContent() != null ? pending.getContent().length : 0;
-        if (validationRules.shouldNotSendBySize(fileSize)) {
-            return skipDocument(pending, traceId, DocumentStatus.NOT_SENT.name(),
-                ProcessingMessages.MSG_SIZE_EXCEEDED + fileSize + ProcessingMessages.MSG_SIZE_EXCEEDED_SUFFIX,
-                ProcessingResultCodes.SIZE_EXCEEDED);
-        }
-        return Mono.empty();
-    }
-
-    // ============ ABSTRACT METHODS (must be implemented by subclasses) ============
-
+    /**
+     * Validates document according to gateway-specific rules.
+     */
     protected abstract Mono<ProductDocumentToProcess> validateDocument(
             ProductDocumentToProcess pending, String traceId);
 
+    /**
+     * Builds the gateway-specific DocumentSendRequest.
+     */
     protected abstract Mono<DocumentSendRequest> buildRequest(
             ProductDocumentToProcess validDoc, String traceId);
 
+    /**
+     * Returns the processor implementation name for logging.
+     */
     protected abstract String implementationName();
 
     public String getImplementationName() {
         return implementationName();
     }
 
-    // ============ CONCRETE SHARED METHODS ============
+    // ============ SHARED CONCRETE METHODS ============
 
     protected Mono<FileUploadResult> sendWithResilience(DocumentSendRequest request) {
         Instant start = Instant.now();
@@ -221,17 +211,30 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .build());
     }
 
-    // ============ CLAIMING (private helper) ============
+    protected Mono<ProductDocumentToProcess> skipFolderCheck(
+            ProductDocumentToProcess pending, String traceId, String reason) {
+        return Mono.just(skipDocument(pending, traceId, DocumentStatus.SKIPPED.name(),
+            reason, ProcessingResultCodes.SKIPPED_FOLDER))
+            .thenMany(Mono.empty())
+            .then(Mono.just(pending)); // Return original to signal skip
+    }
 
-    private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
-        String traceId = UUID.randomUUID().toString();
-        return documentRepository.claimDocument(pending.getDocumentId())
-            .filter(Boolean::booleanValue)
-            .flatMap(claimed -> processDocument(pending, traceId))
-            .switchIfEmpty(Mono.defer(() -> {
-                log.debug("Document {} claimed by another instance", pending.getDocumentId());
-                return Mono.empty();
-            }));
+    // ============ HOOK METHODS (can be overridden) ============
+
+    protected boolean isShuttingDown() {
+        return false;
+    }
+
+    protected int drainTimeoutSeconds() {
+        return 20;
+    }
+
+    protected long countInFlight() {
+        return 0;
+    }
+
+    protected int maxConcurrency() {
+        return ProcessingMessages.DEFAULT_MAX_CONCURRENCY;
     }
 
     // ============ ERROR HELPERS ============
