@@ -2,7 +2,6 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
@@ -22,10 +21,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             ProductDocumentRepository documentRepository,
             ProductStatusAggregator statusAggregator,
             FileGateway fileGateway,
-            CommunicationLogRepository logRepository,
             FileValidator fileValidator,
             FolderExclusionRegexConfig folderExclusionRegex) {
-        super(documentRepository, statusAggregator, fileGateway, logRepository, fileValidator);
+        super(documentRepository, statusAggregator, fileGateway, fileValidator);
         this.folderExclusionRegex = folderExclusionRegex;
     }
 
@@ -35,9 +33,13 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     }
 
     @Override
-    protected Mono<ProductDocumentToProcess> filterByFolder(
+    protected Mono<ProductDocumentToProcess> prepareDocument(
             ProductDocumentToProcess pending, String traceId) {
 
+        log.info("Preparing S3 document: {}, productId: {}",
+            pending.getDocumentId(), pending.getProductId());
+
+        // Step 1: Check folder exclusion
         if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
             log.info("S3 document {} skipped: origin matches exclusion regex: {}",
                 pending.getFilename(), pending.getOrigin());
@@ -47,16 +49,7 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
                 .thenReturn(pending);
         }
 
-        return Mono.just(pending);
-    }
-
-    @Override
-    protected Mono<ProductDocumentToProcess> validateDocument(
-            ProductDocumentToProcess pending, String traceId) {
-
-        log.info("Validating S3 document: {}, productId: {}",
-            pending.getDocumentId(), pending.getProductId());
-
+        // Step 2: Validate document (size, extension, filename, content-type)
         return fileValidator.validate(pending);
     }
 }

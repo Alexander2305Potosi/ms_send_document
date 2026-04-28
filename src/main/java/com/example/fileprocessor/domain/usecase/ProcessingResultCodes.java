@@ -9,19 +9,14 @@ public final class ProcessingResultCodes {
     private ProcessingResultCodes() {}
 
     // Business error codes - document processing
-    public static final String TIMEOUT = "TIMEOUT";
-    public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
-    public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
     public static final String SKIPPED_FOLDER = "SKIPPED_FOLDER";
-    public static final String NOT_SENT_ORIGIN = "NOT_SENT_ORIGIN";
-    public static final String SIZE_EXCEEDED = "SIZE_EXCEEDED";
-    public static final String CIRCUIT_BREAKER_OPEN = "CIRCUIT_BREAKER_OPEN";
 
     // File validation error codes
     public static final String FILE_SIZE_EXCEEDED = "FILE_SIZE_EXCEEDED";
     public static final String INVALID_FILE_TYPE = "INVALID_FILE_TYPE";
     public static final String FILENAME_TOO_LONG = "FILENAME_TOO_LONG";
     public static final String INVALID_FILENAME = "INVALID_FILENAME";
+    public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
 
     // Base64 validation error codes (P10)
     public static final String EMPTY_CONTENT = "EMPTY_CONTENT";

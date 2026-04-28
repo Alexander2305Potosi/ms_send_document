@@ -10,7 +10,6 @@ import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapP
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapNamespaces;
-import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
@@ -55,7 +54,6 @@ public class SoapGatewayAdapter implements FileGateway {
     }
 
     @Override
-    @Timed("soap.gateway")
     public Mono<FileUploadResult> send(DocumentSendRequest request) {
         log.info("Sending SOAP request for traceId: {}, endpoint: {}",
             request.getTraceId(), properties.endpoint());

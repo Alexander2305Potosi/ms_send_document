@@ -15,10 +15,4 @@ public class SoapCommunicationException extends CommunicationException {
     public SoapCommunicationException(String message, String errorCode, String traceId, Throwable cause) {
         super(message, errorCode, traceId, cause);
     }
-
-    // S2: New constructor with cause AND retryCount
-    public SoapCommunicationException(String message, String errorCode, String traceId, Throwable cause, int retryCount) {
-        super(message, errorCode, traceId, retryCount);
-        initCause(cause);
-    }
 }

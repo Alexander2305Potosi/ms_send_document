@@ -73,7 +73,7 @@ public class LoadProductsUseCase {
                     .name(productInfo.getName())
                     .documentCount(documentCount)
                     .status(DocumentStatus.PENDING.name())
-                    .message(ProcessingMessages.MSG_PRODUCT_LOADED)
+                    .message("Product and documents loaded successfully")
                     .traceId(traceId)
                     .processedAt(Instant.now())
                     .success(true)
@@ -131,7 +131,10 @@ public class LoadProductsUseCase {
                         .build();
                 });
         } catch (IOException e) {
-            log.error("Failed to extract ZIP {}: {}", docInfo.filename(), e.getMessage());
+            log.error("Failed to extract ZIP {} for product {}: {}",
+                docInfo.filename(), productId, e.getMessage());
+            // Return empty - ZIP extraction failure is logged but silent to avoid failing entire product load
+            // The product will be saved without this document's children
             return Flux.empty();
         }
     }

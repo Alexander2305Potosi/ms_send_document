@@ -8,8 +8,6 @@ import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -40,9 +38,6 @@ class LoadProductsUseCaseTest {
 
     @Mock
     private ProductDocumentRepository documentRepository;
-
-    @Captor
-    private ArgumentCaptor<Flux<ProductDocumentToProcess>> fluxCaptor;
 
     @Test
     void execute_shouldLoadProductsAndDocuments() {

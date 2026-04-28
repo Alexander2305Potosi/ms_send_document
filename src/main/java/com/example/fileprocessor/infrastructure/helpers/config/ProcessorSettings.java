@@ -34,6 +34,8 @@ public class ProcessorSettings implements FileValidationConfig {
     @Min(1)
     private int maxConcurrency = 10;
 
+    private List<String> contentTypePatterns = List.of();
+
     // ============ Getters/Setters for Spring property binding ============
 
     public long getMaxSize() { return maxSize; }
@@ -66,6 +68,11 @@ public class ProcessorSettings implements FileValidationConfig {
     public int getMaxConcurrency() { return maxConcurrency; }
     public void setMaxConcurrency(int maxConcurrency) { this.maxConcurrency = maxConcurrency > 0 ? maxConcurrency : 10; }
 
+    public List<String> getContentTypePatterns() { return contentTypePatterns; }
+    public void setContentTypePatterns(List<String> contentTypePatterns) {
+        this.contentTypePatterns = contentTypePatterns != null ? contentTypePatterns : List.of();
+    }
+
     public List<String> getFolderExclusionRegex() { return folderExclusionRegex; }
     public void setFolderExclusionRegex(List<String> folderExclusionRegex) {
         this.folderExclusionRegex = folderExclusionRegex != null ? folderExclusionRegex : List.of();
@@ -80,4 +87,5 @@ public class ProcessorSettings implements FileValidationConfig {
     @Override public int maxFileSizeMb() { return maxFileSizeMb; }
     @Override public List<String> keywords() { return keywords; }
     @Override public List<String> originPatternsToSend() { return originPatternsToSend; }
+    @Override public List<String> contentTypePatterns() { return contentTypePatterns; }
 }

@@ -10,6 +10,7 @@ public enum DocumentStatus {
     SUCCESS,
     FAILURE,
     SKIPPED,
-    NOT_SENT;
+    NOT_SENT,
+    DEAD_LETTER;  // Failed after max retries - requires manual intervention
 
 }

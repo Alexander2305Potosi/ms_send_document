@@ -6,7 +6,6 @@ import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -44,7 +43,6 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    @Timed("product.rest")
     public Flux<ProductInfo> getAllProducts(String traceId) {
         log.info("Fetching all products from REST API, traceId: {}", traceId);
 

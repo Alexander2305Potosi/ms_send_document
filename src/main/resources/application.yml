@@ -56,6 +56,10 @@ app:
       origin-patterns-to-send:
         - "incoming"
         - "documents"
+      content-type-patterns:
+        - "xml"
+        - "text"
+        - "pdf"
     s3:
       max-size: 52428800
       allowed-types: pdf,txt,csv,zip
@@ -71,6 +75,7 @@ app:
         - "incoming"
         - "documents"
         - "archive"
+      content-type-patterns: []
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30

@@ -45,7 +45,6 @@ public final class ApiConstants {
 
     // Product document constants
     public static final String EXTENSION_ZIP = "zip";
-    public static final String DEFAULT_FOLDER = ".";
 
     // File path characters (for validation)
     public static final String PATH_DOUBLE_DOT = "..";

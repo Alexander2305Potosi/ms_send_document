@@ -7,14 +7,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Unified file and document validation.
- * Combines file content validation with routing/folder decisions.
+ * Uses FileValidationConfig values for all thresholds and rules.
+ * Each validation is conditional - only runs if config enables it.
  */
 public class FileValidator {
 
@@ -24,75 +22,125 @@ public class FileValidator {
     private static final String PATH_SLASH = "/";
     private static final String PATH_BACKSLASH = "\\";
     private static final String DEFAULT_FOLDER = ".";
-    public static final long BYTES_PER_MEGABYTE = 1024L * 1024L;
 
     private final FileValidationConfig config;
-    private final Set<String> allowedTypes;
+    private final Set<String> allowedExtensions;
 
     public FileValidator(FileValidationConfig config) {
         this.config = config;
-        this.allowedTypes = Arrays.stream(config.allowedTypes().split(","))
-            .map(String::trim)
-            .map(String::toLowerCase)
-            .collect(Collectors.toUnmodifiableSet());
+        this.allowedExtensions = parseAllowedExtensions(config.allowedTypes());
     }
 
     /**
-     * Validates file content (size, extension, filename).
+     * Runs all enabled validations in sequence:
+     * 1. Content type (if shouldValidateContentType)
+     * 2. File size (if shouldValidateSize)
+     * 3. Extension (if shouldValidateExtension)
+     * 4. Filename (if shouldValidateFilename)
      */
-    public Mono<ProductDocumentToProcess> validate(ProductDocumentToProcess pending) {
-        return Mono.just(pending)
-            .flatMap(this::validateSize)
-            .flatMap(this::validateExtension)
-            .flatMap(this::validateFilename);
+    public Mono<ProductDocumentToProcess> validate(ProductDocumentToProcess document) {
+        return Mono.just(document)
+            .flatMap(doc -> maybeValidate(doc, config.shouldValidateContentType(), this::validateContentType))
+            .flatMap(doc -> maybeValidate(doc, config.shouldValidateSize(), this::validateSize))
+            .flatMap(doc -> maybeValidate(doc, config.shouldValidateExtension(), this::validateExtension))
+            .flatMap(doc -> maybeValidate(doc, config.shouldValidateFilename(), this::validateFilename));
     }
 
-    // ============ ROUTING METHODS ============
-
-    /**
-     * Determines if a document should be skipped based on its folder path.
-     */
-    public boolean shouldSkipFolder(String origin) {
-        if (origin == null || origin.isBlank()) {
-            return false;
-        }
-        List<String> foldersToSkip = config.foldersToSkip();
-        if (foldersToSkip == null || foldersToSkip.isEmpty()) {
-            return false;
-        }
-        return foldersToSkip.stream().anyMatch(folder -> origin.contains(folder));
+    private Mono<ProductDocumentToProcess> maybeValidate(
+            ProductDocumentToProcess doc,
+            boolean shouldValidate,
+            java.util.function.Function<ProductDocumentToProcess, Mono<ProductDocumentToProcess>> validator) {
+        return shouldValidate ? validator.apply(doc) : Mono.just(doc);
     }
 
-    /**
-     * Determines if a document should be sent based on its origin pattern.
-     */
-    public boolean shouldSendByOrigin(String origin) {
-        List<String> patterns = config.originPatternsToSend();
-        if (patterns == null || patterns.isEmpty()) {
-            return true;
+    // ============ CONTENT TYPE VALIDATION ============
+
+    private Mono<ProductDocumentToProcess> validateContentType(ProductDocumentToProcess document) {
+        Set<String> allowedTokens = config.allowedContentTypeTokens();
+        if (allowedTokens.isEmpty()) {
+            return Mono.just(document);
         }
-        if (origin == null || origin.isBlank()) {
-            return false;
+
+        String contentType = document.getContentType();
+        if (contentType == null) {
+            log.warn("Document {} has no content type", document.getFilename());
+            return Mono.error(new FileValidationException(
+                "Missing content type",
+                ProcessingResultCodes.INVALID_FILE_TYPE));
         }
-        return patterns.stream().anyMatch(pattern -> origin.contains(pattern));
+
+        boolean matches = allowedTokens.stream()
+            .anyMatch(token -> contentType.contains(token));
+        if (!matches) {
+            log.warn("Document {} rejected: content type '{}' not in allowed list {}",
+                document.getFilename(), contentType, allowedTokens);
+            return Mono.error(new FileValidationException(
+                "Unsupported content type: " + contentType,
+                ProcessingResultCodes.INVALID_FILE_TYPE));
+        }
+
+        return Mono.just(document);
     }
 
-    /**
-     * Determines if a document should NOT be sent based on its file size.
-     */
-    public boolean shouldNotSendBySize(long sizeBytes) {
-        int maxSizeMb = config.maxFileSizeMb();
-        if (maxSizeMb <= 0) {
-            return false;
+    // ============ FILE SIZE VALIDATION ============
+
+    private Mono<ProductDocumentToProcess> validateSize(ProductDocumentToProcess document) {
+        long size = fileSize(document);
+        long maxSize = config.maxSize();
+
+        if (size > maxSize) {
+            log.warn("Document {} exceeds max size: {} > {} bytes",
+                document.getFilename(), size, maxSize);
+            return Mono.error(new FileValidationException(
+                "File size " + size + " exceeds limit of " + maxSize + " bytes",
+                ProcessingResultCodes.FILE_SIZE_EXCEEDED));
         }
-        return sizeBytes >= (long) maxSizeMb * BYTES_PER_MEGABYTE;
+        return Mono.just(document);
     }
 
-    /**
-     * Extracts folder routing information from the document's origin path.
-     */
+    // ============ EXTENSION VALIDATION ============
+
+    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess document) {
+        String ext = extension(document);
+        if (!allowedExtensions.contains(ext.toLowerCase())) {
+            log.warn("Document {} rejected: extension '{}' not in allowed list {}",
+                document.getFilename(), ext, allowedExtensions);
+            return Mono.error(new FileValidationException(
+                "File type '" + ext + "' not allowed. Allowed: " + config.allowedTypes(),
+                ProcessingResultCodes.INVALID_FILE_TYPE));
+        }
+        return Mono.just(document);
+    }
+
+    // ============ FILENAME VALIDATION ============
+
+    private Mono<ProductDocumentToProcess> validateFilename(ProductDocumentToProcess document) {
+        String filename = document.getFilename();
+        int maxLen = config.maxFilenameLength();
+
+        if (filename.length() > maxLen) {
+            log.warn("Document {} rejected: filename length {} > max {}",
+                document.getFilename(), filename.length(), maxLen);
+            return Mono.error(new FileValidationException(
+                "Filename length " + filename.length() + " exceeds max " + maxLen,
+                ProcessingResultCodes.FILENAME_TOO_LONG));
+        }
+
+        if (containsPathTraversal(filename)) {
+            log.warn("Document {} rejected: filename contains path traversal chars",
+                document.getFilename());
+            return Mono.error(new FileValidationException(
+                "Filename contains invalid path characters",
+                ProcessingResultCodes.INVALID_FILENAME));
+        }
+
+        return Mono.just(document);
+    }
+
+    // ============ ROUTING HELPERS ============
+
     public FolderInfo extractFolderInfo(String origin) {
-        List<String> keywords = config.keywords();
+        var keywords = config.keywords();
         if (keywords == null || keywords.isEmpty() || origin == null || origin.isBlank()) {
             return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
         }
@@ -101,9 +149,7 @@ public class FileValidator {
             if (origin.contains(keyword)) {
                 String[] parts = origin.split("/");
                 if (parts.length >= 2) {
-                    String childFolder = parts[parts.length - 1];
-                    String parentFolder = parts.length > 1 ? parts[parts.length - 2] : DEFAULT_FOLDER;
-                    return new FolderInfo(parentFolder, childFolder);
+                    return new FolderInfo(parts[parts.length - 2], parts[parts.length - 1]);
                 }
                 return new FolderInfo(origin, DEFAULT_FOLDER);
             }
@@ -111,12 +157,9 @@ public class FileValidator {
         return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
     }
 
-    /**
-     * Routing information for document processing.
-     */
     public record FolderInfo(String parentFolder, String childFolder) {}
 
-    // ============ PRIVATE FILE VALIDATION ============
+    // ============ PRIVATE HELPERS ============
 
     private long fileSize(ProductDocumentToProcess p) {
         return p.getContent() != null ? p.getContent().length : 0;
@@ -128,44 +171,20 @@ public class FileValidator {
         return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
     }
 
-    private Mono<ProductDocumentToProcess> validateSize(ProductDocumentToProcess p) {
-        long size = fileSize(p);
-        if (size > config.maxSize()) {
-            log.warn("File {} exceeds max size: {} > {}",
-                p.getFilename(), size, config.maxSize());
-            return Mono.error(new FileValidationException(
-                ProcessingMessages.MSG_FILE_SIZE_EXCEEDED + config.maxSize() + " bytes",
-                ProcessingResultCodes.FILE_SIZE_EXCEEDED));
-        }
-        return Mono.just(p);
+    private boolean containsPathTraversal(String filename) {
+        return filename.contains(PATH_DOUBLE_DOT)
+            || filename.contains(PATH_SLASH)
+            || filename.contains(PATH_BACKSLASH);
     }
 
-    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess p) {
-        String ext = extension(p);
-        if (!allowedTypes.contains(ext)) {
-            log.warn("File {} has invalid extension: {}",
-                p.getFilename(), ext);
-            return Mono.error(new FileValidationException(
-                ProcessingMessages.MSG_FILE_TYPE_NOT_ALLOWED + config.allowedTypes(),
-                ProcessingResultCodes.INVALID_FILE_TYPE));
+    private Set<String> parseAllowedExtensions(String allowedTypes) {
+        if (allowedTypes == null || allowedTypes.isBlank()) {
+            return Set.of();
         }
-        return Mono.just(p);
-    }
-
-    private Mono<ProductDocumentToProcess> validateFilename(ProductDocumentToProcess p) {
-        String filename = p.getFilename();
-        if (filename.length() > config.maxFilenameLength()) {
-            log.warn("Filename exceeds max length: {}", filename.length());
-            return Mono.error(new FileValidationException(
-                ProcessingMessages.MSG_FILENAME_TOO_LONG + config.maxFilenameLength(),
-                ProcessingResultCodes.FILENAME_TOO_LONG));
-        }
-        if (filename.contains(PATH_DOUBLE_DOT) || filename.contains(PATH_SLASH) || filename.contains(PATH_BACKSLASH)) {
-            log.warn("Filename contains invalid characters: {}", filename);
-            return Mono.error(new FileValidationException(
-                ProcessingMessages.MSG_FILENAME_INVALID,
-                ProcessingResultCodes.INVALID_FILENAME));
-        }
-        return Mono.just(p);
+        return Set.of(allowedTypes.split(",")).stream()
+            .map(String::trim)
+            .map(String::toLowerCase)
+            .filter(ext -> !ext.isBlank())
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 }

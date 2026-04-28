@@ -32,6 +32,12 @@ class FileValidatorTest {
         when(config.allowedTypes()).thenReturn("pdf,txt,csv");
         when(config.maxFilenameLength()).thenReturn(100);
         when(config.maxFileSizeMb()).thenReturn(10);
+        when(config.contentTypePatterns()).thenReturn(java.util.List.of());
+        when(config.allowedContentTypeTokens()).thenReturn(java.util.Set.of());
+        when(config.shouldValidateContentType()).thenReturn(true);
+        when(config.shouldValidateSize()).thenReturn(true);
+        when(config.shouldValidateExtension()).thenReturn(true);
+        when(config.shouldValidateFilename()).thenReturn(true);
         validator = new FileValidator(config);
     }
 
@@ -50,7 +56,7 @@ class FileValidatorTest {
 
         StepVerifier.create(validator.validate(doc))
             .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("exceeds maximum allowed"))
+                && ex.getMessage().contains("exceeds limit"))
             .verify();
     }
 
@@ -71,7 +77,7 @@ class FileValidatorTest {
 
         StepVerifier.create(validator.validate(doc))
             .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("exceeds maximum length"))
+                && ex.getMessage().contains("exceeds max"))
             .verify();
     }
 
@@ -81,7 +87,7 @@ class FileValidatorTest {
 
         StepVerifier.create(validator.validate(doc))
             .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("invalid characters"))
+                && ex.getMessage().contains("invalid path"))
             .verify();
     }
 
@@ -91,7 +97,7 @@ class FileValidatorTest {
 
         StepVerifier.create(validator.validate(doc))
             .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("invalid characters"))
+                && ex.getMessage().contains("invalid path"))
             .verify();
     }
 
@@ -101,7 +107,7 @@ class FileValidatorTest {
 
         StepVerifier.create(validator.validate(doc))
             .expectErrorMatches(ex -> ex instanceof FileValidationException
-                && ex.getMessage().contains("invalid characters"))
+                && ex.getMessage().contains("invalid path"))
             .verify();
     }
 

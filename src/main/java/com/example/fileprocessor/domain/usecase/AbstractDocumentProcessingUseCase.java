@@ -1,14 +1,11 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.CommunicationLog;
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
-import io.micrometer.core.annotation.Timed;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +13,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,12 +27,10 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final ProductDocumentRepository documentRepository;
     protected final ProductStatusAggregator statusAggregator;
     protected final FileGateway fileGateway;
-    protected final CommunicationLogRepository logRepository;
     protected final FileValidator fileValidator;
 
     // ============ TEMPLATE METHOD (final) ============
 
-    @Timed("document.processing")
     public final Flux<FileUploadResult> executePendingDocuments() {
         return documentRepository.findPendingDocuments()
             .flatMap(this::processPendingDocument)
@@ -45,6 +39,57 @@ public abstract class AbstractDocumentProcessingUseCase {
                 r.getCorrelationId(), r.getStatus()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()));
     }
+
+    /**
+     * Internal orchestration that calls abstract gateway-specific methods.
+     * This is the template method - do not override.
+     */
+    protected final Mono<FileUploadResult> processDocumentInternal(
+            ProductDocumentToProcess pending, String traceId) {
+
+        Mono<DocumentSendRequest> request = prepareDocument(pending, traceId)
+            .flatMap(doc -> buildRequest(doc, traceId));
+
+        return request
+            .flatMap(this::sendWithResilience)
+            .flatMap(result -> checkpoint(pending, result, traceId))
+            .flatMap(result -> postProcess(pending, result, traceId))
+            .doOnNext(result -> log.info("Document {} processed: correlationId={}",
+                pending.getFilename(), result.getCorrelationId()));
+    }
+
+    // ============ ABSTRACT METHOD (gateway-specific) ============
+
+    /**
+     * Prepares document by applying gateway-specific filtering and validation.
+     * This combines folder exclusion and document validation into one step.
+     */
+    protected abstract Mono<ProductDocumentToProcess> prepareDocument(
+            ProductDocumentToProcess pending, String traceId);
+
+    /**
+     * Returns the processor implementation name for logging.
+     */
+    protected abstract String implementationName();
+
+    // ============ REQUEST BUILDING (shared) ============
+
+    protected Mono<DocumentSendRequest> buildRequest(ProductDocumentToProcess validDoc, String traceId) {
+        FileValidator.FolderInfo folderInfo = fileValidator.extractFolderInfo(validDoc.getOrigin());
+
+        return Mono.just(DocumentSendRequest.builder()
+            .documentId(validDoc.getDocumentId())
+            .fileContent(validDoc.getContent())
+            .filename(validDoc.getFilename())
+            .contentType(validDoc.getContentType())
+            .fileSize(validDoc.getContent() != null ? validDoc.getContent().length : 0)
+            .traceId(traceId)
+            .parentFolder(folderInfo.parentFolder())
+            .childFolder(folderInfo.childFolder())
+            .build());
+    }
+
+    // === CLAIMING STRATEGY ===
 
     private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
         String traceId = UUID.randomUUID().toString();
@@ -57,83 +102,34 @@ public abstract class AbstractDocumentProcessingUseCase {
             }));
     }
 
-    // ============ PROCESS INTERNAL (shared orchestration) ============
-
-    /**
-     * Internal orchestration that calls abstract gateway-specific methods.
-     * This is the template method - do not override.
-     */
-    protected final Mono<FileUploadResult> processDocumentInternal(
-            ProductDocumentToProcess pending, String traceId) {
-
-        // Step 1: Filter by folder (abstract - implemented by subclass)
-        Mono<ProductDocumentToProcess> folderFiltered = filterByFolder(pending, traceId);
-
-        // Step 2: Validate document (abstract - implemented by subclass)
-        Mono<ProductDocumentToProcess> validated = folderFiltered
-            .flatMap(doc -> validateDocument(doc, traceId));
-
-        // Step 3: Build request (abstract - implemented by subclass)
-        Mono<DocumentSendRequest> request = validated
-            .flatMap(doc -> buildRequest(doc, traceId));
-
-        // Step 4-6: Shared pipeline (concrete)
-        return request
-            .flatMap(this::sendWithResilience)
-            .flatMap(result -> checkpoint(pending, result, traceId))
-            .flatMap(result -> postProcess(pending, result, traceId))
-            .doOnNext(result -> log.info("Document {} processed: correlationId={}",
-                pending.getFilename(), result.getCorrelationId()));
-    }
-
-    // ============ ABSTRACT METHODS (gateway-specific) ============
-
-    /**
-     * Filters document based on gateway-specific folder rules.
-     * Returns Mono.empty() to continue, Mono.just(result) to skip.
-     */
-    protected abstract Mono<ProductDocumentToProcess> filterByFolder(
-            ProductDocumentToProcess pending, String traceId);
-
-    /**
-     * Validates document according to gateway-specific rules.
-     */
-    protected abstract Mono<ProductDocumentToProcess> validateDocument(
-            ProductDocumentToProcess pending, String traceId);
-
-    /**
-     * Returns the processor implementation name for logging.
-     */
-    protected abstract String implementationName();
-
-    // ============ SHARED CONCRETE METHODS ============
+    // === RESILIENCE STRATEGY ===
 
     protected Mono<FileUploadResult> sendWithResilience(DocumentSendRequest request) {
-        Instant start = Instant.now();
         return fileGateway.send(request)
-            .flatMap(result -> logRepository.save(createLog(request, result, 0, start)).thenReturn(result))
-            .doOnError(error -> {
+            .onErrorResume(error -> {
                 String errorCode = extractErrorCode(error);
-                FileUploadResult failureResult = buildFailureResult(errorCode, request.getTraceId());
-                logRepository.save(createLog(request, failureResult, 0, start)).subscribe();
+                return Mono.just(buildFailureResult(errorCode, request.getTraceId()));
             });
     }
 
-    private CommunicationLog createLog(DocumentSendRequest request, FileUploadResult result, int retryCount, Instant startTime) {
-        long latencyMs = java.time.Duration.between(startTime, Instant.now()).toMillis();
-        return CommunicationLog.builder()
-            .traceId(request.getTraceId())
-            .documentId(request.getDocumentId())
-            .status(result.getStatus())
-            .retryCount(retryCount)
-            .errorCode(result.getErrorCode())
-            .filename(request.getFilename())
-            .createdAt(Instant.now())
-            .latencyMs(latencyMs)
-            .gatewayName(implementationName())
-            .metadata("{}")
+    private String extractErrorCode(Throwable error) {
+        if (error instanceof com.example.fileprocessor.domain.exception.CommunicationException ce) {
+            return ce.getErrorCode();
+        }
+        return ProcessingResultCodes.UNKNOWN_ERROR;
+    }
+
+    private FileUploadResult buildFailureResult(String errorCode, String traceId) {
+        return FileUploadResult.builder()
+            .status(DocumentStatus.FAILURE.name())
+            .errorCode(errorCode)
+            .traceId(traceId)
+            .processedAt(Instant.now())
+            .success(false)
             .build();
     }
+
+    // === PERSISTENCE STRATEGY ===
 
     protected Mono<FileUploadResult> checkpoint(
             ProductDocumentToProcess pending, FileUploadResult result, String traceId) {
@@ -152,43 +148,5 @@ public abstract class AbstractDocumentProcessingUseCase {
             ProductDocumentToProcess pending, FileUploadResult result, String traceId) {
         return statusAggregator.updateProductStatus(pending.getProductId(), traceId)
             .thenReturn(result);
-    }
-
-    // ============ REQUEST BUILDING (shared - override only if gateway-specific) ============
-
-    protected Mono<DocumentSendRequest> buildRequest(ProductDocumentToProcess validDoc, String traceId) {
-        FileValidator.FolderInfo folderInfo = fileValidator.extractFolderInfo(validDoc.getOrigin());
-        String idempotencyKey = IdempotencyKey.forFirstAttempt(validDoc.getDocumentId(), traceId).value();
-
-        return Mono.just(DocumentSendRequest.builder()
-            .documentId(validDoc.getDocumentId())
-            .fileContent(validDoc.getContent())
-            .filename(validDoc.getFilename())
-            .contentType(validDoc.getContentType())
-            .fileSize(validDoc.getContent() != null ? validDoc.getContent().length : 0)
-            .traceId(traceId)
-            .parentFolder(folderInfo.parentFolder())
-            .childFolder(folderInfo.childFolder())
-            .idempotencyKey(idempotencyKey)
-            .build());
-    }
-
-    // ============ ERROR HELPERS ============
-
-    private String extractErrorCode(Throwable error) {
-        if (error instanceof com.example.fileprocessor.domain.exception.CommunicationException ce) {
-            return ce.getErrorCode();
-        }
-        return ProcessingResultCodes.UNKNOWN_ERROR;
-    }
-
-    private FileUploadResult buildFailureResult(String errorCode, String traceId) {
-        return FileUploadResult.builder()
-            .status(DocumentStatus.FAILURE.name())
-            .errorCode(errorCode)
-            .traceId(traceId)
-            .processedAt(Instant.now())
-            .success(false)
-            .build();
     }
 }

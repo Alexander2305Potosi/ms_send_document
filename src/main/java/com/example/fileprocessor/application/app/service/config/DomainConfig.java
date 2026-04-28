@@ -1,6 +1,5 @@
 package com.example.fileprocessor.application.app.service.config;
 
-import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
@@ -39,11 +38,10 @@ public class DomainConfig {
             ProductDocumentRepository documentRepository,
             ProductStatusAggregator statusAggregator,
             FileGateway fileGateway,
-            CommunicationLogRepository logRepository,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
         return new SoapDocumentProcessingUseCase(
-            documentRepository, statusAggregator, fileGateway, logRepository, fileValidator);
+            documentRepository, statusAggregator, fileGateway, fileValidator);
     }
 
     // ============ S3 Processor ============
@@ -58,11 +56,10 @@ public class DomainConfig {
             ProductDocumentRepository documentRepository,
             ProductStatusAggregator statusAggregator,
             FileGateway fileGateway,
-            CommunicationLogRepository logRepository,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getS3());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
         return new S3DocumentProcessingUseCase(
-            documentRepository, statusAggregator, fileGateway, logRepository, fileValidator, folderRegex);
+            documentRepository, statusAggregator, fileGateway, fileValidator, folderRegex);
     }
 }

@@ -4,8 +4,8 @@ import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.port.out.FileGateway;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
-import io.micrometer.core.annotation.Timed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -17,7 +17,6 @@ import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 @org.springframework.context.annotation.Profile("s3")
@@ -36,7 +35,6 @@ public class S3GatewayAdapter implements FileGateway {
     }
 
     @Override
-    @Timed("s3.gateway")
     public Mono<FileUploadResult> send(DocumentSendRequest request) {
         byte[] content = request.getFileContent();
         String key = buildKey(request);
@@ -79,22 +77,30 @@ public class S3GatewayAdapter implements FileGateway {
                     .success(true)
                     .build();
             })
-            .doOnError(error -> log.error("S3 upload failed for {}: {}",
-                request.getFilename(), error.getMessage()))
-            .onErrorResume(error -> {
-                // Distinguish infrastructure failures (propagate for CB) from business failures (return result)
-                if (error instanceof java.util.concurrent.TimeoutException) {
-                    return Mono.error(new com.example.fileprocessor.domain.exception.CommunicationException(
-                        "S3 upload timed out: " + error.getMessage(),
-                        "TIMEOUT",
-                        request.getTraceId()));
-                }
-                // Other errors - propagate for CB to react
-                return Mono.error(new com.example.fileprocessor.domain.exception.CommunicationException(
-                    "S3 upload failed: " + error.getMessage(),
-                    "S3_ERROR",
-                    request.getTraceId()));
-            });
+            .onErrorResume(error -> handleS3Error(error, request));
+    }
+
+    private Mono<FileUploadResult> handleS3Error(Throwable error, DocumentSendRequest request) {
+        log.error("S3 upload failed for {}: {}", request.getFilename(), error.getMessage());
+
+        if (error instanceof java.util.concurrent.TimeoutException) {
+            return Mono.just(FileUploadResult.builder()
+                .status(DocumentStatus.FAILURE.name())
+                .errorCode(ProcessingResultCodes.GATEWAY_TIMEOUT)
+                .traceId(request.getTraceId())
+                .processedAt(Instant.now())
+                .success(false)
+                .build());
+        }
+
+        // For S3 errors, all are treated as failures (S3 doesn't distinguish 4xx vs 5xx like HTTP)
+        return Mono.just(FileUploadResult.builder()
+            .status(DocumentStatus.FAILURE.name())
+            .errorCode(ProcessingResultCodes.UNKNOWN_ERROR)
+            .traceId(request.getTraceId())
+            .processedAt(Instant.now())
+            .success(false)
+            .build());
     }
 
     private boolean isRetryableException(Throwable throwable) {
@@ -102,7 +108,6 @@ public class S3GatewayAdapter implements FileGateway {
             return true;
         }
         if (throwable instanceof software.amazon.awssdk.core.exception.SdkException e) {
-            // S3 SDK exceptions that are retryable
             String name = e.getClass().getSimpleName();
             return name.contains("ServiceException") || name.contains("SocketTimeoutException")
                 || name.contains("ConnectTimeoutException");
@@ -111,11 +116,8 @@ public class S3GatewayAdapter implements FileGateway {
     }
 
     private String buildKey(DocumentSendRequest request) {
-        String timestamp = java.time.Instant.now().toString().replace(":", "-");
-        String uniqueId = UUID.randomUUID().toString().substring(0, 8);
-        return String.format("documents/%s/%s_%s",
-            timestamp.substring(0, 10),
-            uniqueId,
+        return String.format("documents/%s/%s",
+            request.getTraceId(),
             request.getFilename());
     }
 }

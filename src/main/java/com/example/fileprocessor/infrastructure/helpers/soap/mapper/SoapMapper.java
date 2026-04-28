@@ -41,7 +41,6 @@ public class SoapMapper {
     public String toSoapXml(DocumentSendRequest request) {
         log.debug("Converting DocumentSendRequest to XML body for traceId: {}", request.getTraceId());
 
-        // FIX #5: Base64 encoding happens HERE in infrastructure, not in domain
         String base64Content = request.getFileContent() != null
             ? Base64.getEncoder().encodeToString(request.getFileContent())
             : "";

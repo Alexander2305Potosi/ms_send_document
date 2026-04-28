@@ -5,23 +5,14 @@ import com.example.fileprocessor.domain.entity.ProductStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
 /**
  * Aggregates document statuses to determine overall product status.
- *
- * Business Rules:
- * - CA-01: SUCCESS when ALL documents are SUCCESS
- * - CA-02: PARTIAL_FAILURE if at least 1 document FAILED permanently
- * - CA-03: COMPLETED_WITH_SKIPS if all processed (no FAILURE/RETRY) but some are SKIPPED
- *
- * Additional rules:
- * - COMPLETED_WITH_NOT_SENT: If all documents are either SUCCESS, SKIPPED, or NOT_SENT
- * - COMPLETED_WITH_FAILURES: If all documents are FAILURE
- * - PENDING: If any document is still PENDING, PROCESSING, or RETRY
  */
 public class ProductStatusAggregator {
 
@@ -38,20 +29,17 @@ public class ProductStatusAggregator {
 
     /**
      * Calculates and updates the status of a product based on its documents.
-     * Call this after each document status change.
      */
     public Mono<Void> updateProductStatus(String productId, String traceId) {
         return documentRepository.findByProductId(productId)
             .collectList()
             .flatMap(docs -> {
-                ProductStatus newStatus = calculateStatus(docs);
-                log.info("Calculated status for product {}: {} (docs: success={}, failure={}, pending={}, skipped={}, notSent={})",
+                var counts = countAllStatuses(docs);
+                ProductStatus newStatus = calculateStatusFromCounts(counts);
+
+                log.info("Calculated status for product {}: {} (success={}, failure={}, pending={})",
                     productId, newStatus,
-                    countByStatus(docs, DocumentStatus.SUCCESS.name()),
-                    countByStatus(docs, DocumentStatus.FAILURE.name()),
-                    countByStatus(docs, DocumentStatus.PENDING.name()),
-                    countByStatus(docs, DocumentStatus.SKIPPED.name()),
-                    countByStatus(docs, DocumentStatus.NOT_SENT.name()));
+                    counts.success, counts.failure, counts.pending);
 
                 return productRepository.updateStatus(productId, newStatus.name(), traceId);
             });
@@ -60,65 +48,17 @@ public class ProductStatusAggregator {
     /**
      * Calculates the overall status from a list of documents.
      */
-    public static ProductStatus calculateStatus(java.util.List<ProductDocumentToProcess> documents) {
+    public static ProductStatus calculateStatus(List<ProductDocumentToProcess> documents) {
         if (documents == null || documents.isEmpty()) {
             return ProductStatus.PENDING;
         }
-
-        int success = countByStatus(documents, DocumentStatus.SUCCESS.name());
-        int failure = countByStatus(documents, DocumentStatus.FAILURE.name());
-        int pending = countByStatus(documents, DocumentStatus.PENDING.name());
-        int processing = countByStatus(documents, DocumentStatus.PROCESSING.name());
-        int retry = countByStatus(documents, DocumentStatus.RETRY.name());
-        int skipped = countByStatus(documents, DocumentStatus.SKIPPED.name());
-        int notSent = countByStatus(documents, DocumentStatus.NOT_SENT.name());
-        int total = documents.size();
-
-        // If any document is still being processed or pending, product is not complete
-        if (pending > 0 || processing > 0 || retry > 0) {
-            return ProductStatus.PENDING;
-        }
-
-        // CA-02: If any document failed permanently, it's PARTIAL_FAILURE
-        if (failure > 0) {
-            return ProductStatus.PARTIAL_FAILURE;
-        }
-
-        // All documents processed (no PENDING, PROCESSING, RETRY, FAILURE)
-        int processed = success + skipped + notSent;
-
-        if (processed == total) {
-            // CA-01: All SUCCESS
-            if (success == total) {
-                return ProductStatus.SUCCESS;
-            }
-            // CA-03: All processed but some are SKIPPED (no failures)
-            if (skipped > 0 && success + skipped == total) {
-                return ProductStatus.COMPLETED_WITH_SKIPS;
-            }
-            // Some were NOT_SENT due to business rules
-            return ProductStatus.COMPLETED_WITH_NOT_SENT;
-        }
-
-        // All documents are FAILURE
-        if (failure == total) {
-            return ProductStatus.COMPLETED_WITH_FAILURES;
-        }
-
-        return ProductStatus.PENDING;
-    }
-
-    private static int countByStatus(java.util.List<ProductDocumentToProcess> documents, String status) {
-        return (int) documents.stream()
-            .filter(doc -> status.equals(doc.getStatus()))
-            .count();
+        return calculateStatusFromCounts(countAllStatuses(documents));
     }
 
     /**
      * Returns a summary of document counts by status for a product.
      */
-    public static ProductStatusSummary createSummary(String productId,
-                                                     java.util.List<ProductDocumentToProcess> documents) {
+    public static ProductStatusSummary createSummary(String productId, List<ProductDocumentToProcess> documents) {
         if (documents == null || documents.isEmpty()) {
             return ProductStatusSummary.builder()
                 .productId(productId)
@@ -133,24 +73,72 @@ public class ProductStatusAggregator {
                 .build();
         }
 
-        int success = countByStatus(documents, DocumentStatus.SUCCESS.name());
-        int failure = countByStatus(documents, DocumentStatus.FAILURE.name());
-        int pending = countByStatus(documents, DocumentStatus.PENDING.name());
-        int processing = countByStatus(documents, DocumentStatus.PROCESSING.name());
-        int retry = countByStatus(documents, DocumentStatus.RETRY.name());
-        int skipped = countByStatus(documents, DocumentStatus.SKIPPED.name());
-        int notSent = countByStatus(documents, DocumentStatus.NOT_SENT.name());
-
+        var counts = countAllStatuses(documents);
         return ProductStatusSummary.builder()
             .productId(productId)
             .totalDocuments(documents.size())
-            .successCount(success)
-            .failureCount(failure)
-            .pendingCount(pending + processing + retry)  // Active processing
-            .skippedCount(skipped)
-            .notSentCount(notSent)
-            .retryCount(retry)
-            .overallStatus(calculateStatus(documents))
+            .successCount(counts.success)
+            .failureCount(counts.failure)
+            .pendingCount(counts.pending + counts.processing + counts.retry)
+            .skippedCount(counts.skipped)
+            .notSentCount(counts.notSent)
+            .retryCount(counts.retry)
+            .overallStatus(calculateStatusFromCounts(counts))
             .build();
+    }
+
+    // ============ PRIVATE HELPERS ============
+
+    private record StatusCounts(
+        int success, int failure, int pending,
+        int processing, int retry, int skipped, int notSent
+    ) {}
+
+    private static StatusCounts countAllStatuses(List<ProductDocumentToProcess> documents) {
+        int success = 0, failure = 0, pending = 0;
+        int processing = 0, retry = 0, skipped = 0, notSent = 0;
+
+        for (var doc : documents) {
+            switch (doc.getStatus()) {
+                case "SUCCESS" -> success++;
+                case "FAILURE" -> failure++;
+                case "PENDING" -> pending++;
+                case "PROCESSING" -> processing++;
+                case "RETRY" -> retry++;
+                case "SKIPPED" -> skipped++;
+                case "NOT_SENT" -> notSent++;
+            }
+        }
+        return new StatusCounts(success, failure, pending, processing, retry, skipped, notSent);
+    }
+
+    private static ProductStatus calculateStatusFromCounts(StatusCounts c) {
+        int total = c.success + c.failure + c.pending + c.processing + c.retry + c.skipped + c.notSent;
+
+        // If any document is still being processed or pending, product is not complete
+        if (c.pending > 0 || c.processing > 0 || c.retry > 0) {
+            return ProductStatus.PENDING;
+        }
+
+        // If any document failed permanently, it's PARTIAL_FAILURE
+        if (c.failure > 0) {
+            return ProductStatus.PARTIAL_FAILURE;
+        }
+
+        // All documents processed
+        if (c.success == total) {
+            return ProductStatus.SUCCESS;
+        }
+        if (c.skipped > 0 && c.success + c.skipped == total) {
+            return ProductStatus.COMPLETED_WITH_SKIPS;
+        }
+        if (c.notSent > 0 && c.success + c.notSent == total) {
+            return ProductStatus.COMPLETED_WITH_NOT_SENT;
+        }
+        if (c.failure == total) {
+            return ProductStatus.COMPLETED_WITH_FAILURES;
+        }
+
+        return ProductStatus.PENDING;
     }
 }

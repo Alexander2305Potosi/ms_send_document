@@ -1,6 +1,5 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import com.example.fileprocessor.domain.port.out.FileGateway;
@@ -21,15 +20,13 @@ class SoapDocumentProcessingUseCaseTest {
     private ProductStatusAggregator statusAggregator;
     @Mock
     private FileGateway fileGateway;
-    @Mock
-    private CommunicationLogRepository logRepository;
 
     private SoapDocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
         useCase = new SoapDocumentProcessingUseCase(
-            documentRepository, statusAggregator, fileGateway, logRepository,
+            documentRepository, statusAggregator, fileGateway,
             new FileValidator(createFileValidationConfig())
         );
     }

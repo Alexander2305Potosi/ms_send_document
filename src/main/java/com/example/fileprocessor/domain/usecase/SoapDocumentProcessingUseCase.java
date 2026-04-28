@@ -1,8 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.exception.FileValidationException;
-import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import org.slf4j.Logger;
@@ -20,9 +18,8 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
             ProductDocumentRepository documentRepository,
             ProductStatusAggregator statusAggregator,
             FileGateway fileGateway,
-            CommunicationLogRepository logRepository,
             FileValidator fileValidator) {
-        super(documentRepository, statusAggregator, fileGateway, logRepository, fileValidator);
+        super(documentRepository, statusAggregator, fileGateway, fileValidator);
     }
 
     @Override
@@ -31,28 +28,10 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     }
 
     @Override
-    protected Mono<ProductDocumentToProcess> filterByFolder(
+    protected Mono<ProductDocumentToProcess> prepareDocument(
             ProductDocumentToProcess pending, String traceId) {
-        return Mono.just(pending);
-    }
-
-    @Override
-    protected Mono<ProductDocumentToProcess> validateDocument(
-            ProductDocumentToProcess pending, String traceId) {
-
-        log.info("Validating SOAP document: {}, productId: {}",
+        log.info("Preparing SOAP document: {}, productId: {}",
             pending.getDocumentId(), pending.getProductId());
-
-        String contentType = pending.getContentType();
-        if (contentType == null ||
-            (!contentType.contains("xml") && !contentType.contains("text") && !contentType.contains("pdf"))) {
-            log.warn("SOAP document {} rejected: unsupported content type {}",
-                pending.getFilename(), contentType);
-            return Mono.error(new FileValidationException(
-                "Unsupported SOAP content type: " + contentType,
-                ProcessingResultCodes.INVALID_FILE_TYPE));
-        }
-
         return fileValidator.validate(pending);
     }
 }

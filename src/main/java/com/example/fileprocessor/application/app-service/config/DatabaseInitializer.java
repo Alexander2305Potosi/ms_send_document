@@ -39,7 +39,6 @@ public class DatabaseInitializer implements ApplicationRunner {
         return resetProcessingProductDocuments()
             .then(createProductsToProcessTable())
             .then(createProductDocumentsToProcessTable())
-            .then(createCommunicationLogTable())
             .then(createIndexes());
     }
 
@@ -97,27 +96,6 @@ public class DatabaseInitializer implements ApplicationRunner {
                     trace_id VARCHAR(255),
                     correlation_id VARCHAR(255),
                     error_code VARCHAR(100)
-                )
-                """)
-            .fetch()
-            .first()
-            .then();
-    }
-
-    private Mono<Void> createCommunicationLogTable() {
-        log.info("Creating communication_log table...");
-        return databaseClient.sql("""
-                CREATE TABLE IF NOT EXISTS communication_log (
-                    trace_id VARCHAR(255) PRIMARY KEY,
-                    document_id VARCHAR(255),
-                    status VARCHAR(50) NOT NULL,
-                    retry_count INT NOT NULL,
-                    error_code VARCHAR(100),
-                    filename VARCHAR(255),
-                    created_at TIMESTAMP NOT NULL,
-                    latency_ms BIGINT,
-                    gateway_name VARCHAR(50),
-                    metadata VARCHAR(1000)
                 )
                 """)
             .fetch()
