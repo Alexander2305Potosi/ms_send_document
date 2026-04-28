@@ -5,7 +5,6 @@ import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.usecase.DocumentValidationRules;
 import com.example.fileprocessor.domain.usecase.FileValidator;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.usecase.ProcessingDependencies;
@@ -52,9 +51,7 @@ public class DomainConfig {
             ProcessingDependencies deps,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
-        DocumentValidationRules validationRules = new DocumentValidationRules(config.getSoap());
-        return new SoapDocumentProcessingUseCase(
-            deps, fileValidator, validationRules, config.getSoap());
+        return new SoapDocumentProcessingUseCase(deps, fileValidator, config.getSoap());
     }
 
     // ============ S3 Processor ============
@@ -69,9 +66,7 @@ public class DomainConfig {
             ProcessingDependencies deps,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getS3());
-        DocumentValidationRules validationRules = new DocumentValidationRules(config.getS3());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
-        return new S3DocumentProcessingUseCase(
-            deps, fileValidator, validationRules, folderRegex, config.getS3());
+        return new S3DocumentProcessingUseCase(deps, fileValidator, folderRegex, config.getS3());
     }
 }

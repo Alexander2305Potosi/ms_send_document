@@ -15,17 +15,14 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     private static final Logger log = LoggerFactory.getLogger(S3DocumentProcessingUseCase.class);
     private final ProcessorSettings settings;
-    private final FileValidator fileValidator;
     private final FolderExclusionRegexConfig folderExclusionRegex;
 
     public S3DocumentProcessingUseCase(
             ProcessingDependencies deps,
             FileValidator fileValidator,
-            DocumentValidationRules validationRules,
             FolderExclusionRegexConfig folderExclusionRegex,
             ProcessorSettings settings) {
-        super(deps, validationRules, new CommunicationLogFactory("S3"));
-        this.fileValidator = fileValidator;
+        super(deps, fileValidator, new CommunicationLogFactory("S3"));
         this.folderExclusionRegex = folderExclusionRegex;
         this.settings = settings;
     }

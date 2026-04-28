@@ -38,7 +38,6 @@ class SoapDocumentProcessingUseCaseTest {
         useCase = new SoapDocumentProcessingUseCase(
             deps,
             new FileValidator(createFileValidationConfig()),
-            new DocumentValidationRules(createFileValidationConfig()),
             settings
         );
     }

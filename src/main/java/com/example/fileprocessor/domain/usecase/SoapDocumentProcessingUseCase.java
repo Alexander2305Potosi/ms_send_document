@@ -14,15 +14,12 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     private static final Logger log = LoggerFactory.getLogger(SoapDocumentProcessingUseCase.class);
     private final ProcessorSettings settings;
-    private final FileValidator fileValidator;
 
     public SoapDocumentProcessingUseCase(
             ProcessingDependencies deps,
             FileValidator fileValidator,
-            DocumentValidationRules validationRules,
             ProcessorSettings settings) {
-        super(deps, validationRules, new CommunicationLogFactory("SOAP"));
-        this.fileValidator = fileValidator;
+        super(deps, fileValidator, new CommunicationLogFactory("SOAP"));
         this.settings = settings;
     }
 

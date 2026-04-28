@@ -31,18 +31,18 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final ProductStatusAggregator statusAggregator;
     protected final FileGateway fileGateway;
     protected final CommunicationLogRepository logRepository;
-    protected final DocumentValidationRules validationRules;
+    protected final FileValidator fileValidator;
     protected final CommunicationLogFactory logFactory;
 
     protected AbstractDocumentProcessingUseCase(
             ProcessingDependencies deps,
-            DocumentValidationRules validationRules,
+            FileValidator fileValidator,
             CommunicationLogFactory logFactory) {
         this.documentRepository = deps.documentRepository();
         this.statusAggregator = deps.statusAggregator();
         this.fileGateway = deps.fileGateway();
         this.logRepository = deps.logRepository();
-        this.validationRules = validationRules;
+        this.fileValidator = fileValidator;
         this.logFactory = logFactory;
     }
 
@@ -188,7 +188,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     // ============ REQUEST BUILDING (shared - override only if gateway-specific) ============
 
     protected Mono<DocumentSendRequest> buildRequest(ProductDocumentToProcess validDoc, String traceId) {
-        DocumentValidationRules.FolderInfo folderInfo = validationRules.extractFolderInfo(validDoc.getOrigin());
+        FileValidator.FolderInfo folderInfo = fileValidator.extractFolderInfo(validDoc.getOrigin());
         String idempotencyKey = IdempotencyKey.forFirstAttempt(validDoc.getDocumentId(), traceId).value();
 
         return Mono.just(DocumentSendRequest.builder()
