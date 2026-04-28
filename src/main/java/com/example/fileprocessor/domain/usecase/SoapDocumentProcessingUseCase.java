@@ -1,11 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
-import com.example.fileprocessor.domain.port.out.ResilienceOperator;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -20,12 +19,12 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     public SoapDocumentProcessingUseCase(
             ProcessingDependencies deps,
-            ResilienceOperator resilienceOperator,
+            CircuitBreaker circuitBreaker,
             FileValidator fileValidator,
             DocumentValidationRules validationRules,
             FolderExclusionRegexConfig folderExclusionRegex,
             ProcessorSettings settings) {
-        super(deps, resilienceOperator, fileValidator, validationRules, folderExclusionRegex,
+        super(deps, circuitBreaker, fileValidator, validationRules, folderExclusionRegex,
             new CommunicationLogFactory("SOAP"));
         this.settings = settings;
     }

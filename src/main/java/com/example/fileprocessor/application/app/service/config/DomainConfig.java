@@ -5,7 +5,6 @@ import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.port.out.ResilienceOperator;
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.DocumentValidationRules;
 import com.example.fileprocessor.domain.usecase.FileValidator;
@@ -16,9 +15,9 @@ import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 
 @Configuration
 public class DomainConfig {
@@ -58,13 +57,13 @@ public class DomainConfig {
     @Bean
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
             ProcessingDependencies deps,
-            ResilienceOperator soapResilienceOperator,
+            CircuitBreaker soapCircuitBreaker,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
         DocumentValidationRules validationRules = new DocumentValidationRules(config.getSoap());
         FolderExclusionRegexConfig folderRegex = soapFolderExclusion(config);
         return new SoapDocumentProcessingUseCase(
-            deps, soapResilienceOperator, fileValidator, validationRules, folderRegex, config.getSoap());
+            deps, soapCircuitBreaker, fileValidator, validationRules, folderRegex, config.getSoap());
     }
 
     // ============ S3 Processor ============
@@ -77,12 +76,12 @@ public class DomainConfig {
     @Bean
     public S3DocumentProcessingUseCase s3DocumentUseCase(
             ProcessingDependencies deps,
-            ResilienceOperator s3ResilienceOperator,
+            CircuitBreaker s3CircuitBreaker,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getS3());
         DocumentValidationRules validationRules = new DocumentValidationRules(config.getS3());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
         return new S3DocumentProcessingUseCase(
-            deps, s3ResilienceOperator, fileValidator, validationRules, folderRegex, config.getS3());
+            deps, s3CircuitBreaker, fileValidator, validationRules, folderRegex, config.getS3());
     }
 }
