@@ -1,12 +1,10 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
 import com.example.fileprocessor.domain.entity.AsyncOperationStatus;
-import com.example.fileprocessor.domain.usecase.AbstractProcessDocumentsUseCase;
+import com.example.fileprocessor.domain.usecase.DocumentProcessingOrchestrator;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
-import com.example.fileprocessor.domain.usecase.S3DocumentUseCase;
-import com.example.fileprocessor.domain.usecase.SoapDocumentUseCase;
 import com.example.fileprocessor.domain.port.out.AsyncOperationRepository;
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiConstants;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -27,13 +25,13 @@ public class ProductHandler {
     private static final Logger log = LoggerFactory.getLogger(ProductHandler.class);
 
     private final LoadProductsUseCase loadProductsUseCase;
-    private final SoapDocumentUseCase soapDocumentUseCase;
-    private final Optional<S3DocumentUseCase> s3DocumentUseCase;
+    private final DocumentProcessingOrchestrator soapDocumentUseCase;
+    private final Optional<DocumentProcessingOrchestrator> s3DocumentUseCase;
     private final AsyncOperationRepository asyncOperationRepository;
 
     public ProductHandler(LoadProductsUseCase loadProductsUseCase,
-                         SoapDocumentUseCase soapDocumentUseCase,
-                         Optional<S3DocumentUseCase> s3DocumentUseCase,
+                         DocumentProcessingOrchestrator soapDocumentUseCase,
+                         Optional<DocumentProcessingOrchestrator> s3DocumentUseCase,
                          AsyncOperationRepository asyncOperationRepository) {
         this.loadProductsUseCase = loadProductsUseCase;
         this.soapDocumentUseCase = soapDocumentUseCase;
@@ -42,7 +40,7 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> loadProducts(ServerRequest request) {
-        String headerTraceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
+        String headerTraceId = request.headers().firstHeader(ApiConstants.HEADER_TRACE_ID);
         final String traceId = (headerTraceId != null && !headerTraceId.isBlank())
             ? headerTraceId
             : UUID.randomUUID().toString();
@@ -67,16 +65,16 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
-        String processorType = request.queryParam(RestApiConstants.PARAM_PROCESSOR).orElse(RestApiConstants.PROCESSOR_SOAP);
+        String processorType = request.queryParam(ApiConstants.PARAM_PROCESSOR).orElse(ApiConstants.PROCESSOR_SOAP);
 
-        String headerTraceId = request.headers().firstHeader(RestApiConstants.HEADER_TRACE_ID);
+        String headerTraceId = request.headers().firstHeader(ApiConstants.HEADER_TRACE_ID);
         final String traceId = (headerTraceId != null && !headerTraceId.isBlank())
             ? headerTraceId
             : UUID.randomUUID().toString();
 
-        AbstractProcessDocumentsUseCase useCase = resolveUseCase(processorType);
+        DocumentProcessingOrchestrator useCase = resolveUseCase(processorType);
         log.info("Starting async pending product documents processing with {} processor, traceId: {}",
-            useCase.implementationName(), traceId);
+            useCase.getImplementationName(), traceId);
 
         AsyncOperationStatus initialStatus = AsyncOperationStatus.startProcessing(traceId);
 
@@ -107,17 +105,17 @@ public class ProductHandler {
             .switchIfEmpty(ServerResponse.notFound().build());
     }
 
-    private AbstractProcessDocumentsUseCase resolveUseCase(String processorType) {
+    private DocumentProcessingOrchestrator resolveUseCase(String processorType) {
         return switch (processorType.toLowerCase()) {
-            case RestApiConstants.PROCESSOR_S3 -> {
+            case ApiConstants.PROCESSOR_S3 -> {
                 if (s3DocumentUseCase.isEmpty()) {
-                    throw new IllegalStateException(RestApiConstants.MSG_S3_NOT_AVAILABLE);
+                    throw new IllegalStateException(ApiConstants.MSG_S3_NOT_AVAILABLE);
                 }
                 yield s3DocumentUseCase.get();
             }
-            case RestApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
+            case ApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
             default -> {
-                log.warn(RestApiConstants.MSG_UNKNOWN_PROCESSOR, processorType);
+                log.warn(ApiConstants.MSG_UNKNOWN_PROCESSOR, processorType);
                 yield soapDocumentUseCase;
             }
         };

@@ -1,8 +1,9 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
-import com.example.fileprocessor.domain.entity.SoapRequest;
+import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
-import com.example.fileprocessor.domain.usecase.DocumentErrorCodes;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapNamespaces;
@@ -36,8 +37,8 @@ public class SoapMapper {
         }
     }
 
-    public String toSoapXml(SoapRequest request) {
-        log.debug("Converting SoapRequest to XML body for traceId: {}", request.getTraceId());
+    public String toSoapXml(DocumentSendRequest request) {
+        log.debug("Converting DocumentSendRequest to XML body for traceId: {}", request.getTraceId());
 
         // FIX #5: Base64 encoding happens HERE in infrastructure, not in domain
         String base64Content = request.getFileContent() != null
@@ -58,16 +59,16 @@ public class SoapMapper {
         return marshalRequest(uploadRequest);
     }
 
-    public String toFullSoapMessage(SoapRequest request) {
+    public String toFullSoapMessage(DocumentSendRequest request) {
         log.debug("Generating full SOAP message for traceId: {}", request.getTraceId());
 
         String soapBody = toSoapXml(request);
-        return SoapMapperConstants.SOAP_HEADER_PREFIX
-            + SoapMapperConstants.SOAP_HEADER_ENVELOPE_START + SoapNamespaces.SOAP_ENVELOPE + "\"\n"
+        return ApiConstants.SOAP_HEADER_PREFIX
+            + ApiConstants.SOAP_HEADER_ENVELOPE_START + SoapNamespaces.SOAP_ENVELOPE + "\"\n"
             + "               xmlns:file=\"" + SoapNamespaces.FILE_SERVICE + "\">\n"
-            + SoapMapperConstants.SOAP_HEADER_ENVELOPE_END
+            + ApiConstants.SOAP_HEADER_ENVELOPE_END
             + soapBody
-            + SoapMapperConstants.SOAP_FOOTER_ENVELOPE_END;
+            + ApiConstants.SOAP_FOOTER_ENVELOPE_END;
     }
 
     private String marshalRequest(UploadFileRequest request) {
@@ -81,7 +82,7 @@ public class SoapMapper {
             return writer.toString();
         } catch (JAXBException e) {
             log.error("Error marshalling SOAP request: {}", e.getMessage());
-            throw new SoapCommunicationException("Failed to marshal SOAP request", DocumentErrorCodes.UNKNOWN_ERROR, null, e);
+            throw new SoapCommunicationException("Failed to marshal SOAP request", ProcessingResultCodes.UNKNOWN_ERROR, null, e);
         }
     }
 
@@ -107,7 +108,7 @@ public class SoapMapper {
             log.error("Error parsing SOAP response: {}", e.getMessage());
             throw new SoapCommunicationException(
                 "Failed to parse SOAP response: " + e.getMessage(),
-                DocumentErrorCodes.INVALID_RESPONSE, traceId);
+                ProcessingResultCodes.INVALID_RESPONSE, traceId);
         }
     }
 }

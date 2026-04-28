@@ -14,23 +14,26 @@ com.example.fileprocessor/
 │   │   ├── ProductDocumentToProcess.java    # Documento de producto en BD
 │   │   ├── ProductInfo.java                 # Producto desde REST API
 │   │   ├── ProductDocumentInfo.java          # Documento dentro de ProductInfo
-│   │   ├── FileData.java                    # Datos de archivo para SOAP
-│   │   ├── FileUploadResult.java            # Resultado de upload
-│   │   ├── SoapCommunicationLog.java        # Log de comunicacion SOAP
-│   │   ├── SoapRequest.java
-│   │   ├── SoapResponse.java
+│   │   ├── FileData.java                    # Datos de archivo para validacion
+│   │   ├── FileUploadResult.java            # Resultado de upload/procesamiento
+│   │   ├── CommunicationLog.java            # Log de comunicacion (SOAP o S3)
+│   │   ├── DocumentSendRequest.java         # Request de envio (antes SoapRequest)
+│   │   ├── SoapResponse.java                # Respuesta SOAP
 │   │   ├── ZipArchive.java                  # ZIP con documentos extraibles
 │   │   ├── AsyncOperationStatus.java        # Tracking de operacion async
 │   │   ├── DocumentStatus.java              # Estados de documento (constantes)
 │   │   └── ProductStatus.java               # Estados de producto
 │   ├── usecase/                      # Casos de uso (logica de negocio)
 │   │   ├── LoadProductsUseCase.java                # Carga productos y documentos
-│   │   ├── AbstractProcessDocumentsUseCase.java     # Procesa documentos (template method)
-│   │   ├── SoapDocumentUseCase.java                 # Implementacion SOAP
-│   │   ├── S3DocumentUseCase.java                   # Implementacion S3
-│   │   ├── DocumentValidationRules.java             # Reglas de validacion
-│   │   ├── FileValidator.java
-│   │   ├── DocumentResult.java                     # Resultado de procesamiento
+│   │   ├── DocumentProcessingOrchestrator.java     # Orquestador de procesamiento (reemplaza AbstractProcessDocumentsUseCase)
+│   │   ├── DocumentProcessingPipeline.java         # Pipeline de 5 etapas: validateBusinessRules → validateFile → buildRequest → sendWithCircuitBreaker → updateStatuses
+│   │   ├── DocumentSender.java                     # Interfaz Strategy para envio de documentos
+│   │   ├── SoapDocumentSender.java                 # Implementacion envio SOAP (2 dependencias: soapGateway + logRepository)
+│   │   ├── S3DocumentSender.java                   # Implementacion envio S3 (2 dependencias: s3Gateway + logRepository)
+│   │   ├── DocumentSkipHandler.java               # Manejo de documentos saltados
+│   │   ├── DocumentValidationRules.java            # Reglas de validacion
+│   │   ├── FileValidator.java                      # Validador de archivos
+│   │   ├── DocumentResult.java                     # Resultado de envio
 │   │   ├── DocumentErrorCodes.java                 # Codigos de error
 │   │   ├── ProductStatusAggregator.java            # Agregacion de estado de producto
 │   │   └── ProductStatusSummary.java               # Resumen de estado
@@ -296,7 +299,7 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. AbstractProcessDocumentsUseCase.executePendingDocuments()                 │
+│ 2. DocumentProcessingOrchestrator.executePendingDocuments()               │
 │    - Invoca documentRepository.findPendingDocuments()                        │
 │    - Retorna Flux<ProductDocumentToProcess> con statuses:                    │
 │      PENDING, RETRY, PROCESSING (crash recovery)                           │
@@ -333,7 +336,7 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 6. processDocumentClaimed(ProductDocumentToProcess)                         │
+│ 6. DocumentProcessingPipeline.processDocumentClaimed(ProductDocumentToProcess)                         │
 │    - Genera traceId UUID para este documento                                 │
 │    - Evalua reglas de negocio en orden (usando DocumentValidationRules):     │
 │                                                                             │
@@ -390,9 +393,11 @@ Procesa los documentos pendientes de todos los productos usando el procesador es
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 8. sendDocument(SoapRequest) - Template Method                             │
-│    - Subclases SoapDocumentUseCase o S3DocumentUseCase                      │
-│    - Delegan al gateway correspondiente (SOAP o S3)                           │
+│ 8. DocumentProcessingPipeline.sendWithCircuitBreaker(SoapRequest)         │
+│    - Aplica Circuit Breaker via Resilience4j                              │
+│    - Delega al DocumentSender strategy:                                    │
+│      - SoapDocumentSender → soapGateway.sendFile()                        │
+│      - S3DocumentSender → s3Gateway.upload()                              │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
               ┌─────────────────────┴─────────────────────┐
@@ -546,24 +551,47 @@ El sistema calcula automáticamente el estado del producto basado en sus documen
 
 ## Patrones de Diseno
 
-### Template Method (AbstractProcessDocumentsUseCase)
+### Composition over Inheritance (DocumentSender Strategy)
 
-`AbstractProcessDocumentsUseCase` implementa el flujo completo de procesamiento:
+El procesamiento de documentos ahora usa **composición** en lugar de herencia:
 
 ```
-executePendingDocuments()
-    └── findPendingDocuments()
-            └── flatMap(processPendingDocument, 10)  // maxConcurrency=10
-                    ├── claimDocument()
-                    ├── validateRules()          <- reglas de negocio
-                    ├── fileValidator.validate() <- tipo archivo
-                    ├── sendDocument()           <- ABSTRACT (subclasses)
-                    └── updateStatus()
+DocumentProcessingOrchestrator
+  └── DocumentProcessingPipeline (5 etapas)
+       └── DocumentSender (Strategy interface)
+            ├── SoapDocumentSender (2 deps: soapGateway + logRepository)
+            └── S3DocumentSender (2 deps: s3Gateway + logRepository)
 ```
 
-Las subclases solo definen `sendDocument()` y `getImplementationName()`:
-- **SoapDocumentUseCase**: envia via `ExternalSoapGateway`
-- **S3DocumentUseCase**: sube via `S3Gateway`
+**Beneficios:**
+- **S3DocumentSender y SoapDocumentSender** tienen solo 2 dependencias (antes heredaban 6)
+- El pipeline de 5 etapas se lee de arriba a abajo
+- Agregar un nuevo mecanismo de envío (FTP, REST) = nueva clase de ~30 líneas
+- Tests unitarios solo requieren 2 mocks por sender
+
+### Pipeline de Procesamiento (DocumentProcessingPipeline)
+
+El flujo se divide en 5 etapas con responsabilidades claras:
+
+```
+1. validateBusinessRules  → skip por carpeta/origin/tamano
+2. validateFile            → validacion de tipo de archivo
+3. buildRequest           → construir SoapRequest
+4. sendWithCircuitBreaker  → enviar con circuit breaker
+5. updateStatuses          → actualizar documento y producto
+```
+
+**Codigo ejemplo:**
+```java
+public Mono<FileUploadResult> process(ProductDocumentToProcess pending, String traceId) {
+    return Mono.just(pending)
+        .flatMap(doc -> validateBusinessRules(doc, traceId))
+        .flatMap(this::validateFile)
+        .flatMap(data -> buildRequest(pending, data, traceId))
+        .flatMap(this::sendWithCircuitBreaker)
+        .flatMap(result -> updateStatuses(pending, result, traceId));
+}
+```
 
 ### Async Operation Tracking
 
@@ -596,9 +624,9 @@ El servicio utiliza `AsyncOperationRepository` para tracking de operaciones asin
 
 | Perfil | Implementacion | Uso |
 |--------|---------------|-----|
-| `soap` (default) | SoapDocumentUseCase | Envio via SOAP |
-| `s3` | S3DocumentUseCase | Upload a AWS S3 |
-| sin perfil | SoapDocumentUseCase | Default igual que soap |
+| `soap` (default) | SoapDocumentSender | Envio via SOAP |
+| `s3` | S3DocumentSender | Upload a AWS S3 |
+| sin perfil | SoapDocumentSender | Default igual que soap |
 
 ## Observabilidad
 
@@ -702,19 +730,19 @@ El servicio implementa **3 reintentos maximos** con backoff exponencial:
 
 ### Circuit Breaker (Resilience4j)
 
-El servicio implementa Circuit Breaker con Resilience4j integrado en `AbstractProcessDocumentsUseCase`:
+El servicio implementa Circuit Breaker con Resilience4j integrado en `DocumentProcessingPipeline`:
 
 ```java
-private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request,
-    String traceId, String documentId) {
-    return Mono.fromCallable(() -> request)
+private Mono<DocumentResult> sendWithCircuitBreaker(SoapRequest request) {
+    return Mono.just(request)
         .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
-        .flatMap(req -> sendDocument(req))
+        .flatMap(documentSender::send)
         .onErrorResume(CallNotPermittedException.class, e -> {
-            log.warn("Circuit breaker OPEN for document {}", documentId);
-            return Mono.error(new SoapCommunicationException(
+            log.warn("Circuit breaker OPEN for document {}", request.getDocumentId());
+            return Mono.error(new CommunicationException(
                 "Circuit breaker is OPEN",
-                DocumentErrorCodes.CIRCUIT_BREAKER_OPEN, traceId, 0));
+                DocumentErrorCodes.CIRCUIT_BREAKER_OPEN,
+                request.getTraceId(), 0));
         });
 }
 ```
@@ -918,7 +946,39 @@ aws --endpoint-url=http://localhost:4566 s3 ls
 
 ## Changelog
 
-### 2026-04-27 - Documentacion Actualizada
+### 2026-04-27 - Hito C Completado: Composition over Inheritance
+
+#### Cambios Aplicados
+
+**Nuevo: Composition over Inheritance (Strategy Pattern)**
+
+Se refactorizó la arquitectura de `AbstractProcessDocumentsUseCase` (herencia) a `DocumentProcessingOrchestrator` + `DocumentSender` (composición):
+
+| Clase Anterior | Nueva Arquitectura |
+|----------------|-------------------|
+| `AbstractProcessDocumentsUseCase` (270 líneas) | `DocumentProcessingOrchestrator` (~50 líneas) |
+| `SoapDocumentUseCase` (hereda 6 dependencias) | `SoapDocumentSender` (2 dependencias) |
+| `S3DocumentUseCase` (hereda 6 dependencias) | `S3DocumentSender` (2 dependencias) |
+
+**Nuevo: DocumentProcessingPipeline**
+
+Pipeline con 5 etapas que reemplaza la cadena de 8 métodos:
+```
+validateBusinessRules → validateFile → buildRequest → sendWithCircuitBreaker → updateStatuses
+```
+
+**Archivos nuevos:**
+- `DocumentSender.java` - Interfaz Strategy funcional
+- `SoapDocumentSender.java` - Implementación SOAP
+- `S3DocumentSender.java` - Implementación S3
+- `DocumentProcessingPipeline.java` - Pipeline de 5 etapas
+- `DocumentProcessingOrchestrator.java` - Orquestador refactorizado
+- `SoapDocumentSenderTest.java` - Tests unitarios
+
+**Configuración actualizada:**
+- `DomainConfig.java` - Rewiring completo para usar la nueva arquitectura
+
+**Beneficio:** Tests unitarios de senders solo requieren 2 mocks (antes 6).
 
 - Actualizada estructura de paquetes para reflejar la organizacion real
 - Agregado endpoint `/api/v1/operations/{traceId}/status` para tracking async

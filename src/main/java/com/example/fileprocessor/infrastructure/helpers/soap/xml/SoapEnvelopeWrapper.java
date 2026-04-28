@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
-import com.example.fileprocessor.domain.usecase.DocumentErrorCodes;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
@@ -54,12 +55,12 @@ public class SoapEnvelopeWrapper {
 
             Node body = doc.getElementsByTagNameNS(SoapNamespaces.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
-                throw new SoapCommunicationException(SoapEnvelopeConstants.MSG_SOAP_BODY_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
+                throw new SoapCommunicationException(ApiConstants.MSG_SOAP_BODY_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
             }
 
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
-                throw new SoapCommunicationException(SoapEnvelopeConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND, DocumentErrorCodes.INVALID_RESPONSE, null);
+                throw new SoapCommunicationException(ApiConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
             }
 
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
@@ -75,7 +76,7 @@ public class SoapEnvelopeWrapper {
             throw e;
         } catch (Exception e) {
             log.error("Error unmarshalling SOAP response: {}", e.getMessage());
-            throw new SoapCommunicationException(SoapEnvelopeConstants.MSG_PARSE_ERROR, DocumentErrorCodes.INVALID_RESPONSE, null, e);
+            throw new SoapCommunicationException(ApiConstants.MSG_PARSE_ERROR, ProcessingResultCodes.INVALID_RESPONSE, null, e);
         }
     }
 

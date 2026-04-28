@@ -128,7 +128,11 @@
       "Bash(sed -n '/<table/,/<\\\\/table>/p' build/reports/jacoco/test/index.html)",
       "Bash(./gradlew compileJava --stacktrace)",
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk-21.0.2/Contents/Home ./gradlew compileJava)",
-      "Bash(export JAVA_HOME=\"/Library/Java/JavaVirtualMachines/temurin-26.jdk/Contents/Home\")"
+      "Bash(export JAVA_HOME=\"/Library/Java/JavaVirtualMachines/temurin-26.jdk/Contents/Home\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(lsof -ti:8080)"
     ]
   }
 }

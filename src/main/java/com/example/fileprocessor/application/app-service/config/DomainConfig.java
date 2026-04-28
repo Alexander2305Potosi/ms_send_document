@@ -1,17 +1,20 @@
 package com.example.fileprocessor.application.app.service.config;
 
-import com.example.fileprocessor.domain.port.out.ExternalSoapGateway;
+import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
+import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.port.out.S3Gateway;
-import com.example.fileprocessor.domain.port.out.SoapCommunicationLogRepository;
+import com.example.fileprocessor.domain.usecase.DocumentProcessingOrchestrator;
+import com.example.fileprocessor.domain.usecase.DocumentProcessingPipeline;
+import com.example.fileprocessor.domain.usecase.DocumentSender;
+import com.example.fileprocessor.domain.usecase.DocumentSenderImpl;
+import com.example.fileprocessor.domain.usecase.DocumentSkipHandler;
+import com.example.fileprocessor.domain.usecase.DocumentValidationRules;
 import com.example.fileprocessor.domain.usecase.FileValidator;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
-import com.example.fileprocessor.domain.usecase.S3DocumentUseCase;
-import com.example.fileprocessor.domain.usecase.SoapDocumentUseCase;
-import com.example.fileprocessor.infrastructure.helpers.config.SoapProcessorProperties;
-import com.example.fileprocessor.infrastructure.helpers.config.S3ProcessorProperties;
+import com.example.fileprocessor.domain.usecase.ProductStatusAggregator;
+import com.example.fileprocessor.infrastructure.helpers.config.ProcessorConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,13 +23,13 @@ import org.springframework.context.annotation.Configuration;
 public class DomainConfig {
 
     @Bean
-    public FileValidator soapFileValidator(SoapProcessorProperties properties) {
-        return new FileValidator(properties);
+    public FileValidator soapFileValidator(ProcessorConfig config) {
+        return new FileValidator(config.getSoap());
     }
 
     @Bean
-    public FileValidator s3FileValidator(S3ProcessorProperties properties) {
-        return new FileValidator(properties);
+    public FileValidator s3FileValidator(ProcessorConfig config) {
+        return new FileValidator(config.getS3());
     }
 
     @Bean
@@ -37,25 +40,90 @@ public class DomainConfig {
     }
 
     @Bean
-    public SoapDocumentUseCase soapDocumentUseCase(ProductDocumentRepository documentRepository,
-                                                  ProductRepository productRepository,
-                                                  ExternalSoapGateway soapGateway,
-                                                  FileValidator soapFileValidator,
-                                                  SoapCommunicationLogRepository logRepository,
-                                                  SoapProcessorProperties validationConfig,
-                                                  CircuitBreaker soapCircuitBreaker) {
-        return new SoapDocumentUseCase(documentRepository, productRepository, soapGateway, soapFileValidator, logRepository, validationConfig, soapCircuitBreaker);
+    public ProductStatusAggregator productStatusAggregator(ProductDocumentRepository documentRepository,
+                                                           ProductRepository productRepository) {
+        return new ProductStatusAggregator(documentRepository, productRepository);
+    }
+
+    @Bean
+    public DocumentSkipHandler soapDocumentSkipHandler(ProductDocumentRepository documentRepository,
+                                                      ProductStatusAggregator statusAggregator) {
+        return new DocumentSkipHandler(documentRepository, statusAggregator);
+    }
+
+    @Bean
+    public DocumentValidationRules soapDocumentValidationRules(ProcessorConfig config) {
+        return new DocumentValidationRules(config.getSoap());
+    }
+
+    @Bean
+    public DocumentValidationRules s3DocumentValidationRules(ProcessorConfig config) {
+        return new DocumentValidationRules(config.getS3());
+    }
+
+    @Bean
+    public DocumentSender documentSender(FileGateway fileGateway,
+                                        CommunicationLogRepository logRepository) {
+        return new DocumentSenderImpl(fileGateway, logRepository);
+    }
+
+    @Bean
+    public DocumentProcessingPipeline documentPipeline(
+            ProductDocumentRepository documentRepository,
+            FileValidator soapFileValidator,
+            DocumentValidationRules soapDocumentValidationRules,
+            DocumentSkipHandler soapDocumentSkipHandler,
+            ProductStatusAggregator productStatusAggregator,
+            CircuitBreaker soapCircuitBreaker,
+            DocumentSender documentSender) {
+        return new DocumentProcessingPipeline(
+            documentRepository,
+            soapFileValidator,
+            soapDocumentValidationRules,
+            soapDocumentSkipHandler,
+            productStatusAggregator,
+            soapCircuitBreaker,
+            documentSender);
     }
 
     @org.springframework.context.annotation.Profile("s3")
     @Bean
-    public S3DocumentUseCase s3DocumentUseCase(ProductDocumentRepository documentRepository,
-                                              ProductRepository productRepository,
-                                              S3Gateway s3Gateway,
-                                              FileValidator s3FileValidator,
-                                              SoapCommunicationLogRepository logRepository,
-                                              S3ProcessorProperties validationConfig,
-                                              CircuitBreaker s3CircuitBreaker) {
-        return new S3DocumentUseCase(documentRepository, productRepository, s3Gateway, s3FileValidator, logRepository, validationConfig, s3CircuitBreaker);
+    public DocumentProcessingPipeline s3DocumentPipeline(
+            ProductDocumentRepository documentRepository,
+            FileValidator s3FileValidator,
+            DocumentValidationRules s3DocumentValidationRules,
+            DocumentSkipHandler soapDocumentSkipHandler,
+            ProductStatusAggregator productStatusAggregator,
+            CircuitBreaker s3CircuitBreaker,
+            DocumentSender documentSender) {
+        return new DocumentProcessingPipeline(
+            documentRepository,
+            s3FileValidator,
+            s3DocumentValidationRules,
+            soapDocumentSkipHandler,
+            productStatusAggregator,
+            s3CircuitBreaker,
+            documentSender);
+    }
+
+    @Bean
+    public DocumentProcessingOrchestrator soapDocumentOrchestrator(
+            ProductDocumentRepository documentRepository,
+            DocumentProcessingPipeline documentPipeline) {
+        return new DocumentProcessingOrchestrator(
+            documentRepository,
+            documentPipeline,
+            "SOAP");
+    }
+
+    @org.springframework.context.annotation.Profile("s3")
+    @Bean
+    public DocumentProcessingOrchestrator s3DocumentOrchestrator(
+            ProductDocumentRepository documentRepository,
+            DocumentProcessingPipeline s3DocumentPipeline) {
+        return new DocumentProcessingOrchestrator(
+            documentRepository,
+            s3DocumentPipeline,
+            "S3");
     }
 }

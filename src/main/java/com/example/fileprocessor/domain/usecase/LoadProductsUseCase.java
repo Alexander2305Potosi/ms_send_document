@@ -73,7 +73,7 @@ public class LoadProductsUseCase {
                     .name(productInfo.getName())
                     .documentCount(documentCount)
                     .status(DocumentStatus.PENDING_VALUE)
-                    .message(LoadProductsConstants.MSG_PRODUCT_LOADED)
+                    .message(ProcessingMessages.MSG_PRODUCT_LOADED)
                     .traceId(traceId)
                     .processedAt(Instant.now())
                     .success(true)

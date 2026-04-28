@@ -1,15 +1,11 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
-import com.example.fileprocessor.domain.entity.SoapRequest;
+import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.SoapResponse;
 import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,8 +22,8 @@ class SoapMapperTest {
 
     @Test
     void toSoapXml_shouldGenerateValidSoapBody() {
-        SoapRequest request = SoapRequest.builder()
-            .fileContent("testContent".getBytes())  // FIX #5: raw bytes instead of Base64 string
+        DocumentSendRequest request = DocumentSendRequest.builder()
+            .fileContent("testContent".getBytes())
             .filename("test.pdf")
             .contentType("application/pdf")
             .fileSize(1234)

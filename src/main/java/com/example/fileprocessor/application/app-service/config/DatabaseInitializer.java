@@ -39,7 +39,7 @@ public class DatabaseInitializer implements ApplicationRunner {
         return resetProcessingProductDocuments()
             .then(createProductsToProcessTable())
             .then(createProductDocumentsToProcessTable())
-            .then(createSoapCommunicationLogTable())
+            .then(createCommunicationLogTable())
             .then(createIndexes());
     }
 
@@ -104,12 +104,12 @@ public class DatabaseInitializer implements ApplicationRunner {
             .then();
     }
 
-    private Mono<Void> createSoapCommunicationLogTable() {
-        log.info("Creating soap_communication_log table...");
+    private Mono<Void> createCommunicationLogTable() {
+        log.info("Creating communication_log table...");
         return databaseClient.sql("""
-                CREATE TABLE IF NOT EXISTS soap_communication_log (
+                CREATE TABLE IF NOT EXISTS communication_log (
                     trace_id VARCHAR(255) PRIMARY KEY,
-                    document_id VARCHAR(255),  -- Added for audit traceability
+                    document_id VARCHAR(255),
                     status VARCHAR(50) NOT NULL,
                     retry_count INT NOT NULL,
                     error_code VARCHAR(100),

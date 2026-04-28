@@ -1,5 +1,6 @@
 package com.example.fileprocessor.domain.entity;
 
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -19,6 +20,6 @@ public class SoapResponse {
     private final String externalReference;
 
     public boolean isSuccess() {
-        return DocumentStatus.SUCCESS_VALUE.equalsIgnoreCase(status) || SoapResponseConstants.STATUS_OK.equalsIgnoreCase(status);
+        return DocumentStatus.SUCCESS_VALUE.equalsIgnoreCase(status) || ApiConstants.SOAP_STATUS_OK.equalsIgnoreCase(status);
     }
 }
