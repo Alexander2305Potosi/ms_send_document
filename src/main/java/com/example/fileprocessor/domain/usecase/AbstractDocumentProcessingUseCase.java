@@ -5,14 +5,10 @@ import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.exception.CommunicationException;
 import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,11 +35,9 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final DocumentValidationRules validationRules;
     protected final FolderExclusionRegexConfig folderExclusionRegex;
     protected final CommunicationLogFactory logFactory;
-    protected final CircuitBreaker circuitBreaker;
 
     protected AbstractDocumentProcessingUseCase(
             ProcessingDependencies deps,
-            CircuitBreaker circuitBreaker,
             FileValidator fileValidator,
             DocumentValidationRules validationRules,
             FolderExclusionRegexConfig folderExclusionRegex,
@@ -56,7 +50,6 @@ public abstract class AbstractDocumentProcessingUseCase {
         this.validationRules = validationRules;
         this.folderExclusionRegex = folderExclusionRegex;
         this.logFactory = logFactory;
-        this.circuitBreaker = circuitBreaker;
     }
 
     // ============ TEMPLATE METHOD (final) ============
@@ -145,24 +138,14 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     protected Mono<FileUploadResult> sendWithResilience(DocumentSendRequest request) {
         Instant start = Instant.now();
-        return Mono.defer(() -> fileGateway.send(request)
-            .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+        return fileGateway.send(request)
             .flatMap(result -> saveCommunicationLog(request, result, 0, start)
                 .thenReturn(result))
-            .onErrorResume(CallNotPermittedException.class, e -> {
-                log.warn("Circuit breaker OPEN for operation: {}", request.getTraceId());
-                return Mono.error(new CommunicationException(
-                    "Circuit breaker is OPEN",
-                    "CIRCUIT_BREAKER_OPEN",
-                    request.getTraceId(), 0));
-            })
-            .onErrorResume(error -> {
-                int retries = extractRetryCount(error);
+            .doOnError(error -> {
                 String errorCode = extractErrorCode(error);
                 FileUploadResult failureResult = buildFailureResult(errorCode, request.getTraceId());
-                return saveCommunicationLog(request, failureResult, retries, start)
-                    .then(Mono.error(error));
-            }));
+                saveCommunicationLog(request, failureResult, 0, start).subscribe();
+            });
     }
 
     protected Mono<FileUploadResult> checkpoint(
@@ -228,10 +211,6 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     // ============ ERROR HELPERS ============
-
-    private int extractRetryCount(Throwable error) {
-        return 0;
-    }
 
     private String extractErrorCode(Throwable error) {
         if (error instanceof com.example.fileprocessor.domain.exception.CommunicationException ce) {
