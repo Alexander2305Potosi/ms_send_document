@@ -15,6 +15,8 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     private static final Logger log = LoggerFactory.getLogger(S3DocumentProcessingUseCase.class);
     private final ProcessorSettings settings;
+    private final FileValidator fileValidator;
+    private final FolderExclusionRegexConfig folderExclusionRegex;
 
     public S3DocumentProcessingUseCase(
             ProcessingDependencies deps,
@@ -22,8 +24,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             DocumentValidationRules validationRules,
             FolderExclusionRegexConfig folderExclusionRegex,
             ProcessorSettings settings) {
-        super(deps, fileValidator, validationRules, folderExclusionRegex,
-            new CommunicationLogFactory("S3"));
+        super(deps, validationRules, new CommunicationLogFactory("S3"));
+        this.fileValidator = fileValidator;
+        this.folderExclusionRegex = folderExclusionRegex;
         this.settings = settings;
     }
 

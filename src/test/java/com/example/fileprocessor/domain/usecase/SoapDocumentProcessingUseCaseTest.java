@@ -1,9 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
-import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,13 +35,10 @@ class SoapDocumentProcessingUseCaseTest {
         settings.setMaxConcurrency(5);
         settings.setMaxFileSizeMb(50);
 
-        FolderExclusionRegexConfig folderRegex = new FolderExclusionRegexConfig(java.util.List.of());
-
         useCase = new SoapDocumentProcessingUseCase(
             deps,
             new FileValidator(createFileValidationConfig()),
             new DocumentValidationRules(createFileValidationConfig()),
-            folderRegex,
             settings
         );
     }

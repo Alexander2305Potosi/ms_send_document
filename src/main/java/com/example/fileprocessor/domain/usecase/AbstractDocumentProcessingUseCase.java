@@ -31,24 +31,18 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final ProductStatusAggregator statusAggregator;
     protected final FileGateway fileGateway;
     protected final CommunicationLogRepository logRepository;
-    protected final FileValidator fileValidator;
     protected final DocumentValidationRules validationRules;
-    protected final FolderExclusionRegexConfig folderExclusionRegex;
     protected final CommunicationLogFactory logFactory;
 
     protected AbstractDocumentProcessingUseCase(
             ProcessingDependencies deps,
-            FileValidator fileValidator,
             DocumentValidationRules validationRules,
-            FolderExclusionRegexConfig folderExclusionRegex,
             CommunicationLogFactory logFactory) {
         this.documentRepository = deps.documentRepository();
         this.statusAggregator = deps.statusAggregator();
         this.fileGateway = deps.fileGateway();
         this.logRepository = deps.logRepository();
-        this.fileValidator = fileValidator;
         this.validationRules = validationRules;
-        this.folderExclusionRegex = folderExclusionRegex;
         this.logFactory = logFactory;
     }
 

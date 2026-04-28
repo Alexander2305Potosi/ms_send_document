@@ -2,7 +2,6 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
-import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,15 +14,15 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     private static final Logger log = LoggerFactory.getLogger(SoapDocumentProcessingUseCase.class);
     private final ProcessorSettings settings;
+    private final FileValidator fileValidator;
 
     public SoapDocumentProcessingUseCase(
             ProcessingDependencies deps,
             FileValidator fileValidator,
             DocumentValidationRules validationRules,
-            FolderExclusionRegexConfig folderExclusionRegex,
             ProcessorSettings settings) {
-        super(deps, fileValidator, validationRules, folderExclusionRegex,
-            new CommunicationLogFactory("SOAP"));
+        super(deps, validationRules, new CommunicationLogFactory("SOAP"));
+        this.fileValidator = fileValidator;
         this.settings = settings;
     }
 
@@ -35,9 +34,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     @Override
     protected Mono<ProductDocumentToProcess> filterByFolder(
             ProductDocumentToProcess pending, String traceId) {
-
         // SOAP-specific: no additional folder filtering
-        // Shared validation rules already applied in preValidate via validationRules
         return Mono.just(pending);
     }
 

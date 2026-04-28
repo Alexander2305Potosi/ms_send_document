@@ -48,19 +48,13 @@ public class DomainConfig {
     // ============ SOAP Processor ============
 
     @Bean
-    public FolderExclusionRegexConfig soapFolderExclusion(ProcessorConfig config) {
-        return new FolderExclusionRegexConfig(config.getSoap().getFolderExclusionRegex());
-    }
-
-    @Bean
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
             ProcessingDependencies deps,
             ProcessorConfig config) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
         DocumentValidationRules validationRules = new DocumentValidationRules(config.getSoap());
-        FolderExclusionRegexConfig folderRegex = soapFolderExclusion(config);
         return new SoapDocumentProcessingUseCase(
-            deps, fileValidator, validationRules, folderRegex, config.getSoap());
+            deps, fileValidator, validationRules, config.getSoap());
     }
 
     // ============ S3 Processor ============
