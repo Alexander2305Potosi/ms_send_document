@@ -158,7 +158,13 @@
       "Bash(mkdir -p /Library/Java/JavaVirtualMachines)",
       "Bash(curl -L -o temurin-21.tar.gz \"https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_mac_hotspot_21.0.5_11.tar.gz\")",
       "Bash(tar -xzf /Library/Java/JavaVirtualMachines/temurin-21.tar.gz -C /Library/Java/JavaVirtualMachines/)",
-      "Bash(export JAVA_HOME=\"/Library/Java/JavaVirtualMachines/jdk-21.0.5+11/Contents/Home\")"
+      "Bash(export JAVA_HOME=\"/Library/Java/JavaVirtualMachines/jdk-21.0.5+11/Contents/Home\")",
+      "Bash(gh pr *)",
+      "Bash(rm -rf ~/.gradle/caches/8.*/scripts ~/.gradle/caches/8.*/scripts-remapped)",
+      "Bash(./gradlew --no-daemon clean compileJava --refresh-dependencies)",
+      "Bash(./gradlew --no-daemon clean compileJava --info)",
+      "Bash(javac -version)",
+      "Read(//Users/alexander2305/.gradle/**)"
     ]
   }
 }

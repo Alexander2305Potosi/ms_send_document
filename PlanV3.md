@@ -1362,9 +1362,9 @@ public Health health() {
 | P2 | Orchestrator superfluo | Separación artificial Orchestrator/Pipeline | Fusión en abstracta + `maxConcurrency` por props | Eliminar `DocumentProcessingOrchestrator` |
 | P3 | `String.contains` sin regex | `DocumentValidationRules` legacy | `FolderExclusionRegexConfig` + fail-fast startup | Nuevo value object, 1 campo en `ProcessorSettings` |
 | P4 | `CommunicationLog` solo éxito | `DocumentSenderImpl.saveSuccessLog()` acoplado a `flatMap` | `saveCommunicationLog` en `sendWithResilience()` con `onErrorResume` | `AbstractDocumentProcessingUseCase.sendWithResilience()` |
-| P5 | Sin checkpointing | `updateStatuses` fusiona doc + producto en un paso | `checkpoint()` inmediato post-envío + heartbeat recovery | Método `checkpoint()` + `releaseStaleDocuments()` |
+| P5 | Sin checkpointing | `updateStatuses` fusiona doc + producto en un paso | `checkpoint()` inmediato post-envío + recovery inline vía `claimDocumentWithRecovery()` | Método `checkpoint()` + `claimDocumentWithRecovery()` |
 | P6 | Resiliencia asimétrica | Retry en `SoapGatewayAdapter`, ausente en S3 | Gateways hacen 1 intento; retry en `ResilienceOperator` | `SoapGatewayAdapter` (-30 líneas), `S3GatewayAdapter` (+2 líneas) |
-| P7 | Sin trazabilidad fallos | `CommunicationLog` sin `errorCode` ni `retryCount` | Log en cada outcome con `latencyMs`, `gatewayName`, `metadata` | `CommunicationLog` (+3 campos), `CommunicationLogRepository.purgeOlderThan()` |
+| P7 | Sin trazabilidad fallos | `CommunicationLog` sin `errorCode` ni `retryCount` | Log en cada outcome con `latencyMs`, `gatewayName`, `metadata` | `CommunicationLog` (+3 campos) |
 | P8 | Race condition `claimDocument` | Documentos atascados en `PROCESSING` sin recovery | `claimDocumentWithRecovery` atómico + reconcilación vía `CommunicationLog` | `ProductDocumentRepository` (nuevo método), BD (+3 columnas) |
 | P9 | Sin `idempotency-key` | No hay diferenciación entre primer intento y retry | `IdempotencyKey` determinista (`documentId:traceId:attempt`) en request + `ProcessingDecision` SKIP_COMPLETED | `DocumentSendRequest` (+1 campo), 2 gateways (+metadata) |
 | P10 | Sin validación Base64 temprana | `Base64.getDecoder().decode()` inline sin contexto | `decodeSafe()` con `DomainException` + pipeline tolerante a fallos por documento | `Base64Utils` (+1 método), `LoadProductsUseCase` (refactor) |
@@ -2090,7 +2090,7 @@ MÉTRICAS:
 | Riesgo | Probabilidad | Impacto | Mitigación |
 |--------|-------------|---------|------------|
 | El refactor rompe los tests existentes | Media | Alto | Ejecutar `./gradlew test` tras cada fase; actualizar tests incrementalmente. |
-| `CommunicationLog` extra en cada fallo puede sobrecargar BD | Baja | Medio | Configurar `retryAttempts` máximo (3) y TTL en `communication_logs` vía scheduled cleanup. |
+| `CommunicationLog` extra en cada fallo puede sobrecargar BD | Baja | Medio | Configurar `retryAttempts` máximo (3). La limpieza de logs se realiza manualmente vía revisión de BD cuando sea necesario. |
 | La firma del template method (`final`) limita extensibilidad futura | Baja | Bajo | El patrón Template Method es extensible por diseño: nuevas subclases = nuevos gateways (FTP, etc.). |
 | El cambio de `contains` a regex incrementa latencia de validación | Muy baja | Bajo | Los patrones se compilan una vez (en constructor) y `Pattern.matcher().matches()` es O(n+m). Para 10 patrones sobre rutas de ~100 chars, el overhead es despreciable. |
 | Conflicto de merge con `feature/v2.0` | Media | Medio | La rama `v2.0` ya consolidó tipos (P1-P8). La `v3.0` parte desde `v2.0` con todos esos cambios integrados. |
