@@ -2,6 +2,9 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
+import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
+import com.example.fileprocessor.domain.port.out.FileGateway;
+import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;

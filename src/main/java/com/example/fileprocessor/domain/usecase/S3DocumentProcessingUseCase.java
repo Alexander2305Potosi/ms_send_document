@@ -2,6 +2,9 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
+import com.example.fileprocessor.domain.port.out.CommunicationLogRepository;
+import com.example.fileprocessor.domain.port.out.FileGateway;
+import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
