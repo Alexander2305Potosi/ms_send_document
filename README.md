@@ -314,6 +314,309 @@ Cuando un documento es ZIP, se extrae y procesa cada hijo:
 
 ---
 
+## Escenarios de Procesamiento de Documentos
+
+### 1. Escenario: Procesamiento Exitoso
+
+**Condicion:** Todos los documentos se procesan sin errores.
+
+```
+Flujo:
+1. claimDocument() → rowsUpdated=1 → documento clonado
+2. content disponible (pre-cargado o baixado)
+3. Validaciones passent (tamano, tipo, origin)
+4. sendWithResilience() → HTTP 200 + SOAPResponse.success
+5. checkpoint(SUCCESS) → UPDATE documento
+6. postProcess() → log final
+
+Resultado:
+- documento.status = SUCCESS
+- documento.correlation_id = ID del servicio
+- documento.processed_at = timestamp
+- producto.status = recalculado
+```
+
+### 2. Escenario: Fallo Permanente (No Retry)
+
+**Condicion:** Error que no permite reintento (ej. archivo corrupto, validation failed).
+
+```
+Flujo:
+1. claimDocument() → rowsUpdated=1
+2. Validacion falla → FileValidationException
+3. handleFailure() → status=FAILURE, errorCode=VALIDATION_FAILED
+4. checkpoint(FAILURE) → UPDATE documento
+
+Resultado:
+- documento.status = FAILURE
+- documento.error_code = VALIDATION_FAILED
+- documento.processed_at = timestamp
+- No se ejecuta send()
+```
+
+### 3. Escenario: Fallo Transitorio (Retry)
+
+**Condicion:** Error de red o servicio no disponible.
+
+```
+Flujo:
+1. claimDocument() → rowsUpdated=1
+2. send() → SoapCommunicationException (timeout, 503, etc.)
+3. isRetryableException() → true
+4. Retry.backoff() → reintentos con exponential backoff
+5. Si todos fallan → handleFailure()
+6. checkpoint(FAILURE) → status=RETRY
+
+Resultado:
+- documento.status = RETRY
+- documento.error_code = GATEWAY_TIMEOUT | SERVICE_UNAVAILABLE
+- documento.retry_count = 3
+```
+
+### 4. Escenario: Producto con Documentos Mixtos
+
+**Condicion:** Algunos documentos success, otros failure.
+
+```
+Flujo:
+1. findPendingDocuments() → Flux de 5 documentos
+2. doc1 → SUCCESS, doc2 → SUCCESS, doc3 → FAILURE
+3. doc4 → SUCCESS, doc5 → FAILURE
+4. Cuando todos los docs de un producto estan processed:
+   → ProductStatusAggregator.recalculate()
+   → producto.status = PARTIAL_FAILURE
+
+Resultado:
+- 3 docs SUCCESS, 2 docs FAILURE
+- producto.status = PARTIAL_FAILURE
+```
+
+### 5. Escenario: ZIP Vacio
+
+**Condicion:** El ZIP no contiene archivos hijos.
+
+```
+Flujo:
+1. extractZipChildren() → lista vacia
+2. handleEmptyZip()
+3. UPDATE documento ZIP → status=SUCCESS, message="ZIP was empty"
+4. No se crean documentos hijos
+
+Resultado:
+- documento ZIP.status = SUCCESS
+- documento ZIP.message = "ZIP was empty"
+- No se crean child documents
+```
+
+### 6. Escenario: ZIP con Archivos Mixtos
+
+**Condicion:** ZIP contiene archivos validos e invalidos.
+
+```
+Flujo:
+1. extractZipChildren() → 10 archivos extraidos
+2. processZipChildren() → flatMapSequential
+3. child1-5 → SUCCESS, child6 → FAILURE (tipo no permitido)
+4. child7-10 → SUCCESS
+5. aggregateZipResults() → allSuccess=false
+6. UPDATE ZIP padre → status=FAILURE, errorCode=ZIP_PARTIAL_FAILURE
+
+Resultado:
+- ZIP padre.status = FAILURE
+- ZIP padre.error_code = ZIP_PARTIAL_FAILURE
+- children tienen sus propios estados (SUCCESS/FAILURE)
+```
+
+### 7. Escenario: Claim atomico ( concurrency)
+
+**Condicion:** Multiple pods procesan el mismo documento.
+
+```
+Flujo:
+1. Pod A y Pod B llaman claimDocument(documentId)
+2. Database: UPDATE ... WHERE document_id=$1 AND status IN ('PENDING','RETRY')
+3. Pod A → rowsUpdated=1 → continua
+4. Pod B → rowsUpdated=0 → skip
+
+Resultado:
+- Solo 1 pod procesa el documento
+- El otro pod hace skip y continua con el siguiente
+```
+
+### 8. Escenario: Documento no encontrado en REST API
+
+**Condicion:** El documento tiene `content=null` y no existe en REST API.
+
+```
+Flujo:
+1. downloadContentIfNeeded() → GET /products/{id}/docs/{id}
+2. REST API returns 404
+3. handleFailure() → status=FAILURE, errorCode=DOCUMENT_NOT_FOUND
+
+Resultado:
+- documento.status = FAILURE
+- documento.error_code = DOCUMENT_NOT_FOUND
+```
+
+---
+
+## Flujos de Persistencia de Datos
+
+### Carga de Productos (LoadProductsUseCase)
+
+```
+OBTENER (GET) → REST API Externa
+│
+├── GET /products → List<ProductInfo>
+│
+├── Por cada producto:
+│   ├── INSERT products_to_process
+│   │   └── status = PENDING
+│   │
+│   └── Por cada documento en producto:
+│       ├── Validar: es ZIP? → ZipArchive.extractDocuments()
+│       ├── INSERT product_documents_to_process ( padre o hijos )
+│       └── content = Base64.decode( base64Content )
+│
+└── RETURN LoadProductsResult
+```
+
+**Guardar:**
+- `products_to_process`: product_id, name, status=PENDING, trace_id, created_at
+- `product_documents_to_process`: document_id, product_id, filename, content, content_type, origin, status=PENDING
+
+### Procesamiento de Documentos (AbstractDocumentProcessingUseCase)
+
+```
+OBTENER (SELECT) → Base de Datos
+│
+├── findPendingDocuments()
+│   └── SELECT * FROM product_documents_to_process
+│       WHERE status IN ('PENDING', 'RETRY')
+│       ORDER BY created_at ASC
+│
+├── Por cada documento:
+│   ├── claimDocument() → UPDATE ... RETURNING *
+│   │
+│   ├── MODIFICAR (UPDATE) → claim atomico
+│   │   └── status = PROCESSING (solo si rowsUpdated > 0)
+│   │
+│   ├── Si content null:
+│   │   ├── OBTENER (GET) → REST API
+│   │   │   └── GET /products/{productId}/documents/{documentId}
+│   │   └── MODIFICAR (UPDATE) → content
+│   │
+│   ├── Si es ZIP:
+│   │   ├── MODIFICAR (INSERT) → hijos extraidos
+│   │   └── processZipChildren() →递归
+│   │
+│   ├── ENVIAR (POST) → SOAP o S3
+│   │
+│   └── MODIFICAR (UPDATE) → resultado final
+│       └── status, correlation_id, processed_at, latency_ms, error_code
+│
+└── Verificar todos los docs del producto:
+    ├── OBTENER → count docs por status
+    └── MODIFICAR (UPDATE) → product status
+```
+
+### Calculo de Estado de Producto (ProductStatusAggregator)
+
+```
+OBTENER (SELECT) → product_documents_to_process
+│
+├── findDocumentsByProduct(productId)
+│   └── SELECT status, COUNT(*) FROM product_documents_to_process
+│       WHERE product_id = $1 GROUP BY status
+│
+├── Calcular:
+│   ├── allSuccess = todos status=SUCCESS
+│   ├── anyFailure = existe status=FAILURE
+│   ├── hasPending = existe status=PENDING/PROCESSING/RETRY
+│   ├── allSkipped = todos status=SKIPPED/NOT_SENT
+│   │
+│   └── Reglas:
+│       ├── hasPending → PENDING
+│       ├── allSuccess → SUCCESS
+│       ├── anyFailure && !allFailure → PARTIAL_FAILURE
+│       ├── allSkipped → COMPLETED_WITH_SKIPS
+│       └── allFailure → COMPLETED_WITH_FAILURES
+│
+└── MODIFICAR (UPDATE) → products_to_process.status
+```
+
+---
+
+## Reglas de Validacion y Restricciones
+
+### Validacion de Archivos
+
+| Regla | soap | s3 | Descripcion |
+|-------|------|----|-------------|
+| Tamano maximo | 10MB | 50MB | `max-size` en configuracion |
+| Tipos permitidos | pdf,txt,csv | pdf,txt,csv,zip | `allowed-types` |
+| Longitud filename | 255 chars | 255 chars | `max-filename-length` |
+| Origen valido | incoming,documents | incoming,documents | `origin-patterns-to-send` |
+
+### Patrones de Origin (Regex)
+
+```
+SOAP:
+- origin-patterns-to-send: "incoming", "documents"
+- folder-exclusion-regex: ".*/temp/.*", ".*/backup/.*"
+
+S3:
+- origin-patterns-to-send: "incoming", "documents", "exports"
+- folder-exclusion-regex: ".*/temp/.*"
+```
+
+### Formatos de Content-Type Soportados
+
+| Content-Type | Extension | soap | s3 |
+|--------------|-----------|------|-----|
+| application/pdf | .pdf | ✅ | ✅ |
+| text/plain | .txt | ✅ | ✅ |
+| text/csv | .csv | ✅ | ✅ |
+| application/zip | .zip | ❌ | ✅ |
+| application/json | .json | ❌ | ✅ |
+| image/png | .png | ❌ | ✅ |
+
+### Codigos de Error
+
+| Codigo | Descripcion | Retry |
+|--------|-------------|-------|
+| `VALIDATION_FAILED` | Archivo no cumple validaciones | No |
+| `INVALID_RESPONSE` | Respuesta SOAP invalida | No |
+| `DOCUMENT_NOT_FOUND` | Documento no existe en REST API | No |
+| `ZIP_EXTRACTION_FAILED` | Error extrayendo ZIP | No |
+| `ZIP_PARTIAL_FAILURE` | Algunos hijos fallaron | No |
+| `GATEWAY_TIMEOUT` | Timeout en gateway | Si |
+| `SERVICE_UNAVAILABLE` | Servicio no disponible (503) | Si |
+| `BAD_GATEWAY` | Error 500 del servicio | Si |
+| `CLIENT_ERROR` | Error 4xx del servicio | No |
+| `UNKNOWN_ERROR` | Error no categorizado | No |
+
+### Estados de Documento y Transiciones
+
+```
+PENDING → PROCESSING (claim exitoso)
+PENDING → NOT_SENT (validacion de origin/tamano/tipo falla)
+PROCESSING → SUCCESS (envio exitoso)
+PROCESSING → RETRY (error transitorio, reintentos disponibles)
+PROCESSING → FAILURE (error permanente o reintentos agotados)
+RETRY → PROCESSING (proximo intento)
+RETRY → FAILURE (reintentos agotados)
+```
+
+### Latencia Esperada por Gateway
+
+| Gateway | Latencia P50 | Latencia P99 | Timeout |
+|---------|--------------|--------------|---------|
+| SOAP | 150ms | 500ms | 30s |
+| S3 | 80ms | 200ms | 30s |
+
+---
+
 ## Modelo de Datos
 
 ### Tablas
