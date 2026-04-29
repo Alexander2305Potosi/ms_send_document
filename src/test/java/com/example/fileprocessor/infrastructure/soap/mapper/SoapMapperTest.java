@@ -127,7 +127,7 @@ class SoapMapperTest {
             () -> soapMapper.fromSoapXml(invalidXml, "trace-000"));
 
         assertEquals("INVALID_RESPONSE", exception.getErrorCode());
-        assertEquals("trace-000", exception.getTraceId());
+        assertTrue(exception.getMessage().contains("trace-000"));
         assertTrue(exception.getMessage().contains("Failed to parse"));
     }
 }

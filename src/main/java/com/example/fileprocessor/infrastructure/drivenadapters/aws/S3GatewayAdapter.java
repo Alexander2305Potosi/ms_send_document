@@ -25,6 +25,7 @@ import java.util.concurrent.CompletableFuture;
 public class S3GatewayAdapter implements FileGateway {
 
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
+    private static final String S3_KEY_PREFIX = "documents/";
 
     private final S3AsyncClient s3Client;
     private final S3Properties s3Properties;
@@ -117,7 +118,7 @@ public class S3GatewayAdapter implements FileGateway {
 
     private String buildKey(DocumentSendRequest request) {
         String sanitizedFilename = sanitizeFilename(request.getFilename());
-        return String.format("documents/%s/%s",
+        return String.format(S3_KEY_PREFIX + "%s/%s",
             request.getTraceId(),
             sanitizedFilename);
     }

@@ -103,10 +103,9 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             } catch (Exception e) {
                 log.error("Failed to decode Base64 for document {} ({}): {}",
                     documentId, filename, e.getMessage());
-                throw new com.example.fileprocessor.domain.exception.CommunicationException(
-                    "Base64 decode failed for document: " + documentId,
-                    com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64,
-                    traceId);
+            throw new com.example.fileprocessor.domain.exception.CommunicationException(
+                    "Base64 decode failed for document: " + documentId + ", traceId: " + traceId,
+                    com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64);
             }
         } else {
             content = null; // No content available

@@ -7,31 +7,15 @@ package com.example.fileprocessor.domain.exception;
  */
 public class CommunicationException extends DomainException {
 
-    private final String traceId;
-    private final int retryCount;
-
-    public CommunicationException(String message, String errorCode, String traceId) {
-        this(message, errorCode, traceId, 0);
-    }
-
-    public CommunicationException(String message, String errorCode, String traceId, int retryCount) {
+    public CommunicationException(String message, String errorCode) {
         super(message, errorCode);
-        this.traceId = traceId;
-        this.retryCount = retryCount;
     }
 
-    public CommunicationException(String message, String errorCode, String traceId, Throwable cause) {
-        super(message, errorCode);
-        this.traceId = traceId;
-        this.retryCount = 0;
-        initCause(cause);
+    public CommunicationException(String message, String errorCode, Throwable cause) {
+        super(message, errorCode, cause);
     }
 
-    public String getTraceId() {
-        return traceId;
-    }
-
-    public int getRetryCount() {
-        return retryCount;
+    public static CommunicationException withTraceId(String message, String errorCode, String traceId) {
+        return new CommunicationException(message + " [traceId=" + traceId + "]", errorCode);
     }
 }

@@ -174,7 +174,7 @@ class SoapGatewayAdapterTest {
             .expectErrorMatches(throwable -> {
                 if (!(throwable instanceof SoapCommunicationException)) return false;
                 SoapCommunicationException sce = (SoapCommunicationException) throwable;
-                return "trace-123".equals(sce.getTraceId());
+                return sce.getMessage().contains("trace-123");
             })
             .verify();
     }

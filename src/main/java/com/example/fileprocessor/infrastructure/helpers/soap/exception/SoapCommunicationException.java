@@ -5,14 +5,10 @@ import com.example.fileprocessor.domain.exception.CommunicationException;
 public class SoapCommunicationException extends CommunicationException {
 
     public SoapCommunicationException(String message, String errorCode, String traceId) {
-        super(message, errorCode, traceId, 0);
-    }
-
-    public SoapCommunicationException(String message, String errorCode, String traceId, int retryCount) {
-        super(message, errorCode, traceId, retryCount);
+        super(message + " [traceId=" + traceId + "]", errorCode);
     }
 
     public SoapCommunicationException(String message, String errorCode, String traceId, Throwable cause) {
-        super(message, errorCode, traceId, cause);
+        super(message + " [traceId=" + traceId + "]", errorCode, cause);
     }
 }
