@@ -101,16 +101,19 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             try {
                 content = Base64Utils.decodeSafe(contentBase64, filename, documentId);
             } catch (Exception e) {
-                log.warn("Failed to decode Base64 for document {} ({}): {}",
+                log.error("Failed to decode Base64 for document {} ({}): {}",
                     documentId, filename, e.getMessage());
-                content = new byte[0];
+                throw new com.example.fileprocessor.domain.exception.CommunicationException(
+                    "Base64 decode failed for document: " + documentId,
+                    com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64,
+                    null);
             }
         } else {
-            content = new byte[0];
+            content = null; // No content available
         }
 
         Object sizeObj = json.get("size");
-        long size = sizeObj instanceof Number ? ((Number) sizeObj).longValue() : (long) content.length;
+        long size = sizeObj instanceof Number ? ((Number) sizeObj).longValue() : (content != null ? content.length : 0);
 
         Object isZipObj = json.get("isZip");
         boolean isZip = isZipObj instanceof Boolean ? (Boolean) isZipObj : false;
