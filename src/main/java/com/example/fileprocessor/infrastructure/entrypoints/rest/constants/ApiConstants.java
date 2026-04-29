@@ -19,7 +19,7 @@ public final class ApiConstants {
     public static final String PARAM_PROCESSOR = "processor";
 
     // HTTP headers
-    public static final String HEADER_TRACE_ID = "X-Trace-Id";
+    public static final String HEADER_TRACE_ID = "message-id";
 
     // SOAP envelope constants
     public static final String SOAP_HEADER_PREFIX = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
