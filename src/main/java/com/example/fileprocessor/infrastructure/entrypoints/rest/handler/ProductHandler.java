@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
@@ -23,8 +23,8 @@ public class ProductHandler {
     private static final Logger log = LoggerFactory.getLogger(ProductHandler.class);
 
     private final LoadProductsUseCase loadProductsUseCase;
-    private final SoapDocumentProcessingUseCase soapDocumentUseCase;
-    private final S3DocumentProcessingUseCase s3DocumentUseCase;
+    private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
+    private final AbstractDocumentProcessingUseCase s3DocumentUseCase;
 
     public ProductHandler(LoadProductsUseCase loadProductsUseCase,
                          SoapDocumentProcessingUseCase soapDocumentUseCase,
@@ -48,32 +48,32 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
-        String processorType = request.queryParam(ApiConstants.PARAM_PROCESSOR).orElse(ApiConstants.PROCESSOR_SOAP);
+        String processorType = request.queryParam(ApiConstants.PARAM_PROCESSOR)
+            .map(String::toLowerCase)
+            .orElse(ApiConstants.PROCESSOR_SOAP);
         String traceId = resolveTraceId(request);
 
-        if (ApiConstants.PROCESSOR_S3.equalsIgnoreCase(processorType)) {
-            log.info("Starting S3 document processing, traceId: {}", traceId);
-            return ServerResponse.accepted()
-                .bodyValue(s3DocumentUseCase.executePendingDocuments()
-                    .doOnNext(result -> log.info("S3 Document processed: correlationId={}, status={}",
-                        result.getCorrelationId(), result.getStatus()))
-                    .doOnError(error -> log.error("S3 Processing failed for traceId {}: {}", traceId, error.getMessage()))
-                    .collectList()
-                );
-        }
+        return ServerResponse.accepted()
+            .bodyValue(getProcessor(processorType, traceId).executePendingDocuments()
+                .doOnNext(result -> log.info("Document processed: correlationId={}, status={}",
+                    result.getCorrelationId(), result.getStatus()))
+                .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
+                .collectList());
+    }
 
-        if (!ApiConstants.PROCESSOR_SOAP.equalsIgnoreCase(processorType)) {
+    private AbstractDocumentProcessingUseCase getProcessor(String processorType, String traceId) {
+        if (ApiConstants.PROCESSOR_S3.equals(processorType)) {
+            if (s3DocumentUseCase == null) {
+                throw new IllegalStateException("S3 processor not available - enable 's3' profile");
+            }
+            log.info("Using S3 processor, traceId: {}", traceId);
+            return s3DocumentUseCase;
+        }
+        if (!ApiConstants.PROCESSOR_SOAP.equals(processorType)) {
             log.warn("Unknown processor type '{}', defaulting to SOAP, traceId: {}", processorType, traceId);
         }
-
-        log.info("Starting SOAP document processing, traceId: {}", traceId);
-        return ServerResponse.accepted()
-            .bodyValue(soapDocumentUseCase.executePendingDocuments()
-                .doOnNext(result -> log.info("SOAP Document processed: correlationId={}, status={}",
-                    result.getCorrelationId(), result.getStatus()))
-                .doOnError(error -> log.error("SOAP Processing failed for traceId {}: {}", traceId, error.getMessage()))
-                .collectList()
-            );
+        log.info("Using SOAP processor, traceId: {}", traceId);
+        return soapDocumentUseCase;
     }
 
     private static String resolveTraceId(ServerRequest request) {
