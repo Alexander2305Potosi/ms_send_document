@@ -53,7 +53,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .retrieve()
             .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
             .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-            .map(list -> list.stream().map(this::mapToProductInfo).toList())
+            .map(list -> list.stream().map(json -> mapToProductInfo(json, traceId)).toList())
             .flatMapMany(Flux::fromIterable)
             .doOnNext(product -> log.info("Product retrieved: {}", product.getProductId()));
     }
@@ -71,16 +71,16 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .retrieve()
             .bodyToMono(MAP_TYPE_REF)
             .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-            .map(this::mapToProductDocumentInfo)
+            .map(json -> mapToProductDocumentInfo(json, traceId))
             .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
     }
 
-    private ProductInfo mapToProductInfo(Map<String, Object> json) {
+    private ProductInfo mapToProductInfo(Map<String, Object> json, String traceId) {
         Object docsObj = json.get("documents");
         List<ProductDocumentInfo> documents = (docsObj instanceof List<?>)
             ? ((List<?>) docsObj).stream()
                 .filter(m -> m instanceof Map)
-                .map(m -> mapToProductDocumentInfo((Map<String, Object>) m))
+                .map(m -> mapToProductDocumentInfo((Map<String, Object>) m, traceId))
                 .toList()
             : List.of();
 
@@ -91,7 +91,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .build();
     }
 
-    private ProductDocumentInfo mapToProductDocumentInfo(Map<String, Object> json) {
+    private ProductDocumentInfo mapToProductDocumentInfo(Map<String, Object> json, String traceId) {
         String contentBase64 = (String) json.get("content");
         String filename = (String) json.get("filename");
         String documentId = (String) json.get("documentId");
@@ -106,7 +106,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 throw new com.example.fileprocessor.domain.exception.CommunicationException(
                     "Base64 decode failed for document: " + documentId,
                     com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64,
-                    null);
+                    traceId);
             }
         } else {
             content = null; // No content available

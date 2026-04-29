@@ -25,19 +25,10 @@ public final class ApiConstants {
     // HTTP headers
     public static final String HEADER_TRACE_ID = "X-Trace-Id";
 
-    // Operation types - reference domain constants
-    public static final String OPERATION_LOAD = com.example.fileprocessor.domain.entity.AsyncOperationStatus.OPERATION_LOAD;
-    public static final String OPERATION_PROCESS = com.example.fileprocessor.domain.entity.AsyncOperationStatus.OPERATION_PROCESS;
-
-    // Status values - reference domain constants
-    public static final String STATUS_LOADING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_LOADING;
-    public static final String STATUS_PROCESSING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_PROCESSING;
-    public static final String STATUS_COMPLETED = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_COMPLETED;
+    // Operation status values
     public static final String STATUS_FAILED = "FAILED";
 
-    // REST operation messages - reference domain constants
-    public static final String MSG_LOADING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.MSG_LOADING;
-    public static final String MSG_PROCESSING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.MSG_PROCESSING;
+    // REST operation messages
     public static final String MSG_NOT_FOUND = "Operation not found for traceId: ";
 
     // SOAP response constants

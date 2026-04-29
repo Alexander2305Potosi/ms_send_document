@@ -2,8 +2,8 @@ package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
 import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
+import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
@@ -34,6 +34,14 @@ public class SoapGatewayAdapter implements FileGateway {
 
     private static final Logger log = LoggerFactory.getLogger(SoapGatewayAdapter.class);
     private static final int MAX_ERROR_BODY_LENGTH = 500;
+
+    /*
+     * Error Handling Strategy:
+     * - Infrastructure errors (connection failures, timeouts, 5xx) -> propagate as SoapCommunicationException
+     *   These trigger circuit breaker to open and protect the system.
+     * - Business errors (4xx client errors, validation failures) -> return FileUploadResult with FAILURE status
+     *   These are expected responses from the external service and should be recorded, not thrown.
+     */
 
     private final WebClient webClient;
     private final SoapProperties properties;

@@ -63,6 +63,10 @@ public class ProductHandler {
                 );
         }
 
+        if (!ApiConstants.PROCESSOR_SOAP.equalsIgnoreCase(processorType)) {
+            log.warn("Unknown processor type '{}', defaulting to SOAP, traceId: {}", processorType, traceId);
+        }
+
         log.info("Starting SOAP document processing, traceId: {}", traceId);
         return ServerResponse.accepted()
             .bodyValue(soapDocumentUseCase.executePendingDocuments()

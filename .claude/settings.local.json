@@ -164,7 +164,25 @@
       "Bash(./gradlew --no-daemon clean compileJava --refresh-dependencies)",
       "Bash(./gradlew --no-daemon clean compileJava --info)",
       "Bash(javac -version)",
-      "Read(//Users/alexander2305/.gradle/**)"
+      "Read(//Users/alexander2305/.gradle/**)",
+      "Bash(./gradlew compileJava --info)",
+      "Bash(pkill -f gradle)",
+      "Bash(rm -rf ~/.gradle/daemon/*)",
+      "Bash(javac -d /tmp/testcompile -sourcepath src/main/java src/main/java/com/example/fileprocessor/domain/usecase/AbstractDocumentProcessingUseCase.java)",
+      "Bash(./gradlew compileJava --debug)",
+      "Bash(./gradlew tasks *)",
+      "Bash(./gradlew *)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.0.5+11/Contents/Home ./gradlew compileJava)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.0.5+11/Contents/Home ./gradlew test *)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.0.5+11/Contents/Home ./gradlew compileJava test)",
+      "Bash(awk '{print $NF}')",
+      "Bash(grep -rEn \"\\\\b\\\\d{2,}\\\\b\" /Users/alexander2305/Downloads/file-processor-service/src/main/java --include=\"*.java\")",
+      "Bash(awk -F. '{print $NF}')",
+      "Bash(xargs -I{} basename {})",
+      "Bash(export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.0.5+11/Contents/Home)",
+      "Bash(curl -s http://localhost:8080/api/v1/products/load -H \"X-Trace-Id: test-123\")",
+      "Bash(curl -s http://localhost:8080/api/v1/products)",
+      "Bash(kill 58939)"
     ]
   }
 }

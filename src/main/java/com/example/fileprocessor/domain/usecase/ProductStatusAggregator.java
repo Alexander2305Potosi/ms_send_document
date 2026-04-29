@@ -107,6 +107,8 @@ public class ProductStatusAggregator {
                 case "RETRY" -> retry++;
                 case "SKIPPED" -> skipped++;
                 case "NOT_SENT" -> notSent++;
+                default -> log.warn("Unknown document status '{}' for document {} in product {}",
+                    doc.getStatus(), doc.getDocumentId(), doc.getProductId());
             }
         }
         return new StatusCounts(success, failure, pending, processing, retry, skipped, notSent);

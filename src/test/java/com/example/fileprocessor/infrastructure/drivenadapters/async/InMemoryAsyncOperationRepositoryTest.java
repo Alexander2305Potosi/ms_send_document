@@ -97,8 +97,23 @@ class InMemoryAsyncOperationRepositoryTest {
     }
 
     @Test
-    void updateProgress_withNonExistentTraceId_shouldNotFail() {
+    void updateProgress_withNonExistentTraceId_shouldFail() {
         StepVerifier.create(repository.updateProgress("non-existent", 10, 5, 5))
-            .verifyComplete();
+            .expectError(IllegalStateException.class)
+            .verify();
+    }
+
+    @Test
+    void incrementProgress_withNonExistentTraceId_shouldFail() {
+        StepVerifier.create(repository.incrementProgress("non-existent", true))
+            .expectError(IllegalStateException.class)
+            .verify();
+    }
+
+    @Test
+    void markCompleted_withNonExistentTraceId_shouldFail() {
+        StepVerifier.create(repository.markCompleted("non-existent"))
+            .expectError(IllegalStateException.class)
+            .verify();
     }
 }

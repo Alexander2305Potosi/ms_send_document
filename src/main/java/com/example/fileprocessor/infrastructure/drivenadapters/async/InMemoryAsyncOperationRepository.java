@@ -32,60 +32,58 @@ public class InMemoryAsyncOperationRepository implements AsyncOperationRepositor
 
     @Override
     public Mono<Void> updateProgress(String traceId, int processed, int success, int failed) {
-        return Mono.fromRunnable(() -> {
-            AsyncOperationStatus updated = operations.compute(traceId, (key, current) -> {
-                if (current == null) {
-                    log.warn("Cannot update progress - operation not found: traceId={}", traceId);
-                    return null;
-                }
-                return current.withProgress(
-                    current.getTotalItems() > 0 ? current.getTotalItems() : processed,
-                    processed,
-                    success,
-                    failed
-                );
-            });
-            if (updated != null) {
-                log.debug("Progress updated: traceId={}, processed={}, success={}, failed={}",
-                    traceId, processed, success, failed);
+        return Mono.defer(() -> {
+            AsyncOperationStatus current = operations.get(traceId);
+            if (current == null) {
+                return Mono.error(new IllegalStateException(
+                    "Cannot update progress - operation not found: traceId=" + traceId));
             }
+            AsyncOperationStatus updated = current.withProgress(
+                current.getTotalItems() > 0 ? current.getTotalItems() : processed,
+                processed,
+                success,
+                failed
+            );
+            operations.put(traceId, updated);
+            log.debug("Progress updated: traceId={}, processed={}, success={}, failed={}",
+                traceId, processed, success, failed);
+            return Mono.empty();
         });
     }
 
     @Override
     public Mono<Void> incrementProgress(String traceId, boolean success) {
-        return Mono.fromRunnable(() -> {
-            operations.compute(traceId, (key, current) -> {
-                if (current == null) {
-                    log.warn("Cannot increment progress - operation not found: traceId={}", traceId);
-                    return null;
-                }
-                int newProcessed = current.getProcessedItems() + 1;
-                int newSuccess = current.getSuccessItems() + (success ? 1 : 0);
-                int newFailed = current.getFailedItems() + (success ? 0 : 1);
-                return current.withProgress(
-                    current.getTotalItems() > 0 ? current.getTotalItems() : newProcessed,
-                    newProcessed,
-                    newSuccess,
-                    newFailed
-                );
-            });
+        return Mono.defer(() -> {
+            AsyncOperationStatus current = operations.get(traceId);
+            if (current == null) {
+                return Mono.error(new IllegalStateException(
+                    "Cannot increment progress - operation not found: traceId=" + traceId));
+            }
+            int newProcessed = current.getProcessedItems() + 1;
+            int newSuccess = current.getSuccessItems() + (success ? 1 : 0);
+            int newFailed = current.getFailedItems() + (success ? 0 : 1);
+            AsyncOperationStatus updated = current.withProgress(
+                current.getTotalItems() > 0 ? current.getTotalItems() : newProcessed,
+                newProcessed,
+                newSuccess,
+                newFailed
+            );
+            operations.put(traceId, updated);
+            return Mono.empty();
         });
     }
 
     @Override
     public Mono<Void> markCompleted(String traceId) {
-        return Mono.fromRunnable(() -> {
-            AsyncOperationStatus completed = operations.compute(traceId, (key, current) -> {
-                if (current == null) {
-                    log.warn("Cannot mark completed - operation not found: traceId={}", traceId);
-                    return null;
-                }
-                return current.completed();
-            });
-            if (completed != null) {
-                log.info("Async operation completed: traceId={}", traceId);
+        return Mono.defer(() -> {
+            AsyncOperationStatus current = operations.get(traceId);
+            if (current == null) {
+                return Mono.error(new IllegalStateException(
+                    "Cannot mark completed - operation not found: traceId=" + traceId));
             }
+            operations.put(traceId, current.completed());
+            log.info("Async operation completed: traceId={}", traceId);
+            return Mono.empty();
         });
     }
 

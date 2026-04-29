@@ -108,7 +108,7 @@ public class SoapMapper {
             log.error("Error parsing SOAP response: {}", e.getMessage());
             throw new SoapCommunicationException(
                 "Failed to parse SOAP response: " + e.getMessage(),
-                ProcessingResultCodes.INVALID_RESPONSE, traceId);
+                ProcessingResultCodes.INVALID_RESPONSE, traceId, e);
         }
     }
 }
