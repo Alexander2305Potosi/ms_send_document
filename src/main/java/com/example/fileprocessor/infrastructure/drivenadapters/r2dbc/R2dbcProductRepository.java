@@ -28,11 +28,14 @@ public class R2dbcProductRepository implements ProductRepository {
         String sql = """
             SELECT product_id, name, status, created_at, processed_at, trace_id
             FROM products_to_process
-            WHERE status IN ('%s', '%s', '%s')
+            WHERE status IN ($1, $2, $3)
             ORDER BY created_at ASC
-            """.formatted(DocumentStatus.PENDING.name(), DocumentStatus.RETRY.name(), DocumentStatus.PROCESSING.name());
+            """;
 
         return databaseClient.sql(sql)
+            .bind("$1", DocumentStatus.PENDING.name())
+            .bind("$2", DocumentStatus.RETRY.name())
+            .bind("$3", DocumentStatus.PROCESSING.name())
             .map((row, metadata) -> ProductToProcess.builder()
                 .productId(row.get("product_id", String.class))
                 .name(row.get("name", String.class))

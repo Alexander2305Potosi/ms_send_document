@@ -33,11 +33,14 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
                    trace_id, correlation_id, error_code
             FROM product_documents_to_process
-            WHERE status IN ('%s', '%s', '%s')
+            WHERE status IN ($1, $2, $3)
             ORDER BY created_at ASC
-            """.formatted(DocumentStatus.PENDING.name(), DocumentStatus.RETRY.name(), DocumentStatus.PROCESSING.name());
+            """;
 
         return databaseClient.sql(sql)
+            .bind("$1", DocumentStatus.PENDING.name())
+            .bind("$2", DocumentStatus.RETRY.name())
+            .bind("$3", DocumentStatus.PROCESSING.name())
             .map(this::mapRowToDocument)
             .all();
     }
@@ -94,16 +97,18 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Mono<Boolean> claimDocument(String documentId) {
         String sql = """
             UPDATE product_documents_to_process
-            SET status = '%s', trace_id = $2, processed_at = $3
-            WHERE document_id = $1 AND status = '%s'
-            """.formatted(DocumentStatus.PROCESSING.name(), DocumentStatus.PENDING.name());
+            SET status = $2, trace_id = $3, processed_at = $4
+            WHERE document_id = $1 AND status = $5
+            """;
 
         String traceId = UUID.randomUUID().toString();
 
         return databaseClient.sql(sql)
             .bind("$1", documentId)
-            .bind("$2", traceId)
-            .bind("$3", Instant.now())
+            .bind("$2", DocumentStatus.PROCESSING.name())
+            .bind("$3", traceId)
+            .bind("$4", Instant.now())
+            .bind("$5", DocumentStatus.PENDING.name())
             .fetch()
             .rowsUpdated()
             .map(rowsUpdated -> rowsUpdated > 0)
