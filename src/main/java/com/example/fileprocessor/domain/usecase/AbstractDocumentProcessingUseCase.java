@@ -164,83 +164,110 @@ public abstract class AbstractDocumentProcessingUseCase {
      * Processes a ZIP document by extracting its children and processing each.
      */
     private Mono<FileUploadResult> processZipDocument(ProductDocumentToProcess zipDoc, String traceId) {
-        log.info("Processing ZIP document: {}, filename: {}",
-            zipDoc.getDocumentId(), zipDoc.getFilename());
+        return extractZipChildren(zipDoc, traceId)
+            .flatMap(children -> children.isEmpty()
+                ? handleEmptyZip(zipDoc, traceId)
+                : processZipChildren(zipDoc, children, traceId));
+    }
 
-        ZipArchive archive = ZipArchive.builder()
-            .zipContent(zipDoc.getContent())
-            .originalFilename(zipDoc.getFilename())
-            .build();
-
-        List<ZipArchive.ExtractedDocument> children;
+    private Mono<List<ZipArchive.ExtractedDocument>> extractZipChildren(ProductDocumentToProcess zipDoc, String traceId) {
         try {
-            children = archive.extractDocuments();
+            ZipArchive archive = ZipArchive.builder()
+                .zipContent(zipDoc.getContent())
+                .originalFilename(zipDoc.getFilename())
+                .build();
+            List<ZipArchive.ExtractedDocument> children = archive.extractDocuments();
             log.info("ZIP {} contains {} documents", zipDoc.getFilename(), children.size());
+            return Mono.just(children);
         } catch (Exception e) {
             log.error("Failed to extract ZIP {}: {}", zipDoc.getFilename(), e.getMessage());
-            return documentRepository.updateStatus(
+            documentRepository.updateStatus(
                     zipDoc.getDocumentId(), DocumentStatus.FAILURE.name(), traceId,
                     null, ProcessingResultCodes.ZIP_EXTRACTION_FAILED)
-                .thenReturn(buildFailureResult(ProcessingResultCodes.ZIP_EXTRACTION_FAILED, traceId));
+                .subscribe();
+            return Mono.just(List.of());
         }
+    }
 
-        if (children.isEmpty()) {
-            log.warn("ZIP {} is empty", zipDoc.getFilename());
-            return documentRepository.updateStatus(
-                    zipDoc.getDocumentId(), DocumentStatus.SUCCESS.name(), traceId,
-                    null, null)
-                .thenReturn(FileUploadResult.builder()
-                    .status(DocumentStatus.SUCCESS.name())
-                    .correlationId(zipDoc.getDocumentId())
-                    .traceId(traceId)
-                    .processedAt(Instant.now())
-                    .success(true)
-                    .build());
-        }
+    private Mono<FileUploadResult> handleEmptyZip(ProductDocumentToProcess zipDoc, String traceId) {
+        log.warn("ZIP {} is empty", zipDoc.getFilename());
+        return documentRepository.updateStatus(
+                zipDoc.getDocumentId(), DocumentStatus.SUCCESS.name(), traceId, null, null)
+            .thenReturn(successResult(zipDoc.getDocumentId(), traceId, "ZIP was empty"));
+    }
 
+    private Mono<FileUploadResult> processZipChildren(
+            ProductDocumentToProcess zipDoc,
+            List<ZipArchive.ExtractedDocument> children,
+            String traceId) {
         return Flux.fromIterable(children)
-            .flatMapSequential(extracted -> {
-                String childDocId = zipDoc.getDocumentId() + "_" + extracted.getFilename();
-                Instant now = Instant.now();
-
-                ProductDocumentToProcess childDoc = ProductDocumentToProcess.builder()
-                    .documentId(childDocId)
-                    .productId(zipDoc.getProductId())
-                    .parentDocumentId(zipDoc.getDocumentId())
-                    .filename(extracted.getFilename())
-                    .content(extracted.getContent())
-                    .contentType(extracted.getContentType())
-                    .origin(zipDoc.getOrigin())
-                    .status(DocumentStatus.PENDING.name())
-                    .createdAt(now)
-                    .isZipArchive(false)
-                    .build();
-
-                return documentRepository.save(childDoc)
-                    .then(processDocumentInternal(childDoc, traceId));
-            })
+            .flatMapSequential(extracted -> processZipChild(zipDoc, extracted, traceId))
             .collectList()
-            .flatMap(results -> {
-                boolean allSuccess = results.stream().allMatch(FileUploadResult::isSuccess);
-                String parentStatus = allSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name();
-                String errorCode = allSuccess ? null : ProcessingResultCodes.ZIP_PARTIAL_FAILURE;
+            .flatMap(results -> aggregateZipResults(zipDoc, results, traceId));
+    }
 
-                return documentRepository.updateStatus(
-                        zipDoc.getDocumentId(), parentStatus, traceId, null, errorCode)
-                    .thenReturn(FileUploadResult.builder()
-                        .status(parentStatus)
-                        .correlationId(zipDoc.getDocumentId())
-                        .traceId(traceId)
-                        .processedAt(Instant.now())
-                        .success(allSuccess)
-                        .errorCode(errorCode)
-                        .message(allSuccess
-                            ? "ZIP processed successfully with " + results.size() + " documents"
-                            : "ZIP processed with failures: " + results.size() + " documents")
-                        .build());
-            })
-            .doOnSuccess(result -> log.info("ZIP document {} processed: status={}, success={}",
-                zipDoc.getDocumentId(), result.getStatus(), result.isSuccess()));
+    private Mono<FileUploadResult> processZipChild(
+            ProductDocumentToProcess zipDoc,
+            ZipArchive.ExtractedDocument extracted,
+            String traceId) {
+        ProductDocumentToProcess childDoc = buildChildDocument(zipDoc, extracted);
+        return documentRepository.save(childDoc)
+            .then(processDocumentInternal(childDoc, traceId));
+    }
+
+    private ProductDocumentToProcess buildChildDocument(
+            ProductDocumentToProcess zipDoc,
+            ZipArchive.ExtractedDocument extracted) {
+        return ProductDocumentToProcess.builder()
+            .documentId(zipDoc.getDocumentId() + "_" + extracted.getFilename())
+            .productId(zipDoc.getProductId())
+            .parentDocumentId(zipDoc.getDocumentId())
+            .filename(extracted.getFilename())
+            .content(extracted.getContent())
+            .contentType(extracted.getContentType())
+            .origin(zipDoc.getOrigin())
+            .status(DocumentStatus.PENDING.name())
+            .createdAt(Instant.now())
+            .isZipArchive(false)
+            .build();
+    }
+
+    private Mono<FileUploadResult> aggregateZipResults(
+            ProductDocumentToProcess zipDoc,
+            List<FileUploadResult> results,
+            String traceId) {
+        boolean allSuccess = results.stream().allMatch(FileUploadResult::isSuccess);
+        String status = allSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name();
+        String errorCode = allSuccess ? null : ProcessingResultCodes.ZIP_PARTIAL_FAILURE;
+
+        return documentRepository.updateStatus(
+                zipDoc.getDocumentId(), status, traceId, null, errorCode)
+            .thenReturn(FileUploadResult.builder()
+                .status(status)
+                .correlationId(zipDoc.getDocumentId())
+                .traceId(traceId)
+                .processedAt(Instant.now())
+                .success(allSuccess)
+                .errorCode(errorCode)
+                .message(summaryMessage(allSuccess, results.size()))
+                .build());
+    }
+
+    private FileUploadResult successResult(String correlationId, String traceId, String message) {
+        return FileUploadResult.builder()
+            .status(DocumentStatus.SUCCESS.name())
+            .correlationId(correlationId)
+            .traceId(traceId)
+            .processedAt(Instant.now())
+            .success(true)
+            .message(message)
+            .build();
+    }
+
+    private String summaryMessage(boolean allSuccess, int count) {
+        return allSuccess
+            ? "ZIP processed successfully with " + count + " documents"
+            : "ZIP processed with failures: " + count + " documents";
     }
 
     // === RESILIENCE STRATEGY ===
