@@ -18,29 +18,8 @@ public final class ApiConstants {
     // Query parameter names
     public static final String PARAM_PROCESSOR = "processor";
 
-    // Error messages
-    public static final String MSG_S3_NOT_AVAILABLE = "S3 processor is not available. Please enable the 's3' profile.";
-    public static final String MSG_UNKNOWN_PROCESSOR = "Unknown processor type '{}', defaulting to SOAP";
-
     // HTTP headers
     public static final String HEADER_TRACE_ID = "X-Trace-Id";
-
-    // Operation status values
-    public static final String STATUS_FAILED = "FAILED";
-
-    // REST operation messages
-    public static final String MSG_NOT_FOUND = "Operation not found for traceId: ";
-
-    // SOAP response constants
-    public static final String SOAP_STATUS_OK = "OK";
-
-    // Product document constants
-    public static final String EXTENSION_ZIP = "zip";
-
-    // File path characters (for validation)
-    public static final String PATH_DOUBLE_DOT = "..";
-    public static final String PATH_SLASH = "/";
-    public static final String PATH_BACKSLASH = "\\";
 
     // SOAP envelope constants
     public static final String SOAP_HEADER_PREFIX = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
