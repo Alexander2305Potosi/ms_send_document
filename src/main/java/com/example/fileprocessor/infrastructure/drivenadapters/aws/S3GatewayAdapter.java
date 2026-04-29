@@ -116,8 +116,32 @@ public class S3GatewayAdapter implements FileGateway {
     }
 
     private String buildKey(DocumentSendRequest request) {
+        String sanitizedFilename = sanitizeFilename(request.getFilename());
         return String.format("documents/%s/%s",
             request.getTraceId(),
-            request.getFilename());
+            sanitizedFilename);
+    }
+
+    /**
+     * Sanitizes filename to prevent path traversal attacks.
+     * Removes ../ sequences and normalizes the path.
+     */
+    private String sanitizeFilename(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "unnamed";
+        }
+
+        // Remove any path components that attempt traversal
+        String sanitized = filename
+            .replace("..", "")
+            .replace("/", "")
+            .replace("\\", "");
+
+        // If result is empty or only whitespace, use default
+        if (sanitized.isBlank()) {
+            return "unnamed";
+        }
+
+        return sanitized;
     }
 }
