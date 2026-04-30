@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
@@ -36,30 +37,26 @@ public class SoapMapper {
         this.jaxbContext = envelopeWrapper.getJaxbContext();
     }
 
-    public String toSoapXml(byte[] content, String filename,
-                           String contentType, long fileSize,
-                           String parentFolder, String childFolder) {
-        String base64Content = content != null
-            ? Base64.getEncoder().encodeToString(content)
+    public String toSoapXml(FileUploadRequest fileUploadRequest) {
+        String base64Content = fileUploadRequest.getContent() != null
+            ? Base64.getEncoder().encodeToString(fileUploadRequest.getContent())
             : "";
 
         UploadFileRequest uploadRequest = new UploadFileRequest(
-            base64Content,
-            filename,
-            contentType,
-            fileSize,
-            Instant.now().toString(),
-            parentFolder,
-            childFolder
+                base64Content,
+                fileUploadRequest.getFilename(),
+                fileUploadRequest.getContentType(),
+                fileUploadRequest.getFileSize(),
+                Instant.now().toString(),
+                fileUploadRequest.getParentFolder(),
+                fileUploadRequest.getChildFolder()
         );
 
         return marshalRequest(uploadRequest);
     }
 
-    public String toFullSoapMessage(String documentId, byte[] content, String filename,
-                                    String contentType, long fileSize,
-                                    String parentFolder, String childFolder) {
-        String soapBody = toSoapXml(content, filename, contentType, fileSize, parentFolder, childFolder);
+    public String toFullSoapMessage(FileUploadRequest fileUploadRequest) {
+        String soapBody = toSoapXml(fileUploadRequest);
         return SoapConstants.HEADER_PREFIX
             + SoapConstants.ENVELOPE_START + SoapConstants.SOAP_ENVELOPE + "\"\n"
             + "               xmlns:file=\"" + SoapConstants.FILE_SERVICE + "\">\n"
