@@ -25,8 +25,6 @@ public class ProductDocumentToProcess {
     private final String correlationId;
     private final String errorCode;
     @Builder.Default
-    private final boolean isZipArchive = false;
-    @Builder.Default
     private final double fileSizeMb = 0.0;
     @Builder.Default
     private final String parentFolder = ".";
@@ -37,25 +35,25 @@ public class ProductDocumentToProcess {
     @Builder.Default
     private final boolean skipped = false;
 
-    public ProductDocumentToProcess withContent(byte[] newContent, String newFilename, String newContentType, double newFileSizeMb) {
+    public ProductDocumentToProcess withContent(byte[] newContent) {
+        double newFileSizeMb = newContent != null ? newContent.length / (1024.0 * 1024.0) : 0.0;
         return ProductDocumentToProcess.builder()
             .documentId(this.documentId)
             .productId(this.productId)
             .parentDocumentId(this.parentDocumentId)
-            .filename(newFilename != null ? newFilename : this.filename)
+            .filename(this.filename)
             .content(newContent)
-            .contentType(newContentType != null ? newContentType : this.contentType)
+            .contentType(this.contentType)
             .origin(this.origin)
             .status(this.status)
             .createdAt(this.createdAt)
             .processedAt(this.processedAt)
             .correlationId(this.correlationId)
             .errorCode(this.errorCode)
-            .isZipArchive(this.isZipArchive)
             .fileSizeMb(newFileSizeMb)
             .parentFolder(this.parentFolder)
             .childFolder(this.childFolder)
-            .fileSizeBytes((long) (newFileSizeMb * 1024 * 1024))
+            .fileSizeBytes(newContent != null ? newContent.length : 0)
             .skipped(this.skipped)
             .build();
     }
@@ -74,7 +72,6 @@ public class ProductDocumentToProcess {
             .processedAt(this.processedAt)
             .correlationId(this.correlationId)
             .errorCode(this.errorCode)
-            .isZipArchive(this.isZipArchive)
             .fileSizeMb(this.fileSizeMb)
             .parentFolder(this.parentFolder)
             .childFolder(this.childFolder)

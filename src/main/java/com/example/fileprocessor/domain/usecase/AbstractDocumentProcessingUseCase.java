@@ -58,11 +58,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
             .flatMap(docInfo -> {
                 byte[] content = docInfo.content() != null ? docInfo.content() : new byte[0];
-                boolean isZip = docInfo.isZip() ||
-                    (docInfo.filename() != null && docInfo.filename().toLowerCase().endsWith(".zip"));
-                double fileSizeMb = content.length / (1024.0 * 1024.0);
-
-                ProductDocumentToProcess updated = doc.withContent(content, docInfo.filename(), docInfo.contentType(), fileSizeMb);
+                ProductDocumentToProcess updated = doc.withContent(content);
                 return documentRepository.updateContent(doc.getDocumentId(), content)
                     .thenReturn(updated);
             });

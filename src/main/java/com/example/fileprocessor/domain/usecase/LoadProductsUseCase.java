@@ -87,7 +87,6 @@ public class LoadProductsUseCase {
             .origin(docInfo.origin())
             .status(DocumentStatus.PENDING.name())
             .createdAt(Instant.now())
-            .isZipArchive(docInfo.isZipArchive())
             .build();
     }
 }
