@@ -1,11 +1,11 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.service.DocumentValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -23,28 +23,15 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     public SoapDocumentProcessingUseCase(
             ProductRestGateway productRestGateway,
-            SoapGateway soapGateway) {
-        super(productRestGateway);
+            SoapGateway soapGateway,
+            DocumentValidator documentValidator) {
+        super(productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
     }
 
     @Override
-    protected String implementationName() {
-        return "SOAP";
-    }
-
-    @Override
     protected Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId) {
-        FileUploadRequest request = FileUploadRequest.of(
-            doc.documentId(),
-            doc.content() != null ? doc.content() : new byte[0],
-            doc.filename(),
-            doc.contentType(),
-            doc.size(),
-            ".",
-            ".");
-
-        return soapGateway.send(request)
+        return soapGateway.send(buildFileUploadRequest(doc, null))
             .onErrorResume(error -> {
                 String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
                     ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
@@ -55,5 +42,10 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                     .success(false)
                     .build());
             });
+    }
+
+    @Override
+    protected String implementationName() {
+        return "SOAP";
     }
 }

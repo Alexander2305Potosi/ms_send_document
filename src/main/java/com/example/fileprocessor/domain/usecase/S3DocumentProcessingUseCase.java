@@ -6,6 +6,7 @@ import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
+import com.example.fileprocessor.domain.service.DocumentValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -23,27 +24,15 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     public S3DocumentProcessingUseCase(
             ProductRestGateway productRestGateway,
-            S3Gateway s3Gateway) {
-        super(productRestGateway);
+            S3Gateway s3Gateway,
+            DocumentValidator documentValidator) {
+        super(productRestGateway, documentValidator);
         this.s3Gateway = s3Gateway;
     }
 
     @Override
-    protected String implementationName() {
-        return "S3";
-    }
-
-    @Override
     protected Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId) {
-        FileUploadRequest request = FileUploadRequest.of(
-            doc.documentId(),
-            doc.content() != null ? doc.content() : new byte[0],
-            doc.filename(),
-            doc.contentType(),
-            doc.size(),
-            ".",
-            ".",
-            doc.origin());
+        FileUploadRequest request = buildFileUploadRequest(doc, doc.origin());
 
         return s3Gateway.send(request)
             .onErrorResume(error -> {
@@ -56,5 +45,10 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
                     .success(false)
                     .build());
             });
+    }
+
+    @Override
+    protected String implementationName() {
+        return "S3";
     }
 }

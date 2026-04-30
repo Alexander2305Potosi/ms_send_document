@@ -62,6 +62,10 @@ app:
       timeout-seconds: 30
       key-prefix: "documents/"
 
+params:
+  regex: ".*\\.(pdf|csv)$"
+  maxFileSize: 52428800
+
 ---
 spring:
   config:
