@@ -21,15 +21,19 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     private final SoapGateway soapGateway;
     private final FileValidator fileValidator;
+    private final FolderInfoExtractor folderInfoExtractor;
 
     public SoapDocumentProcessingUseCase(
             ProductDocumentRepository documentRepository,
             SoapGateway soapGateway,
             FileValidator fileValidator,
+            FolderInfoExtractor folderInfoExtractor,
             ProductRestGateway productRestGateway) {
-        super(documentRepository, productRestGateway, new ZipProcessor(fileValidator));
+        super(documentRepository, productRestGateway,
+            new ZipProcessor(fileValidator.getMaxSize(), fileValidator.getAllowedTypes()));
         this.soapGateway = soapGateway;
         this.fileValidator = fileValidator;
+        this.folderInfoExtractor = folderInfoExtractor;
     }
 
     @Override
@@ -45,9 +49,9 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
         return fileValidator.validate(pending)
             .map(validDoc -> {
-                FileValidator.FolderInfo folderInfo = fileValidator.extractFolderInfo(validDoc.getOrigin());
-                long fileSize = validDoc.getContent() != null ? validDoc.getContent().length : 0;
-                return new DocumentToUpload(validDoc, folderInfo, fileSize, false);
+                FolderInfo folderInfo = folderInfoExtractor.extract(validDoc.getOrigin());
+                long fileSizeBytes = (long) (validDoc.getFileSizeMb() * 1024 * 1024);
+                return new DocumentToUpload(validDoc, folderInfo, fileSizeBytes, false);
             });
     }
 
@@ -63,7 +67,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                 .build());
         }
 
-        FileValidator.FolderInfo folderInfo = doc.folderInfo();
+        FolderInfo folderInfo = doc.folderInfo();
 
         return soapGateway.send(
                 doc.documentId(),

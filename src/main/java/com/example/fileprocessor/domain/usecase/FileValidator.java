@@ -2,106 +2,77 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.FileValidationException;
-import com.example.fileprocessor.domain.port.in.FileValidationConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
- * Unified file and document validation.
- * Only three validations: format, size, and folder exclusion (handled separately).
+ * Validates file extension and size against configured limits.
  */
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
 
-    private final FileValidationConfig config;
+    private final double maxSizeMb;
+    private final String allowedTypes;
+    private final Set<String> allowedExtensions;
 
-    public FileValidationConfig getConfig() {
-        return config;
+    public FileValidator(double maxSizeMb, String allowedTypes) {
+        this.maxSizeMb = maxSizeMb;
+        this.allowedTypes = allowedTypes;
+        this.allowedExtensions = parseExtensions(allowedTypes);
     }
 
-    public FileValidator(FileValidationConfig config) {
-        this.config = config;
-    }
+    double getMaxSize() { return maxSizeMb; }
+    String getAllowedTypes() { return allowedTypes; }
 
-    /**
-     * Runs enabled validations:
-     * 1. Extension/Format validation
-     * 2. File size validation
-     */
     public Mono<ProductDocumentToProcess> validate(ProductDocumentToProcess document) {
-        Set<String> allowedExtensions = parseAllowedExtensions(config.allowedTypes());
-
         return Mono.just(document)
-            .flatMap(doc -> validateExtension(doc, allowedExtensions))
-            .flatMap(doc -> validateSize(doc, config.maxSize()));
+            .flatMap(this::validateExtension)
+            .flatMap(this::validateSize);
     }
 
-    // ============ EXTENSION VALIDATION ============
-
-    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess document, Set<String> allowedExtensions) {
-        String ext = extractFileExtension(document);
+    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess document) {
+        String ext = extractExtension(document.getFilename());
         if (!allowedExtensions.contains(ext.toLowerCase())) {
             log.warn("Document {} rejected: extension '{}' not in allowed list {}",
                 document.getFilename(), ext, allowedExtensions);
             return Mono.error(new FileValidationException(
-                "File type '" + ext + "' not allowed. Allowed: " + config.allowedTypes(),
+                "File type '" + ext + "' not allowed",
                 ProcessingResultCodes.INVALID_FILE_TYPE));
         }
         return Mono.just(document);
     }
 
-    // ============ FILE SIZE VALIDATION ============
-
-    private Mono<ProductDocumentToProcess> validateSize(ProductDocumentToProcess document, long maxSize) {
-        long size = extractFileSize(document);
-
-        if (size > maxSize) {
-            log.warn("Document {} exceeds max size: {} > {} bytes",
-                document.getFilename(), size, maxSize);
+    private Mono<ProductDocumentToProcess> validateSize(ProductDocumentToProcess document) {
+        double sizeMb = document.getFileSizeMb();
+        if (sizeMb > maxSizeMb) {
+            log.warn("Document {} exceeds max size: {} > {} MB",
+                document.getFilename(), sizeMb, maxSizeMb);
             return Mono.error(new FileValidationException(
-                "File size " + size + " exceeds limit of " + maxSize + " bytes",
+                "File size " + sizeMb + " MB exceeds limit of " + maxSizeMb + " MB",
                 ProcessingResultCodes.FILE_SIZE_EXCEEDED));
         }
         return Mono.just(document);
     }
 
-    // ============ FOLDER INFO EXTRACTION ============
+    private static String extractExtension(String filename) {
+        int lastDot = filename != null ? filename.lastIndexOf('.') : -1;
+        return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
+    }
 
-    public FolderInfo extractFolderInfo(String origin) {
-        var keywords = config.keywords();
-        if (keywords == null || keywords.isEmpty() || origin == null || origin.isBlank()) {
-            return new FolderInfo(".", ".");
+    private static Set<String> parseExtensions(String allowedTypes) {
+        if (allowedTypes == null || allowedTypes.isBlank()) {
+            return Set.of();
         }
-
-        for (String keyword : keywords) {
-            if (origin.contains(keyword)) {
-                String[] parts = origin.split("/");
-                if (parts.length >= 2) {
-                    return new FolderInfo(parts[parts.length - 2], parts[parts.length - 1]);
-                }
-                return new FolderInfo(origin, ".");
-            }
-        }
-        return new FolderInfo(".", ".");
-    }
-
-    public record FolderInfo(String parentFolder, String childFolder) {}
-
-    // ============ PRIVATE HELPERS ============
-
-    private long extractFileSize(ProductDocumentToProcess p) {
-        return p.getContent() != null ? p.getContent().length : 0;
-    }
-
-    private String extractFileExtension(ProductDocumentToProcess p) {
-        return FileValidationUtils.extractExtension(p.getFilename());
-    }
-
-    private Set<String> parseAllowedExtensions(String allowedTypes) {
-        return FileValidationUtils.parseAllowedExtensions(allowedTypes);
+        return Arrays.stream(allowedTypes.split(","))
+            .map(String::trim)
+            .map(String::toLowerCase)
+            .filter(ext -> !ext.isBlank())
+            .collect(Collectors.toUnmodifiableSet());
     }
 }

@@ -1,14 +1,12 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.usecase.DocumentToUpload;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,11 +16,11 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,17 +34,14 @@ class SoapDocumentProcessingUseCaseTest {
     private ProductRestGateway productRestGateway;
 
     private SoapDocumentProcessingUseCase useCase;
-    private FileValidator fileValidator;
 
     @BeforeEach
     void setUp() {
-        ProcessorSettings config = new ProcessorSettings();
-        config.setAllowedTypes("pdf,txt,csv");
-        config.setMaxSize(10485760L);
-        fileValidator = new FileValidator(config);
+        FileValidator fileValidator = new FileValidator(10.0, "pdf,txt,csv");
+        FolderInfoExtractor folderInfoExtractor = new FolderInfoExtractor(List.of("test", "mock"));
         useCase = new SoapDocumentProcessingUseCase(
             documentRepository, soapGateway,
-            fileValidator,
+            fileValidator, folderInfoExtractor,
             productRestGateway
         );
     }
@@ -65,6 +60,7 @@ class SoapDocumentProcessingUseCaseTest {
             .content(new byte[]{1, 2, 3})
             .contentType("application/octet-stream")
             .status(DocumentStatus.PENDING.name())
+            .fileSizeMb(0.5)
             .build();
 
         StepVerifier.create(useCase.applyRulesMetadata(doc))
@@ -83,6 +79,7 @@ class SoapDocumentProcessingUseCaseTest {
             .content(new byte[]{1, 2, 3})
             .contentType("application/pdf")
             .status(DocumentStatus.PENDING.name())
+            .fileSizeMb(0.5)
             .build();
 
         StepVerifier.create(useCase.applyRulesMetadata(doc))
@@ -95,12 +92,10 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void applyRulesMetadata_shouldRejectOversizedFile() {
-        ProcessorSettings smallConfig = new ProcessorSettings();
-        smallConfig.setAllowedTypes("pdf,txt,csv");
-        smallConfig.setMaxSize(2L);
-        FileValidator smallFileValidator = new FileValidator(smallConfig);
+        FileValidator smallFileValidator = new FileValidator(0.000001, "pdf,txt,csv");
+        FolderInfoExtractor folderInfoExtractor = new FolderInfoExtractor(List.of("test", "mock"));
         SoapDocumentProcessingUseCase useCaseWithSmallLimit = new SoapDocumentProcessingUseCase(
-            documentRepository, soapGateway, smallFileValidator, productRestGateway);
+            documentRepository, soapGateway, smallFileValidator, folderInfoExtractor, productRestGateway);
 
         ProductDocumentToProcess doc = ProductDocumentToProcess.builder()
             .documentId("doc1")
@@ -109,6 +104,7 @@ class SoapDocumentProcessingUseCaseTest {
             .content(new byte[]{1, 2, 3})
             .contentType("application/pdf")
             .status(DocumentStatus.PENDING.name())
+            .fileSizeMb(0.5)
             .build();
 
         StepVerifier.create(useCaseWithSmallLimit.applyRulesMetadata(doc))
@@ -135,8 +131,9 @@ class SoapDocumentProcessingUseCaseTest {
                 .filename("doc.pdf")
                 .content(new byte[]{1, 2, 3})
                 .contentType("application/pdf")
+                .fileSizeMb(0.5)
                 .build(),
-            new FileValidator.FolderInfo("parent", "child"),
+            new FolderInfo("parent", "child"),
             3L,
             false
         );
@@ -160,8 +157,9 @@ class SoapDocumentProcessingUseCaseTest {
                 .filename("doc.pdf")
                 .content(new byte[]{1, 2, 3})
                 .contentType("application/pdf")
+                .fileSizeMb(0.5)
                 .build(),
-            new FileValidator.FolderInfo("parent", "child"),
+            new FolderInfo("parent", "child"),
             3L,
             false
         );

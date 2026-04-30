@@ -7,7 +7,7 @@ import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
  */
 public record DocumentToUpload(
         ProductDocumentToProcess document,
-        FileValidator.FolderInfo folderInfo,
+        FolderInfo folderInfo,
         long fileSize,
         boolean skipped
 ) {

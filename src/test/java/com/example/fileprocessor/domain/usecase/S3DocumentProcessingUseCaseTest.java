@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.usecase.DocumentToUpload;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -9,7 +8,6 @@ import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
-import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,10 +17,13 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,19 +37,16 @@ class S3DocumentProcessingUseCaseTest {
     private ProductRestGateway productRestGateway;
 
     private S3DocumentProcessingUseCase useCase;
-    private FileValidator fileValidator;
     private FolderExclusionRegexConfig folderExclusionRegex;
 
     @BeforeEach
     void setUp() {
-        ProcessorSettings config = new ProcessorSettings();
-        config.setAllowedTypes("pdf,txt,csv");
-        config.setMaxSize(10485760L);
-        fileValidator = new FileValidator(config);
-        folderExclusionRegex = new FolderExclusionRegexConfig(java.util.List.of("excluded", "skip-me"));
+        FileValidator fileValidator = new FileValidator(10.0, "pdf,txt,csv");
+        FolderInfoExtractor folderInfoExtractor = new FolderInfoExtractor(List.of("test", "mock"));
+        folderExclusionRegex = new FolderExclusionRegexConfig(List.of("excluded", "skip-me"));
         useCase = new S3DocumentProcessingUseCase(
             documentRepository, s3Gateway,
-            fileValidator, folderExclusionRegex,
+            fileValidator, folderExclusionRegex, folderInfoExtractor,
             productRestGateway
         );
     }
@@ -67,6 +65,7 @@ class S3DocumentProcessingUseCaseTest {
             .content(new byte[]{1, 2, 3})
             .contentType("application/octet-stream")
             .status(DocumentStatus.PENDING.name())
+            .fileSizeMb(0.5)
             .build();
 
         StepVerifier.create(useCase.applyRulesMetadata(doc))
@@ -85,6 +84,7 @@ class S3DocumentProcessingUseCaseTest {
             .content(new byte[]{1, 2, 3})
             .contentType("application/pdf")
             .status(DocumentStatus.PENDING.name())
+            .fileSizeMb(0.5)
             .build();
 
         StepVerifier.create(useCase.applyRulesMetadata(doc))
@@ -105,6 +105,7 @@ class S3DocumentProcessingUseCaseTest {
             .contentType("application/pdf")
             .origin("s3://bucket/excluded/folder/file.pdf")
             .status(DocumentStatus.PENDING.name())
+            .fileSizeMb(0.5)
             .build();
 
         when(documentRepository.updateStatus(any(), any(), any(), any()))
@@ -130,6 +131,7 @@ class S3DocumentProcessingUseCaseTest {
             .contentType("application/pdf")
             .origin("s3://bucket/included/folder/file.pdf")
             .status(DocumentStatus.PENDING.name())
+            .fileSizeMb(0.5)
             .build();
 
         StepVerifier.create(useCase.applyRulesMetadata(doc))
@@ -161,8 +163,9 @@ class S3DocumentProcessingUseCaseTest {
                 .content(new byte[]{1, 2, 3})
                 .contentType("application/pdf")
                 .origin("s3://bucket/parent/child/file.pdf")
+                .fileSizeMb(0.5)
                 .build(),
-            new FileValidator.FolderInfo("parent", "child"),
+            new FolderInfo("parent", "child"),
             3L,
             false
         );
@@ -187,8 +190,9 @@ class S3DocumentProcessingUseCaseTest {
                 .content(new byte[]{1, 2, 3})
                 .contentType("application/pdf")
                 .origin("s3://bucket/parent/child/file.pdf")
+                .fileSizeMb(0.5)
                 .build(),
-            new FileValidator.FolderInfo("parent", "child"),
+            new FolderInfo("parent", "child"),
             3L,
             false
         );
@@ -210,8 +214,9 @@ class S3DocumentProcessingUseCaseTest {
                 .content(null)
                 .contentType("application/pdf")
                 .origin("s3://bucket/excluded/file.pdf")
+                .fileSizeMb(0)
                 .build(),
-            new FileValidator.FolderInfo("excluded", "folder"),
+            new FolderInfo("excluded", "folder"),
             0L,
             true
         );

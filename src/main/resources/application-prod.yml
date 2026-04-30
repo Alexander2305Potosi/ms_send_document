@@ -10,7 +10,7 @@ server:
 app:
   processors:
     soap:
-      max-size: 5242880
+      max-size: 5
       allowed-types: pdf,txt,csv
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}

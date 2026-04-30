@@ -26,4 +26,6 @@ public class ProductDocumentToProcess {
     private final String errorCode;
     @Builder.Default
     private final boolean isZipArchive = false;
+    @Builder.Default
+    private final double fileSizeMb = 0.0;
 }

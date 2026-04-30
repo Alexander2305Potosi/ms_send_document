@@ -5,7 +5,6 @@ import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -14,10 +13,9 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 /**
- * Abstract base class for document processing use cases.
- * Handles shared orchestration logic; subclasses implement gateway-specific behavior.
+ * Abstract base for document processing use cases.
+ * Handles shared orchestration; subclasses implement gateway-specific behavior.
  */
-@AllArgsConstructor
 public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
@@ -26,7 +24,14 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final ProductRestGateway productRestGateway;
     protected final ZipProcessor zipProcessor;
 
-    // ============ TEMPLATE METHOD (final) ============
+    protected AbstractDocumentProcessingUseCase(
+            ProductDocumentRepository documentRepository,
+            ProductRestGateway productRestGateway,
+            ZipProcessor zipProcessor) {
+        this.documentRepository = documentRepository;
+        this.productRestGateway = productRestGateway;
+        this.zipProcessor = zipProcessor;
+    }
 
     public final Flux<FileUploadResult> executePendingDocuments() {
         return documentRepository.findPendingDocuments()
@@ -50,15 +55,9 @@ public abstract class AbstractDocumentProcessingUseCase {
             .doOnNext(r -> log.info("Document processed: correlationId={}, status={}",
                 r.getCorrelationId(), r.getStatus()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
-            .doOnCancel(() -> log.warn("Pipeline {} cancelled - documents in PROCESSING state will be recovered on next startup", implementationName()));
+            .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
     }
 
-    // ============ SHARED RETRIEVE LOGIC (final) ============
-
-    /**
-     * Downloads document content from REST API if not already present.
-     * This logic is shared across all processor implementations.
-     */
     protected final Mono<DocumentToUpload> retrieveDocument(DocumentToUpload docToUpload) {
         ProductDocumentToProcess pending = docToUpload.document();
 
@@ -74,6 +73,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 byte[] content = docInfo.content() != null ? docInfo.content() : new byte[0];
                 boolean isZip = docInfo.isZip() ||
                     (docInfo.filename() != null && docInfo.filename().toLowerCase().endsWith(".zip"));
+                double fileSizeMb = content.length / (1024.0 * 1024.0);
 
                 ProductDocumentToProcess updated = ProductDocumentToProcess.builder()
                     .documentId(pending.getDocumentId())
@@ -86,20 +86,15 @@ public abstract class AbstractDocumentProcessingUseCase {
                     .status(pending.getStatus())
                     .createdAt(pending.getCreatedAt())
                     .isZipArchive(isZip)
+                    .fileSizeMb(fileSizeMb)
                     .build();
 
-                long fileSize = content != null ? content.length : 0;
+                long fileSizeBytes = (long) (fileSizeMb * 1024 * 1024);
                 return documentRepository.updateContent(pending.getDocumentId(), content)
-                    .thenReturn(new DocumentToUpload(updated, docToUpload.folderInfo(), fileSize, docToUpload.skipped()));
+                    .thenReturn(new DocumentToUpload(updated, docToUpload.folderInfo(), fileSizeBytes, docToUpload.skipped()));
             });
     }
 
-    // ============ SHARED ZIP PROCESSING ============
-
-    /**
-     * Processes a ZIP document end-to-end: extract, validate, process children, aggregate results.
-     * Uses subclasses' validateMetadataDocument and uploadDocument callbacks.
-     */
     protected Mono<DocumentToUpload> processZipDocument(ProductDocumentToProcess zipDoc) {
         return zipProcessor.extractAndValidate(zipDoc)
             .flatMap(extraction -> {
@@ -129,36 +124,15 @@ public abstract class AbstractDocumentProcessingUseCase {
             });
     }
 
-    // ============ SHARED VALIDATION LOGIC (final) ============
-
-    /**
-     * Claims a document for processing and then performs validation.
-     * Returns empty if document is not available or already claimed.
-     * Subclasses implement applyRulesMetadata for specific validation logic.
-     */
     protected final Mono<DocumentToUpload> validateMetadataDocument(ProductDocumentToProcess pending) {
         return documentRepository.claimDocument(pending.getDocumentId())
             .filter(Boolean::booleanValue)
             .flatMap(claimed -> applyRulesMetadata(pending));
     }
 
-    /**
-     * Subclass-specific validation logic after document is claimed.
-     * For S3: includes folder exclusion check.
-     * For SOAP: direct validation.
-     */
     protected abstract Mono<DocumentToUpload> applyRulesMetadata(ProductDocumentToProcess pending);
 
-    // ============ ABSTRACT METHODS (subclasses must implement) ============
-
-    /**
-     * Uploads document to the external gateway (SOAP or S3).
-     * Uses pre-validated metadata from DocumentToUpload.
-     */
     protected abstract Mono<FileUploadResult> uploadDocument(DocumentToUpload validated);
 
-    /**
-     * Returns the processor implementation name for logging.
-     */
     protected abstract String implementationName();
 }

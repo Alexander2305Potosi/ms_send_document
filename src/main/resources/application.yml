@@ -43,13 +43,13 @@ app:
     termination-grace-period: 30s
   processors:
     soap:
-      max-size: 10485760
+      max-size: 10
       allowed-types: pdf,txt,csv
       keywords:
         - "test"
         - "mock"
     s3:
-      max-size: 52428800
+      max-size: 50
       allowed-types: pdf,txt,csv,zip
       folder-exclusion-regex:
         - "_"

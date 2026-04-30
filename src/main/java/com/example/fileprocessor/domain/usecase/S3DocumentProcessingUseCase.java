@@ -23,17 +23,21 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private final S3Gateway s3Gateway;
     private final FileValidator fileValidator;
     private final FolderExclusionRegexConfig folderExclusionRegex;
+    private final FolderInfoExtractor folderInfoExtractor;
 
     public S3DocumentProcessingUseCase(
             ProductDocumentRepository documentRepository,
             S3Gateway s3Gateway,
             FileValidator fileValidator,
             FolderExclusionRegexConfig folderExclusionRegex,
+            FolderInfoExtractor folderInfoExtractor,
             ProductRestGateway productRestGateway) {
-        super(documentRepository, productRestGateway, new ZipProcessor(fileValidator));
+        super(documentRepository, productRestGateway,
+            new ZipProcessor(fileValidator.getMaxSize(), fileValidator.getAllowedTypes()));
         this.s3Gateway = s3Gateway;
         this.fileValidator = fileValidator;
         this.folderExclusionRegex = folderExclusionRegex;
+        this.folderInfoExtractor = folderInfoExtractor;
     }
 
     @Override
@@ -47,7 +51,6 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             return processZipDocument(pending);
         }
 
-        // Check folder exclusion first
         if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
             log.info("S3 document {} skipped: origin matches exclusion regex: {}",
                 pending.getFilename(), pending.getOrigin());
@@ -59,9 +62,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
         return fileValidator.validate(pending)
             .map(validDoc -> {
-                FileValidator.FolderInfo folderInfo = fileValidator.extractFolderInfo(validDoc.getOrigin());
-                long fileSize = validDoc.getContent() != null ? validDoc.getContent().length : 0;
-                return new DocumentToUpload(validDoc, folderInfo, fileSize, false);
+                FolderInfo folderInfo = folderInfoExtractor.extract(validDoc.getOrigin());
+                long fileSizeBytes = (long) (validDoc.getFileSizeMb() * 1024 * 1024);
+                return new DocumentToUpload(validDoc, folderInfo, fileSizeBytes, false);
             });
     }
 
@@ -77,7 +80,7 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
                 .build());
         }
 
-        FileValidator.FolderInfo folderInfo = doc.folderInfo();
+        FolderInfo folderInfo = doc.folderInfo();
 
         return s3Gateway.send(
                 doc.documentId(),
