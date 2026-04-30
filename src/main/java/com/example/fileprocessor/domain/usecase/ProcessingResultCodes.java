@@ -8,21 +8,12 @@ public final class ProcessingResultCodes {
 
     private ProcessingResultCodes() {}
 
-    // Business error codes - document processing
-    public static final String SKIPPED_FOLDER = "SKIPPED_FOLDER";
-
-    // ZIP processing error codes
-    public static final String ZIP_EXTRACTION_FAILED = "ZIP_EXTRACTION_FAILED";
-    public static final String ZIP_PARTIAL_FAILURE = "ZIP_PARTIAL_FAILURE";
-
-    // File validation error codes
-    public static final String FILE_SIZE_EXCEEDED = "FILE_SIZE_EXCEEDED";
-    public static final String INVALID_FILE_TYPE = "INVALID_FILE_TYPE";
-    public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
-
     // Base64 validation error codes (P10)
     public static final String EMPTY_CONTENT = "EMPTY_CONTENT";
     public static final String INVALID_BASE64 = "INVALID_BASE64";
+
+    // Response validation error codes
+    public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
 
     // HTTP-related error codes (shared between domain and infrastructure)
     public static final String GATEWAY_TIMEOUT = "GATEWAY_TIMEOUT";

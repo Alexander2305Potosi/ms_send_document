@@ -11,10 +11,6 @@ public final class ApiConstants {
     public static final String PROCESSOR_SOAP = "soap";
     public static final String PROCESSOR_S3 = "s3";
 
-    // Implementation names
-    public static final String IMPL_NAME_SOAP = "SOAP";
-    public static final String IMPL_NAME_S3 = "S3";
-
     // Query parameter names
     public static final String PARAM_PROCESSOR = "processor";
 
