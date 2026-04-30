@@ -14,7 +14,6 @@ public class ProductRoutes {
     @Bean
     public RouterFunction<ServerResponse> productRouter(ProductHandler handler) {
         return route()
-            .GET(RestApiPaths.API_V1_PRODUCTS_LOAD, handler::loadProducts)
             .GET(RestApiPaths.API_V1_PRODUCTS, handler::processPendingProducts)
             .build();
     }

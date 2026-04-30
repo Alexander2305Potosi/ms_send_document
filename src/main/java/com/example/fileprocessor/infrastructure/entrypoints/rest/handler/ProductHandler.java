@@ -1,7 +1,6 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
-import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -25,30 +24,14 @@ public class ProductHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ProductHandler.class);
 
-    private final LoadProductsUseCase loadProductsUseCase;
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
 
-    public ProductHandler(LoadProductsUseCase loadProductsUseCase,
-                         SoapDocumentProcessingUseCase soapDocumentUseCase,
-                         ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider) {
-        this.loadProductsUseCase = loadProductsUseCase;
+    public ProductHandler(
+            SoapDocumentProcessingUseCase soapDocumentUseCase,
+            ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider) {
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
-    }
-
-    public Mono<ServerResponse> loadProducts(ServerRequest request) {
-        String traceId = resolveTraceId(request);
-        log.info("Starting products load from REST API, traceId: {}", traceId);
-
-        return Mono.deferContextual(ctx -> ServerResponse.accepted()
-            .bodyValue(loadProductsUseCase.execute()
-                .doOnNext(result -> log.info("Product loaded: {} -> {} ({} documents)",
-                    result.getProductId(), result.getStatus(), result.getDocumentCount()))
-                .doOnError(error -> log.error("Load failed for traceId {}: {}", traceId, error.getMessage()))
-                .thenMany(Mono.empty())
-            ))
-            .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {

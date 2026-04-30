@@ -2,8 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
-import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
+import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import org.slf4j.Logger;
@@ -22,10 +21,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private final S3Gateway s3Gateway;
 
     public S3DocumentProcessingUseCase(
-            ProductDocumentRepository documentRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway) {
-        super(documentRepository, productRestGateway);
+        super(productRestGateway);
         this.s3Gateway = s3Gateway;
     }
 
@@ -35,21 +33,18 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     }
 
     @Override
-    protected Mono<ProductDocumentToProcess> applyRules(ProductDocumentToProcess doc) {
-        return Mono.just(doc);
-    }
+    protected Mono<FileUploadResult> uploadDocument(ProductDocumentInfo doc, String productId) {
+        byte[] content = doc.content() != null ? doc.content() : new byte[0];
 
-    @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocumentToProcess doc) {
         return s3Gateway.send(
-                doc.getDocumentId(),
-                doc.getContent(),
-                doc.getFilename(),
-                doc.getContentType(),
-                doc.getFileSizeBytes(),
-                doc.getParentFolder(),
-                doc.getChildFolder(),
-                doc.getOrigin())
+                doc.documentId(),
+                content,
+                doc.filename(),
+                doc.contentType(),
+                content.length,
+                ".",
+                ".",
+                doc.origin())
             .onErrorResume(error -> {
                 String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
                     ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
