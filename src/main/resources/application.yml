@@ -38,25 +38,6 @@ logging:
     console: "%-5level [%thread] [%X{traceId}] %logger{36} - %msg%n"
 
 app:
-  shutdown:
-    drain-timeout-seconds: 20
-    termination-grace-period: 30s
-  processors:
-    soap:
-      max-size: 10
-      allowed-types: pdf,txt,csv
-      keywords:
-        - "test"
-        - "mock"
-    s3:
-      max-size: 50
-      allowed-types: pdf,txt,csv,zip
-      folder-exclusion-regex:
-        - "_"
-      keywords:
-        - "test"
-        - "mock"
-        - "archive"
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
@@ -80,12 +61,6 @@ app:
       retry-backoff-millis: 500
       timeout-seconds: 30
       key-prefix: "documents/"
-  circuit-breaker:
-    failure-rate-threshold: 50
-    wait-duration-in-open-state-millis: 60000
-    permitted-number-of-calls-in-half-open-state: 10
-    sliding-window-size: 100
-    minimum-number-of-calls: 10
 
 ---
 spring:
