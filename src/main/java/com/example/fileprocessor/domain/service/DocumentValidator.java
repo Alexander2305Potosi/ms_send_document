@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.service;
 
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.infrastructure.config.ProcessorsProperties.ProcessorConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -11,15 +12,14 @@ public class DocumentValidator {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentValidator.class);
 
-    private final ValidationConfig config;
+    private final ProcessorConfig config;
 
-    public DocumentValidator(ValidationConfig config) {
+    public DocumentValidator(ProcessorConfig config) {
         this.config = config;
     }
 
     public Mono<ProductDocument> validate(ProductDocument doc) {
         return Mono.defer(() -> {
-            // Size validation
             if (config.maxFileSizeBytes() != null && config.maxFileSizeBytes() > 0) {
                 if (doc.size() > config.maxFileSizeBytes()) {
                     log.warn("Document {} skipped - file size {} exceeds limit of {} bytes",
@@ -28,7 +28,6 @@ public class DocumentValidator {
                 }
             }
 
-            // Filename validation
             if (config.filenamePattern() != null && !config.filenamePattern().isBlank()) {
                 if (!Pattern.matches(config.filenamePattern(), doc.filename())) {
                     log.debug("Document {} skipped - filename '{}' does not match pattern",
@@ -40,9 +39,4 @@ public class DocumentValidator {
             return Mono.just(doc);
         });
     }
-
-    public record ValidationConfig(
-        Long maxFileSizeBytes,
-        String filenamePattern
-    ) {}
 }

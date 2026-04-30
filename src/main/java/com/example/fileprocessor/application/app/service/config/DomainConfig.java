@@ -29,8 +29,8 @@ public class DomainConfig {
         if (soapGateway == null) {
             return null;
         }
-        var validator = new DocumentValidator(properties.toValidationConfig(properties.soap()));
-        return new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validator);
+        return new SoapDocumentProcessingUseCase(
+            productRestGateway, soapGateway, new DocumentValidator(properties.soap()));
     }
 
     // ============ S3 Processor ============
@@ -45,7 +45,7 @@ public class DomainConfig {
         if (s3Gateway == null) {
             return null;
         }
-        var validator = new DocumentValidator(properties.toValidationConfig(properties.s3()));
-        return new S3DocumentProcessingUseCase(productRestGateway, s3Gateway, validator);
+        return new S3DocumentProcessingUseCase(
+            productRestGateway, s3Gateway, new DocumentValidator(properties.s3()));
     }
 }
