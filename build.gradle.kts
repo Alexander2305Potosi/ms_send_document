@@ -11,8 +11,9 @@ group = "com.example"
 version = "1.0.0"
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
 }
 
 configurations {
@@ -40,15 +41,13 @@ dependencies {
 
     // Reactive
     implementation("io.projectreactor:reactor-core")
-    implementation("io.projectreactor.addons:reactor-extra")
 
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.30")
     annotationProcessor("org.projectlombok:lombok:1.18.30")
 
-    // MapStruct
-    implementation("org.mapstruct:mapstruct:1.5.5.Final")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    // FIX #6: MapStruct removed - not used in current implementation
+    // If needed in future, add: implementation("org.mapstruct:mapstruct:1.5.5.Final")
 
     // Logging
     implementation("org.slf4j:slf4j-api")
@@ -63,8 +62,18 @@ dependencies {
     implementation("io.r2dbc:r2dbc-h2")
     runtimeOnly("com.h2database:h2")
 
+    // AWS S3
+    implementation("software.amazon.awssdk:s3:2.28.29")
+    implementation("software.amazon.awssdk:netty-nio-client:2.28.29")
+
+    // Resilience4j - Circuit Breaker (FIX #4)
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-reactor:2.2.0")
+
     // Monitoring & Tracing
+    implementation("io.micrometer:micrometer-core")
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
+    implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.projectreactor:reactor-tools")
 
     // Testing
@@ -85,7 +94,6 @@ tasks.withType<Test> {
         showCauses = true
         showStackTraces = true
     }
-    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
 tasks.withType<JavaCompile> {
@@ -100,7 +108,7 @@ springBoot {
 pitest {
     junit5PluginVersion.set("1.2.1")
     pitestVersion.set("1.15.0")
-    targetClasses.set(listOf("com.example.fileprocessor.domain.*", "com.example.fileprocessor.infrastructure.soap.*", "com.example.fileprocessor.infrastructure.rest.*"))
+    targetClasses.set(listOf("com.example.fileprocessor.domain.*", "com.example.fileprocessor.infrastructure.drivenadapters.*", "com.example.fileprocessor.infrastructure.entrypoints.*", "com.example.fileprocessor.infrastructure.helpers.*"))
     targetTests.set(listOf("com.example.fileprocessor.*"))
     outputFormats.set(listOf("HTML", "XML"))
     timestampedReports.set(false)

@@ -1,769 +1,424 @@
 # File Processor Service
 
-Microservicio reactivo basado en Spring WebFlux que obtiene documentos de una API REST externa y los envia a un servicio SOAP externo.
+Microservicio reactivo basado en Spring WebFlux que obtiene productos con sus documentos asociados desde una API REST externa y los envía a un servicio SOAP externo o AWS S3.
 
-## Arquitectura (Clean Architecture Light)
+## Arquitectura (Clean Architecture)
 
-El proyecto sigue **Clean Architecture simplificada** con 2 capas principales. La capa de **dominio es pura Java** (sin dependencias de frameworks), y la capa de **infraestructura** provee los beans Spring.
+El proyecto sigue **Clean Architecture** con capas claras:
 
 ```
 com.example.fileprocessor/
-├── domain/                    # Capa de dominio (independiente de frameworks)
-│   ├── entity/               # Entidades de negocio
-│   │   ├── DocumentInfo.java        # Documento obtenido de REST
-│   │   ├── DocumentToProcess.java   # Documento pendiente en BD
-│   │   ├── FileData.java
-│   │   ├── FileUploadResult.java
-│   │   ├── SoapCommunicationLog.java
-│   │   ├── SoapRequest.java
-│   │   ├── SoapResponse.java
-│   │   └── ZipArchive.java          # ZIP con documentos extraibles
-│   ├── usecase/              # Casos de uso (logica de negocio)
-│   │   ├── ProcessFileUseCase.java  # Obtiene de REST y envia a SOAP
-│   │   └── FileValidator.java
+├── domain/                          # Capa de dominio (puro Java, sin frameworks)
+│   ├── entity/                      # Entidades de negocio
+│   │   ├── Product.java               # Producto desde REST API
+│   │   ├── ProductDocument.java       # Documento dentro de ProductInfo
+│   │   ├── FileUploadRequest.java     # Request para upload a gateway
+│   │   ├── FileUploadResult.java      # Resultado de upload/procesamiento
+│   │   ├── ExternalServiceResponse.java # Respuesta genérica de servicio externo
+│   │   ├── DocumentStatus.java        # Estados de documento (constantes)
+│   │   └── ProductStatus.java         # Estados de producto
+│   ├── usecase/                      # Casos de uso
+│   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base
+│   │   ├── SoapDocumentProcessingUseCase.java       # Implementación SOAP
+│   │   ├── S3DocumentProcessingUseCase.java         # Implementación S3
+│   │   └── ProcessingResultCodes.java               # Códigos de resultado
+│   ├── service/
+│   │   └── DocumentValidator.java   # Validación centralizada de documentos
 │   ├── port/
-│   │   ├── in/
-│   │   │   └── FileValidationConfig.java
-│   │   └── out/
-│   │       ├── DocumentRestGateway.java  # Puerto para API REST documentos
-│   │       └── ExternalSoapGateway.java
-│   └── exception/            # Excepciones de dominio
+│   │   ├── out/
+│   │   │   ├── ProductRestGateway.java  # Puerto REST productos
+│   │   │   ├── S3Gateway.java          # Puerto S3
+│   │   │   ├── SoapGateway.java       # Puerto SOAP
+│   │   │   └── BussinesParamsGateway.java # Puerto configuración
+│   │   └── in/ (vacío - sin use cases de entrada REST directos)
+│   └── exception/
 │       ├── DomainException.java
-│       └── FileValidationException.java
+│       ├── FileValidationException.java
+│       └── ProcessingException.java   # Excepción unificada de procesamiento
 │
-└── infrastructure/            # Capa de infraestructura (frameworks)
-    ├── config/               # Configuracion (Properties, Beans)
-    │   ├── DomainConfig.java          # Beans de casos de uso
-    │   ├── FileUploadProperties.java
-    │   └── WebFluxConfig.java
-    ├── rest/                 # Adapter REST (entrada y Salida)
-    │   ├── adapter/
-    │   │   └── DocumentRestGatewayImpl.java  # Cliente REST para documentos
-    │   ├── config/
-    │   │   └── DocumentRestProperties.java
-    │   ├── controller/
-    │   │   └── FileController.java
-    │   └── exception/
-    │       └── GlobalErrorHandler.java
-    └── soap/                 # Adapter SOAP (salida)
-        ├── adapter/
-        │   └── ExternalSoapGatewayImpl.java
-        ├── config/
-        │   └── SoapProperties.java
-        ├── mapper/
-        │   └── SoapMapper.java
-        ├── xml/
-        │   ├── SoapEnvelopeWrapper.java
-        │   ├── SoapNamespaces.java
-        │   └── model/
-        │       ├── UploadFileRequest.java
-        │       └── UploadFileResponse.java
-        └── exception/
-            └── SoapCommunicationException.java
+├── application/                      # Configuración de aplicación
+│   └── app-service/
+│       └── config/
+│           └── DomainConfig.java      # Beans de casos de uso
+│
+└── infrastructure/                   # Capa de infraestructura
+    ├── entrypoints/
+    │   └── rest/
+    │       ├── ProductRoutes.java     # RouterFunction
+    │       ├── handler/
+    │       │   └── ProductHandler.java # Lógica de handlers
+    │       └── constants/
+    │           ├── RestApiPaths.java
+    │           └── ApiConstants.java  # Constantes API (message-id, processor types)
+    ├── drivenadapters/
+    │   ├── rest-client/
+    │   │   └── ProductRestGatewayAdapter.java
+    │   ├── soap/
+    │   │   ├── SoapGatewayAdapter.java
+    │   │   └── config/
+    │   │       └── SoapProperties.java
+    │   └── aws/
+    │       ├── S3GatewayAdapter.java
+    │       ├── config/
+    │       │   ├── BussinesParams.java       # Enum de parámetros de negocio
+    │       │   ├── ProcessingProperties.java # ConfigProperties para params
+    │       │   └── ProcessingPropertiesConfig.java
+    └── helpers/
+        └── soap/
+            ├── SoapConstants.java     # Constantes SOAP (namespaces, envelopes)
+            ├── mapper/
+            │   └── SoapMapper.java    # Mapeo XML ↔ objetos
+            └── xml/
+                └── SoapEnvelopeWrapper.java # Wrapper de envelope SOAP
 ```
 
 ### Reglas de Dependencia
 
-- **Domain** no depende de ninguna otra capa (puro Java, sin frameworks, sin Spring)
-- **Domain** no contiene anotaciones de framework (`@Component`, `@Service`, etc.)
-- **Infrastructure** depende de Domain (acceso a casos de uso y entidades)
-- **Infrastructure** expone los beans de dominio via `DomainConfig.java`
+- **Domain** no depende de ninguna otra capa (puro Java)
+- **Domain** no contiene anotaciones Spring (`@Component`, etc.)
+- **Infrastructure** y **Application** dependen de Domain
+- **Application** expone los beans via `DomainConfig.java`
 
-## JAXB - Serializacion SOAP
+---
 
-El proyecto utiliza **Jakarta XML Binding (JAXB)** para la serializacion/deserializacion de mensajes SOAP:
+## Flujo de Procesamiento de Documentos
 
-### Ventajas
+### Pipeline de Procesamiento
 
-- **Tipado fuerte**: Clases Java con anotaciones XML
-- **Validacion automatica**: Esquemas XML validados en runtime
-- **Mantenibilidad**: Cambios en el modelo son refactorizaciones seguras
-- **Namespace handling**: Soporte completo de namespaces SOAP
+El pipeline usa **Reactor** (Project Reactor) con operaciones reactivas:
 
-### Generacion del XML
-
-```java
-// Marshalling (Java -> XML)
-UploadFileRequest request = new UploadFileRequest(content, filename, ...);
-String soapXml = soapMapper.toFullSoapMessage(request);
-
-// Resultado:
-// <?xml version="1.0" encoding="UTF-8"?>
-// <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
-//              xmlns:file="http://example.com/fileservice">
-//   <soap:Header/>
-//   <soap:Body>
-//     <file:UploadFileRequest>
-//       <file:content>dGVzdENvbnRlbnQ=</file:content>
-//       <file:filename>document.pdf</file:filename>
-//       ...
-//     </file:UploadFileRequest>
-//   </soap:Body>
-// </soap:Envelope>
+```
+executePendingDocuments()
+    │
+    ▼
+validate(doc) → ProductDocumentValidator.validate()
+    │         ├── Validación de tamaño (maxFileSize de BussinesParams)
+    │         └── Validación de patrón filename (regex de BussinesParams)
+    ▼
+uploadDocument(doc) → SOAP o S3 según el caso de uso
 ```
 
-### Namespaces Centralizados
+### Validación de Documentos (DocumentValidator)
 
-Los namespaces SOAP estan centralizados en `SoapNamespaces.java` para evitar hardcoding disperso:
-- `SOAP_ENVELOPE`: `http://schemas.xmlsoap.org/soap/envelope/`
-- `FILE_SERVICE`: `http://example.com/fileservice`
+`DocumentValidator` centraliza las validaciones de documentos:
 
-## Requisitos Previos
+1. **Validación de tamaño**: Verifica que `doc.size() <= maxFileSize` (configurable via `BussinesParams.MAX_FILE_SIZE`)
+2. **Validación de patrón**: Verifica que el filename matchee el regex (configurable via `BussinesParams.REGEX`)
 
-- **Java 21**
-- **Docker** (opcional)
-- **Gradle 8.5+**
+Ambas validaciones se leen desde `BussinesParamsGateway`, lo que permite cambiar los parámetros sin recompilar.
 
-## Compilacion
+### Casos de Error en Validación
 
-```bash
-./gradlew clean build
+| Caso | Resultado |
+|------|-----------|
+| Archivo excede maxFileSize | Documento ignorado (Mono.empty()) |
+| Filename no matchea regex | Documento ignorado (Mono.empty()) |
+
+---
+
+## Escenarios de Procesamiento de Documentos
+
+### 1. Escenario: Procesamiento Exitoso
+
+**Condición:** Todos los documentos se procesan sin errores.
+
+```
+Flujo:
+1. executePendingDocuments() → obtiene productos desde REST API
+2. Por cada documento pendiente:
+   ├── validate() → pasa validación de tamaño y regex
+   └── uploadDocument() → SOAP o S3 exitoso
+3. Resultado = SUCCESS
+
+Resultado:
+- FileUploadResult.success = true
+- correlationId = ID del servicio externo
 ```
 
-## Ejecucion de Tests
+### 2. Escenario: Fallo en Gateway
 
-```bash
-# Tests unitarios e integracion
-./gradlew test
+**Condición:** Error de red o servicio no disponible.
 
-# Reporte se genera en:
-# build/reports/tests/test/index.html
+```
+Flujo:
+1. validate() → pasa validación
+2. uploadDocument() → ProcessingException (timeout, 503, etc.)
+3. onErrorResume() → status=FAILURE
+
+Resultado:
+- FileUploadResult.success = false
+- errorCode = GATEWAY_TIMEOUT | BAD_GATEWAY | SERVICE_UNAVAILABLE
 ```
 
-## Coverage Reports (JaCoCo)
+### 3. Escenario: Documento Ignorado por Validación
 
-El proyecto incluye **JaCoCo** para generar reportes de cobertura de código:
+**Condición:** El documento no pasa las validaciones.
 
-```bash
-# Generar reporte de cobertura
-./gradlew jacocoTestReport
+```
+Flujo:
+1. validate() → size excede límite O filename no matchea regex
+2. log.warn() → "Document skipped"
+3. return Mono.empty() → documento no se procesa
 
-# Ver reporte HTML
-open build/reports/jacoco/test/index.html
-
-# El reporte XML se genera en:
-# build/reports/jacoco/test/jacocoTestReport.xml
+Resultado:
+- Documento no aparece en resultados
+- No se ejecuta uploadDocument()
 ```
 
-## SonarQube Analysis
+### 4. Escenario: Claim Atómico (Concurrency)
 
-Para ejecutar análisis estático con SonarQube:
+**Condición:** Múltiples pods procesan el mismo documento.
 
-```bash
-# Opcion 1: Usar Docker Scanner
-docker run --rm -v $(pwd):/usr/src sonarsource/sonar-scanner-cli
+```
+Flujo:
+1. Pod A y Pod B llaman getDocument() concurrently
+2. Solo el primero en proceed continúa
+3. El otro hace skip
 
-# Opcion 2: Descargar scanner manualmente
-# https://docs.sonarsource.com/sonarqube/latest analysis/scan/sonarscanner/
-
-# Configuracion requerida (variables de entorno o sonar-project.properties):
-# SONAR_HOST_URL - URL del servidor SonarQube
-# SONAR_TOKEN    - Token de autenticacion
+Resultado:
+- Solo 1 pod procesa el documento
+- El otro continúa con el siguiente
 ```
 
-El análisis cubre:
-- Code smells
-- Duplicated code
-- Complexity metrics
-- Coverage integration
+---
 
-## Mutation Testing (PIT)
+## BussinesParamsGateway - Configuración Centralizada
 
-El proyecto incluye **PIT (Programmed Instructional Testing)** para evaluar la calidad de las pruebas:
+`BussinesParamsGateway` es un puerto que permite obtener parámetros de negocio configurables:
 
-```bash
-# Ejecutar mutation tests
-./gradlew pitest
+### Parámetros Disponibles
 
-# Ver reporte HTML
-open build/reports/pitest/index.html
+| Enum | Descripción | Default |
+|------|-------------|---------|
+| `REGEX` | Patrón regex para validar filenames | `".*\\.(pdf\|csv)$"` |
+| `MAX_FILE_SIZE` | Tamaño máximo de archivo en bytes | `52428800` (50MB) |
+
+### Configuración en application.yml
+
+```yaml
+params:
+  regex: ".*\\.(pdf|csv)$"
+  maxFileSize: 52428800
 ```
 
-### Configuracion
+### Implementación
 
-| Parametro | Valor |
-|-----------|-------|
-| Motor | PIT 1.15.0 |
-| Plugin JUnit 5 | 1.2.1 |
-| **Mutation Threshold** | **50%** |
-| Coverage Threshold | 60% |
-| Mutators | DEFAULTS + REMOVE_CONDITIONALS + INVERT_NEGS + MATH + NEGATE_CONDITIONALS + RETURN_VALS + VOID_METHOD_CALLS + NON_VOID_METHOD_CALLS |
+`ProcessingProperties` implementa `BussinesParamsGateway` leyendo del prefijo `params.*` en `application.yml`.
 
-Los mutators crean cambios artificiales en el codigo (ej: `>` -> `>=`, eliminar `if`). Si los tests detectan el cambio, el mutante "muere". El threshold del 50% garantiza que la mayoria de los cambios son detectados.
+---
 
-## Cobertura (JaCoCo)
+## Códigos de Error (ProcessingResultCodes)
 
-| Parametro | Valor |
-|-----------|-------|
-| Version | JaCoCo 0.8.12 |
-| Reporte XML | `build/reports/jacoco/test/jacocoTestReport.xml` |
-| Reporte HTML | `build/reports/jacoco/test/index.html` |
+| Código | Descripción | Retry |
+|--------|-------------|-------|
+| `GATEWAY_TIMEOUT` | Timeout en gateway | Si |
+| `BAD_GATEWAY` | Error 500 del servicio | Si |
+| `SERVICE_UNAVAILABLE_ERROR` | Servicio no disponible | Si |
+| `ACCESS_DENIED_ERROR` | Error 403 (S3) | No |
+| `NOT_FOUND_ERROR` | Error 404 (S3) | No |
+| `CLIENT_ERROR` | Error 4xx del servicio | No |
+| `UNKNOWN_ERROR` | Error no categorizado | No |
 
-## Ejecucion del Servicio
+---
 
-```bash
-# Desarrollo (con perfil dev)
-./gradlew bootRun --args='--spring.profiles.active=dev'
+## Estados de Documento (DocumentStatus)
 
-# Produccion
-./gradlew bootRun --args='--spring.profiles.active=prod'
+```
+SUCCESS    → Procesamiento exitoso
+FAILURE    → Error permanente
 ```
 
-## Variables de Entorno
-
-| Variable | Descripcion | Default |
-|----------|-------------|---------|
-| `SOAP_ENDPOINT` | URL del servicio SOAP | `http://localhost:9000/soap/fileservice` |
-| `DOCUMENT_REST_ENDPOINT` | URL de la API REST de documentos | `http://localhost:3001` |
-
-### Configuracion Automatica (Recomendada)
-
-Al usar los scripts portables (`start-dev.bat` / `start-dev.sh`), la variable se configura automaticamente:
-
-```bash
-./start-dev.sh  # Detecta el puerto y configura SOAP_ENDPOINT
-```
-
-### Configuracion Manual
-
-Si ejecutas manualmente, obten el endpoint del mock:
-
-```bash
-# Linux/Mac
-export SOAP_ENDPOINT=$(cat /tmp/file-processor-mock.info | grep endpoint | cut -d= -f2)
-
-# Windows
-for /f "tokens=2 delims==" %a in ('type %TEMP%\file-processor-mock.info ^| findstr "endpoint"') do set SOAP_ENDPOINT=%a
-```
-
-Luego inicia el microservicio:
-
-```bash
-# Linux/macOS
-./gradlew bootRun --args='--spring.profiles.active=dev'
-
-# Windows
-gradlew.bat bootRun --args='--spring.profiles.active=dev'
-```
-
-### Configuracion Fija (Sin Mock Variable)
-
-Para usar siempre el mismo puerto (ej: 9000), define la variable manualmente:
-
-**Linux/macOS:**
-```bash
-export SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
-./gradlew bootRun
-```
-
-**Windows:**
-```cmd
-set SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
-gradlew.bat bootRun
-```
-
-O configura permanentemente en Variables de Entorno del Sistema.
-
-## Mock SOAP para desarrollo
-
-El mock portable ahora soporta **6 escenarios de respuesta** rotando infinitamente:
-
-| # | Escenario | HTTP Status | Delay | Reintentable |
-|---|-----------|-------------|-------|--------------|
-| 1 | **Success** | 200 | 100ms | - |
-| 2 | **Server Error** | 500 | 100ms | Si |
-| 3 | **Service Unavailable** | 503 | 100ms | Si |
-| 4 | **Gateway Timeout** | 504 | 100ms | Si |
-| 5 | **Slow Response** | 200 | **30s** | - |
-| 6 | **Bad Request** | 400 | 100ms | No |
-
-### Iniciar el Mock SOAP (Version Portable - Recomendada)
-
-**Windows:**
-```cmd
-# Opcion 1: Script completo (Mock + Microservicio)
-start-dev.bat
-
-# Opcion 2: Solo el Mock
-scripts\start-mock.bat
-
-# Ver que puerto se uso:
-type %TEMP%\file-processor-mock.info
-```
-
-**Linux/macOS:**
-```bash
-# Opcion 1: Script completo (Mock + Microservicio)
-chmod +x start-dev.sh
-./start-dev.sh
-
-# Opcion 2: Solo el Mock
-./scripts/start-mock.sh
-
-# Ver que puerto se uso:
-cat /tmp/file-processor-mock.info
-```
-
-### Ejecucion Manual con Puerto Especifico
-
-```bash
-# Compilar
-./gradlew testClasses
-
-# Iniciar con puerto especifico (todos los escenarios)
-java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000
-
-# Solo escenarios especificos (ej: solo 200 y 500)
-java -cp build/classes/java/test com.example.fileprocessor.mock.PortableSoapMock 9000 1,2
-
-# Configurar endpoint manualmente
-export SOAP_ENDPOINT=http://localhost:9000/soap/fileservice
-```
-
-### Filtrar Escenarios
-
-Puedes indicar qué escenarios responder separados por comas:
-
-```bash
-# Linux/Mac
-./scripts/start-mock.sh 9000 1      # Solo exito
-./scripts/start-mock.sh 9000 2,3,4    # Solo errores reintentables
-
-# Windows
-scripts\start-mock.bat 9000 1
-scripts\start-mock.bat 9000 2,3,4
-```
-
-| # | Escenario |
-|---|-----------|
-| 1 | 200 Success |
-| 2 | 500 Server Error |
-| 3 | 503 Service Unavailable |
-| 4 | 504 Gateway Timeout |
-| 5 | 200 Slow Response (30s) |
-| 6 | 400 Bad Request |
-
-### Mock REST de Documentos
-
-El mock de documentos (`DocumentRestMock`) simula una API REST externa que provee documentos:
-
-| Endpoint | Descripcion |
-|----------|-------------|
-| `GET /api/documents` | Lista todos los documentos disponibles |
-| `GET /api/document/{id}` | Obtiene un documento especifico por ID |
-
-**Documentos disponibles:**
-
-| ID | Nombre | Tipo Contenido | Origin |
-|----|--------|----------------|--------|
-| doc-001 | test-document.pdf | application/pdf | folderA/incoming |
-| doc-002 | test-document.docx | application/vnd.openxmlformats-officedocument.wordprocessingml.document | folderB/incoming |
-| doc-003 | test-document.txt | text/plain | folderA/special |
-
-**Iniciar el Mock REST de Documentos:**
-
-```bash
-# Linux/macOS
-chmod +x ./scripts/start-document-mock.sh
-./scripts/start-document-mock.sh
-
-# Ver que puerto se uso:
-cat /tmp/document-rest-mock.info
-```
-
-**Windows:**
-```cmd
-scripts\start-document-mock.bat
-type %TEMP%\document-rest-mock.info
-```
-
-### Mockoon Desktop
-
-Si prefieres usar **Mockoon Desktop** en lugar del mock Java, puedes importar la configuracion:
-
-```bash
-# Importar en Mockoon Desktop
-mockoon/document-rest-mock.json
-```
-
-**Puerto:** 3001 (configurable al abrir el archivo en Mockoon)
-
-Endpoints configurados:
-- `GET /api/documents` - Lista todos los documentos
-- `POST /api/document/:id` - Documento por ID
-
-### Mas informacion
-
-- [`src/test/java/com/example/fileprocessor/mock/README.md`](src/test/java/com/example/fileprocessor/mock/README.md) - Documentacion completa del mock Java
-- [`soapui/README.md`](soapui/README.md) - Alternativa usando SOAP UI (menos estable en Windows)
+---
 
 ## API Endpoints
 
-### POST /api/v1/files/load
+### GET /api/v1/products/load
 
-Carga documentos desde la API REST externa y los guarda en la base de datos para su procesamiento posterior. Este es el primer paso del flujo de dos pasos.
+Carga productos desde REST API externa.
 
-**Request:**
-```bash
-curl -X POST http://localhost:8080/api/v1/files/load
-```
+**Headers:**
+- `message-id`: (opcional) Trace ID para correlación
 
 **Response:**
 ```json
 {
+  "traceId": "550e8400-e29b-41d4-a716-446655440000",
+  "operationType": "LOAD",
   "status": "LOADING",
-  "message": "Document loading from REST API started",
-  "correlationId": null,
-  "traceId": "uuid-generado",
-  "externalReference": null,
-  "processedAt": "2024-01-15T10:30:00Z",
-  "errorCode": null,
+  "message": "Product loading from REST API started",
   "success": true
 }
 ```
 
-### GET /api/v1/files/{documentId}
+### GET /api/v1/products?processor={soap|s3}
 
-Obtiene un documento de la API REST externa y lo envia al servicio SOAP.
+Procesa documentos pendientes.
 
-**Request:**
-```bash
-curl -X GET http://localhost:8080/api/v1/files/doc-001
-```
+**Headers:**
+- `message-id`: (opcional) Trace ID para correlación
+
+**Parámetros:**
+- `processor`: `soap` (default) | `s3`
 
 **Response:**
 ```json
 {
-  "status": "SUCCESS",
-  "message": "File uploaded successfully",
-  "correlationId": "corr-123-abc",
-  "traceId": "uuid-generado",
-  "processedAt": "2024-01-15T10:30:00Z",
-  "externalReference": "ext-ref-456",
+  "traceId": "660e8400-e29b-41d4-a716-446655440001",
+  "operationType": "PROCESS",
+  "status": "PROCESSING",
+  "message": "Pending product documents processing started",
   "success": true
 }
 ```
 
-### GET /api/v1/files/{documentId} (ZIP)
+### GET /actuator/health
 
-Si el documento es un archivo ZIP, retorna un resultado consolidado:
-
-```bash
-curl -X GET http://localhost:8080/api/v1/files/doc-004
-```
+Health check de la aplicación.
 
 **Response:**
 ```json
 {
-  "status": "SUCCESS",
-  "message": "ZIP processed: 3 documents, 3 successful",
-  "correlationId": "corr-789-xyz",
-  "traceId": "uuid-generado",
-  "processedAt": "2024-01-15T10:30:01Z",
-  "externalReference": "doc-004 (ZIP)",
-  "success": true
+  "status": "UP"
 }
 ```
 
-### GET /api/v1/files
+---
 
-Obtiene todos los documentos disponibles de la API REST y los envia al servicio SOAP.
-
-**Request:**
-```bash
-curl -X GET http://localhost:8080/api/v1/files
-```
-
-**Response:**
-```json
-[
-  {
-    "status": "SUCCESS",
-    "message": "File uploaded successfully",
-    "correlationId": "corr-123-abc",
-    "traceId": "uuid-generado",
-    "processedAt": "2024-01-15T10:30:00Z",
-    "externalReference": "ext-ref-456",
-    "success": true
-  },
-  {
-    "status": "SUCCESS",
-    "message": "File uploaded successfully",
-    "correlationId": "corr-456-def",
-    "traceId": "uuid-generado",
-    "processedAt": "2024-01-15T10:30:01Z",
-    "externalReference": "ext-ref-789",
-    "success": true
-  }
-]
-```
-
-## Configuracion de Propiedades
-
-El servicio utiliza `FileUploadProperties` para validar archivos:
-
-| Propiedad | Descripcion | Default | Validacion |
-|-----------|-------------|---------|------------|
-| `app.file.max-size` | Tamano maximo en bytes | 10485760 (10MB) | Min 1024 |
-| `app.file.allowed-types` | Tipos permitidos | pdf,docx,txt | No vacio |
-| `app.file.max-filename-length` | Longitud maxima nombre | 255 | Min 10 |
-| `app.file.max-file-size-mb` | Tamano maximo en MB | 50 | Min 1 |
-
-## Restricciones de Archivos
-
-- **Tamano maximo**: 10 MB
-- **Tipos permitidos**: `pdf`, `docx`, `txt`
-- **Nombre maximo**: 255 caracteres
-
-### Validacion Temprana de Tamano
-
-Antes de consumir el stream completo en memoria, el servicio verifica el `Content-Length` declarado por el cliente. Si excede el limite configurado, se rechaza inmediatamente con `FILE_SIZE_EXCEEDED`.
-
-### Payload Too Large
-
-Si el cuerpo de la peticion excede el buffer configurado en WebFlux (`maxInMemorySize`), el servicio responde con **HTTP 413 PAYLOAD_TOO_LARGE**.
-
-## Procesamiento de Archivos ZIP
-
-El servicio soporta el procesamiento de archivos comprimidos en formato ZIP. Cuando se recibe un documento ZIP:
-
-1. **Deteccion Automatica**: El sistema detecta archivos con extension `.zip` o cuyo campo `isZip` sea `true`
-2. **Extraccion**: El contenido del ZIP se extrae automáticamente
-3. **Procesamiento Individual**: Cada archivo dentro del ZIP se procesa individualmente mediante el servicio SOAP
-4. **Reporte Consolidado**: Se retorna un resultado consolidado con el total de documentos procesados
-
-### Contenido del ZIP
-
-El ZIP puede contener cualquier combinacion de:
-- `*.pdf` - Documentos PDF
-- `*.docx` - Documentos Word
-- `*.txt` - Archivos de texto
-- Otros formatos reconocidos
-
-### Archivos Ignorados
-
-El sistema ignora automaticamente:
-- Directorios dentro del ZIP
-- Archivos que comienzan con `_` (archivos de metadata)
-- Archivos con nombre vacio
-
-### Ejemplo de Respuesta para ZIP
-
-```json
-{
-  "status": "SUCCESS",
-  "message": "ZIP processed: 3 documents, 3 successful",
-  "correlationId": "corr-123-abc",
-  "traceId": "uuid-generado",
-  "processedAt": "2024-01-15T10:30:00Z",
-  "externalReference": "doc-004 (ZIP)",
-  "success": true
-}
-```
-
-## Reintentos SOAP
-
-El servicio implementa **3 reintentos maximos** con backoff exponencial:
-
-- **Escenarios reintentables**: Timeouts, errores 5xx (500, 502, 503, 504)
-- **Delay**: 1s, 2s, 4s entre intentos
-- **Logging**: Cada reintento es loggeado con traceId
-
-### Estrategia de Timeout Dual
-
-Para robustez ante conexiones lentas o "keep-alive tricks", se usan dos capas de timeout desfasadas 5 segundos:
-
-| Capa | Timeout | Proposito |
-|------|---------|-----------|
-| Netty `responseTimeout` | `timeoutSeconds - 5` | Cancela la conexion si no hay respuesta de red |
-| Reactor `.timeout()` | `timeoutSeconds` | Red de seguridad absoluta para el pipeline completo |
-
-Esto evita que un servidor externo que envia bytes espaciados mantenga la conexion abierta indefinidamente.
+## Template Method Pattern
 
 ```
-INFO  - Sending SOAP request for traceId: abc-123, maxRetries=3
-WARN  - Retrying SOAP call for traceId=abc-123, attempt 1/3 (backoff=1000ms)
-WARN  - Retrying SOAP call for traceId=abc-123, attempt 2/3 (backoff=2000ms)
-WARN  - Retrying SOAP call for traceId=abc-123, attempt 3/3 (backoff=4000ms)
-ERROR - SOAP timeout for traceId: abc-123 after all retries exhausted
+AbstractDocumentProcessingUseCase
+│
+├── executePendingDocuments()     ← FINAL (template method)
+│   ├── getAllProducts()          ← ProductRestGateway
+│   ├── getDocument()              ← ProductRestGateway
+│   ├── validate()                ← DocumentValidator
+│   └── uploadDocument()          ← ABSTRACT (subclase implementa)
+│
+├── SoapDocumentProcessingUseCase
+│   └── uploadDocument()          → SoapGateway.send()
+│
+└── S3DocumentProcessingUseCase
+    └── uploadDocument()          → S3Gateway.send()
 ```
 
-## Manejo de Errores
+---
 
-El `GlobalErrorHandler` centraliza el manejo de excepciones:
+## Configuración
 
-| Excepcion | HTTP Status | Codigo |
-|-----------|-------------|--------|
-| `FileValidationException` | 400 | `FILE_SIZE_EXCEEDED`, `INVALID_FILE_TYPE`, `FILENAME_TOO_LONG`, `INVALID_FILENAME` |
-| `SoapCommunicationException` | 502/504/500 | `BAD_GATEWAY`, `GATEWAY_TIMEOUT`, `CLIENT_ERROR` |
-| `DataBufferLimitException` | 413 | `PAYLOAD_TOO_LARGE` |
-| `IllegalArgumentException` | 400 | `INVALID_ARGUMENT` |
-| `ServerWebInputException` | 400 | `INVALID_REQUEST` |
-| `RetryExhaustedException` | 504 | `GATEWAY_TIMEOUT` |
+### Variables de Entorno
 
-### Retry Exhausted
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `DOCUMENT_REST_ENDPOINT` | `http://localhost:3001` | API REST de productos |
+| `SOAP_ENDPOINT` | `http://localhost:9000/soap/fileservice` | Servicio SOAP |
+| `AWS_ENDPOINT` | `` | Endpoint S3 (LocalStack) |
+| `AWS_BUCKET` | `documents-bucket` | Bucket S3 |
+| `AWS_REGION` | `us-east-1` | Región AWS |
+| `AWS_ACCESS_KEY` | `` | Access key |
+| `AWS_SECRET_KEY` | `` | Secret key |
 
-Cuando se agotan los reintentos configurados, el error es capturado y mapeado a `GATEWAY_TIMEOUT` con un mensaje descriptivo.
+### Configuración de Procesadores (application.yml)
+
+```yaml
+app:
+  soap:
+    endpoint: ${SOAP_ENDPOINT}
+    timeout-seconds: 30
+    retry-attempts: 3
+    retry-backoff-millis: 1000
+  document-rest:
+    endpoint: ${DOCUMENT_REST_ENDPOINT}
+    products-path: /api/products
+    product-documents-path: /api/products/{productId}/documents
+    timeout-seconds: 15
+
+params:
+  regex: ".*\\.(pdf|csv)$"
+  maxFileSize: 52428800
+
+spring:
+  r2dbc:
+    url: r2dbc:h2:mem:///fileprocessor
+```
+
+---
 
 ## Seguridad
 
-### Proteccion XXE
+### Sanitización de S3 Keys
 
-El parser XML del `SoapEnvelopeWrapper` tiene configuradas protecciones contra ataques XXE (XML External Entity):
+`S3GatewayAdapter.buildKey()` sanitiza el filename:
+- Elimina `..` (path traversal)
+- Elimina `/` y `\` (path separators)
+- Previene escribir fuera del bucket
 
-- `disallow-doctype-decl: true`
-- `external-general-entities: false`
-- `external-parameter-entities: false`
+---
 
-Esto previene que un atacante use DOCTYPE para leer archivos del servidor via respuestas SOAP maliciosas.
-
-### Validacion de Nombres de Archivo
-
-El `FileValidator` rechaza nombres que contengan:
-- `..` (path traversal)
-- `/` o `\` (separadores de directorio)
-- Mas de 255 caracteres
-
-## Testing con Postman
-
-Ver carpeta `postman/`:
+## Compilación y Ejecución
 
 ```bash
-# Importar en Postman
-postman/File-Processor-Service.postman_collection.json
+# Compilar
+./gradlew clean build
+
+# Ejecutar tests
+./gradlew test
+
+# Ejecutar con perfil SOAP
+SPRING_PROFILES_ACTIVE=soap ./gradlew bootRun
+
+# Ejecutar con perfil S3
+SPRING_PROFILES_ACTIVE=s3 ./gradlew bootRun
 ```
 
-Endpoints incluidos:
-- GET /api/v1/files/{documentId} - Procesar documento especifico
-- GET /api/v1/files - Procesar todos los documentos
-- Health Check
-- Error scenarios (400, 504)
+---
 
-Para mas detalles: [`postman/README.md`](postman/README.md)
-
-## Scripts Disponibles
-
-### Scripts Principales (Nuevos - Portable)
-
-| Script | Plataforma | Descripcion |
-|--------|------------|-------------|
-| `./start-dev.sh` | Linux/Mac | **Inicia Mock + Microservicio** (auto-configura puerto) |
-| `start-dev.bat` | Windows | **Inicia Mock + Microservicio** (auto-configura puerto) |
-| `./scripts/start-mock.sh` | Linux/Mac | Mock SOAP portable (auto-detecta Java y puerto libre) |
-| `scripts\start-mock.bat` | Windows | Mock SOAP portable (auto-detecta Java y puerto libre) |
-| `./scripts/start-document-mock.sh` | Linux/Mac | Mock REST documentos (puerto 8081) |
-| `scripts\start-document-mock.bat` | Windows | Mock REST documentos (puerto 8081) |
-| `./scripts/stop-mock.sh` | Linux/Mac | Detener cualquier mock activo |
-| `scripts\stop-mock.bat` | Windows | Detener cualquier mock activo |
-
-## Testing con SOAP UI
-
-Ver carpeta `soapui/`:
+## Ejemplos de curl
 
 ```bash
-# Importar en SOAP UI
-soapui/FileService-Mock-soapui-project.xml
+# Cargar productos
+curl -X GET http://localhost:8080/api/v1/products/load \
+  -H "message-id: my-trace-123"
+
+# Procesar con SOAP
+curl -X GET "http://localhost:8080/api/v1/products?processor=soap" \
+  -H "message-id: my-trace-123"
+
+# Procesar con S3
+curl -X GET "http://localhost:8080/api/v1/products?processor=s3" \
+  -H "message-id: my-trace-123"
+
+# Health check
+curl -s http://localhost:8080/actuator/health
 ```
 
-Respuestas mock configuradas:
-- ✅ Success (200)
-- ❌ Server Error 500 (reintentable)
-- ❌ Service Unavailable 503 (reintentable)
-- ⏱️ Slow Response (30s delay)
-- ❌ Bad Request 400 (no reintentable)
+---
 
-📖 **Nota**: El mock de Java es mas estable y simple. Ver [Mock SOAP en Java](src/test/java/com/example/fileprocessor/mock/README.md) para comparar opciones.
+## Excepciones
 
-## Dependencias Clave
+### ProcessingException
 
-```gradle
-// SOAP / JAXB
-implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.1")
-runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.4")
+Excepción unificada para todos los errores de procesamiento. Incluye:
+- `traceId`: Extraído automáticamente del contexto reactivo via `fromContext()`
+- `documentId`: Opcional
+- `errorCode`: Código de error (`ProcessingResultCodes`)
 
-// Mutation Testing
-id("info.solidsoft.pitest") version "1.15.0"
+**Métodos factory:**
+```java
+// Extrae traceId del ContextView automáticamente
+ProcessingException.fromContext(ctx, message, errorCode)
+ProcessingException.fromContext(ctx, message, errorCode, documentId)
+ProcessingException.fromContext(ctx, message, errorCode, cause)
+
+// Con traceId explícito
+ProcessingException.withTraceId(message, errorCode, traceId)
+ProcessingException.withDocumentId(message, errorCode, traceId, documentId)
 ```
 
-## Changelog
+### DomainException
 
-### 2026-04-25 - Refactorizacion Mock REST Documentos
-- **Refactor:** `DocumentRestMock.java` - Eliminado Jackson, generacion JSON manual
-- **Refactor:** `start-document-mock.sh` - Simplificado (mock auto-detecta puerto)
-- **Nuevo:** `start-document-mock.bat` - Script Windows para mock REST
-- **Doc:** Actualizado `mock/README.md` con documentacion del mock REST
+Base class para todas las excepciones de dominio.
 
-### 2026-04-25 - Nuevo Endpoint de Carga de Documentos
-- **Nuevo:** `POST /api/v1/files/load` - Carga documentos desde API REST externa a la BD
-- **Nuevo:** `LoadDocumentsUseCase` - Caso de uso para carga de documentos
-- **Nuevo:** `LoadDocumentsResult` - DTO de resultado para carga
-- **Nuevo:** `DocumentRestGateway.getAllDocuments()` - Puerto para obtener todos los documentos
-- **Nuevo:** `DocumentRepository.save(DocumentToProcess)` - Metodo para guardar documentos
-- **Nuevo:** `R2dbcDocumentRepository.save()` - Implementacion R2dbc
-- **Nuevo:** `DocumentRestMock` - Mock de API REST de documentos con `origin`
-- **Nuevo:** `LoadDocumentsUseCaseTest` - Pruebas unitarias
-- **Nuevo:** `DocumentRestGatewayImplTest` - Pruebas del adapter
-- **Actualizado:** `FileController` con nuevo endpoint `/load`
-- **Actualizado:** `DocumentInfo` con campo `origin`
-- **Actualizado:** `DocumentRestMock` incluye `origin` en respuestas
+### FileValidationException
 
-### 2026-04-25 - Constantes de Status Centralizadas
-- **Nuevo:** `DocumentStatus.java` - Enum con valores `PENDING`, `PROCESSING`, `RETRY`, `SUCCESS`, `FAILURE`, `SKIPPED`
-- **Refactor:** `R2dbcDocumentRepository` ahora usa `DocumentStatus.*_VALUE` en SQL
-- **Refactor:** `DatabaseInitializer` ahora usa constantes para SQL
-- **Refactor:** `ProcessFileUseCase` usa `DocumentStatus.*_VALUE` en lugar de constantes locales
-- **Refactor:** `SoapResponse.isSuccess()` usa `DocumentStatus.SUCCESS_VALUE`
-- **Refactor:** `FileController` usa `DocumentStatus.PROCESSING_VALUE`
-- **Cleanup:** `start-mock.bat` simplificado (el mock ahora auto-detecta puerto)
-
-### 2026-04-22 - Limpieza de Codigo
-- **Eliminado**: `SoapConfig.java` - bean `JAXBContext` sin uso
-- **Eliminado**: `WebClientConfig.java` - bean `WebClient.Builder` sin uso
-- **Eliminado**: `FileUploadResponseDto.java` - DTO sin uso
-- **Eliminado**: `DocumentRestGateway.getAllDocuments()` - metodo sin uso
-- **Eliminado**: `DocumentRepository.save()` y `findById()` - metodos sin uso
-- **Eliminado**: `STATUS_PENDING` constante sin uso en `ProcessFileUseCase.java`
-
-### 2026-04-22 - Configuracion y Documentacion
-- **Config**: Agregado `max-file-size-mb: 50` en `application.yml`
-- **Doc**: Agregada seccion de JaCoCo coverage reports
-- **Doc**: Agregada seccion de SonarQube analysis
-- **Doc**: Agregada tabla de `FileUploadProperties`
-
-### 2026-04-21 - Refactorizacion Completa (v4)
-- **Seguridad**: Proteccion XXE en `SoapEnvelopeWrapper` (disallow-doctype-decl, external entities bloqueadas)
-- **Seguridad**: Eliminado endpoint `/debug` que exponia headers sin autenticacion
-- **Defensa**: Validacion temprana de tamano (`Content-Length`) antes de cargar stream en memoria
-- **Defensa**: Handler `DataBufferLimitException` con HTTP 413
-- **Arquitectura**: Dominio desacoplado de Spring (`@Service`/`@Component` removidos, `DomainConfig` creado)
-- **Arquitectura**: Eliminados `FileUploadRequestDto` y `FileDtoMapper` (redundantes con `FileData`)
-- **Arquitectura**: Consolidado `JAXBContext` en bean `SoapConfig` compartido
-- **Arquitectura**: Eliminado `SoapEnvelope.java`, envelope unificado en `SoapMapper`
-- **Arquitectura**: Namespaces SOAP centralizados en `SoapNamespaces`
-- **Bugfix**: `onErrorResume(TimeoutException)` ahora captura `retryExhausted` correctamente
-- **Bugfix**: Eliminada condicion redundante `|| value == 503` en `isRetryableException`
-- **Bugfix**: `SoapMapper.fromSoapXml()` propaga `SoapCommunicationException` ante XML invalido
-- **Performance**: `FileValidator` precalcula `Set` de tipos permitidos con `trim()` y `toLowerCase()`
-- **Performance**: Eliminado `.subscribeOn(Schedulers.boundedElastic())` innecesario en WebClient
-- **Error Handling**: Agregado handler `IllegalStateException` para `Exceptions.retryExhausted`
-- **Mutation Testing**: Plugin PIT integrado con threshold del 50%
-- **Timeout Dual**: Netty `responseTimeout` desfasado 5s del timeout de Reactor
-
-### 2025-04-21 - Mock SOAP Portable (v3)
-- **Nuevo:** `PortableSoapMock.java` - Detecta automaticamente puerto libre (9000, o 9000-9999)
-- **Nuevo:** `start-dev.sh` / `start-dev.bat` - Inicia Mock + Microservicio en un solo comando
-- **Nuevo:** Scripts en carpeta `scripts/` - Organizados y portables
-- **Mejorado:** Auto-deteccion de Java en ubicaciones comunes (sin `JAVA_HOME` requerido)
-- **Mejorado:** Guarda configuracion en archivo temporal (`/tmp/file-processor-mock.info`)
-- **Solucionado:** Ya no requiere permisos de administrador en Windows
-- **Documentacion:** Guia completa en `scripts/README.md`
-
-### 2025-04-20 - Scripts de Mock Mejorados (v2)
-- **Mejorado:** Scripts ahora verifican que el puerto realmente se libere antes de reportar exito
-- **Agregado:** `start-mock.sh` detecta si el puerto esta ocupado e intenta liberarlo automaticamente
-- **Agregado:** `stop-mock.sh` espera y verifica que el proceso realmente haya terminado
-- **Agregado:** Scripts `stop-mock.sh` y `stop-mock.bat` para detener el mock SOAP
-- **Actualizado:** Documentacion con instrucciones para Windows y Linux/macOS
-
-### 2025-04-20 - Refactor de Codigo
-- **Eliminado:** Imports sin uso en `FileControllerTest.java`, `ExternalSoapGatewayImplTest.java` y `GlobalErrorHandler.java`
+Excepción para errores de validación de archivos.

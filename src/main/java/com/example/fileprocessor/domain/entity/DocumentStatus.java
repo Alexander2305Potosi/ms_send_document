@@ -9,12 +9,8 @@ public enum DocumentStatus {
     RETRY,
     SUCCESS,
     FAILURE,
-    SKIPPED;
+    SKIPPED,
+    NOT_SENT,
+    DEAD_LETTER;  // Failed after max retries - requires manual intervention
 
-    public static final String PENDING_VALUE = PENDING.name();
-    public static final String PROCESSING_VALUE = PROCESSING.name();
-    public static final String RETRY_VALUE = RETRY.name();
-    public static final String SUCCESS_VALUE = SUCCESS.name();
-    public static final String FAILURE_VALUE = FAILURE.name();
-    public static final String SKIPPED_VALUE = SKIPPED.name();
 }

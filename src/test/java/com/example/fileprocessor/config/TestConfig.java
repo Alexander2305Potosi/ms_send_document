@@ -1,14 +1,13 @@
 package com.example.fileprocessor.config;
 
-import com.example.fileprocessor.infrastructure.config.FileUploadProperties;
-import com.example.fileprocessor.infrastructure.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.reactive.function.client.WebClient;
 
 @TestConfiguration
-@EnableConfigurationProperties({FileUploadProperties.class, SoapProperties.class})
+@EnableConfigurationProperties({SoapProperties.class})
 public class TestConfig {
 
     @Bean

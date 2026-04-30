@@ -1,11 +1,96 @@
 # Mocks para Desarrollo
 
-Este directorio contiene dos servidores mock para pruebas:
+Este directorio contiene servidores mock para pruebas:
 
 | Mock | Descripcion | Puerto default |
-|------|-------------|-----------------|
+|------|-------------|----------------|
 | `PortableSoapMock.java` | Mock SOAP con escenarios rotativos | 9000 |
 | `DocumentRestMock.java` | Mock REST para documentos | 8081 |
+| `ProductRestMock.java` | Mock REST para productos | 3001 |
+| `S3Mock.java` | Mock S3 (simula LocalStack) | 4566 |
+
+---
+
+# Mock S3 Server (LocalStack-like)
+
+## Clase Principal: S3Mock.java
+
+El mock S3 simula el comportamiento de AWS S3 PUT Object:
+- Funciona en cualquier maquina sin configuracion adicional
+- Auto-detección de Java y puerto dinámico
+- Soporta uploads PUT con headers x-amz-meta-*
+- Genera ETag aleatorio para cada request
+- Guarda configuración en archivo temporal
+
+## Endpoints
+
+| Metodo | Path | Descripcion |
+|--------|------|-------------|
+| PUT | `/documents-bucket/{key}` | Upload un objeto |
+
+## Headers Esperados
+
+| Header | Descripcion |
+|--------|-------------|
+| `Content-Type` | Content type del archivo (application/pdf, text/plain, etc.) |
+| `x-amz-meta-traceId` | UUID de traza |
+| `x-amz-meta-original-filename` | Nombre original del archivo |
+| `x-amz-meta-timestamp` | Timestamp ISO |
+
+## Uso
+
+### Opcion 1: Script Automatico
+
+```bash
+chmod +x ./scripts/start-s3-mock.sh
+./scripts/start-s3-mock.sh
+```
+
+### Opcion 2: Ejecucion Manual
+
+```bash
+# Compilar
+./gradlew testClasses
+
+# Ejecutar (puerto default: 4566)
+java -cp build/classes/java/test com.example.fileprocessor.mock.S3Mock
+
+# Con puerto y bucket especifico
+java -cp build/classes/java/test com.example.fileprocessor.mock.S3Mock 4566 my-bucket
+```
+
+## Verificar configuracion
+
+```bash
+cat /tmp/s3-mock.info
+```
+
+## Probar con curl
+
+```bash
+# Upload de archivo
+curl -X PUT "http://localhost:4566/documents-bucket/test.pdf" \
+  -H "Content-Type: application/pdf" \
+  -H "x-amz-meta-traceId: test-trace-123" \
+  -H "x-amz-meta-original-filename: manual.pdf" \
+  -H "x-amz-meta-timestamp: 2024-04-20T12:00:00Z" \
+  --data-binary "@test.pdf"
+
+# Expected response:
+# <?xml version="1.0" encoding="UTF-8"?>
+# <PutObjectResponse xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+#     <ETag>"abc123"</ETag>
+#     <LastModified>2024-04-20T12:00:00.000Z</LastModified>
+#     <ContentLength>1234</ContentLength>
+# </PutObjectResponse>
+```
+
+## Variables de entorno para el MS
+
+```bash
+export AWS_ENDPOINT=http://localhost:4566
+export AWS_BUCKET=documents-bucket
+```
 
 ---
 

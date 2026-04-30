@@ -11,7 +11,7 @@ spring:
     password:
   h2:
     console:
-      enabled: true
+      enabled: ${H2_CONSOLE_ENABLED:false}
   webflux:
     multipart:
       max-in-memory-size: 10MB
@@ -35,27 +35,57 @@ logging:
     com.example.fileprocessor: INFO
     reactor.netty: INFO
   pattern:
-    console: "%-5level [%thread] %logger{36} - traceId=%X{traceId} - %msg%n"
+    console: "%-5level [%thread] [%X{traceId}] %logger{36} - %msg%n"
 
 app:
-  file:
-    max-size: 10485760
-    allowed-types: pdf,docx,txt
-    max-filename-length: 255
-    max-file-size-mb: 50
-    folders-to-skip:
-      - "/tmp"
-      - "/transient"
-    keywords:
-      - "test"
-      - "mock"
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
     retry-attempts: 3
     retry-backoff-millis: 1000
+    max-error-body-length: 500
   document-rest:
     endpoint: ${DOCUMENT_REST_ENDPOINT:http://localhost:3001}
-    list-path: /api/documents
-    get-path: /api/document
+    products-path: /api/products
+    product-documents-path: /api/products/{productId}/documents
     timeout-seconds: 15
+  aws:
+    s3:
+      bucket-name: ${AWS_BUCKET:documents-bucket}
+      region: ${AWS_REGION:us-east-1}
+      endpoint: ${AWS_ENDPOINT:}
+      path-style-access: false
+      access-key: ${AWS_ACCESS_KEY:}
+      secret-key: ${AWS_SECRET_KEY:}
+      retry-attempts: 3
+      retry-backoff-millis: 500
+      timeout-seconds: 30
+      key-prefix: "documents/"
+
+  processors:
+    s3:
+      max-file-size-bytes: 52428800
+      filename-pattern: ".*\\.(pdf|csv)$"
+    soap:
+      max-file-size-bytes: 10485760
+      filename-pattern: ".*\\.(pdf|docx|txt)$"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: soap
+
+---
+spring:
+  config:
+    activate:
+      on-profile: s3
+  aws:
+    s3:
+      bucket-name: documents-bucket
+      region: us-east-1
+      endpoint: http://localhost:4566
+      path-style-access: true
+      retry-attempts: 3
+      retry-backoff-millis: 500
