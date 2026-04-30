@@ -63,9 +63,9 @@ public class SoapGatewayAdapter implements SoapGateway {
             log.info("Sending SOAP request for traceId: {}, endpoint: {}", traceId, properties.endpoint());
 
             String soapEnvelope = soapMapper.toFullSoapMessage(
-                request.documentId(), request.content(), request.filename(),
-                request.contentType(), request.fileSize(),
-                request.parentFolder(), request.childFolder());
+                request.getDocumentId(), request.getContent(), request.getFilename(),
+                request.getContentType(), request.getFileSize(),
+                request.getParentFolder(), request.getChildFolder());
 
             Mono<ExternalServiceResponse> soapCall = webClient.post()
                 .contentType(MediaType.TEXT_XML)
@@ -79,7 +79,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                             log.error("SOAP error response for traceId={}: {}", traceId, truncatedBody);
                             return Mono.error(ProcessingException.fromContext(ctx,
                                 "SOAP error " + response.statusCode() + ": " + truncatedBody,
-                                mapHttpStatusToCode(response.statusCode()), request.documentId()));
+                                mapHttpStatusToCode(response.statusCode()), request.getDocumentId()));
                         }))
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
@@ -109,14 +109,14 @@ public class SoapGatewayAdapter implements SoapGateway {
                         log.error("SOAP timeout for traceId: {} after {} retries", traceId, retries);
                         return Mono.error(ProcessingException.fromContext(ctx,
                             "SOAP request timed out after " + retries + " retries",
-                            ProcessingResultCodes.GATEWAY_TIMEOUT, request.documentId()));
+                            ProcessingResultCodes.GATEWAY_TIMEOUT, request.getDocumentId()));
                     }
                     if (cause instanceof WebClientResponseException e) {
                         if (e.getStatusCode().is5xxServerError()) {
                             log.error("SOAP server error for traceId: {}: {}", traceId, e.getMessage());
                             return Mono.error(ProcessingException.fromContext(ctx,
                                 "SOAP service error: " + e.getMessage(),
-                                mapHttpStatusToCode(e.getStatusCode()), request.documentId()));
+                                mapHttpStatusToCode(e.getStatusCode()), request.getDocumentId()));
                         }
                         log.error("SOAP client error for traceId: {}: {}", traceId, e.getMessage());
                         return Mono.just(toFileUploadResultError(
@@ -127,13 +127,13 @@ public class SoapGatewayAdapter implements SoapGateway {
                         log.error("Connection failed for traceId: {}: {}", traceId, cause.getMessage());
                         return Mono.error(ProcessingException.fromContext(ctx,
                             "Connection failed: " + cause.getMessage(),
-                            ProcessingResultCodes.UNKNOWN_ERROR, request.documentId()));
+                            ProcessingResultCodes.UNKNOWN_ERROR, request.getDocumentId()));
                     }
                     if (cause instanceof IOException) {
                         log.error("IO error for traceId: {}: {}", traceId, cause.getMessage());
                         return Mono.error(ProcessingException.fromContext(ctx,
                             "IO error: " + cause.getMessage(),
-                            ProcessingResultCodes.UNKNOWN_ERROR, request.documentId()));
+                            ProcessingResultCodes.UNKNOWN_ERROR, request.getDocumentId()));
                     }
                     return Mono.error(throwable);
                 });

@@ -22,7 +22,6 @@ class SoapMapperTest {
     @Test
     void toSoapXml_shouldGenerateValidSoapBody() {
         String xml = soapMapper.toSoapXml(
-            "doc-1",
             "testContent".getBytes(),
             "test.pdf",
             "application/pdf",

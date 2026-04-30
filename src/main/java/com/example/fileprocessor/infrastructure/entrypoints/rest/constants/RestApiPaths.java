@@ -7,6 +7,5 @@ public final class RestApiPaths {
 
     private RestApiPaths() {}
 
-    public static final String API_V1_PRODUCTS_LOAD = "/api/v1/products/load";
     public static final String API_V1_PRODUCTS = "/api/v1/products";
 }

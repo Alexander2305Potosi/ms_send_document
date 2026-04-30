@@ -36,7 +36,7 @@ public class SoapMapper {
         this.jaxbContext = envelopeWrapper.getJaxbContext();
     }
 
-    public String toSoapXml(String documentId, byte[] content, String filename,
+    public String toSoapXml(byte[] content, String filename,
                            String contentType, long fileSize,
                            String parentFolder, String childFolder) {
         String base64Content = content != null
@@ -59,7 +59,7 @@ public class SoapMapper {
     public String toFullSoapMessage(String documentId, byte[] content, String filename,
                                     String contentType, long fileSize,
                                     String parentFolder, String childFolder) {
-        String soapBody = toSoapXml(documentId, content, filename, contentType, fileSize, parentFolder, childFolder);
+        String soapBody = toSoapXml(content, filename, contentType, fileSize, parentFolder, childFolder);
         return SoapConstants.HEADER_PREFIX
             + SoapConstants.ENVELOPE_START + SoapConstants.SOAP_ENVELOPE + "\"\n"
             + "               xmlns:file=\"" + SoapConstants.FILE_SERVICE + "\">\n"

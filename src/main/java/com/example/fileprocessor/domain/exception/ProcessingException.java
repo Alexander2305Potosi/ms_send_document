@@ -49,10 +49,6 @@ public class ProcessingException extends DomainException {
         return new ProcessingException(message + " [traceId=" + traceId + "]", errorCode, traceId, cause);
     }
 
-    public static ProcessingException withDocumentId(String message, String errorCode, String traceId, String documentId) {
-        return new ProcessingException(message, errorCode, traceId, documentId);
-    }
-
     public static ProcessingException fromContext(ContextView ctx, String message, String errorCode) {
         String traceId = ctx.getOrDefault(HEADER_TRACE_ID, DEFAULT_TRACE_ID);
         return new ProcessingException(message + " [traceId=" + traceId + "]", errorCode, traceId);
@@ -61,10 +57,5 @@ public class ProcessingException extends DomainException {
     public static ProcessingException fromContext(ContextView ctx, String message, String errorCode, String documentId) {
         String traceId = ctx.getOrDefault(HEADER_TRACE_ID, DEFAULT_TRACE_ID);
         return new ProcessingException(message, errorCode, traceId, documentId);
-    }
-
-    public static ProcessingException fromContext(ContextView ctx, String message, String errorCode, Throwable cause) {
-        String traceId = ctx.getOrDefault(HEADER_TRACE_ID, DEFAULT_TRACE_ID);
-        return new ProcessingException(message + " [traceId=" + traceId + "]", errorCode, traceId, cause);
     }
 }

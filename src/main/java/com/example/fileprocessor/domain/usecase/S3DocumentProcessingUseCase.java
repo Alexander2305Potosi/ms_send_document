@@ -7,8 +7,6 @@ import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.service.DocumentValidator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -17,8 +15,6 @@ import java.time.Instant;
  * S3-specific document processing use case.
  */
 public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
-
-    private static final Logger log = LoggerFactory.getLogger(S3DocumentProcessingUseCase.class);
 
     private final S3Gateway s3Gateway;
 

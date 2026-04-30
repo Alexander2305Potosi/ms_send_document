@@ -6,8 +6,6 @@ import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.service.DocumentValidator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -16,8 +14,6 @@ import java.time.Instant;
  * SOAP-specific document processing use case.
  */
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
-
-    private static final Logger log = LoggerFactory.getLogger(SoapDocumentProcessingUseCase.class);
 
     private final SoapGateway soapGateway;
 

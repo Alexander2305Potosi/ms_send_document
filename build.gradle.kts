@@ -45,7 +45,6 @@ dependencies {
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.30")
     annotationProcessor("org.projectlombok:lombok:1.18.30")
-    implementation("org.projectlombok:lombok:1.18.30")
 
     // FIX #6: MapStruct removed - not used in current implementation
     // If needed in future, add: implementation("org.mapstruct:mapstruct:1.5.5.Final")
