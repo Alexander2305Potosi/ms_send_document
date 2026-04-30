@@ -53,7 +53,8 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     protected final Mono<ProductDocumentToProcess> retrieveDocumentContent(ProductDocumentToProcess doc) {
-        return Mono.just(doc);
+        return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
+            .thenReturn(doc);
     }
 
     protected final Mono<ProductDocumentToProcess> validateDocument(ProductDocumentToProcess pending) {
