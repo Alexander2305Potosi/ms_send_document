@@ -29,9 +29,7 @@ public class DomainConfig {
         if (soapGateway == null) {
             return null;
         }
-        var validator = new DocumentValidator(
-            properties.soap().maxFileSizeBytes(),
-            properties.soap().filenamePattern());
+        var validator = new DocumentValidator(properties.toValidationConfig(properties.soap()));
         return new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validator);
     }
 
@@ -47,9 +45,7 @@ public class DomainConfig {
         if (s3Gateway == null) {
             return null;
         }
-        var validator = new DocumentValidator(
-            properties.s3().maxFileSizeBytes(),
-            properties.s3().filenamePattern());
+        var validator = new DocumentValidator(properties.toValidationConfig(properties.s3()));
         return new S3DocumentProcessingUseCase(productRestGateway, s3Gateway, validator);
     }
 }

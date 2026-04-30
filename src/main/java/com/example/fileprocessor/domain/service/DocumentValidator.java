@@ -11,27 +11,38 @@ public class DocumentValidator {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentValidator.class);
 
-    private final long maxFileSizeBytes;
-    private final Pattern filenamePattern;
+    private final ValidationConfig config;
 
-    public DocumentValidator(long maxFileSizeBytes, String filenamePattern) {
-        this.maxFileSizeBytes = maxFileSizeBytes;
-        this.filenamePattern = Pattern.compile(filenamePattern);
+    public DocumentValidator(ValidationConfig config) {
+        this.config = config;
     }
 
     public Mono<ProductDocument> validate(ProductDocument doc) {
         return Mono.defer(() -> {
-            if (maxFileSizeBytes > 0 && doc.size() > maxFileSizeBytes) {
-                log.warn("Document {} skipped - file size {} exceeds limit of {} bytes",
-                    doc.documentId(), doc.size(), maxFileSizeBytes);
-                return Mono.empty();
+            // Size validation
+            if (config.maxFileSizeBytes() != null && config.maxFileSizeBytes() > 0) {
+                if (doc.size() > config.maxFileSizeBytes()) {
+                    log.warn("Document {} skipped - file size {} exceeds limit of {} bytes",
+                        doc.documentId(), doc.size(), config.maxFileSizeBytes());
+                    return Mono.empty();
+                }
             }
-            if (!filenamePattern.matcher(doc.filename()).matches()) {
-                log.debug("Document {} skipped - filename '{}' does not match pattern",
-                    doc.documentId(), doc.filename());
-                return Mono.empty();
+
+            // Filename validation
+            if (config.filenamePattern() != null && !config.filenamePattern().isBlank()) {
+                if (!Pattern.matches(config.filenamePattern(), doc.filename())) {
+                    log.debug("Document {} skipped - filename '{}' does not match pattern",
+                        doc.documentId(), doc.filename());
+                    return Mono.empty();
+                }
             }
+
             return Mono.just(doc);
         });
     }
+
+    public record ValidationConfig(
+        Long maxFileSizeBytes,
+        String filenamePattern
+    ) {}
 }
