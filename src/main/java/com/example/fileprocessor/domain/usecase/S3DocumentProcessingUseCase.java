@@ -35,25 +35,21 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     }
 
     @Override
-    protected Mono<DocumentToUpload> applyRulesMetadata(ProductDocumentToProcess pending) {
-        FolderInfo folderInfo = FolderInfo.root();
-        long fileSizeBytes = (long) (pending.getFileSizeMb() * 1024 * 1024);
-        return Mono.just(new DocumentToUpload(pending, folderInfo, fileSizeBytes, false));
+    protected Mono<ProductDocumentToProcess> applyRules(ProductDocumentToProcess doc) {
+        return Mono.just(doc);
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(DocumentToUpload doc) {
-        FolderInfo folderInfo = doc.folderInfo();
-
+    protected Mono<FileUploadResult> uploadDocument(ProductDocumentToProcess doc) {
         return s3Gateway.send(
-                doc.documentId(),
-                doc.content(),
-                doc.filename(),
-                doc.contentType(),
-                doc.fileSize(),
-                folderInfo.parentFolder(),
-                folderInfo.childFolder(),
-                doc.origin())
+                doc.getDocumentId(),
+                doc.getContent(),
+                doc.getFilename(),
+                doc.getContentType(),
+                doc.getFileSizeBytes(),
+                doc.getParentFolder(),
+                doc.getChildFolder(),
+                doc.getOrigin())
             .onErrorResume(error -> {
                 String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
                     ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;

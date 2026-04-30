@@ -33,16 +33,16 @@ public abstract class AbstractDocumentProcessingUseCase {
             .limitRate(10)
             .flatMap(doc -> {
                 String docId = doc.getDocumentId();
-                return validateMetadataDocument(doc)
+                return validateDocument(doc)
                     .doOnError(e -> log.error("Pipeline error at stage=VALIDATE for doc=[{}]: {}", docId, e.getMessage()));
             })
             .flatMap(doc -> {
-                String docId = doc.document().getDocumentId();
-                return retrieveDocument(doc)
+                String docId = doc.getDocumentId();
+                return retrieveDocumentContent(doc)
                     .doOnError(e -> log.error("Pipeline error at stage=RETRIEVE for doc=[{}]: {}", docId, e.getMessage()));
             })
             .flatMap(doc -> {
-                String docId = doc.document().getDocumentId();
+                String docId = doc.getDocumentId();
                 return uploadDocument(doc)
                     .doOnError(e -> log.error("Pipeline error at stage=UPLOAD for doc=[{}]: {}", docId, e.getMessage()));
             })
@@ -53,52 +53,36 @@ public abstract class AbstractDocumentProcessingUseCase {
             .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
     }
 
-    protected final Mono<DocumentToUpload> retrieveDocument(DocumentToUpload docToUpload) {
-        ProductDocumentToProcess pending = docToUpload.document();
-
-        if (pending.getContent() != null && pending.getContent().length > 0) {
-            log.debug("Document {} already has content", pending.getDocumentId());
-            return Mono.just(docToUpload);
+    protected final Mono<ProductDocumentToProcess> retrieveDocumentContent(ProductDocumentToProcess doc) {
+        if (doc.getContent() != null && doc.getContent().length > 0) {
+            log.debug("Document {} already has content", doc.getDocumentId());
+            return Mono.just(doc);
         }
 
-        log.info("Downloading content for document {} from REST API", pending.getDocumentId());
+        log.info("Downloading content for document {} from REST API", doc.getDocumentId());
 
-        return productRestGateway.getDocument(pending.getProductId(), pending.getDocumentId())
+        return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
             .flatMap(docInfo -> {
                 byte[] content = docInfo.content() != null ? docInfo.content() : new byte[0];
                 boolean isZip = docInfo.isZip() ||
                     (docInfo.filename() != null && docInfo.filename().toLowerCase().endsWith(".zip"));
                 double fileSizeMb = content.length / (1024.0 * 1024.0);
 
-                ProductDocumentToProcess updated = ProductDocumentToProcess.builder()
-                    .documentId(pending.getDocumentId())
-                    .productId(pending.getProductId())
-                    .parentDocumentId(pending.getParentDocumentId())
-                    .filename(docInfo.filename() != null ? docInfo.filename() : pending.getFilename())
-                    .content(content)
-                    .contentType(docInfo.contentType() != null ? docInfo.contentType() : pending.getContentType())
-                    .origin(pending.getOrigin())
-                    .status(pending.getStatus())
-                    .createdAt(pending.getCreatedAt())
-                    .isZipArchive(isZip)
-                    .fileSizeMb(fileSizeMb)
-                    .build();
-
-                long fileSizeBytes = (long) (fileSizeMb * 1024 * 1024);
-                return documentRepository.updateContent(pending.getDocumentId(), content)
-                    .thenReturn(new DocumentToUpload(updated, docToUpload.folderInfo(), fileSizeBytes, docToUpload.skipped()));
+                ProductDocumentToProcess updated = doc.withContent(content, docInfo.filename(), docInfo.contentType(), fileSizeMb);
+                return documentRepository.updateContent(doc.getDocumentId(), content)
+                    .thenReturn(updated);
             });
     }
 
-    protected final Mono<DocumentToUpload> validateMetadataDocument(ProductDocumentToProcess pending) {
+    protected final Mono<ProductDocumentToProcess> validateDocument(ProductDocumentToProcess pending) {
         return documentRepository.claimDocument(pending.getDocumentId())
             .filter(Boolean::booleanValue)
-            .flatMap(claimed -> applyRulesMetadata(pending));
+            .flatMap(claimed -> applyRules(pending));
     }
 
-    protected abstract Mono<DocumentToUpload> applyRulesMetadata(ProductDocumentToProcess pending);
+    protected abstract Mono<ProductDocumentToProcess> applyRules(ProductDocumentToProcess pending);
 
-    protected abstract Mono<FileUploadResult> uploadDocument(DocumentToUpload validated);
+    protected abstract Mono<FileUploadResult> uploadDocument(ProductDocumentToProcess doc);
 
     protected abstract String implementationName();
 }

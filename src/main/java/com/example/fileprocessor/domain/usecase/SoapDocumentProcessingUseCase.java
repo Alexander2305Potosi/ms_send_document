@@ -35,34 +35,30 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     }
 
     @Override
-    protected Mono<DocumentToUpload> applyRulesMetadata(ProductDocumentToProcess pending) {
-        FolderInfo folderInfo = FolderInfo.root();
-        long fileSizeBytes = (long) (pending.getFileSizeMb() * 1024 * 1024);
-        return Mono.just(new DocumentToUpload(pending, folderInfo, fileSizeBytes, false));
+    protected Mono<ProductDocumentToProcess> applyRules(ProductDocumentToProcess doc) {
+        return Mono.just(doc);
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(DocumentToUpload doc) {
-        if (doc.skipped()) {
+    protected Mono<FileUploadResult> uploadDocument(ProductDocumentToProcess doc) {
+        if (doc.isSkipped()) {
             return Mono.just(FileUploadResult.builder()
                 .status(DocumentStatus.SKIPPED.name())
-                .correlationId(doc.documentId())
+                .correlationId(doc.getDocumentId())
                 .processedAt(Instant.now())
                 .success(true)
                 .message("Document skipped")
                 .build());
         }
 
-        FolderInfo folderInfo = doc.folderInfo();
-
         return soapGateway.send(
-                doc.documentId(),
-                doc.content(),
-                doc.filename(),
-                doc.contentType(),
-                doc.fileSize(),
-                folderInfo.parentFolder(),
-                folderInfo.childFolder())
+                doc.getDocumentId(),
+                doc.getContent(),
+                doc.getFilename(),
+                doc.getContentType(),
+                doc.getFileSizeBytes(),
+                doc.getParentFolder(),
+                doc.getChildFolder())
             .onErrorResume(error -> {
                 String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
                     ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;

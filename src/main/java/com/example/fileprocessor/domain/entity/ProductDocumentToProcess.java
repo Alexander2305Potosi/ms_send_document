@@ -6,7 +6,7 @@ import lombok.Getter;
 import java.time.Instant;
 
 /**
- * Represents a document to be processed in the database.
+ * Represents a document to be processed.
  * Contains content (Base64 encoded in storage), metadata, and processing status.
  */
 @Getter
@@ -28,4 +28,58 @@ public class ProductDocumentToProcess {
     private final boolean isZipArchive = false;
     @Builder.Default
     private final double fileSizeMb = 0.0;
+    @Builder.Default
+    private final String parentFolder = ".";
+    @Builder.Default
+    private final String childFolder = ".";
+    @Builder.Default
+    private final long fileSizeBytes = 0;
+    @Builder.Default
+    private final boolean skipped = false;
+
+    public ProductDocumentToProcess withContent(byte[] newContent, String newFilename, String newContentType, double newFileSizeMb) {
+        return ProductDocumentToProcess.builder()
+            .documentId(this.documentId)
+            .productId(this.productId)
+            .parentDocumentId(this.parentDocumentId)
+            .filename(newFilename != null ? newFilename : this.filename)
+            .content(newContent)
+            .contentType(newContentType != null ? newContentType : this.contentType)
+            .origin(this.origin)
+            .status(this.status)
+            .createdAt(this.createdAt)
+            .processedAt(this.processedAt)
+            .correlationId(this.correlationId)
+            .errorCode(this.errorCode)
+            .isZipArchive(this.isZipArchive)
+            .fileSizeMb(newFileSizeMb)
+            .parentFolder(this.parentFolder)
+            .childFolder(this.childFolder)
+            .fileSizeBytes((long) (newFileSizeMb * 1024 * 1024))
+            .skipped(this.skipped)
+            .build();
+    }
+
+    public ProductDocumentToProcess withSkipped(boolean skipped) {
+        return ProductDocumentToProcess.builder()
+            .documentId(this.documentId)
+            .productId(this.productId)
+            .parentDocumentId(this.parentDocumentId)
+            .filename(this.filename)
+            .content(this.content)
+            .contentType(this.contentType)
+            .origin(this.origin)
+            .status(this.status)
+            .createdAt(this.createdAt)
+            .processedAt(this.processedAt)
+            .correlationId(this.correlationId)
+            .errorCode(this.errorCode)
+            .isZipArchive(this.isZipArchive)
+            .fileSizeMb(this.fileSizeMb)
+            .parentFolder(this.parentFolder)
+            .childFolder(this.childFolder)
+            .fileSizeBytes(this.fileSizeBytes)
+            .skipped(skipped)
+            .build();
+    }
 }
