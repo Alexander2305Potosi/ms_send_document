@@ -5,15 +5,14 @@ import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.usecase.FileValidator;
-import com.example.fileprocessor.domain.usecase.FolderInfoExtractor;
+import com.example.fileprocessor.domain.usecase.DocumentValidationService;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
-import com.example.fileprocessor.domain.usecase.ProductStatusAggregator;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.ZipProcessor;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorConfig;
-import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,17 +20,14 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class DomainConfig {
 
-    @Bean
-    public LoadProductsUseCase loadProductsUseCase(ProductRestGateway productGateway,
-                                                    ProductRepository productRepository,
-                                                    ProductDocumentRepository documentRepository) {
-        return new LoadProductsUseCase(productGateway, productRepository, documentRepository);
-    }
+    // ============ Load Products ============
 
     @Bean
-    public ProductStatusAggregator productStatusAggregator(ProductDocumentRepository documentRepository,
-                                                           ProductRepository productRepository) {
-        return new ProductStatusAggregator(documentRepository, productRepository);
+    public LoadProductsUseCase loadProductsUseCase(
+            ProductRestGateway productGateway,
+            ProductRepository productRepository,
+            ProductDocumentRepository documentRepository) {
+        return new LoadProductsUseCase(productGateway, productRepository, documentRepository);
     }
 
     // ============ SOAP Processor ============
@@ -42,11 +38,11 @@ public class DomainConfig {
             SoapGateway soapGateway,
             ProcessorConfig config,
             ProductRestGateway productRestGateway) {
-        ProcessorSettings s = config.getSoap();
-        FileValidator fileValidator = new FileValidator(s.getMaxSize(), s.getAllowedTypes());
-        FolderInfoExtractor folderInfoExtractor = new FolderInfoExtractor(s.getKeywords());
+        DocumentValidationService validationService = new DocumentValidationService(
+            config.getSoap().getMaxSize(), config.getSoap().getAllowedTypes(), config.getSoap().getKeywords());
         return new SoapDocumentProcessingUseCase(
-            documentRepository, soapGateway, fileValidator, folderInfoExtractor, productRestGateway);
+            documentRepository, productRestGateway, new ZipProcessor(validationService),
+            soapGateway, validationService);
     }
 
     // ============ S3 Processor ============
@@ -60,14 +56,18 @@ public class DomainConfig {
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
             ProductDocumentRepository documentRepository,
-            S3Gateway s3Gateway,
+            ObjectProvider<S3Gateway> s3GatewayProvider,
             ProcessorConfig config,
             ProductRestGateway productRestGateway) {
-        ProcessorSettings s = config.getS3();
-        FileValidator fileValidator = new FileValidator(s.getMaxSize(), s.getAllowedTypes());
-        FolderInfoExtractor folderInfoExtractor = new FolderInfoExtractor(s.getKeywords());
+        S3Gateway s3Gateway = s3GatewayProvider.getIfAvailable();
+        if (s3Gateway == null) {
+            return null;
+        }
+        DocumentValidationService validationService = new DocumentValidationService(
+            config.getS3().getMaxSize(), config.getS3().getAllowedTypes(), config.getS3().getKeywords());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
         return new S3DocumentProcessingUseCase(
-            documentRepository, s3Gateway, fileValidator, folderRegex, folderInfoExtractor, productRestGateway);
+            documentRepository, productRestGateway, new ZipProcessor(validationService),
+            s3Gateway, validationService, folderRegex);
     }
 }
