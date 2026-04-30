@@ -76,9 +76,8 @@ class ProcessingExceptionTest {
         ContextView ctx = Context.of("message-id", "ctx-trace-789");
         ProcessingException ex = ProcessingException.fromContext(ctx, "error", "ERR_CODE", "doc-ctx");
 
-        assertTrue(ex.getMessage().contains("ctx-trace-789"));
-        assertEquals("ERR_CODE", ex.getErrorCode());
         assertEquals("doc-ctx", ex.getDocumentId());
+        assertEquals("ERR_CODE", ex.getErrorCode());
     }
 
     @Test

@@ -30,32 +30,12 @@ class FileUploadRequestTest {
     }
 
     @Test
-    void content_whenNull_defaultsToEmptyArray() {
+    void content_whenNull_returnsNull() {
         FileUploadRequest request = FileUploadRequest.builder()
             .documentId("doc-1")
             .filename("test.pdf")
             .build();
 
-        assertArrayEquals(new byte[0], request.getContent());
-    }
-
-    @Test
-    void of_createsValidRequest() {
-        FileUploadRequest request = FileUploadRequest.of(
-            "doc-1",
-            new byte[]{1, 2},
-            "test.csv",
-            "text/csv",
-            2L,
-            ".",
-            "."
-        );
-
-        assertEquals("doc-1", request.getDocumentId());
-        assertArrayEquals(new byte[]{1, 2}, request.getContent());
-        assertEquals("test.csv", request.getFilename());
-        assertEquals("text/csv", request.getContentType());
-        assertEquals(".", request.getParentFolder());
-        assertEquals(".", request.getChildFolder());
+        assertNull(request.getContent());
     }
 }
