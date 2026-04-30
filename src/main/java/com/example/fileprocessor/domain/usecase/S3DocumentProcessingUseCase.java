@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -34,17 +35,17 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     @Override
     protected Mono<FileUploadResult> uploadDocument(ProductDocumentInfo doc, String productId) {
-        byte[] content = doc.content() != null ? doc.content() : new byte[0];
+        FileUploadRequest request = FileUploadRequest.of(
+            doc.documentId(),
+            doc.content() != null ? doc.content() : new byte[0],
+            doc.filename(),
+            doc.contentType(),
+            doc.size(),
+            ".",
+            ".",
+            doc.origin());
 
-        return s3Gateway.send(
-                doc.documentId(),
-                content,
-                doc.filename(),
-                doc.contentType(),
-                content.length,
-                ".",
-                ".",
-                doc.origin())
+        return s3Gateway.send(request)
             .onErrorResume(error -> {
                 String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
                     ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;

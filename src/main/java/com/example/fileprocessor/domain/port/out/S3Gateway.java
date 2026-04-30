@@ -1,5 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import reactor.core.publisher.Mono;
 
@@ -7,7 +8,5 @@ import reactor.core.publisher.Mono;
  * Port for sending documents to S3.
  */
 public interface S3Gateway {
-    Mono<FileUploadResult> send(String documentId, byte[] content, String filename,
-                                 String contentType, long fileSize,
-                                 String parentFolder, String childFolder, String origin);
+    Mono<FileUploadResult> send(FileUploadRequest request);
 }

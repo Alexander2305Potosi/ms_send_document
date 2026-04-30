@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -34,17 +35,16 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     @Override
     protected Mono<FileUploadResult> uploadDocument(ProductDocumentInfo doc, String productId) {
-        byte[] content = doc.content() != null ? doc.content() : new byte[0];
-        long fileSizeBytes = content.length;
+        FileUploadRequest request = FileUploadRequest.of(
+            doc.documentId(),
+            doc.content() != null ? doc.content() : new byte[0],
+            doc.filename(),
+            doc.contentType(),
+            doc.size(),
+            ".",
+            ".");
 
-        return soapGateway.send(
-                doc.documentId(),
-                content,
-                doc.filename(),
-                doc.contentType(),
-                fileSizeBytes,
-                ".",
-                ".")
+        return soapGateway.send(request)
             .onErrorResume(error -> {
                 String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
                     ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;

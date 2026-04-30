@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.aws;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -36,28 +37,26 @@ public class S3GatewayAdapter implements S3Gateway {
     }
 
     @Override
-    public Mono<FileUploadResult> send(String documentId, byte[] content, String filename,
-                                       String contentType, long fileSize,
-                                       String parentFolder, String childFolder, String origin) {
+    public Mono<FileUploadResult> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.info("Sending S3 upload request for documentId: {}, traceId: {}", documentId, traceId);
+            log.info("Sending S3 upload request for documentId: {}, traceId: {}", request.documentId(), traceId);
 
-            String key = buildKey(traceId, filename);
+            String key = buildKey(traceId, request.filename());
 
             PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(s3Properties.bucketName())
                 .key(key)
-                .contentType(contentType)
-                .contentLength(content != null ? (long) content.length : 0L)
+                .contentType(request.contentType())
+                .contentLength(request.content() != null ? (long) request.content().length : 0L)
                 .metadata(Map.of(
                     "traceId", traceId,
-                    "originalFilename", filename,
-                    "documentId", documentId
+                    "originalFilename", request.filename(),
+                    "documentId", request.documentId()
                 ))
                 .build();
 
-            CompletableFuture<PutObjectResponse> future = s3Client.putObject(putRequest, AsyncRequestBody.fromBytes(content));
+            CompletableFuture<PutObjectResponse> future = s3Client.putObject(putRequest, AsyncRequestBody.fromBytes(request.content()));
 
             return Mono.fromFuture(future)
                 .timeout(Duration.ofSeconds(s3Properties.timeoutSeconds()))
@@ -66,11 +65,11 @@ public class S3GatewayAdapter implements S3Gateway {
                     .doBeforeRetry(retrySignal -> {
                         long attempt = retrySignal.totalRetries() + 1;
                         log.warn("Retrying S3 upload for documentId={}, attempt {}/{} (backoff={}ms)",
-                            documentId, attempt, s3Properties.retryAttempts(),
+                            request.documentId(), attempt, s3Properties.retryAttempts(),
                             s3Properties.retryBackoffMillis() * attempt);
                     }))
                 .map(completed -> {
-                    log.info("S3 upload successful: {} -> {}/{}", filename, s3Properties.bucketName(), key);
+                    log.info("S3 upload successful: {} -> {}/{}", request.filename(), s3Properties.bucketName(), key);
                     return FileUploadResult.builder()
                         .status(DocumentStatus.SUCCESS.name())
                         .message("Uploaded to S3: " + s3Properties.bucketName() + "/" + key)
@@ -81,7 +80,7 @@ public class S3GatewayAdapter implements S3Gateway {
                         .success(true)
                         .build();
                 })
-                .onErrorResume(error -> handleS3Error(error, documentId, traceId));
+                .onErrorResume(error -> handleS3Error(error, request.documentId(), traceId));
         });
     }
 
@@ -159,16 +158,9 @@ public class S3GatewayAdapter implements S3Gateway {
 
     private String sanitizeFilename(String filename) {
         if (filename == null || filename.isBlank()) return "unnamed";
-
-        // Remove null bytes and control characters
         String sanitized = filename.replaceAll("[\\x00-\\x1F\\x7F]", "");
-
-        // Path traversal protection
         sanitized = sanitized.replace("..", "").replace("/", "").replace("\\", "");
-
-        // Whitelist: only allow alphanumeric, dots, underscores, hyphens
         sanitized = sanitized.replaceAll("[^a-zA-Z0-9._-]", "");
-
         if (sanitized.isBlank()) return "unnamed";
         return sanitized;
     }
