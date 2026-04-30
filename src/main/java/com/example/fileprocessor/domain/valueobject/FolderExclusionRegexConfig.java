@@ -2,6 +2,7 @@ package com.example.fileprocessor.domain.valueobject;
 
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 /**
@@ -25,7 +26,7 @@ public class FolderExclusionRegexConfig {
     private Pattern compilePattern(String pattern) {
         try {
             return Pattern.compile(pattern);
-        } catch (java.util.regex.PatternSyntaxException e) {
+        } catch (PatternSyntaxException e) {
             throw new IllegalStateException(
                 "Invalid folder exclusion regex pattern: '" + pattern + "'. " + e.getMessage(), e);
         }

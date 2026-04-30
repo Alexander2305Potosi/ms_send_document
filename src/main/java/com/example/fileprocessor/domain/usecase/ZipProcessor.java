@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
@@ -77,6 +78,7 @@ public class ZipProcessor {
      */
     public Mono<ZipExtractionResult> extractAndValidate(ProductDocumentToProcess zipDoc) {
         return extractChildren(zipDoc)
+            .publishOn(Schedulers.boundedElastic())
             .flatMap(this::validateChildren)
             .map(entries -> {
                 if (entries.isEmpty()) {
@@ -116,6 +118,12 @@ public class ZipProcessor {
     // ============ PRIVATE ============
 
     private Mono<List<ExtractedDocument>> extractChildren(ProductDocumentToProcess zipDoc) {
+        return Mono.fromCallable(() -> doExtractChildren(zipDoc))
+            .subscribeOn(Schedulers.boundedElastic())
+            .doOnError(e -> log.error("Failed to extract ZIP {}: {}", zipDoc.getFilename(), e.getMessage()));
+    }
+
+    private List<ExtractedDocument> doExtractChildren(ProductDocumentToProcess zipDoc) {
         try {
             ZipArchive archive = ZipArchive.builder()
                 .zipContent(zipDoc.getContent())
@@ -126,15 +134,13 @@ public class ZipProcessor {
 
             List<ExtractedDocument> children = archive.extractDocuments();
             log.info("ZIP {} contains {} documents", zipDoc.getFilename(), children.size());
-            return Mono.just(children);
+            return children;
         } catch (FileValidationException e) {
-            log.error("ZIP validation failed for {}: {}", zipDoc.getFilename(), e.getMessage());
-            return Mono.error(e);
+            throw e;
         } catch (Exception e) {
-            log.error("Failed to extract ZIP {}: {}", zipDoc.getFilename(), e.getMessage());
-            return Mono.error(new FileValidationException(
+            throw new FileValidationException(
                 "ZIP extraction failed: " + e.getMessage(),
-                ProcessingResultCodes.ZIP_EXTRACTION_FAILED));
+                ProcessingResultCodes.ZIP_EXTRACTION_FAILED);
         }
     }
 
@@ -159,8 +165,8 @@ public class ZipProcessor {
                 ProcessingResultCodes.FILE_SIZE_EXCEEDED));
         }
 
-        String ext = extension(entry.getFilename());
-        Set<String> allowedExtensions = parseAllowedExtensions(config.allowedTypes());
+        String ext = FileValidationUtils.extractExtension(entry.getFilename());
+        Set<String> allowedExtensions = FileValidationUtils.parseAllowedExtensions(config.allowedTypes());
         if (!allowedExtensions.contains(ext.toLowerCase())) {
             log.warn("ZIP entry {} has disallowed extension: '{}'",
                 entry.getFilename(), ext);
@@ -183,22 +189,6 @@ public class ZipProcessor {
             .build();
     }
 
-    private String extension(String filename) {
-        int lastDot = filename != null ? filename.lastIndexOf('.') : -1;
-        return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
-    }
-
     private static final int DEFAULT_MAX_ENTRIES = 1000;
     private static final long DEFAULT_MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024; // 100MB
-
-    private Set<String> parseAllowedExtensions(String allowedTypes) {
-        if (allowedTypes == null || allowedTypes.isBlank()) {
-            return Set.of();
-        }
-        return Set.of(allowedTypes.split(",")).stream()
-            .map(String::trim)
-            .map(String::toLowerCase)
-            .filter(ext -> !ext.isBlank())
-            .collect(java.util.stream.Collectors.toUnmodifiableSet());
-    }
 }

@@ -9,17 +9,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class FileValidatorTest {
 
     @Mock
@@ -29,10 +27,8 @@ class FileValidatorTest {
 
     @BeforeEach
     void setUp() {
-        when(config.maxSize()).thenReturn(1000L);
-        when(config.allowedTypes()).thenReturn("pdf,txt,csv");
-        when(config.shouldValidateSize()).thenReturn(true);
-        when(config.shouldValidateExtension()).thenReturn(true);
+        lenient().when(config.maxSize()).thenReturn(1000L);
+        lenient().when(config.allowedTypes()).thenReturn("pdf,txt,csv");
         validator = new FileValidator(config);
     }
 

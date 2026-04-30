@@ -18,8 +18,6 @@ public final class ProcessingResultCodes {
     // File validation error codes
     public static final String FILE_SIZE_EXCEEDED = "FILE_SIZE_EXCEEDED";
     public static final String INVALID_FILE_TYPE = "INVALID_FILE_TYPE";
-    public static final String FILENAME_TOO_LONG = "FILENAME_TOO_LONG";
-    public static final String INVALID_FILENAME = "INVALID_FILENAME";
     public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
 
     // Base64 validation error codes (P10)
@@ -31,4 +29,9 @@ public final class ProcessingResultCodes {
     public static final String BAD_GATEWAY = "BAD_GATEWAY";
     public static final String CLIENT_ERROR = "CLIENT_ERROR";
     public static final String UNKNOWN_ERROR = "UNKNOWN_ERROR";
+
+    // S3-specific error codes
+    public static final String ACCESS_DENIED_ERROR = "ACCESS_DENIED_ERROR";
+    public static final String NOT_FOUND_ERROR = "NOT_FOUND_ERROR";
+    public static final String SERVICE_UNAVAILABLE_ERROR = "SERVICE_UNAVAILABLE_ERROR";
 }

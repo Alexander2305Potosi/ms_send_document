@@ -30,13 +30,27 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     public final Flux<FileUploadResult> executePendingDocuments() {
         return documentRepository.findPendingDocuments()
-            .flatMap(this::validateMetadataDocument)
-            .flatMap(this::retrieveDocument)
-            .flatMap(this::uploadDocument)
+            .limitRate(10)
+            .flatMap(doc -> {
+                String docId = doc.getDocumentId();
+                return validateMetadataDocument(doc)
+                    .doOnError(e -> log.error("Pipeline error at stage=VALIDATE for doc=[{}]: {}", docId, e.getMessage()));
+            })
+            .flatMap(doc -> {
+                String docId = doc.document().getDocumentId();
+                return retrieveDocument(doc)
+                    .doOnError(e -> log.error("Pipeline error at stage=RETRIEVE for doc=[{}]: {}", docId, e.getMessage()));
+            })
+            .flatMap(doc -> {
+                String docId = doc.document().getDocumentId();
+                return uploadDocument(doc)
+                    .doOnError(e -> log.error("Pipeline error at stage=UPLOAD for doc=[{}]: {}", docId, e.getMessage()));
+            })
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnNext(r -> log.info("Document processed: correlationId={}, status={}",
                 r.getCorrelationId(), r.getStatus()))
-            .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()));
+            .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
+            .doOnCancel(() -> log.warn("Pipeline {} cancelled - documents in PROCESSING state will be recovered on next startup", implementationName()));
     }
 
     // ============ SHARED RETRIEVE LOGIC (final) ============

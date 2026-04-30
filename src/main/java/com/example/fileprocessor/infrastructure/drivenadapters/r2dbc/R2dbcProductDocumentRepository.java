@@ -33,14 +33,12 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
                    correlation_id, error_code
             FROM product_documents_to_process
-            WHERE status IN ($1, $2, $3)
+            WHERE status = $1
             ORDER BY created_at ASC
             """;
 
         return databaseClient.sql(sql)
             .bind("$1", DocumentStatus.PENDING.name())
-            .bind("$2", DocumentStatus.RETRY.name())
-            .bind("$3", DocumentStatus.PROCESSING.name())
             .map(this::mapRowToDocument)
             .all();
     }
@@ -97,7 +95,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
         String sql = """
             UPDATE product_documents_to_process
             SET status = $2, processed_at = $3
-            WHERE document_id = $1 AND status = $4
+            WHERE document_id = $1 AND status IN ($4, $5)
             """;
 
         return databaseClient.sql(sql)
@@ -105,6 +103,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .bind("$2", DocumentStatus.PROCESSING.name())
             .bind("$3", Instant.now())
             .bind("$4", DocumentStatus.PENDING.name())
+            .bind("$5", DocumentStatus.RETRY.name())
             .fetch()
             .rowsUpdated()
             .map(rowsUpdated -> rowsUpdated > 0)
@@ -135,14 +134,16 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .fetch()
             .first()
             .then()
-            .doOnSuccess(v -> log.info("Saved product document to process: {}", document.getDocumentId()));
+            .doOnSuccess(v -> log.info("Saved product document to process: {}", document.getDocumentId()))
+            .doOnError(e -> log.error("Failed to save product document {}: {}", document.getDocumentId(), e.getMessage(), e));
     }
 
     @Override
     public Mono<Void> saveAll(Flux<ProductDocumentToProcess> documents) {
         return documents
             .flatMap(this::save)
-            .then();
+            .then()
+            .doOnError(e -> log.error("Failed to save all product documents: {}", e.getMessage(), e));
     }
 
     @Override

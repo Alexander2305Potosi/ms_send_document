@@ -65,7 +65,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
         FileValidator.FolderInfo folderInfo = doc.folderInfo();
 
-        return soapGateway.sendSoap(
+        return soapGateway.send(
                 doc.documentId(),
                 doc.content(),
                 doc.filename(),

@@ -4,7 +4,8 @@ logging:
     org.springframework.web.reactive: WARN
 
 server:
-  shutdown: immediate
+  shutdown: graceful
+  timeout: 30s
 
 app:
   processors:

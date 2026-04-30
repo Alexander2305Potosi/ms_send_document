@@ -98,19 +98,10 @@ public class FileValidator {
     }
 
     private String extractFileExtension(ProductDocumentToProcess p) {
-        String filename = p.getFilename();
-        int lastDot = filename != null ? filename.lastIndexOf('.') : -1;
-        return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
+        return FileValidationUtils.extractExtension(p.getFilename());
     }
 
     private Set<String> parseAllowedExtensions(String allowedTypes) {
-        if (allowedTypes == null || allowedTypes.isBlank()) {
-            return Set.of();
-        }
-        return Set.of(allowedTypes.split(",")).stream()
-            .map(String::trim)
-            .map(String::toLowerCase)
-            .filter(ext -> !ext.isBlank())
-            .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return FileValidationUtils.parseAllowedExtensions(allowedTypes);
     }
 }

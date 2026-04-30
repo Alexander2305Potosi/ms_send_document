@@ -19,6 +19,12 @@ public record SoapProperties(
     int retryAttempts,
 
     @Min(100)
-    int retryBackoffMillis
+    int retryBackoffMillis,
+
+    @Min(100)
+    int maxErrorBodyLength
 ) {
+    public SoapProperties {
+        if (maxErrorBodyLength < 100) maxErrorBodyLength = 500;
+    }
 }

@@ -1,6 +1,5 @@
 package com.example.fileprocessor.domain.exception;
 
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import reactor.util.context.ContextView;
 
 /**
@@ -10,6 +9,8 @@ import reactor.util.context.ContextView;
 public class ProcessingException extends DomainException {
 
     private static final String DEFAULT_TRACE_ID = "unknown";
+
+    public static final String HEADER_TRACE_ID = "message-id";
 
     private final String traceId;
     private final String documentId;
@@ -53,17 +54,17 @@ public class ProcessingException extends DomainException {
     }
 
     public static ProcessingException fromContext(ContextView ctx, String message, String errorCode) {
-        String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, DEFAULT_TRACE_ID);
+        String traceId = ctx.getOrDefault(HEADER_TRACE_ID, DEFAULT_TRACE_ID);
         return new ProcessingException(message + " [traceId=" + traceId + "]", errorCode, traceId);
     }
 
     public static ProcessingException fromContext(ContextView ctx, String message, String errorCode, String documentId) {
-        String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, DEFAULT_TRACE_ID);
+        String traceId = ctx.getOrDefault(HEADER_TRACE_ID, DEFAULT_TRACE_ID);
         return new ProcessingException(message, errorCode, traceId, documentId);
     }
 
     public static ProcessingException fromContext(ContextView ctx, String message, String errorCode, Throwable cause) {
-        String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, DEFAULT_TRACE_ID);
+        String traceId = ctx.getOrDefault(HEADER_TRACE_ID, DEFAULT_TRACE_ID);
         return new ProcessingException(message + " [traceId=" + traceId + "]", errorCode, traceId, cause);
     }
 }

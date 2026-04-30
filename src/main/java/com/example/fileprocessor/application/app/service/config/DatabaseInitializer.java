@@ -1,10 +1,9 @@
-package com.example.fileprocessor.application.app_service.config;
+package com.example.fileprocessor.application.app.service.config;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -13,7 +12,7 @@ import reactor.util.retry.Retry;
 import java.time.Duration;
 
 @Component
-public class DatabaseInitializer implements ApplicationRunner {
+public class DatabaseInitializer implements InitializingBean {
 
     private static final Logger log = LoggerFactory.getLogger(DatabaseInitializer.class);
 
@@ -24,13 +23,13 @@ public class DatabaseInitializer implements ApplicationRunner {
     }
 
     @Override
-    public void run(ApplicationArguments args) {
+    public void afterPropertiesSet() throws Exception {
+        log.info("Initializing database schema (blocking startup until ready)...");
         initialize()
             .doOnSuccess(v -> log.info("Database ready"))
             .doOnError(e -> log.error("Database initialization failed: {}", e.getMessage()))
             .retryWhen(Retry.backoff(3, Duration.ofMillis(100)))
-            .onErrorResume(e -> Mono.empty())
-            .subscribe();
+            .block(Duration.ofSeconds(30));
     }
 
     public Mono<Void> initialize() {

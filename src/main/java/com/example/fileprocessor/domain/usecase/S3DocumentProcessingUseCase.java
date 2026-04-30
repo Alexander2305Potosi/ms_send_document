@@ -79,7 +79,7 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
         FileValidator.FolderInfo folderInfo = doc.folderInfo();
 
-        return s3Gateway.upload(
+        return s3Gateway.send(
                 doc.documentId(),
                 doc.content(),
                 doc.filename(),

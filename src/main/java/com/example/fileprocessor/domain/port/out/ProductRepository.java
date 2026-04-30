@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
 import com.example.fileprocessor.domain.entity.ProductToProcess;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -9,11 +8,6 @@ import reactor.core.publisher.Mono;
  * Abstraction that allows different storage implementations (R2DBC, JPA, etc.)
  */
 public interface ProductRepository {
-    /**
-     * Finds all products with pending status.
-     * @return Flux of products awaiting processing
-     */
-    Flux<ProductToProcess> findPendingProducts();
 
     /**
      * Saves a product to storage.

@@ -7,7 +7,8 @@ import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.S3Gateway;
+import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorSettings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,21 +23,21 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class SoapDocumentProcessingUseCaseTest {
+class S3DocumentProcessingUseCaseTest {
 
     @Mock
     private ProductDocumentRepository documentRepository;
     @Mock
-    private SoapGateway soapGateway;
+    private S3Gateway s3Gateway;
     @Mock
     private ProductRestGateway productRestGateway;
 
-    private SoapDocumentProcessingUseCase useCase;
+    private S3DocumentProcessingUseCase useCase;
     private FileValidator fileValidator;
+    private FolderExclusionRegexConfig folderExclusionRegex;
 
     @BeforeEach
     void setUp() {
@@ -44,16 +45,17 @@ class SoapDocumentProcessingUseCaseTest {
         config.setAllowedTypes("pdf,txt,csv");
         config.setMaxSize(10485760L);
         fileValidator = new FileValidator(config);
-        useCase = new SoapDocumentProcessingUseCase(
-            documentRepository, soapGateway,
-            fileValidator,
+        folderExclusionRegex = new FolderExclusionRegexConfig(java.util.List.of("excluded", "skip-me"));
+        useCase = new S3DocumentProcessingUseCase(
+            documentRepository, s3Gateway,
+            fileValidator, folderExclusionRegex,
             productRestGateway
         );
     }
 
     @Test
-    void implementationName_shouldReturnSoap() {
-        assertThat(useCase.implementationName()).isEqualTo("SOAP");
+    void implementationName_shouldReturnS3() {
+        assertThat(useCase.implementationName()).isEqualTo("S3");
     }
 
     @Test
@@ -94,30 +96,53 @@ class SoapDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void applyRulesMetadata_shouldRejectOversizedFile() {
-        ProcessorSettings smallConfig = new ProcessorSettings();
-        smallConfig.setAllowedTypes("pdf,txt,csv");
-        smallConfig.setMaxSize(2L);
-        FileValidator smallFileValidator = new FileValidator(smallConfig);
-        SoapDocumentProcessingUseCase useCaseWithSmallLimit = new SoapDocumentProcessingUseCase(
-            documentRepository, soapGateway, smallFileValidator, productRestGateway);
-
+    void applyRulesMetadata_shouldSkipExcludedFolder() {
         ProductDocumentToProcess doc = ProductDocumentToProcess.builder()
             .documentId("doc1")
             .productId("prod1")
             .filename("document.pdf")
             .content(new byte[]{1, 2, 3})
             .contentType("application/pdf")
+            .origin("s3://bucket/excluded/folder/file.pdf")
             .status(DocumentStatus.PENDING.name())
             .build();
 
-        StepVerifier.create(useCaseWithSmallLimit.applyRulesMetadata(doc))
-            .expectErrorMatches(e -> e instanceof com.example.fileprocessor.domain.exception.FileValidationException)
-            .verify();
+        when(documentRepository.updateStatus(any(), any(), any(), any()))
+            .thenReturn(Mono.empty());
+
+        StepVerifier.create(useCase.applyRulesMetadata(doc))
+            .assertNext(result -> {
+                assertThat(result.skipped()).isTrue();
+                assertThat(result.documentId()).isEqualTo("doc1");
+            })
+            .verifyComplete();
+
+        verify(documentRepository).updateStatus(eq("doc1"), eq(DocumentStatus.SKIPPED.name()), isNull(), eq("SKIPPED_FOLDER"));
     }
 
     @Test
-    void uploadDocument_shouldReturnSuccessWhenSoapSucceeds() {
+    void applyRulesMetadata_shouldNotSkipNonExcludedFolder() {
+        ProductDocumentToProcess doc = ProductDocumentToProcess.builder()
+            .documentId("doc1")
+            .productId("prod1")
+            .filename("document.pdf")
+            .content(new byte[]{1, 2, 3})
+            .contentType("application/pdf")
+            .origin("s3://bucket/included/folder/file.pdf")
+            .status(DocumentStatus.PENDING.name())
+            .build();
+
+        StepVerifier.create(useCase.applyRulesMetadata(doc))
+            .assertNext(result -> {
+                assertThat(result.skipped()).isFalse();
+            })
+            .verifyComplete();
+
+        verify(documentRepository, never()).updateStatus(any(), any(), any(), any());
+    }
+
+    @Test
+    void uploadDocument_shouldReturnSuccessWhenS3Succeeds() {
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
             .correlationId("corr-123")
@@ -126,7 +151,7 @@ class SoapDocumentProcessingUseCaseTest {
             .message("OK")
             .build();
 
-        when(soapGateway.send(any(), any(), anyString(), anyString(), anyLong(), anyString(), anyString()))
+        when(s3Gateway.send(any(), any(), anyString(), anyString(), anyLong(), anyString(), anyString(), anyString()))
             .thenReturn(Mono.just(successResult));
 
         DocumentToUpload docToUpload = new DocumentToUpload(
@@ -135,6 +160,7 @@ class SoapDocumentProcessingUseCaseTest {
                 .filename("doc.pdf")
                 .content(new byte[]{1, 2, 3})
                 .contentType("application/pdf")
+                .origin("s3://bucket/parent/child/file.pdf")
                 .build(),
             new FileValidator.FolderInfo("parent", "child"),
             3L,
@@ -150,9 +176,9 @@ class SoapDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void uploadDocument_shouldReturnFailureWhenSoapFails() {
-        when(soapGateway.send(any(), any(), anyString(), anyString(), anyLong(), anyString(), anyString()))
-            .thenReturn(Mono.error(new ProcessingException("SOAP error", "SOAP_ERROR", "trace-1")));
+    void uploadDocument_shouldReturnFailureWhenS3Fails() {
+        when(s3Gateway.send(any(), any(), anyString(), anyString(), anyLong(), anyString(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ProcessingException("S3 error", "S3_ERROR", "trace-1")));
 
         DocumentToUpload docToUpload = new DocumentToUpload(
             ProductDocumentToProcess.builder()
@@ -160,6 +186,7 @@ class SoapDocumentProcessingUseCaseTest {
                 .filename("doc.pdf")
                 .content(new byte[]{1, 2, 3})
                 .contentType("application/pdf")
+                .origin("s3://bucket/parent/child/file.pdf")
                 .build(),
             new FileValidator.FolderInfo("parent", "child"),
             3L,
@@ -169,8 +196,34 @@ class SoapDocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.uploadDocument(docToUpload))
             .assertNext(result -> {
                 assertThat(result.isSuccess()).isFalse();
-                assertThat(result.getErrorCode()).isEqualTo("SOAP_ERROR");
+                assertThat(result.getErrorCode()).isEqualTo("S3_ERROR");
             })
             .verifyComplete();
+    }
+
+    @Test
+    void uploadDocument_shouldReturnSkippedResultWhenDocumentIsSkipped() {
+        DocumentToUpload skippedDoc = new DocumentToUpload(
+            ProductDocumentToProcess.builder()
+                .documentId("doc1")
+                .filename("doc.pdf")
+                .content(null)
+                .contentType("application/pdf")
+                .origin("s3://bucket/excluded/file.pdf")
+                .build(),
+            new FileValidator.FolderInfo("excluded", "folder"),
+            0L,
+            true
+        );
+
+        StepVerifier.create(useCase.uploadDocument(skippedDoc))
+            .assertNext(result -> {
+                assertThat(result.isSuccess()).isTrue();
+                assertThat(result.getStatus()).isEqualTo(DocumentStatus.SKIPPED.name());
+                assertThat(result.getMessage()).contains("folder exclusion");
+            })
+            .verifyComplete();
+
+        verify(s3Gateway, never()).send(any(), any(), anyString(), anyString(), anyLong(), anyString(), anyString(), anyString());
     }
 }

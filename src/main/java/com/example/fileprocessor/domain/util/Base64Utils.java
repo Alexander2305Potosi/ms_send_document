@@ -3,7 +3,6 @@ package com.example.fileprocessor.domain.util;
 import com.example.fileprocessor.domain.exception.InvalidBase64Exception;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
@@ -33,16 +32,6 @@ public final class Base64Utils {
                 "Invalid Base64 content for document: " + filename
                 + " (documentId=" + documentId + "): " + e.getMessage(),
                 ProcessingResultCodes.INVALID_BASE64, e);
-        }
-    }
-
-    public static boolean isValidUtf8(byte[] decoded, String filename) {
-        if (decoded == null) return false;
-        try {
-            new String(decoded, StandardCharsets.UTF_8);
-            return true;
-        } catch (Exception e) {
-            return false;
         }
     }
 

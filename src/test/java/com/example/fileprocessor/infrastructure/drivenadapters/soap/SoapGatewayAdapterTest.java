@@ -39,7 +39,8 @@ class SoapGatewayAdapterTest {
             mockWebServer.url("/").toString(),
             5,
             1,
-            100
+            100,
+            500
         );
 
         gateway = new SoapGatewayAdapter(
@@ -52,10 +53,6 @@ class SoapGatewayAdapterTest {
     @AfterEach
     void tearDown() throws Exception {
         mockWebServer.shutdown();
-    }
-
-    private void createTestRequest() {
-        // Now parameters are passed directly to sendSoap method
     }
 
     @Test
@@ -80,7 +77,7 @@ class SoapGatewayAdapterTest {
             .setBody(responseXml)
             .addHeader("Content-Type", "text/xml"));
 
-        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+        StepVerifier.create(gateway.send("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
                 .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .assertNext(result -> {
                 assertTrue(result.isSuccess());
@@ -95,7 +92,7 @@ class SoapGatewayAdapterTest {
             .setResponseCode(500)
             .setBody("<?xml version=\"1.0\"?><soap:Fault></faultstring>Server Error</faultstring></soap:Fault>"));
 
-        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+        StepVerifier.create(gateway.send("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
                 .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable -> throwable instanceof ProcessingException)
             .verify();
@@ -107,7 +104,7 @@ class SoapGatewayAdapterTest {
             .setResponseCode(400)
             .setBody("<soap:Fault>Bad Request</soap:Fault>"));
 
-        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+        StepVerifier.create(gateway.send("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
                 .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable ->
                 throwable instanceof ProcessingException &&
@@ -122,7 +119,7 @@ class SoapGatewayAdapterTest {
             .setResponseCode(500)
             .setBody(errorBody));
 
-        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+        StepVerifier.create(gateway.send("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
                 .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable -> {
                 if (!(throwable instanceof ProcessingException)) return false;
@@ -154,7 +151,7 @@ class SoapGatewayAdapterTest {
             .setBody(responseXml)
             .addHeader("Content-Type", "text/xml"));
 
-        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+        StepVerifier.create(gateway.send("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
                 .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
@@ -169,7 +166,7 @@ class SoapGatewayAdapterTest {
             .setResponseCode(500)
             .setBody("<soap:Fault>Server Error</soap:Fault>"));
 
-        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+        StepVerifier.create(gateway.send("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
                 .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable -> {
                 if (!(throwable instanceof ProcessingException)) return false;
@@ -185,7 +182,7 @@ class SoapGatewayAdapterTest {
             .setResponseCode(500)
             .setBody("<soap:Fault>Internal Error</soap:Fault>"));
 
-        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+        StepVerifier.create(gateway.send("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
                 .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable -> {
                 if (!(throwable instanceof ProcessingException)) return false;

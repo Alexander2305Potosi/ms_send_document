@@ -7,7 +7,7 @@ import reactor.core.publisher.Mono;
  * Port for sending documents via SOAP protocol.
  */
 public interface SoapGateway {
-    Mono<FileUploadResult> sendSoap(String documentId, byte[] content, String filename,
-                                     String contentType, long fileSize,
-                                     String parentFolder, String childFolder);
+    Mono<FileUploadResult> send(String documentId, byte[] content, String filename,
+                                 String contentType, long fileSize,
+                                 String parentFolder, String childFolder);
 }

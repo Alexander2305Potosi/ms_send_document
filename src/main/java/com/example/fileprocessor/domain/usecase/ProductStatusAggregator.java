@@ -99,21 +99,58 @@ public class ProductStatusAggregator {
         int processing = 0, retry = 0, skipped = 0, notSent = 0;
 
         for (var doc : documents) {
-            switch (doc.getStatus()) {
-                case "SUCCESS" -> success++;
-                case "FAILURE" -> failure++;
-                case "PENDING" -> pending++;
-                case "PROCESSING" -> processing++;
-                case "RETRY" -> retry++;
-                case "SKIPPED" -> skipped++;
-                case "NOT_SENT" -> notSent++;
-                default -> log.warn("Unknown document status '{}' for document {} in product {}",
-                    doc.getStatus(), doc.getDocumentId(), doc.getProductId());
+            String status = doc.getStatus();
+            if (status == null) {
+                log.warn("Document {} has null status", doc.getDocumentId());
+            } else if (status.equals(DocumentStatus.SUCCESS.name())) {
+                success++;
+            } else if (status.equals(DocumentStatus.FAILURE.name())) {
+                failure++;
+            } else if (status.equals(DocumentStatus.PENDING.name())) {
+                pending++;
+            } else if (status.equals(DocumentStatus.PROCESSING.name())) {
+                processing++;
+            } else if (status.equals(DocumentStatus.RETRY.name())) {
+                retry++;
+            } else if (status.equals(DocumentStatus.SKIPPED.name())) {
+                skipped++;
+            } else if (status.equals(DocumentStatus.NOT_SENT.name())) {
+                notSent++;
+            } else {
+                log.warn("Unknown document status '{}' for document {} in product {}",
+                    status, doc.getDocumentId(), doc.getProductId());
             }
         }
         return new StatusCounts(success, failure, pending, processing, retry, skipped, notSent);
     }
 
+    /**
+     * Calculates the overall product status from document counts.
+     *
+     * <h3>Status Evaluation Truth Table</h3>
+     * <table border="1">
+     * <tr><th>Condition</th><th>Returns</th></tr>
+     * <tr><td>Any PENDING, PROCESSING, or RETRY documents</td><td>PENDING</td></tr>
+     * <tr><td>At least one FAILURE and no PENDING/PROCESSING/RETRY</td><td>PARTIAL_FAILURE</td></tr>
+     * <tr><td>All documents are SUCCESS</td><td>SUCCESS</td></tr>
+     * <tr><td>Only SUCCESS and SKIPPED (no FAILURE)</td><td>COMPLETED_WITH_SKIPS</td></tr>
+     * <tr><td>Only SUCCESS and NOT_SENT (no FAILURE)</td><td>COMPLETED_WITH_NOT_SENT</td></tr>
+     * <tr><td>All documents are FAILURE</td><td>COMPLETED_WITH_FAILURES</td></tr>
+     * <tr><td>All documents are NOT_SENT</td><td>COMPLETED_WITH_NOT_SENT</td></tr>
+     * <tr><td>Everything else</td><td>PENDING</td></tr>
+     * </table>
+     *
+     * <h3>Priority of Evaluation</h3>
+     * <ol>
+     * <li>PENDING/PROCESSING/RETRY → blocks completion (highest priority)</li>
+     * <li>FAILURE → determines partial vs complete failure</li>
+     * <li>SUCCESS → determines full success</li>
+     * <li>SKIPPED/NOT_SENT → determines completion type when no failures exist</li>
+     * </ol>
+     *
+     * @param c the counts of documents by status
+     * @return the calculated product status
+     */
     private static ProductStatus calculateStatusFromCounts(StatusCounts c) {
         int total = c.success + c.failure + c.pending + c.processing + c.retry + c.skipped + c.notSent;
 

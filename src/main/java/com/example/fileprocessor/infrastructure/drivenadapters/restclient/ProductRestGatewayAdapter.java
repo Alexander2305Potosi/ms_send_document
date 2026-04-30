@@ -5,11 +5,12 @@ import com.example.fileprocessor.domain.entity.ProductInfo;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
+import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
+import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
@@ -20,14 +21,11 @@ import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 
 @Component
 public class ProductRestGatewayAdapter implements ProductRestGateway {
 
     private static final Logger log = LoggerFactory.getLogger(ProductRestGatewayAdapter.class);
-    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE_REF =
-        new ParameterizedTypeReference<Map<String, Object>>() {};
 
     private final WebClient webClient;
     private final DocumentRestProperties properties;
@@ -54,10 +52,9 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .accept(MediaType.APPLICATION_JSON)
                 .header(ApiConstants.HEADER_TRACE_ID, traceId)
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .bodyToFlux(ProductResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .map(list -> list.stream().map(json -> mapToProductInfo(json)).toList())
-                .flatMapMany(Flux::fromIterable)
+                .map(this::mapToProductInfo)
                 .doOnNext(product -> log.info("Product retrieved: {}", product.getProductId()));
         });
     }
@@ -75,33 +72,31 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .accept(MediaType.APPLICATION_JSON)
                 .header(ApiConstants.HEADER_TRACE_ID, traceId)
                 .retrieve()
-                .bodyToMono(MAP_TYPE_REF)
+                .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .map(this::mapToProductDocumentInfo)
                 .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
         });
     }
 
-    private ProductInfo mapToProductInfo(Map<String, Object> json) {
-        Object docsObj = json.get("documents");
-        List<ProductDocumentInfo> documents = (docsObj instanceof List<?>)
-            ? ((List<?>) docsObj).stream()
-                .filter(m -> m instanceof Map)
-                .map(m -> mapToProductDocumentInfo((Map<String, Object>) m))
+    private ProductInfo mapToProductInfo(ProductResponse json) {
+        List<ProductDocumentInfo> documents = json.documents() != null
+            ? json.documents().stream()
+                .map(this::mapToProductDocumentInfo)
                 .toList()
             : List.of();
 
         return ProductInfo.builder()
-            .productId((String) json.get("productId"))
-            .name((String) json.get("name"))
+            .productId(json.productId())
+            .name(json.name())
             .documents(documents)
             .build();
     }
 
-    private ProductDocumentInfo mapToProductDocumentInfo(Map<String, Object> json) {
-        String contentBase64 = (String) json.get("content");
-        String filename = (String) json.get("filename");
-        String documentId = (String) json.get("documentId");
+    private ProductDocumentInfo mapToProductDocumentInfo(ProductDocumentResponse json) {
+        String contentBase64 = json.content();
+        String filename = json.filename();
+        String documentId = json.documentId();
 
         byte[] content;
         if (contentBase64 != null && !contentBase64.isBlank()) {
@@ -110,28 +105,25 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             } catch (Exception e) {
                 log.error("Failed to decode Base64 for document {} ({}): {}",
                     documentId, filename, e.getMessage());
-            throw new ProcessingException(
+                throw new ProcessingException(
                     "Base64 decode failed for document: " + documentId,
                     com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64, documentId);
             }
         } else {
-            content = null; // No content available
+            content = null;
         }
 
-        Object sizeObj = json.get("size");
-        long size = sizeObj instanceof Number ? ((Number) sizeObj).longValue() : (content != null ? content.length : 0);
-
-        Object isZipObj = json.get("isZip");
-        boolean isZip = isZipObj instanceof Boolean ? (Boolean) isZipObj : false;
+        long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
+        boolean isZip = Boolean.TRUE.equals(json.isZip());
 
         return new ProductDocumentInfo(
             documentId,
             filename,
             content,
-            (String) json.get("contentType"),
+            json.contentType(),
             size,
             isZip,
-            (String) json.get("origin")
+            json.origin()
         );
     }
 }

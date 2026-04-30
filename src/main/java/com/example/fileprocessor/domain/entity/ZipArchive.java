@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -22,7 +23,7 @@ import java.util.zip.ZipInputStream;
 @Getter
 @Builder
 public class ZipArchive {
-    private static final java.util.Map<String, String> EXT_TO_MIME = java.util.Map.of(
+    private static final Map<String, String> EXT_TO_MIME = Map.of(
         ".pdf", MediaTypeConstants.APPLICATION_PDF,
         ".docx", MediaTypeConstants.APPLICATION_WORD,
         ".txt", MediaTypeConstants.TEXT_PLAIN,
@@ -139,7 +140,7 @@ public class ZipArchive {
     private String detectContentType(String filename) {
         return EXT_TO_MIME.entrySet().stream()
             .filter(entry -> filename.toLowerCase().endsWith(entry.getKey()))
-            .map(java.util.Map.Entry::getValue)
+            .map(Map.Entry::getValue)
             .findFirst()
             .orElse(MediaTypeConstants.APPLICATION_OCTET_STREAM);
     }

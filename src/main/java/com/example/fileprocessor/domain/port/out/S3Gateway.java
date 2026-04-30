@@ -7,7 +7,7 @@ import reactor.core.publisher.Mono;
  * Port for sending documents to S3.
  */
 public interface S3Gateway {
-    Mono<FileUploadResult> upload(String documentId, byte[] content, String filename,
-                                   String contentType, long fileSize,
-                                   String parentFolder, String childFolder, String origin);
+    Mono<FileUploadResult> send(String documentId, byte[] content, String filename,
+                                 String contentType, long fileSize,
+                                 String parentFolder, String childFolder, String origin);
 }

@@ -62,6 +62,7 @@ app:
     timeout-seconds: 30
     retry-attempts: 3
     retry-backoff-millis: 1000
+    max-error-body-length: 500
   document-rest:
     endpoint: ${DOCUMENT_REST_ENDPOINT:http://localhost:3001}
     products-path: /api/products
@@ -77,6 +78,8 @@ app:
       secret-key: ${AWS_SECRET_KEY:}
       retry-attempts: 3
       retry-backoff-millis: 500
+      timeout-seconds: 30
+      key-prefix: "documents/"
   circuit-breaker:
     failure-rate-threshold: 50
     wait-duration-in-open-state-millis: 60000

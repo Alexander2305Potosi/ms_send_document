@@ -67,7 +67,15 @@ public class SoapEnvelopeWrapper {
                 throw ProcessingException.withTraceId(SoapConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
             }
 
-            Transformer transformer = TransformerFactory.newInstance().newTransformer();
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            try {
+                transformerFactory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+                transformerFactory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                transformerFactory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+            } catch (Exception e) {
+                log.warn("Failed to configure secure TransformerFactory: {}", e.getMessage());
+            }
+            Transformer transformer = transformerFactory.newTransformer();
             transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
             StringWriter writer = new StringWriter();
             transformer.transform(new DOMSource(responseNode), new StreamResult(writer));

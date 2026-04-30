@@ -19,18 +19,27 @@ public record S3Properties(
 
     boolean pathStyleAccess,
 
+    @NotBlank
     String accessKey,
 
+    @NotBlank
     String secretKey,
 
     @Min(0)
     int retryAttempts,
 
     @Min(100)
-    int retryBackoffMillis
+    int retryBackoffMillis,
+
+    @Min(1)
+    int timeoutSeconds,
+
+    String keyPrefix
 ) {
     public S3Properties {
         if (retryAttempts < 0) retryAttempts = 3;
         if (retryBackoffMillis < 100) retryBackoffMillis = 500;
+        if (timeoutSeconds <= 0) timeoutSeconds = 30;
+        if (keyPrefix == null || keyPrefix.isBlank()) keyPrefix = "documents/";
     }
 }

@@ -95,7 +95,6 @@ tasks.withType<Test> {
         showCauses = true
         showStackTraces = true
     }
-    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
 tasks.withType<JavaCompile> {
@@ -110,7 +109,7 @@ springBoot {
 pitest {
     junit5PluginVersion.set("1.2.1")
     pitestVersion.set("1.15.0")
-    targetClasses.set(listOf("com.example.fileprocessor.domain.*", "com.example.fileprocessor.infrastructure.soap.*", "com.example.fileprocessor.infrastructure.rest.*"))
+    targetClasses.set(listOf("com.example.fileprocessor.domain.*", "com.example.fileprocessor.infrastructure.drivenadapters.*", "com.example.fileprocessor.infrastructure.entrypoints.*", "com.example.fileprocessor.infrastructure.helpers.*"))
     targetTests.set(listOf("com.example.fileprocessor.*"))
     outputFormats.set(listOf("HTML", "XML"))
     timestampedReports.set(false)

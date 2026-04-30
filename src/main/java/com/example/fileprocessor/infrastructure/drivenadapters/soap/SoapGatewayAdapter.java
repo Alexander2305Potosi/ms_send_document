@@ -29,11 +29,23 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * SOAP gateway adapter for file upload operations.
+ *
+ * <h3>Error Handling Policy</h3>
+ * <ul>
+ *   <li><b>TimeoutException</b> → GATEWAY_TIMEOUT (retries exhausted)</li>
+ *   <li><b>5xx Server Error</b> → BAD_GATEWAY (propagates as ProcessingException)</li>
+ *   <li><b>4xx Client Error</b> → CLIENT_ERROR (returns failed FileUploadResult)</li>
+ *   <li><b>ConnectException</b> → UNKNOWN_ERROR (propagates)</li>
+ *   <li><b>IOException</b> → UNKNOWN_ERROR (propagates)</li>
+ *   <li><b>Retryable</b>: 5xx, 429, TimeoutException, IOException, ConnectException</li>
+ * </ul>
+ */
 @Component
 public class SoapGatewayAdapter implements SoapGateway {
 
     private static final Logger log = LoggerFactory.getLogger(SoapGatewayAdapter.class);
-    private static final int MAX_ERROR_BODY_LENGTH = 500;
 
     private final WebClient webClient;
     private final SoapProperties properties;
@@ -54,9 +66,9 @@ public class SoapGatewayAdapter implements SoapGateway {
     }
 
     @Override
-    public Mono<FileUploadResult> sendSoap(String documentId, byte[] content, String filename,
-                                            String contentType, long fileSize,
-                                            String parentFolder, String childFolder) {
+    public Mono<FileUploadResult> send(String documentId, byte[] content, String filename,
+                                       String contentType, long fileSize,
+                                       String parentFolder, String childFolder) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             log.info("Sending SOAP request for traceId: {}, endpoint: {}", traceId, properties.endpoint());
@@ -178,7 +190,7 @@ public class SoapGatewayAdapter implements SoapGateway {
 
     private String truncateBody(String body) {
         if (body == null) return "null";
-        if (body.length() <= MAX_ERROR_BODY_LENGTH) return body;
-        return body.substring(0, MAX_ERROR_BODY_LENGTH) + "...";
+        if (body.length() <= properties.maxErrorBodyLength()) return body;
+        return body.substring(0, properties.maxErrorBodyLength()) + "...";
     }
 }

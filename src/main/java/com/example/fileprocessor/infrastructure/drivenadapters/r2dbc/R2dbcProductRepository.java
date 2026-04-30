@@ -1,13 +1,11 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ProductToProcess;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -21,29 +19,6 @@ public class R2dbcProductRepository implements ProductRepository {
 
     public R2dbcProductRepository(DatabaseClient databaseClient) {
         this.databaseClient = databaseClient;
-    }
-
-    @Override
-    public Flux<ProductToProcess> findPendingProducts() {
-        String sql = """
-            SELECT product_id, name, status, created_at, processed_at
-            FROM products_to_process
-            WHERE status IN ($1, $2, $3)
-            ORDER BY created_at ASC
-            """;
-
-        return databaseClient.sql(sql)
-            .bind("$1", DocumentStatus.PENDING.name())
-            .bind("$2", DocumentStatus.RETRY.name())
-            .bind("$3", DocumentStatus.PROCESSING.name())
-            .map((row, metadata) -> ProductToProcess.builder()
-                .productId(row.get("product_id", String.class))
-                .name(row.get("name", String.class))
-                .status(row.get("status", String.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .processedAt(row.get("processed_at", Instant.class))
-                .build())
-            .all();
     }
 
     @Override
