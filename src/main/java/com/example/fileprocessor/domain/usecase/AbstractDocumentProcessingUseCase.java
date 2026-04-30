@@ -30,7 +30,6 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     public final Flux<FileUploadResult> executePendingDocuments() {
         return documentRepository.findPendingDocuments()
-            .limitRate(10)
             .flatMap(doc -> {
                 String docId = doc.getDocumentId();
                 return retrieveDocumentContent(doc)
