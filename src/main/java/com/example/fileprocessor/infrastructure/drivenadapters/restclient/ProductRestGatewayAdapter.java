@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
-import com.example.fileprocessor.domain.entity.ProductInfo;
+import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
@@ -42,7 +42,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    public Flux<ProductInfo> getAllProducts() {
+    public Flux<Product> getAllProducts() {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             log.info("Fetching all products from REST API, traceId: {}", traceId);
@@ -54,13 +54,13 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .retrieve()
                 .bodyToFlux(ProductResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .map(this::mapToProductInfo)
-                .doOnNext(product -> log.info("Product retrieved: {}", product.getProductId()));
+                .map(this::mapToProduct)
+                .doOnNext(product -> log.info("Product retrieved: {}", product.productId()));
         });
     }
 
     @Override
-    public Mono<ProductDocumentInfo> getDocument(String productId, String documentId) {
+    public Mono<ProductDocument> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             log.info("Fetching document {} for product {} from REST API, traceId: {}", documentId, productId, traceId);
@@ -74,26 +74,26 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .retrieve()
                 .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .map(this::mapToProductDocumentInfo)
+                .map(this::mapToProductDocument)
                 .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
         });
     }
 
-    private ProductInfo mapToProductInfo(ProductResponse json) {
-        List<ProductDocumentInfo> documents = json.documents() != null
+    private Product mapToProduct(ProductResponse json) {
+        List<ProductDocument> documents = json.documents() != null
             ? json.documents().stream()
-                .map(this::mapToProductDocumentInfo)
+                .map(this::mapToProductDocument)
                 .toList()
             : List.of();
 
-        return ProductInfo.builder()
+        return Product.builder()
             .productId(json.productId())
             .name(json.name())
             .documents(documents)
             .build();
     }
 
-    private ProductDocumentInfo mapToProductDocumentInfo(ProductDocumentResponse json) {
+    private ProductDocument mapToProductDocument(ProductDocumentResponse json) {
         String contentBase64 = json.content();
         String filename = json.filename();
         String documentId = json.documentId();
@@ -116,14 +116,14 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
         boolean isZip = Boolean.TRUE.equals(json.isZip());
 
-        return new ProductDocumentInfo(
-            documentId,
-            filename,
-            content,
-            json.contentType(),
-            size,
-            isZip,
-            json.origin()
-        );
+        return ProductDocument.builder()
+            .documentId(documentId)
+            .filename(filename)
+            .content(content)
+            .contentType(json.contentType())
+            .size(size)
+            .isZip(isZip)
+            .origin(json.origin())
+            .build();
     }
 }

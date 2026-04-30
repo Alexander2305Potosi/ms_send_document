@@ -1,26 +1,14 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.ProductInfo;
-import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
+import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductDocument;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
  * Port for fetching products from external REST API.
- * Abstraction that allows different implementations (mock, real, etc.)
  */
 public interface ProductRestGateway {
-    /**
-     * Fetches all products from the external REST API.
-     * @return Flux of products
-     */
-    Flux<ProductInfo> getAllProducts();
-
-    /**
-     * Fetches a specific document for a product.
-     * @param productId the product identifier
-     * @param documentId the document identifier
-     * @return Mono with document info
-     */
-    Mono<ProductDocumentInfo> getDocument(String productId, String documentId);
+    Flux<Product> getAllProducts();
+    Mono<ProductDocument> getDocument(String productId, String documentId);
 }

@@ -3,7 +3,7 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
+import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import org.slf4j.Logger;
@@ -34,7 +34,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocumentInfo doc, String productId) {
+    protected Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId) {
         FileUploadRequest request = FileUploadRequest.of(
             doc.documentId(),
             doc.content() != null ? doc.content() : new byte[0],

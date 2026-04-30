@@ -1,8 +1,8 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
-import com.example.fileprocessor.domain.entity.ProductInfo;
+import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,21 +31,21 @@ public abstract class AbstractDocumentProcessingUseCase {
             .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
     }
 
-    private Flux<FileUploadResult> processProductDocuments(ProductInfo productInfo) {
-        if (productInfo.getDocuments() == null || productInfo.getDocuments().isEmpty()) {
+    private Flux<FileUploadResult> processProductDocuments(Product product) {
+        if (product.documents() == null || product.documents().isEmpty()) {
             return Flux.empty();
         }
 
-        return Flux.fromIterable(productInfo.getDocuments())
+        return Flux.fromIterable(product.documents())
             .flatMap(docInfo -> {
                 String docId = docInfo.documentId();
-                return productRestGateway.getDocument(productInfo.getProductId(), docId)
-                    .flatMap(doc -> uploadDocument(doc, productInfo.getProductId())
+                return productRestGateway.getDocument(product.productId(), docId)
+                    .flatMap(doc -> uploadDocument(doc, product.productId())
                         .doOnError(e -> log.error("Pipeline error for doc=[{}]: {}", docId, e.getMessage())));
             });
     }
 
-    protected abstract Mono<FileUploadResult> uploadDocument(ProductDocumentInfo doc, String productId);
+    protected abstract Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId);
 
     protected abstract String implementationName();
 }
