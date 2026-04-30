@@ -33,13 +33,13 @@ public abstract class AbstractDocumentProcessingUseCase {
             .limitRate(10)
             .flatMap(doc -> {
                 String docId = doc.getDocumentId();
-                return validateDocument(doc)
-                    .doOnError(e -> log.error("Pipeline error at stage=VALIDATE for doc=[{}]: {}", docId, e.getMessage()));
+                return retrieveDocumentContent(doc)
+                    .doOnError(e -> log.error("Pipeline error at stage=RETRIEVE for doc=[{}]: {}", docId, e.getMessage()));
             })
             .flatMap(doc -> {
                 String docId = doc.getDocumentId();
-                return retrieveDocumentContent(doc)
-                    .doOnError(e -> log.error("Pipeline error at stage=RETRIEVE for doc=[{}]: {}", docId, e.getMessage()));
+                return validateDocument(doc)
+                    .doOnError(e -> log.error("Pipeline error at stage=VALIDATE for doc=[{}]: {}", docId, e.getMessage()));
             })
             .flatMap(doc -> {
                 String docId = doc.getDocumentId();
