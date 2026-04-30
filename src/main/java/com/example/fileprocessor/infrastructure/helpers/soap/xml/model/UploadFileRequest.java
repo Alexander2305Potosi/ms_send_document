@@ -21,9 +21,6 @@ public class UploadFileRequest {
     @XmlElement(name = "fileSize")
     private long fileSize;
 
-    @XmlElement(name = "traceId")
-    private String traceId;
-
     @XmlElement(name = "timestamp")
     private String timestamp;
 
@@ -36,13 +33,12 @@ public class UploadFileRequest {
     public UploadFileRequest() {}
 
     public UploadFileRequest(String fileContentBase64, String filename, String contentType,
-                           long fileSize, String traceId, String timestamp,
+                           long fileSize, String timestamp,
                            String parentFolder, String childFolder) {
         this.fileContentBase64 = fileContentBase64;
         this.filename = filename;
         this.contentType = contentType;
         this.fileSize = fileSize;
-        this.traceId = traceId;
         this.timestamp = timestamp;
         this.parentFolder = parentFolder;
         this.childFolder = childFolder;
@@ -52,7 +48,6 @@ public class UploadFileRequest {
     public String getFilename() { return filename; }
     public String getContentType() { return contentType; }
     public long getFileSize() { return fileSize; }
-    public String getTraceId() { return traceId; }
     public String getTimestamp() { return timestamp; }
     public String getParentFolder() { return parentFolder; }
     public String getChildFolder() { return childFolder; }

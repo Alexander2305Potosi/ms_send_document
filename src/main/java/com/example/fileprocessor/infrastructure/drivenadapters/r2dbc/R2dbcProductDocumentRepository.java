@@ -31,7 +31,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Flux<ProductDocumentToProcess> findPendingDocuments() {
         String sql = """
             SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
-                   trace_id, correlation_id, error_code
+                   correlation_id, error_code
             FROM product_documents_to_process
             WHERE status IN ($1, $2, $3)
             ORDER BY created_at ASC
@@ -57,7 +57,6 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .status(row.get("status", String.class))
             .createdAt(row.get("created_at", Instant.class))
             .processedAt(row.get("processed_at", Instant.class))
-            .traceId(row.get("trace_id", String.class))
             .correlationId(row.get("correlation_id", String.class))
             .errorCode(row.get("error_code", String.class))
             .build();
@@ -81,7 +80,7 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Flux<ProductDocumentToProcess> findByProductId(String productId) {
         String sql = """
             SELECT document_id, product_id, parent_document_id, filename, content, content_type, origin, status, created_at, processed_at,
-                   trace_id, correlation_id, error_code
+                   correlation_id, error_code
             FROM product_documents_to_process
             WHERE product_id = $1
             ORDER BY created_at ASC
@@ -97,18 +96,15 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Mono<Boolean> claimDocument(String documentId) {
         String sql = """
             UPDATE product_documents_to_process
-            SET status = $2, trace_id = $3, processed_at = $4
-            WHERE document_id = $1 AND status = $5
+            SET status = $2, processed_at = $3
+            WHERE document_id = $1 AND status = $4
             """;
-
-        String traceId = UUID.randomUUID().toString();
 
         return databaseClient.sql(sql)
             .bind("$1", documentId)
             .bind("$2", DocumentStatus.PROCESSING.name())
-            .bind("$3", traceId)
-            .bind("$4", Instant.now())
-            .bind("$5", DocumentStatus.PENDING.name())
+            .bind("$3", Instant.now())
+            .bind("$4", DocumentStatus.PENDING.name())
             .fetch()
             .rowsUpdated()
             .map(rowsUpdated -> rowsUpdated > 0)
@@ -119,8 +115,8 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     public Mono<Void> save(ProductDocumentToProcess document) {
         String sql = """
             INSERT INTO product_documents_to_process (document_id, product_id, parent_document_id, filename, content, content_type, origin, status,
-                                                    created_at, processed_at, trace_id, correlation_id, error_code)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                                                    created_at, processed_at, correlation_id, error_code)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             """;
 
         return databaseClient.sql(sql)
@@ -134,9 +130,8 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
             .bind("$8", document.getStatus())
             .bind("$9", document.getCreatedAt() != null ? document.getCreatedAt() : Instant.now())
             .bind("$10", document.getProcessedAt() != null ? document.getProcessedAt() : Instant.now())
-            .bind("$11", document.getTraceId() != null ? document.getTraceId() : "")
-            .bind("$12", document.getCorrelationId() != null ? document.getCorrelationId() : "")
-            .bind("$13", document.getErrorCode() != null ? document.getErrorCode() : "")
+            .bind("$11", document.getCorrelationId() != null ? document.getCorrelationId() : "")
+            .bind("$12", document.getErrorCode() != null ? document.getErrorCode() : "")
             .fetch()
             .first()
             .then()
@@ -151,21 +146,20 @@ public class R2dbcProductDocumentRepository implements ProductDocumentRepository
     }
 
     @Override
-    public Mono<Void> updateStatus(String documentId, String status, String traceId,
+    public Mono<Void> updateStatus(String documentId, String status,
                                    String correlationId, String errorCode) {
         String sql = """
             UPDATE product_documents_to_process
-            SET status = $2, trace_id = $3, correlation_id = $4, error_code = $5, processed_at = $6
+            SET status = $2, correlation_id = $3, error_code = $4, processed_at = $5
             WHERE document_id = $1
             """;
 
         return databaseClient.sql(sql)
             .bind("$1", documentId)
             .bind("$2", status)
-            .bind("$3", traceId != null ? traceId : "")
-            .bind("$4", correlationId != null ? correlationId : "")
-            .bind("$5", errorCode != null ? errorCode : "")
-            .bind("$6", Instant.now())
+            .bind("$3", correlationId != null ? correlationId : "")
+            .bind("$4", errorCode != null ? errorCode : "")
+            .bind("$5", Instant.now())
             .fetch()
             .first()
             .then()

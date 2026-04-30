@@ -13,7 +13,6 @@ public class LoadProductsResult {
     private final int documentCount;
     private final String status;
     private final String message;
-    private final String traceId;
     private final Instant processedAt;
     private final boolean success;
 }

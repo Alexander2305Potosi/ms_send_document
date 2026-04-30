@@ -1,8 +1,7 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
-import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,21 +21,20 @@ class SoapMapperTest {
 
     @Test
     void toSoapXml_shouldGenerateValidSoapBody() {
-        DocumentSendRequest request = DocumentSendRequest.builder()
-            .fileContent("testContent".getBytes())
-            .filename("test.pdf")
-            .contentType("application/pdf")
-            .fileSize(1234)
-            .traceId("trace-123")
-            .build();
-
-        String xml = soapMapper.toSoapXml(request);
+        String xml = soapMapper.toSoapXml(
+            "doc-1",
+            "testContent".getBytes(),
+            "test.pdf",
+            "application/pdf",
+            1234L,
+            "parent",
+            "child"
+        );
 
         assertNotNull(xml);
         assertFalse(xml.contains("soap:Envelope"), "Should NOT contain SOAP envelope");
         assertTrue(xml.contains("UploadFileRequest"));
         assertTrue(xml.contains("test.pdf"));
-        assertTrue(xml.contains("trace-123"));
         assertTrue(xml.contains("http://example.com/fileservice"));
     }
 
@@ -59,13 +57,12 @@ class SoapMapperTest {
             </soap:Envelope>
             """;
 
-        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse, "trace-123");
+        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse);
 
         assertNotNull(response);
         assertEquals("SUCCESS", response.getStatus());
         assertEquals("File processed", response.getMessage());
         assertEquals("corr-abc-123", response.getCorrelationId());
-        assertEquals("trace-123", response.getTraceId());
         assertEquals("ext-ref-456", response.getExternalReference());
         assertTrue(response.isSuccess());
     }
@@ -87,7 +84,7 @@ class SoapMapperTest {
             </soap:Envelope>
             """;
 
-        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse, "trace-456");
+        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse);
 
         assertNotNull(response);
         assertEquals("OK", response.getStatus());
@@ -112,7 +109,7 @@ class SoapMapperTest {
             </soap:Envelope>
             """;
 
-        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse, "trace-789");
+        ExternalServiceResponse response = soapMapper.fromSoapXml(soapResponse);
 
         assertNotNull(response);
         assertEquals("ERROR", response.getStatus());
@@ -120,14 +117,13 @@ class SoapMapperTest {
     }
 
     @Test
-    void fromSoapXml_shouldThrowSoapCommunicationException_whenInvalidXml() {
+    void fromSoapXml_shouldThrowProcessingException_whenInvalidXml() {
         String invalidXml = "not valid xml";
 
-        SoapCommunicationException exception = assertThrows(SoapCommunicationException.class,
-            () -> soapMapper.fromSoapXml(invalidXml, "trace-000"));
+        ProcessingException exception = assertThrows(ProcessingException.class,
+            () -> soapMapper.fromSoapXml(invalidXml));
 
         assertEquals("INVALID_RESPONSE", exception.getErrorCode());
-        assertTrue(exception.getMessage().contains("trace-000"));
         assertTrue(exception.getMessage().contains("Failed to parse"));
     }
 }

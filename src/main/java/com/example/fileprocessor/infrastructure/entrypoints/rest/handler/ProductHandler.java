@@ -7,12 +7,15 @@ import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
+
+import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_TRACE_ID;
 
 /**
  * Handler for product-related REST endpoints.
@@ -24,27 +27,28 @@ public class ProductHandler {
 
     private final LoadProductsUseCase loadProductsUseCase;
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
-    private final AbstractDocumentProcessingUseCase s3DocumentUseCase;
+    private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
 
     public ProductHandler(LoadProductsUseCase loadProductsUseCase,
                          SoapDocumentProcessingUseCase soapDocumentUseCase,
-                         S3DocumentProcessingUseCase s3DocumentUseCase) {
+                         ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider) {
         this.loadProductsUseCase = loadProductsUseCase;
         this.soapDocumentUseCase = soapDocumentUseCase;
-        this.s3DocumentUseCase = s3DocumentUseCase;
+        this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
     }
 
     public Mono<ServerResponse> loadProducts(ServerRequest request) {
         String traceId = resolveTraceId(request);
         log.info("Starting products load from REST API, traceId: {}", traceId);
 
-        return ServerResponse.accepted()
+        return Mono.deferContextual(ctx -> ServerResponse.accepted()
             .bodyValue(loadProductsUseCase.execute()
                 .doOnNext(result -> log.info("Product loaded: {} -> {} ({} documents)",
                     result.getProductId(), result.getStatus(), result.getDocumentCount()))
                 .doOnError(error -> log.error("Load failed for traceId {}: {}", traceId, error.getMessage()))
                 .thenMany(Mono.empty())
-            );
+            ))
+            .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
@@ -53,26 +57,28 @@ public class ProductHandler {
             .orElse(ApiConstants.PROCESSOR_SOAP);
         String traceId = resolveTraceId(request);
 
-        return ServerResponse.accepted()
-            .bodyValue(getProcessor(processorType, traceId).executePendingDocuments()
+        return Mono.deferContextual(ctx -> ServerResponse.accepted()
+            .bodyValue(getProcessor(processorType).executePendingDocuments()
                 .doOnNext(result -> log.info("Document processed: correlationId={}, status={}",
                     result.getCorrelationId(), result.getStatus()))
                 .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()))
-                .collectList());
+                .collectList()))
+            .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 
-    private AbstractDocumentProcessingUseCase getProcessor(String processorType, String traceId) {
+    private AbstractDocumentProcessingUseCase getProcessor(String processorType) {
         if (ApiConstants.PROCESSOR_S3.equals(processorType)) {
-            if (s3DocumentUseCase == null) {
+            S3DocumentProcessingUseCase s3UseCase = s3DocumentUseCaseProvider.getIfAvailable();
+            if (s3UseCase == null) {
                 throw new IllegalStateException("S3 processor not available - enable 's3' profile");
             }
-            log.info("Using S3 processor, traceId: {}", traceId);
-            return s3DocumentUseCase;
+            log.info("Using S3 processor");
+            return s3UseCase;
         }
         if (!ApiConstants.PROCESSOR_SOAP.equals(processorType)) {
-            log.warn("Unknown processor type '{}', defaulting to SOAP, traceId: {}", processorType, traceId);
+            log.warn("Unknown processor type '{}', defaulting to SOAP", processorType);
         }
-        log.info("Using SOAP processor, traceId: {}", traceId);
+        log.info("Using SOAP processor");
         return soapDocumentUseCase;
     }
 

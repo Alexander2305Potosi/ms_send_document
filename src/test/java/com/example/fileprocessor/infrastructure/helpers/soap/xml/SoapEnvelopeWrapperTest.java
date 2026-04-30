@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,8 +53,8 @@ class SoapEnvelopeWrapperTest {
             </soap:Envelope>
             """;
 
-        SoapCommunicationException exception = assertThrows(
-            SoapCommunicationException.class,
+        ProcessingException exception = assertThrows(
+            ProcessingException.class,
             () -> wrapper.unwrapResponse(xmlWithoutBody, UploadFileResponse.class)
         );
 
@@ -71,8 +71,8 @@ class SoapEnvelopeWrapperTest {
             </soap:Envelope>
             """;
 
-        SoapCommunicationException exception = assertThrows(
-            SoapCommunicationException.class,
+        ProcessingException exception = assertThrows(
+            ProcessingException.class,
             () -> wrapper.unwrapResponse(xmlWithEmptyBody, UploadFileResponse.class)
         );
 
@@ -83,8 +83,8 @@ class SoapEnvelopeWrapperTest {
     void unwrapResponse_shouldThrowOnInvalidXml() {
         String invalidXml = "not xml at all";
 
-        SoapCommunicationException exception = assertThrows(
-            SoapCommunicationException.class,
+        ProcessingException exception = assertThrows(
+            ProcessingException.class,
             () -> wrapper.unwrapResponse(invalidXml, UploadFileResponse.class)
         );
 

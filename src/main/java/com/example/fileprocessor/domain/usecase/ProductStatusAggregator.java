@@ -30,7 +30,7 @@ public class ProductStatusAggregator {
     /**
      * Calculates and updates the status of a product based on its documents.
      */
-    public Mono<Void> updateProductStatus(String productId, String traceId) {
+    public Mono<Void> updateProductStatus(String productId) {
         return documentRepository.findByProductId(productId)
             .collectList()
             .flatMap(docs -> {
@@ -41,7 +41,7 @@ public class ProductStatusAggregator {
                     productId, newStatus,
                     counts.success, counts.failure, counts.pending);
 
-                return productRepository.updateStatus(productId, newStatus.name(), traceId);
+                return productRepository.updateStatus(productId, newStatus.name());
             });
     }
 
@@ -117,17 +117,14 @@ public class ProductStatusAggregator {
     private static ProductStatus calculateStatusFromCounts(StatusCounts c) {
         int total = c.success + c.failure + c.pending + c.processing + c.retry + c.skipped + c.notSent;
 
-        // If any document is still being processed or pending, product is not complete
         if (c.pending > 0 || c.processing > 0 || c.retry > 0) {
             return ProductStatus.PENDING;
         }
 
-        // If any document failed permanently, it's PARTIAL_FAILURE
         if (c.failure > 0) {
             return ProductStatus.PARTIAL_FAILURE;
         }
 
-        // All documents processed
         if (c.success == total) {
             return ProductStatus.SUCCESS;
         }

@@ -93,7 +93,6 @@ class FileValidatorTest {
             .content(new byte[]{1})
             .contentType("application/pdf")
             .origin("/incoming/" + filename)
-            .traceId("trace-" + docId)
             .createdAt(Instant.now())
             .build();
     }
@@ -107,7 +106,6 @@ class FileValidatorTest {
             .content(content)
             .contentType("application/pdf")
             .origin("/incoming/" + filename)
-            .traceId("trace-" + docId)
             .createdAt(Instant.now())
             .build();
     }

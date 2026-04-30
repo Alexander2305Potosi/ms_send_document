@@ -1,8 +1,8 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
 import jakarta.xml.bind.JAXBContext;
@@ -57,14 +57,14 @@ public class SoapEnvelopeWrapper {
             DocumentBuilder builder = documentBuilderFactory.newDocumentBuilder();
             Document doc = builder.parse(new org.xml.sax.InputSource(new StringReader(soapXml)));
 
-            Node body = doc.getElementsByTagNameNS(SoapNamespaces.SOAP_ENVELOPE, "Body").item(0);
+            Node body = doc.getElementsByTagNameNS(SoapConstants.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
-                throw new SoapCommunicationException(ApiConstants.MSG_SOAP_BODY_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
+            throw ProcessingException.withTraceId(SoapConstants.MSG_SOAP_BODY_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
             }
 
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
-                throw new SoapCommunicationException(ApiConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
+                throw ProcessingException.withTraceId(SoapConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
             }
 
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
@@ -76,11 +76,11 @@ public class SoapEnvelopeWrapper {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
             return responseClass.cast(unmarshaller.unmarshal(new StringReader(responseXml)));
 
-        } catch (SoapCommunicationException e) {
+        } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
             log.error("Error unmarshalling SOAP response: {}", e.getMessage());
-            throw new SoapCommunicationException(ApiConstants.MSG_PARSE_ERROR, ProcessingResultCodes.INVALID_RESPONSE, null, e);
+            throw ProcessingException.withTraceId(SoapConstants.MSG_PARSE_ERROR, ProcessingResultCodes.INVALID_RESPONSE, null, e);
         }
     }
 

@@ -16,7 +16,6 @@ class ProductToProcessTest {
             .status("PENDING")
             .createdAt(now)
             .processedAt(now)
-            .traceId("trace-1")
             .build();
 
         assertEquals("prod-1", product.getProductId());
@@ -24,7 +23,6 @@ class ProductToProcessTest {
         assertEquals("PENDING", product.getStatus());
         assertEquals(now, product.getCreatedAt());
         assertEquals(now, product.getProcessedAt());
-        assertEquals("trace-1", product.getTraceId());
     }
 
     @Test

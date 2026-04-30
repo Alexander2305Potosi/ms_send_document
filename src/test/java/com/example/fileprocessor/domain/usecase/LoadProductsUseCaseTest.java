@@ -54,7 +54,7 @@ class LoadProductsUseCaseTest {
             .documents(List.of(doc1, doc2))
             .build();
 
-        when(productGateway.getAllProducts(any())).thenReturn(Flux.just(product));
+        when(productGateway.getAllProducts()).thenReturn(Flux.just(product));
         when(productRepository.save(any())).thenReturn(Mono.empty());
         when(documentRepository.saveAll(any())).thenReturn(Mono.empty());
 
@@ -94,7 +94,7 @@ class LoadProductsUseCaseTest {
             .documents(List.of(doc2))
             .build();
 
-        when(productGateway.getAllProducts(any())).thenReturn(Flux.just(product1, product2));
+        when(productGateway.getAllProducts()).thenReturn(Flux.just(product1, product2));
         when(productRepository.save(any())).thenReturn(Mono.empty());
         when(documentRepository.saveAll(any())).thenReturn(Mono.empty());
 
@@ -110,7 +110,7 @@ class LoadProductsUseCaseTest {
 
     @Test
     void execute_shouldHandleEmptyProducts() {
-        when(productGateway.getAllProducts(any())).thenReturn(Flux.empty());
+        when(productGateway.getAllProducts()).thenReturn(Flux.empty());
 
         LoadProductsUseCase useCase = new LoadProductsUseCase(productGateway, productRepository, documentRepository);
 
@@ -123,7 +123,7 @@ class LoadProductsUseCaseTest {
 
     @Test
     void execute_shouldPropagateGatewayError() {
-        when(productGateway.getAllProducts(any()))
+        when(productGateway.getAllProducts())
             .thenReturn(Flux.error(new RuntimeException("Gateway error")));
 
         LoadProductsUseCase useCase = new LoadProductsUseCase(productGateway, productRepository, documentRepository);
@@ -147,7 +147,7 @@ class LoadProductsUseCaseTest {
             .documents(List.of(doc1))
             .build();
 
-        when(productGateway.getAllProducts(any())).thenReturn(Flux.just(product));
+        when(productGateway.getAllProducts()).thenReturn(Flux.just(product));
         when(productRepository.save(any())).thenReturn(Mono.empty());
         when(documentRepository.saveAll(any())).thenReturn(Mono.empty());
 
@@ -191,7 +191,7 @@ class LoadProductsUseCaseTest {
 
         List<ProductDocumentToProcess> capturedDocuments = new ArrayList<>();
 
-        when(productGateway.getAllProducts(any())).thenReturn(Flux.just(product));
+        when(productGateway.getAllProducts()).thenReturn(Flux.just(product));
         when(productRepository.save(any())).thenReturn(Mono.empty());
         doAnswer(invocation -> {
             Flux<ProductDocumentToProcess> docs = invocation.getArgument(0);

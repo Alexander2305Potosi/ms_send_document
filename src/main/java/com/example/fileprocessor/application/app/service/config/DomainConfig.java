@@ -1,9 +1,10 @@
 package com.example.fileprocessor.application.app.service.config;
 
-import com.example.fileprocessor.domain.port.out.FileGateway;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.S3Gateway;
+import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.FileValidator;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
@@ -12,6 +13,7 @@ import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import com.example.fileprocessor.infrastructure.helpers.config.ProcessorConfig;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -36,13 +38,12 @@ public class DomainConfig {
     @Bean
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
             ProductDocumentRepository documentRepository,
-            ProductStatusAggregator statusAggregator,
-            FileGateway fileGateway,
+            SoapGateway soapGateway,
             ProcessorConfig config,
             ProductRestGateway productRestGateway) {
         FileValidator fileValidator = new FileValidator(config.getSoap());
         return new SoapDocumentProcessingUseCase(
-            documentRepository, statusAggregator, fileGateway, fileValidator, productRestGateway);
+            documentRepository, soapGateway, fileValidator, productRestGateway);
     }
 
     // ============ S3 Processor ============
@@ -53,15 +54,15 @@ public class DomainConfig {
     }
 
     @Bean
+    @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
             ProductDocumentRepository documentRepository,
-            ProductStatusAggregator statusAggregator,
-            FileGateway fileGateway,
+            S3Gateway s3Gateway,
             ProcessorConfig config,
             ProductRestGateway productRestGateway) {
         FileValidator fileValidator = new FileValidator(config.getS3());
         FolderExclusionRegexConfig folderRegex = s3FolderExclusion(config);
         return new S3DocumentProcessingUseCase(
-            documentRepository, statusAggregator, fileGateway, fileValidator, folderRegex, productRestGateway);
+            documentRepository, s3Gateway, fileValidator, folderRegex, productRestGateway);
     }
 }

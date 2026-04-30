@@ -1,15 +1,15 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
-import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.port.out.FileGateway;
+import com.example.fileprocessor.domain.exception.ProcessingException;
+import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapNamespaces;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
@@ -30,18 +30,10 @@ import java.time.Instant;
 import java.util.concurrent.TimeoutException;
 
 @Component
-public class SoapGatewayAdapter implements FileGateway {
+public class SoapGatewayAdapter implements SoapGateway {
 
     private static final Logger log = LoggerFactory.getLogger(SoapGatewayAdapter.class);
     private static final int MAX_ERROR_BODY_LENGTH = 500;
-
-    /*
-     * Error Handling Strategy:
-     * - Infrastructure errors (connection failures, timeouts, 5xx) -> propagate as SoapCommunicationException
-     *   These trigger circuit breaker to open and protect the system.
-     * - Business errors (4xx client errors, validation failures) -> return FileUploadResult with FAILURE status
-     *   These are expected responses from the external service and should be recorded, not thrown.
-     */
 
     private final WebClient webClient;
     private final SoapProperties properties;
@@ -62,151 +54,125 @@ public class SoapGatewayAdapter implements FileGateway {
     }
 
     @Override
-    public Mono<FileUploadResult> send(DocumentSendRequest request) {
-        log.info("Sending SOAP request for traceId: {}, endpoint: {}",
-            request.getTraceId(), properties.endpoint());
+    public Mono<FileUploadResult> sendSoap(String documentId, byte[] content, String filename,
+                                            String contentType, long fileSize,
+                                            String parentFolder, String childFolder) {
+        return Mono.deferContextual(ctx -> {
+            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            log.info("Sending SOAP request for traceId: {}, endpoint: {}", traceId, properties.endpoint());
 
-        String soapEnvelope = soapMapper.toFullSoapMessage(request);
+            String soapEnvelope = soapMapper.toFullSoapMessage(documentId, content, filename, contentType, fileSize, parentFolder, childFolder);
 
-        Mono<ExternalServiceResponse> soapCall = webClient.post()
-            .contentType(MediaType.TEXT_XML)
-            .header("SOAPAction", SoapNamespaces.FILE_SERVICE + SoapNamespaces.SOAP_ACTION_UPLOAD)
-            .bodyValue(soapEnvelope)
-            .retrieve()
-            .onStatus(HttpStatusCode::isError, response ->
-                response.bodyToMono(String.class)
-                    .flatMap(body -> {
-                        String truncatedBody = truncateBody(body);
-                        log.error("SOAP error response for traceId={}: {}", request.getTraceId(), truncatedBody);
-                        return Mono.error(new SoapCommunicationException(
-                            "SOAP error " + response.statusCode() + ": " + truncatedBody,
-                            mapHttpStatusToCode(response.statusCode()),
-                            request.getTraceId()));
+            Mono<ExternalServiceResponse> soapCall = webClient.post()
+                .contentType(MediaType.TEXT_XML)
+                .header("SOAPAction", SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD)
+                .bodyValue(soapEnvelope)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, response ->
+                    response.bodyToMono(String.class)
+                        .flatMap(body -> {
+                            String truncatedBody = truncateBody(body);
+                            log.error("SOAP error response for traceId={}: {}", traceId, truncatedBody);
+                            return Mono.error(ProcessingException.fromContext(ctx,
+                                "SOAP error " + response.statusCode() + ": " + truncatedBody,
+                                mapHttpStatusToCode(response.statusCode()), documentId));
+                        }))
+                .bodyToMono(String.class)
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .retryWhen(Retry.backoff(properties.retryAttempts(),
+                        Duration.ofMillis(properties.retryBackoffMillis()))
+                    .filter(this::isRetryableException)
+                    .doBeforeRetry(retrySignal -> {
+                        long attempt = retrySignal.totalRetries() + 1;
+                        log.warn("Retrying SOAP call for traceId={}, attempt {}/{} (backoff={}ms)",
+                            traceId, attempt, properties.retryAttempts(),
+                            properties.retryBackoffMillis() * attempt);
                     }))
-            .bodyToMono(String.class)
-            .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-            .retryWhen(Retry.backoff(properties.retryAttempts(),
-                    Duration.ofMillis(properties.retryBackoffMillis()))
-                .filter(this::isRetryableException)
-                .doBeforeRetry(retrySignal -> {
-                    long attempt = retrySignal.totalRetries() + 1;
-                    log.warn("Retrying SOAP call for traceId={}, attempt {}/{} (backoff={}ms)",
-                        request.getTraceId(),
-                        attempt,
-                        properties.retryAttempts(),
-                        properties.retryBackoffMillis() * attempt);
-                }))
-            .map(responseXml -> soapMapper.fromSoapXml(responseXml, request.getTraceId()))
-            .doOnNext(response -> log.info("SOAP response received for traceId={}: correlationId={}",
-                request.getTraceId(), response.getCorrelationId()));
+                .map(soapMapper::fromSoapXml)
+                .doOnNext(response -> log.info("SOAP response received for traceId={}: correlationId={}",
+                    traceId, response.getCorrelationId()));
 
-        return soapCall
-            .map(response -> toFileUploadResult(response, request.getTraceId()))
-            .onErrorResume(throwable -> {
-                int retries = 0;
-                Throwable cause = throwable;
-                if (Exceptions.isRetryExhausted(throwable)) {
-                    cause = Exceptions.unwrap(throwable);
-                    retries = properties.retryAttempts();
-                }
-                // Distinguish infrastructure failures (propagate error for CB) from business failures (return result)
-                if (cause instanceof TimeoutException) {
-                    log.error("SOAP timeout for traceId: {} after {} retries", request.getTraceId(), retries);
-                    return Mono.error(new SoapCommunicationException(
-                        "SOAP request timed out after " + retries + " retries",
-                        ProcessingResultCodes.GATEWAY_TIMEOUT,
-                        request.getTraceId()));
-                }
-                if (cause instanceof WebClientResponseException e) {
-                    // 5xx errors are infrastructure failures - propagate for CB
-                    if (e.getStatusCode().is5xxServerError()) {
-                        log.error("SOAP server error for traceId: {}: {}", request.getTraceId(), e.getMessage());
-                        return Mono.error(new SoapCommunicationException(
-                            "SOAP service error: " + e.getMessage(),
-                            mapHttpStatusToCode(e.getStatusCode()),
-                            request.getTraceId()));
+            return soapCall
+                .map(response -> toFileUploadResult(response))
+                .onErrorResume(throwable -> {
+                    int retries = 0;
+                    Throwable cause = throwable;
+                    if (Exceptions.isRetryExhausted(throwable)) {
+                        cause = Exceptions.unwrap(throwable);
+                        retries = properties.retryAttempts();
                     }
-                    // 4xx errors are business failures - return as failure result
-                    log.error("SOAP client error for traceId: {}: {}", request.getTraceId(), e.getMessage());
-                    return Mono.just(toFileUploadResultError(
-                        "Communication error with SOAP service: " + e.getMessage(),
-                        mapHttpStatusToCode(e.getStatusCode()), request.getTraceId()));
-                }
-                if (cause instanceof ConnectException) {
-                    log.error("Connection failed for traceId: {}: {}", request.getTraceId(), cause.getMessage());
-                    return Mono.error(new SoapCommunicationException(
-                        "Connection failed: " + cause.getMessage(),
-                        ProcessingResultCodes.UNKNOWN_ERROR,
-                        request.getTraceId()));
-                }
-                if (cause instanceof IOException) {
-                    log.error("IO error for traceId: {}: {}", request.getTraceId(), cause.getMessage());
-                    return Mono.error(new SoapCommunicationException(
-                        "IO error: " + cause.getMessage(),
-                        ProcessingResultCodes.UNKNOWN_ERROR,
-                        request.getTraceId()));
-                }
-                // Unknown errors - propagate for CB to react
-                return Mono.error(throwable);
-            });
+                    if (cause instanceof TimeoutException) {
+                        log.error("SOAP timeout for traceId: {} after {} retries", traceId, retries);
+                        return Mono.error(ProcessingException.fromContext(ctx,
+                            "SOAP request timed out after " + retries + " retries",
+                            ProcessingResultCodes.GATEWAY_TIMEOUT, documentId));
+                    }
+                    if (cause instanceof WebClientResponseException e) {
+                        if (e.getStatusCode().is5xxServerError()) {
+                            log.error("SOAP server error for traceId: {}: {}", traceId, e.getMessage());
+                            return Mono.error(ProcessingException.fromContext(ctx,
+                                "SOAP service error: " + e.getMessage(),
+                                mapHttpStatusToCode(e.getStatusCode()), documentId));
+                        }
+                        log.error("SOAP client error for traceId: {}: {}", traceId, e.getMessage());
+                        return Mono.just(toFileUploadResultError(
+                            "Communication error with SOAP service: " + e.getMessage(),
+                            mapHttpStatusToCode(e.getStatusCode())));
+                    }
+                    if (cause instanceof ConnectException) {
+                        log.error("Connection failed for traceId: {}: {}", traceId, cause.getMessage());
+                        return Mono.error(ProcessingException.fromContext(ctx,
+                            "Connection failed: " + cause.getMessage(),
+                            ProcessingResultCodes.UNKNOWN_ERROR, documentId));
+                    }
+                    if (cause instanceof IOException) {
+                        log.error("IO error for traceId: {}: {}", traceId, cause.getMessage());
+                        return Mono.error(ProcessingException.fromContext(ctx,
+                            "IO error: " + cause.getMessage(),
+                            ProcessingResultCodes.UNKNOWN_ERROR, documentId));
+                    }
+                    return Mono.error(throwable);
+                });
+        });
     }
 
-    private FileUploadResult toFileUploadResult(ExternalServiceResponse response, String traceId) {
+    private FileUploadResult toFileUploadResult(ExternalServiceResponse response) {
         return FileUploadResult.builder()
             .status(response.getStatus())
             .message(response.getMessage())
             .correlationId(response.getCorrelationId())
-            .traceId(traceId)
             .processedAt(response.getProcessedAt())
             .externalReference(response.getExternalReference())
             .success(response.isSuccess())
             .build();
     }
 
-    private FileUploadResult toFileUploadResultError(String message, String errorCode, String traceId) {
+    private FileUploadResult toFileUploadResultError(String message, String errorCode) {
         return FileUploadResult.builder()
             .status(DocumentStatus.FAILURE.name())
             .message(message)
             .errorCode(errorCode)
-            .traceId(traceId)
             .processedAt(Instant.now())
             .success(false)
             .build();
     }
 
     private boolean isRetryableException(Throwable throwable) {
-        if (throwable instanceof TimeoutException) {
-            return true;
-        }
-        if (throwable instanceof ConnectException) {
-            return true;
-        }
-        if (throwable instanceof IOException) {
-            return true;
-        }
+        if (throwable instanceof TimeoutException) return true;
+        if (throwable instanceof ConnectException) return true;
+        if (throwable instanceof IOException) return true;
         if (throwable instanceof WebClientResponseException e) {
             int statusCode = e.getStatusCode().value();
-            if (statusCode == 429) {
-                return true;
-            }
-            if (e.getStatusCode().is5xxServerError()) {
-                return true;
-            }
+            return statusCode == 429 || e.getStatusCode().is5xxServerError();
         }
         return false;
     }
 
     private String mapHttpStatusToCode(HttpStatusCode statusCode) {
         int value = statusCode.value();
-        if (value == 504) {
-            return ProcessingResultCodes.GATEWAY_TIMEOUT;
-        }
-        if (statusCode.is5xxServerError()) {
-            return ProcessingResultCodes.BAD_GATEWAY;
-        }
-        if (statusCode.is4xxClientError()) {
-            return ProcessingResultCodes.CLIENT_ERROR;
-        }
+        if (value == 504) return ProcessingResultCodes.GATEWAY_TIMEOUT;
+        if (statusCode.is5xxServerError()) return ProcessingResultCodes.BAD_GATEWAY;
+        if (statusCode.is4xxClientError()) return ProcessingResultCodes.CLIENT_ERROR;
         return ProcessingResultCodes.UNKNOWN_ERROR;
     }
 

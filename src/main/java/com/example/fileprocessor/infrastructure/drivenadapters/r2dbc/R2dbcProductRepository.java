@@ -26,7 +26,7 @@ public class R2dbcProductRepository implements ProductRepository {
     @Override
     public Flux<ProductToProcess> findPendingProducts() {
         String sql = """
-            SELECT product_id, name, status, created_at, processed_at, trace_id
+            SELECT product_id, name, status, created_at, processed_at
             FROM products_to_process
             WHERE status IN ($1, $2, $3)
             ORDER BY created_at ASC
@@ -42,7 +42,6 @@ public class R2dbcProductRepository implements ProductRepository {
                 .status(row.get("status", String.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .processedAt(row.get("processed_at", Instant.class))
-                .traceId(row.get("trace_id", String.class))
                 .build())
             .all();
     }
@@ -50,8 +49,8 @@ public class R2dbcProductRepository implements ProductRepository {
     @Override
     public Mono<Void> save(ProductToProcess product) {
         String sql = """
-            INSERT INTO products_to_process (product_id, name, status, created_at, processed_at, trace_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO products_to_process (product_id, name, status, created_at, processed_at)
+            VALUES ($1, $2, $3, $4, $5)
             """;
 
         return databaseClient.sql(sql)
@@ -60,7 +59,6 @@ public class R2dbcProductRepository implements ProductRepository {
             .bind("$3", product.getStatus())
             .bind("$4", product.getCreatedAt() != null ? product.getCreatedAt() : Instant.now())
             .bind("$5", product.getProcessedAt() != null ? product.getProcessedAt() : Instant.now())
-            .bind("$6", product.getTraceId() != null ? product.getTraceId() : "")
             .fetch()
             .first()
             .then()
@@ -68,18 +66,17 @@ public class R2dbcProductRepository implements ProductRepository {
     }
 
     @Override
-    public Mono<Void> updateStatus(String productId, String status, String traceId) {
+    public Mono<Void> updateStatus(String productId, String status) {
         String sql = """
             UPDATE products_to_process
-            SET status = $2, trace_id = $3, processed_at = $4
+            SET status = $2, processed_at = $3
             WHERE product_id = $1
             """;
 
         return databaseClient.sql(sql)
             .bind("$1", productId)
             .bind("$2", status)
-            .bind("$3", traceId != null ? traceId : "")
-            .bind("$4", Instant.now())
+            .bind("$3", Instant.now())
             .fetch()
             .first()
             .then()

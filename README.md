@@ -10,66 +10,65 @@ El proyecto sigue **Clean Architecture** con capas claras:
 com.example.fileprocessor/
 ├── domain/                          # Capa de dominio (puro Java, sin frameworks)
 │   ├── entity/                      # Entidades de negocio
-│   │   ├── ProductToProcess.java            # Producto en BD
-│   │   ├── ProductDocumentToProcess.java    # Documento de producto en BD
-│   │   ├── ProductInfo.java                 # Producto desde REST API
-│   │   ├── ProductDocumentInfo.java        # Documento dentro de ProductInfo
-│   │   ├── FileUploadResult.java           # Resultado de upload/procesamiento
-│   │   ├── ExternalServiceResponse.java    # Respuesta generica de servicio externo
-│   │   ├── DocumentSendRequest.java       # Request de envio
-│   │   ├── ZipArchive.java                 # ZIP con proteccion contra bombs
-│   │   ├── AsyncOperationStatus.java      # Estado de operacion async
-│   │   ├── DocumentStatus.java            # Estados de documento (constantes)
-│   │   └── ProductStatus.java             # Estados de producto
+│   │   ├── ProductToProcess.java           # Producto en BD
+│   │   ├── ProductDocumentToProcess.java   # Documento de producto en BD
+│   │   ├── ProductInfo.java                # Producto desde REST API
+│   │   ├── ProductDocumentInfo.java       # Documento dentro de ProductInfo
+│   │   ├── FileUploadResult.java          # Resultado de upload/procesamiento
+│   │   ├── ExternalServiceResponse.java   # Respuesta genérica de servicio externo
+│   │   ├── ZipArchive.java                # ZIP con protección contra bombs
+│   │   ├── AsyncOperationStatus.java     # Estado de operación async
+│   │   ├── DocumentStatus.java           # Estados de documento (constantes)
+│   │   └── ProductStatus.java            # Estados de producto
 │   ├── usecase/                      # Casos de uso
 │   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base
-│   │   ├── SoapDocumentProcessingUseCase.java      # Implementacion SOAP
-│   │   ├── S3DocumentProcessingUseCase.java        # Implementacion S3
-│   │   ├── LoadProductsUseCase.java                # Carga productos y documentos
-│   │   ├── LoadProductsResult.java                 # Resultado de carga
-│   │   ├── FileValidator.java                      # Validador de archivos
-│   │   ├── ProductStatusAggregator.java            # Agregacion de estado
-│   │   ├── ProductStatusSummary.java               # Resumen de estado
-│   │   ├── ProcessingCheckpoint.java              # Checkpoint de procesamiento
-│   │   ├── CommunicationLogFactory.java            # Factory para logs
-│   │   └── ProcessingResultCodes.java              # Codigos de resultado
+│   │   ├── SoapDocumentProcessingUseCase.java     # Implementación SOAP
+│   │   ├── S3DocumentProcessingUseCase.java       # Implementación S3
+│   │   ├── LoadProductsUseCase.java               # Carga productos y documentos
+│   │   ├── LoadProductsResult.java                # Resultado de carga
+│   │   ├── FileValidator.java                     # Validador de archivos
+│   │   ├── ZipProcessor.java                      # Procesador de ZIP
+│   │   ├── DocumentToUpload.java                 # Record con info de documento
+│   │   ├── ProductStatusAggregator.java          # Agregación de estado
+│   │   ├── ProductStatusSummary.java             # Resumen de estado
+│   │   └── ProcessingResultCodes.java            # Códigos de resultado
 │   ├── util/
-│   │   ├── Base64Utils.java                  # Encoding/decoding Base64
-│   │   └── MediaTypeConstants.java           # Constantes de tipos MIME
+│   │   ├── Base64Utils.java                # Encoding/decoding Base64
+│   │   └── MediaTypeConstants.java         # Constantes de tipos MIME
 │   ├── valueobject/
-│   │   ├── FolderExclusionRegexConfig.java   # Patrones regex (fail-fast)
-│   │   └── ProcessingDependencies.java       # Record de dependencias compartidas
+│   │   └── FolderExclusionRegexConfig.java  # Patrones regex (fail-fast)
 │   ├── port/
 │   │   ├── in/
-│   │   │   └── FileValidationConfig.java     # Configuracion de validacion
+│   │   │   └── FileValidationConfig.java    # Configuración de validación
 │   │   └── out/
-│   │       ├── ProductRestGateway.java      # Puerto REST productos
-│   │       ├── ProductRepository.java        # Puerto productos
-│   │       ├── ProductDocumentRepository.java # Puerto documentos
-│   │       ├── FileGateway.java              # Puerto unificado (SOAP/S3)
-│   │       └── CommunicationLogRepository.java # Puerto para logs
+│   │       ├── ProductRestGateway.java     # Puerto REST productos
+│   │       ├── ProductRepository.java      # Puerto productos
+│   │       ├── ProductDocumentRepository.java  # Puerto documentos
+│   │       ├── S3Gateway.java              # Puerto S3
+│   │       └── SoapGateway.java           # Puerto SOAP
 │   └── exception/
 │       ├── DomainException.java
 │       ├── FileValidationException.java
-│       └── CommunicationException.java
+│       ├── ProcessingException.java       # Excepción unificada de procesamiento
+│       └── InvalidBase64Exception.java    # Error en decoding Base64
 │
-├── application/                      # Configuracion de aplicacion
+├── application/                      # Configuración de aplicación
 │   └── app-service/
 │       └── config/
-│           ├── DomainConfig.java           # Beans de casos de uso
-│           └── DatabaseInitializer.java   # Inicializacion de BD
+│           ├── DomainConfig.java         # Beans de casos de uso
+│           └── DatabaseInitializer.java  # Inicialización de BD
 │
 └── infrastructure/                  # Capa de infraestructura
     ├── entrypoints/
     │   └── rest/
-    │       ├── ProductRoutes.java         # RouterFunction
+    │       ├── ProductRoutes.java        # RouterFunction
     │       ├── handler/
-    │       │   └── ProductHandler.java     # Logica de handlers
+    │       │   └── ProductHandler.java   # Lógica de handlers
     │       ├── config/
     │       │   └── DocumentRestProperties.java
     │       └── constants/
     │           ├── RestApiPaths.java
-    │           └── ApiConstants.java      # message-id header
+    │           └── ApiConstants.java     # Constantes API (message-id, processor types)
     ├── drivenadapters/
     │   ├── rest-client/
     │   │   └── ProductRestGatewayAdapter.java
@@ -78,7 +77,7 @@ com.example.fileprocessor/
     │   │   └── config/
     │   │       └── SoapProperties.java
     │   ├── aws/
-    │   │   ├── S3GatewayAdapter.java     # Con retry y sanitizacion
+    │   │   ├── S3GatewayAdapter.java
     │   │   └── config/
     │   │       ├── AwsConfig.java
     │   │       └── S3Properties.java
@@ -87,18 +86,17 @@ com.example.fileprocessor/
     │       └── R2dbcProductDocumentRepository.java
     └── helpers/
         ├── config/
-        │   └── ProcessorConfig.java      # Config unificada procesadores
-        ├── soap/
-        │   ├── mapper/
-        │   │   └── SoapMapper.java
-        │   ├── xml/
-        │   │   ├── SoapEnvelopeWrapper.java
-        │   │   ├── SoapNamespaces.java
-        │   │   └── model/
-        │   │       ├── UploadFileRequest.java
-        │   │       └── UploadFileResponse.java
-        │   └── exception/
-        │       └── SoapCommunicationException.java
+        │   ├── ProcessorConfig.java      # Config unificada procesadores
+        │   └── ProcessorSettings.java    # Settings de procesador
+        └── soap/
+            ├── SoapConstants.java        # Constantes SOAP (namespaces, envelopes)
+            ├── mapper/
+            │   └── SoapMapper.java       # Mapeo XML ↔ objetos
+            ├── xml/
+            │   ├── SoapEnvelopeWrapper.java  # Wrapper de envelope SOAP
+            │   └── model/
+            │       ├── UploadFileRequest.java
+            │       └── UploadFileResponse.java
 ```
 
 ### Reglas de Dependencia
@@ -116,58 +114,74 @@ com.example.fileprocessor/
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                           API Request                                       │
+│                           API Request                                         │
 │                      GET /api/v1/products?processor=soap                    │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ 1. ProductHandler.processPendingProducts()                                  │
-│    - Valida processor type (soap|s3)                                       │
-│    - Genera traceId UUID si no existe en header                            │
-│    - Retorna HTTP 202 ACCEPTED inmediatamente                               │
+│    - Valida processor type (soap|s3)                                         │
+│    - Genera traceId UUID si no existe en header                             │
+│    - Retorna HTTP 202 ACCEPTED inmediatamente                                │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ 2. AbstractDocumentProcessingUseCase.executePendingDocuments()             │
-│    - findPendingDocuments() → Flux<ProductDocumentToProcess>              │
-│    - flatMap con processPendingDocument()                                   │
+│    - findPendingDocuments() → Flux<ProductDocumentToProcess>               │
+│    - flatMap con validateMetadataDocument → retrieveDocument → uploadDocument│
 └──────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ 3. processPendingDocument() - Claim Atomico                                  │
+│ 3. validateMetadataDocument() - Claim Atómico                                 │
 │                                                                              │
 │    claimDocument(documentId)                                                 │
-│    ┌────────────────────────────────────────────────────────────────────┐   │
-│    │ UPDATE product_documents_to_process                                  │   │
-│    │ SET status = 'PROCESSING'                                           │   │
-│    │ WHERE document_id = $1 AND status IN ('PENDING', 'RETRY')           │   │
-│    └────────────────────────────────────────────────────────────────────┘   │
+│    ┌────────────────────────────────────────────────────────────────────┐    │
+│    │ UPDATE product_documents_to_process                                  │    │
+│    │ SET status = 'PROCESSING'                                           │    │
+│    │ WHERE document_id = $1 AND status IN ('PENDING', 'RETRY')           │    │
+│    └────────────────────────────────────────────────────────────────────┘    │
 │                                                                              │
 │    Si rowsUpdated > 0 → documento clonado, continuar                        │
-│    Si rowsUpdated = 0 → otro pod lo tomo, skip                              │
+│    Si rowsUpdated = 0 → otro pod lo tomó, skip                              │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     │
                     ┌───────────────┴───────────────┐
                     ▼                               ▼
          ┌──────────────────┐           ┌──────────────────────────────┐
          │ Documento YA    │           │ Documento NECESITA          │
-         │ tiene content   │           │ downloadContentIfNeeded()    │
+         │ tiene content   │           │ downloadContentIfNeeded()   │
          │ (pre-cargado)   │           │ - GET /products/{id}/docs/{id}│
-         └────────┬─────────┘           │ - Decode Base64              │
-                  │                     │ - updateContent()            │
+         └────────┬─────────┘           │ - Decode Base64             │
                   │                     └──────────────┬───────────────┘
                   │                                    │
-                  └──────────────┬─────────────────────┘
+                  └──────────────┬──────────────────────┘
                                  ▼
                    ┌─────────────────────────────┐
-                   │ isZipArchive?              │
+                   │ isZipArchive?               │
                    ├─────────────────────────────┤
                    │ true  → processZipDocument │
-                   │ false → processDocumentInternal│
+                   │ false → applyRulesMetadata│
                    └─────────────────────────────┘
+```
+
+### Pipeline de Procesamiento
+
+El pipeline usa **Reactor** (Project Reactor) con operaciones reactivas:
+
+```
+findPendingDocuments()
+    │
+    ▼
+validateMetadataDocument(doc)     ← Claim + Validación
+    │                              (extensión, tamaño, folder exclusion)
+    ▼
+retrieveDocument(doc)            ← Download content si null
+    │
+    ▼
+uploadDocument(doc)              ← SOAP o S3
 ```
 
 ### Process ZIP Document (Desglose)
@@ -176,130 +190,47 @@ Cuando un documento es ZIP, se extrae y procesa cada hijo:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ processZipDocument(zipDoc, traceId)                                          │
+│ processZipDocument(zipDoc)                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ 3.1 extractZipChildren()                                                   │
+│ 3.1 extractAndValidate()                                                   │
 │                                                                              │
 │    ZipArchive.builder()                                                      │
-│        .zipContent(bytes)                                                    │
+│        .zipContent(bytes)                                                   │
 │        .originalFilename(name)                                               │
-│        .maxEntries(1000)           ← Proteccion contra ZIP bombs             │
-│        .maxUncompressedSize(100MB)                                          │
-│        .build()                                                               │
+│        .maxEntries(1000)           ← Protección contra ZIP bombs           │
+│        .maxUncompressedSize(100MB)                                           │
+│        .build()                                                              │
 │                                                                              │
 │    archive.extractDocuments()                                                │
 │    ┌────────────────────────────────────────────────────────────────────┐    │
-│    │ Validaciones durante extraccion:                                  │    │
+│    │ Validaciones durante extracción:                                  │    │
 │    │ - Contador de entries <= maxEntries (1000)                       │    │
-│    │ - Tamano descomprimido por entry <= maxUncompressedSize          │    │
-│    │ - Tamano total acumulado <= maxUncompressedSize                  │    │
-│    │                                                                     │    │
+│    │ - Tamaño descomprimido por entry <= maxUncompressedSize           │    │
+│    │ - Tamaño total acumulado <= maxUncompressedSize                   │    │
+│    │                                                                      │    │
 │    │ Si falla: FileValidationException ZIP_EXTRACTION_FAILED          │    │
 │    └────────────────────────────────────────────────────────────────────┘    │
 │                                                                              │
 │    Casos:                                                                   │
-│    - ZIP valido con hijos → retorna lista de ExtractedDocument             │
-│    - ZIP vacio → retorna lista vacia []                                   │
-│    - ZIP corrupto/invalido → exception → status=FAILURE                   │
+│    - ZIP válido con hijos → retorna lista de ExtractedDocument               │
+│    - ZIP vacío → retorna lista vacía []                                    │
+│    - ZIP corrupto/inválido → exception → status=FAILURE                    │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     │
                     ┌───────────────┴───────────────┐
                     ▼                               ▼
          ┌──────────────────┐           ┌──────────────────────────────┐
-         │ children.isEmpty│           │ children.isNotEmpty         │
-         │ handleEmptyZip()│           │ processZipChildren()        │
-         └──────────────────┘           └──────────────────────────────┘
-```
-
-#### 3.1.1 handleEmptyZip() - ZIP Vacio
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ handleEmptyZip(zipDoc, traceId)                                             │
-│                                                                              │
-│ 1. Log: "ZIP {filename} is empty"                                          │
-│ 2. UPDATE document status → SUCCESS                                        │
-│ 3. RETURN FileUploadResult                                                   │
-│    - status: SUCCESS                                                        │
-│    - correlationId: zipDoc.documentId                                     │
-│    - message: "ZIP was empty"                                              │
-│                                                                              │
-│ Consideracion: Un ZIP vacio no es error, es valido.                        │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### 3.1.2 processZipChildren() - Procesar Hijos
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ processZipChildren(zipDoc, children, traceId)                             │
-│                                                                              │
-│ Flux.fromIterable(children)                                                 │
-│     .flatMapSequential(extracted → processZipChild())                      │
-│     .collectList()                                                          │
-│     .flatMap(results → aggregateZipResults())                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ processZipChild(zipDoc, extracted, traceId)                                │
-│                                                                              │
-│ 1. buildChildDocument()                                                     │
-│    ┌────────────────────────────────────────────────────────────────────┐    │
-│    │ childDoc = ProductDocumentToProcess.builder()                     │    │
-│    │     .documentId(zipDoc.documentId + "_" + extracted.filename)      │    │
-│    │     .productId(zipDoc.productId)                                   │    │
-│    │     .parentDocumentId(zipDoc.documentId)  ← Link al padre        │    │
-│    │     .filename(extracted.filename)                                  │    │
-│    │     .content(extracted.content)                                    │    │
-│    │     .contentType(extracted.contentType)                            │    │
-│    │     .origin(zipDoc.origin)                                         │    │
-│    │     .status(PENDING)                                               │    │
-│    │     .isZipArchive(false)                                           │    │
-│    └────────────────────────────────────────────────────────────────────┘    │
-│                                                                              │
-│ 2. documentRepository.save(childDoc)                                        │
-│ 3. processDocumentInternal(childDoc, traceId)  ← Procesar hijo              │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### 3.1.3 aggregateZipResults() - Agregar Resultados
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ aggregateZipResults(zipDoc, results, traceId)                              │
-│                                                                              │
-│ 1. Calcular resultado global                                                 │
-│    ┌────────────────────────────────────────────────────────────────────┐    │
-│    │ allSuccess = results.stream().allMatch(FileUploadResult::isSuccess) │  │
-│    └────────────────────────────────────────────────────────────────────┘    │
-│                                                                              │
-│ 2. Determinar status del ZIP padre                                          │
-│    - allSuccess = true  → status = SUCCESS                                │
-│    - allSuccess = false → status = FAILURE                                │
-│                                                                              │
-│ 3. UPDATE documento ZIP padre                                                │
-│    ┌────────────────────────────────────────────────────────────────────┐    │
-│    │ UPDATE product_documents_to_process                                 │    │
-│    │ SET status = parentStatus,                                         │    │
-│    │     error_code = (allSuccess ? null : ZIP_PARTIAL_FAILURE)        │    │
-│    │ WHERE document_id = zipDoc.documentId                               │    │
-│    └────────────────────────────────────────────────────────────────────┘    │
-│                                                                              │
-│ 4. RETURN FileUploadResult                                                   │
-│    ┌────────────────────────────────────────────────────────────────────┐    │
-│    │ FileUploadResult.builder()                                         │    │
-│    │     .status(parentStatus)                                          │    │
-│    │     .correlationId(zipDoc.documentId)                              │    │
-│    │     .success(allSuccess)                                           │    │
-│    │     .errorCode(allSuccess ? null : ZIP_PARTIAL_FAILURE)           │    │
-│    │     .message("ZIP processed [successfully|with failures] " +       │    │
-│    │              "with " + results.size() + " documents")            │    │
-│    └────────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────────────┘
+         │ children.isEmpty │           │ children.isNotEmpty         │
+         │ (ZIP vacío)       │           │ saveAll(children)           │
+         └────────┬──────────┘           │ processZipChildren()        │
+                  │                      └──────────────┬───────────────┘
+                  ▼                                     ▼
+         UPDATE ZIP → SUCCESS                 ┌─────────────────────────┐
+         (status=SUCCESS)                      │ ZIP padre actualizado  │
+                                                └─────────────────────────┘
 ```
 
 ### Casos de Error en Procesamiento ZIP
@@ -307,8 +238,8 @@ Cuando un documento es ZIP, se extrae y procesa cada hijo:
 | Caso | Causa | Resultado |
 |------|-------|-----------|
 | ZIP corrupto | `ZipInputStream` lanza exception | Documento ZIP → `FAILURE` (ZIP_EXTRACTION_FAILED) |
-| ZIP vacio | `children.isEmpty()` | Documento ZIP → `SUCCESS` con mensaje "ZIP was empty" |
-| Hijo falla | `processDocumentInternal()` fails | ZIP → `FAILURE` (ZIP_PARTIAL_FAILURE), hijo individual tiene su estado |
+| ZIP vacío | `children.isEmpty()` | Documento ZIP → `SUCCESS` con mensaje "ZIP was empty" |
+| Hijo falla | `processZipChildren()` fails | ZIP → `FAILURE` (ZIP_PARTIAL_FAILURE), hijo individual tiene su estado |
 | Todos los hijos success | `allSuccess = true` | ZIP → `SUCCESS` |
 | Algún hijo falla | `allSuccess = false` | ZIP → `FAILURE` (ZIP_PARTIAL_FAILURE) |
 
@@ -318,16 +249,16 @@ Cuando un documento es ZIP, se extrae y procesa cada hijo:
 
 ### 1. Escenario: Procesamiento Exitoso
 
-**Condicion:** Todos los documentos se procesan sin errores.
+**Condición:** Todos los documentos se procesan sin errores.
 
 ```
 Flujo:
 1. claimDocument() → rowsUpdated=1 → documento clonado
 2. content disponible (pre-cargado o baixado)
-3. Validaciones passent (tamano, tipo, origin)
-4. sendWithResilience() → HTTP 200 + SOAPResponse.success
-5. checkpoint(SUCCESS) → UPDATE documento
-6. postProcess() → log final
+3. Validaciones passent (tamaño, tipo, origin)
+4. uploadDocument() → HTTP 200 + ExternalServiceResponse.success
+5. UPDATE documento → SUCCESS
+6. ProductStatusAggregator recalcula estado del producto
 
 Resultado:
 - documento.status = SUCCESS
@@ -338,51 +269,50 @@ Resultado:
 
 ### 2. Escenario: Fallo Permanente (No Retry)
 
-**Condicion:** Error que no permite reintento (ej. archivo corrupto, validation failed).
+**Condición:** Error que no permite reintento (ej. archivo corrupto, validación failed).
 
 ```
 Flujo:
 1. claimDocument() → rowsUpdated=1
-2. Validacion falla → FileValidationException
-3. handleFailure() → status=FAILURE, errorCode=VALIDATION_FAILED
+2. Validación falla → FileValidationException
+3. onErrorResume() → status=FAILURE, errorCode=VALIDATION_FAILED
 4. checkpoint(FAILURE) → UPDATE documento
 
 Resultado:
 - documento.status = FAILURE
 - documento.error_code = VALIDATION_FAILED
 - documento.processed_at = timestamp
-- No se ejecuta send()
+- No se ejecuta uploadDocument()
 ```
 
 ### 3. Escenario: Fallo Transitorio (Retry)
 
-**Condicion:** Error de red o servicio no disponible.
+**Condición:** Error de red o servicio no disponible.
 
 ```
 Flujo:
 1. claimDocument() → rowsUpdated=1
-2. send() → SoapCommunicationException (timeout, 503, etc.)
+2. uploadDocument() → ProcessingException (timeout, 503, etc.)
 3. isRetryableException() → true
 4. Retry.backoff() → reintentos con exponential backoff
-5. Si todos fallan → handleFailure()
-6. checkpoint(FAILURE) → status=RETRY
+5. Si todos fallan → onErrorResume() → FAILURE
+6. checkpoint(FAILURE) → UPDATE documento
 
 Resultado:
-- documento.status = RETRY
-- documento.error_code = GATEWAY_TIMEOUT | SERVICE_UNAVAILABLE
-- documento.retry_count = 3
+- documento.status = FAILURE
+- documento.error_code = GATEWAY_TIMEOUT | BAD_GATEWAY
 ```
 
 ### 4. Escenario: Producto con Documentos Mixtos
 
-**Condicion:** Algunos documentos success, otros failure.
+**Condición:** Algunos documentos success, otros failure.
 
 ```
 Flujo:
 1. findPendingDocuments() → Flux de 5 documentos
 2. doc1 → SUCCESS, doc2 → SUCCESS, doc3 → FAILURE
 3. doc4 → SUCCESS, doc5 → FAILURE
-4. Cuando todos los docs de un producto estan processed:
+4. Cuando todos los docs de un producto están processed:
    → ProductStatusAggregator.recalculate()
    → producto.status = PARTIAL_FAILURE
 
@@ -391,35 +321,34 @@ Resultado:
 - producto.status = PARTIAL_FAILURE
 ```
 
-### 5. Escenario: ZIP Vacio
+### 5. Escenario: ZIP Vacío
 
-**Condicion:** El ZIP no contiene archivos hijos.
+**Condición:** El ZIP no contiene archivos hijos.
 
 ```
 Flujo:
-1. extractZipChildren() → lista vacia
-2. handleEmptyZip()
-3. UPDATE documento ZIP → status=SUCCESS, message="ZIP was empty"
-4. No se crean documentos hijos
+1. extractAndValidate() → lista vacía
+2. UPDATE documento ZIP → status=SUCCESS
+3. No se crean documentos hijos
 
 Resultado:
 - documento ZIP.status = SUCCESS
-- documento ZIP.message = "ZIP was empty"
 - No se crean child documents
 ```
 
 ### 6. Escenario: ZIP con Archivos Mixtos
 
-**Condicion:** ZIP contiene archivos validos e invalidos.
+**Condición:** ZIP contiene archivos válidos e inválidos.
 
 ```
 Flujo:
-1. extractZipChildren() → 10 archivos extraidos
-2. processZipChildren() → flatMapSequential
-3. child1-5 → SUCCESS, child6 → FAILURE (tipo no permitido)
-4. child7-10 → SUCCESS
-5. aggregateZipResults() → allSuccess=false
-6. UPDATE ZIP padre → status=FAILURE, errorCode=ZIP_PARTIAL_FAILURE
+1. extractAndValidate() → 10 archivos extraídos
+2. saveAll() → persistir hijos en BD
+3. processZipChildren() → flatMapSequential
+4. child1-5 → SUCCESS, child6 → FAILURE (tipo no permitido)
+5. child7-10 → SUCCESS
+6. aggregateZipResults() → allSuccess=false
+7. UPDATE ZIP padre → status=FAILURE, errorCode=ZIP_PARTIAL_FAILURE
 
 Resultado:
 - ZIP padre.status = FAILURE
@@ -427,9 +356,9 @@ Resultado:
 - children tienen sus propios estados (SUCCESS/FAILURE)
 ```
 
-### 7. Escenario: Claim atomico ( concurrency)
+### 7. Escenario: Claim Atómico (Concurrency)
 
-**Condicion:** Multiple pods procesan el mismo documento.
+**Condición:** Múltiples pods procesan el mismo documento.
 
 ```
 Flujo:
@@ -440,18 +369,18 @@ Flujo:
 
 Resultado:
 - Solo 1 pod procesa el documento
-- El otro pod hace skip y continua con el siguiente
+- El otro pod hace skip y continúa con el siguiente
 ```
 
 ### 8. Escenario: Documento no encontrado en REST API
 
-**Condicion:** El documento tiene `content=null` y no existe en REST API.
+**Condición:** El documento tiene `content=null` y no existe en REST API.
 
 ```
 Flujo:
-1. downloadContentIfNeeded() → GET /products/{id}/docs/{id}
+1. retrieveDocument() → GET /products/{id}/docs/{id}
 2. REST API returns 404
-3. handleFailure() → status=FAILURE, errorCode=DOCUMENT_NOT_FOUND
+3. onErrorResume() → status=FAILURE, errorCode=DOCUMENT_NOT_FOUND
 
 Resultado:
 - documento.status = FAILURE
@@ -465,7 +394,7 @@ Resultado:
 ### Carga de Productos (LoadProductsUseCase)
 
 ```
-OBTENER (GET) → REST API Externa
+REST API Externa
 │
 ├── GET /products → List<ProductInfo>
 │
@@ -488,7 +417,7 @@ OBTENER (GET) → REST API Externa
 ### Procesamiento de Documentos (AbstractDocumentProcessingUseCase)
 
 ```
-OBTENER (SELECT) → Base de Datos
+Base de Datos
 │
 ├── findPendingDocuments()
 │   └── SELECT * FROM product_documents_to_process
@@ -498,29 +427,29 @@ OBTENER (SELECT) → Base de Datos
 ├── Por cada documento:
 │   ├── claimDocument() → UPDATE ... RETURNING *
 │   │
-│   ├── MODIFICAR (UPDATE) → claim atomico
-│   │   └── status = PROCESSING (solo si rowsUpdated > 0)
-│   │
 │   ├── Si content null:
-│   │   ├── OBTENER (GET) → REST API
+│   │   ├── GET → REST API
 │   │   │   └── GET /products/{productId}/documents/{documentId}
-│   │   └── MODIFICAR (UPDATE) → content
+│   │   └── UPDATE → content
+│   │
+│   ├── applyRulesMetadata() → Validación (extensión, tamaño)
 │   │
 │   ├── Si es ZIP:
-│   │   ├── MODIFICAR (INSERT) → hijos extraidos
-│   │   └── processZipChildren() →递归
+│   │   ├── extractAndValidate() → extraer hijos
+│   │   ├── saveAll() → persistir hijos
+│   │   └── processZipChildren() → procesar recursivamente
 │   │
-│   ├── ENVIAR (POST) → SOAP o S3
+│   ├── uploadDocument() → SOAP o S3
 │   │
-│   └── MODIFICAR (UPDATE) → resultado final
-│       └── status, correlation_id, processed_at, latency_ms, error_code
+│   └── UPDATE → resultado final
+│       └── status, correlation_id, processed_at, error_code
 │
 └── Verificar todos los docs del producto:
-    ├── OBTENER → count docs por status
-    └── MODIFICAR (UPDATE) → product status
+    ├── SELECT → count docs por status
+    └── UPDATE → product status
 ```
 
-### Calculo de Estado de Producto (ProductStatusAggregator)
+### Cálculo de Estado de Producto (ProductStatusAggregator)
 
 ```
 OBTENER (SELECT) → product_documents_to_process
@@ -542,37 +471,25 @@ OBTENER (SELECT) → product_documents_to_process
 │       ├── allSkipped → COMPLETED_WITH_SKIPS
 │       └── allFailure → COMPLETED_WITH_FAILURES
 │
-└── MODIFICAR (UPDATE) → products_to_process.status
+└── UPDATE → products_to_process.status
 ```
 
 ---
 
-## Reglas de Validacion y Restricciones
+## Reglas de Validación y Restricciones
 
-### Validacion de Archivos
+### Validación de Archivos (FileValidator)
 
-| Regla | soap | s3 | Descripcion |
+| Regla | soap | s3 | Descripción |
 |-------|------|----|-------------|
-| Tamano maximo | 10MB | 50MB | `max-size` en configuracion |
+| Tamaño máximo | 10MB | 50MB | `max-size` en configuración |
 | Tipos permitidos | pdf,txt,csv | pdf,txt,csv,zip | `allowed-types` |
-| Longitud filename | 255 chars | 255 chars | `max-filename-length` |
-| Origen valido | incoming,documents | incoming,documents | `origin-patterns-to-send` |
-
-### Patrones de Origin (Regex)
-
-```
-SOAP:
-- origin-patterns-to-send: "incoming", "documents"
-- folder-exclusion-regex: ".*/temp/.*", ".*/backup/.*"
-
-S3:
-- origin-patterns-to-send: "incoming", "documents", "exports"
-- folder-exclusion-regex: ".*/temp/.*"
-```
+| Longitud filename | 255 chars | 255 chars | Validación en FileValidator |
+| Folder exclusion | regex | regex | Patrones configurables |
 
 ### Formatos de Content-Type Soportados
 
-| Content-Type | Extension | soap | s3 |
+| Content-Type | Extensión | soap | s3 |
 |--------------|-----------|------|-----|
 | application/pdf | .pdf | ✅ | ✅ |
 | text/plain | .txt | ✅ | ✅ |
@@ -581,39 +498,46 @@ S3:
 | application/json | .json | ❌ | ✅ |
 | image/png | .png | ❌ | ✅ |
 
-### Codigos de Error
+### Códigos de Error (ProcessingResultCodes)
 
-| Codigo | Descripcion | Retry |
+| Código | Descripción | Retry |
 |--------|-------------|-------|
-| `VALIDATION_FAILED` | Archivo no cumple validaciones | No |
-| `INVALID_RESPONSE` | Respuesta SOAP invalida | No |
-| `DOCUMENT_NOT_FOUND` | Documento no existe en REST API | No |
+| `FILE_SIZE_EXCEEDED` | Archivo excede tamaño máximo | No |
+| `INVALID_FILE_TYPE` | Extensión no permitida | No |
+| `FILENAME_TOO_LONG` | Nombre de archivo muy largo | No |
+| `INVALID_FILENAME` | Nombre de archivo inválido | No |
 | `ZIP_EXTRACTION_FAILED` | Error extrayendo ZIP | No |
 | `ZIP_PARTIAL_FAILURE` | Algunos hijos fallaron | No |
 | `GATEWAY_TIMEOUT` | Timeout en gateway | Si |
-| `SERVICE_UNAVAILABLE` | Servicio no disponible (503) | Si |
 | `BAD_GATEWAY` | Error 500 del servicio | Si |
 | `CLIENT_ERROR` | Error 4xx del servicio | No |
 | `UNKNOWN_ERROR` | Error no categorizado | No |
+| `EMPTY_CONTENT` | Content vacío (Base64) | No |
+| `INVALID_BASE64` | Base64 inválido | No |
 
-### Estados de Documento y Transiciones
+### Estados de Documento (DocumentStatus)
 
 ```
 PENDING → PROCESSING (claim exitoso)
-PENDING → NOT_SENT (validacion de origin/tamano/tipo falla)
-PROCESSING → SUCCESS (envio exitoso)
-PROCESSING → RETRY (error transitorio, reintentos disponibles)
-PROCESSING → FAILURE (error permanente o reintentos agotados)
-RETRY → PROCESSING (proximo intento)
+PENDING → SKIPPED (folder exclusion match)
+PROCESSING → SUCCESS (envío exitoso)
+PROCESSING → FAILURE (error permanente)
+RETRY → PROCESSING (próximo intento)
 RETRY → FAILURE (reintentos agotados)
 ```
 
-### Latencia Esperada por Gateway
+### Estados de Producto (ProductStatus)
 
-| Gateway | Latencia P50 | Latencia P99 | Timeout |
-|---------|--------------|--------------|---------|
-| SOAP | 150ms | 500ms | 30s |
-| S3 | 80ms | 200ms | 30s |
+Calculados automáticamente por `ProductStatusAggregator`:
+
+| Estado | Condición |
+|--------|-----------|
+| `PENDING` | Al menos 1 doc PENDING/PROCESSING/RETRY |
+| `SUCCESS` | Todos los docs SUCCESS |
+| `PARTIAL_FAILURE` | Al menos 1 FAILURE (pero no todos) |
+| `COMPLETED_WITH_SKIPS` | Todos SUCCESS/SKIPPED |
+| `COMPLETED_WITH_NOT_SENT` | Todos SUCCESS/SKIPPED/NOT_SENT |
+| `COMPLETED_WITH_FAILURES` | Todos FAILURE |
 
 ---
 
@@ -622,17 +546,17 @@ RETRY → FAILURE (reintentos agotados)
 ### Tablas
 
 **products_to_process**
-| Campo | Tipo | Descripcion |
+| Campo | Tipo | Descripción |
 |-------|------|-------------|
 | product_id | VARCHAR(255) | PK |
 | name | VARCHAR(500) | Nombre del producto |
 | status | VARCHAR(50) | Estado del producto |
 | trace_id | VARCHAR(255) | UUID de traza |
-| created_at | TIMESTAMP | Fecha de creacion |
+| created_at | TIMESTAMP | Fecha de creación |
 | processed_at | TIMESTAMP | Fecha de procesamiento |
 
 **product_documents_to_process**
-| Campo | Tipo | Descripcion |
+| Campo | Tipo | Descripción |
 |-------|------|-------------|
 | document_id | VARCHAR(255) | PK |
 | product_id | VARCHAR(255) | FK a products_to_process |
@@ -641,29 +565,14 @@ RETRY → FAILURE (reintentos agotados)
 | content | TEXT | Contenido (Base64 encoded) |
 | content_type | VARCHAR(255) | Tipo MIME |
 | origin | VARCHAR(500) | Origen (ej. folderA/incoming) |
-| status | VARCHAR(50) | PENDING, PROCESSING, SUCCESS, FAILURE, RETRY, SKIPPED, NOT_SENT |
-| created_at | TIMESTAMP | Fecha de creacion |
+| status | VARCHAR(50) | PENDING, PROCESSING, SUCCESS, FAILURE, RETRY, SKIPPED |
+| is_zip_archive | BOOLEAN | Indica si es ZIP |
+| created_at | TIMESTAMP | Fecha de creación |
 | processed_at | TIMESTAMP | Fecha de procesamiento |
-| trace_id | VARCHAR(255) | UUID de traza |
-| correlation_id | VARCHAR(255) | ID del servicio externo (SOAP correlationId o S3 eTag) |
-| error_code | VARCHAR(100) | Codigo de error |
+| correlation_id | VARCHAR(255) | ID del servicio externo |
+| error_code | VARCHAR(100) | Código de error |
 | latency_ms | BIGINT | Latencia del gateway (ms) |
 | gateway_name | VARCHAR(50) | Nombre del gateway (SOAP/S3) |
-| metadata | VARCHAR(1000) | Metadatos adicionales (JSON) |
-
-**communication_log**
-| Campo | Tipo | Descripcion |
-|-------|------|-------------|
-| trace_id | VARCHAR(255) | UUID de traza |
-| document_id | VARCHAR(255) | Documento asociado |
-| status | VARCHAR(50) | SUCCESS/FAILURE |
-| retry_count | INT | Numero de reintentos |
-| error_code | VARCHAR(100) | Codigo de error |
-| filename | VARCHAR(255) | Nombre del archivo |
-| created_at | TIMESTAMP | Fecha del log |
-| latency_ms | BIGINT | Latencia (ms) |
-| gateway_name | VARCHAR(50) | SOAP/S3 |
-| metadata | VARCHAR(1000) | JSON metadata |
 
 ---
 
@@ -671,10 +580,10 @@ RETRY → FAILURE (reintentos agotados)
 
 ### GET /api/v1/products/load
 
-Carga productos desde REST API externa. Los ZIP se expanden automaticamente.
+Carga productos desde REST API externa. Los ZIP se expanden automáticamente.
 
 **Headers:**
-- `message-id`: (opcional) Trace ID para correlacion
+- `message-id`: (opcional) Trace ID para correlación
 
 **Response:**
 ```json
@@ -692,9 +601,9 @@ Carga productos desde REST API externa. Los ZIP se expanden automaticamente.
 Procesa documentos pendientes.
 
 **Headers:**
-- `message-id`: (opcional) Trace ID para correlacion
+- `message-id`: (opcional) Trace ID para correlación
 
-**Parametros:**
+**Parámetros:**
 - `processor`: `soap` (default) | `s3`
 
 **Response:**
@@ -708,34 +617,16 @@ Procesa documentos pendientes.
 }
 ```
 
----
+### GET /actuator/health
 
-## Estados de Documento
+Health check de la aplicación.
 
-| Estado | Descripcion |
-|--------|-------------|
-| `PENDING` | Esperando procesamiento |
-| `PROCESSING` | Siendo procesado (claimado) |
-| `SUCCESS` | Enviado exitosamente |
-| `FAILURE` | Error permanente |
-| `RETRY` | Error reintentable |
-| `SKIPPED` | Excluido por carpeta |
-| `NOT_SENT` | No enviado (tamano, tipo, u origin no valido) |
-
----
-
-## Estados de Producto
-
-Calculados automaticamente por `ProductStatusAggregator`:
-
-| Estado | Condicion |
-|--------|-----------|
-| `PENDING` | Al menos 1 doc PENDING/PROCESSING/RETRY |
-| `SUCCESS` | Todos los docs SUCCESS |
-| `PARTIAL_FAILURE` | Al menos 1 FAILURE (pero no todos) |
-| `COMPLETED_WITH_SKIPS` | Todos SUCCESS/SKIPPED |
-| `COMPLETED_WITH_NOT_SENT` | Todos SUCCESS/SKIPPED/NOT_SENT |
-| `COMPLETED_WITH_FAILURES` | Todos FAILURE |
+**Response:**
+```json
+{
+  "status": "UP"
+}
+```
 
 ---
 
@@ -743,36 +634,50 @@ Calculados automaticamente por `ProductStatusAggregator`:
 
 ```
 AbstractDocumentProcessingUseCase
-├── executePendingDocuments()          ← FINAL
-└── processDocumentInternal(doc, id)  ← FINAL (template)
-     ├── 1. prepareDocument()         ← ABSTRACT (subclase)
-     ├── 2. buildRequest()             ← CONCRETO
-     ├── 3. sendWithResilience()       ← CONCRETO
-     ├── 4. checkpoint()               ← CONCRETO
-     └── 5. postProcess()              ← CONCRETO
-
-SoapDocumentProcessingUseCase     S3DocumentProcessingUseCase
-  - prepareDocument()                - prepareDocument()
-  - implementationName()             - implementationName()
+│
+├── executePendingDocuments()          ← FINAL (template method)
+│   │
+│   ├── findPendingDocuments()
+│   ├── validateMetadataDocument()      ← FINAL (claim + validation)
+│   │   └── applyRulesMetadata()      ← ABSTRACT (subclase implementa)
+│   ├── retrieveDocument()             ← FINAL (shared logic)
+│   └── uploadDocument()              ← ABSTRACT (subclase implementa)
+│
+├── SoapDocumentProcessingUseCase     S3DocumentProcessingUseCase
+│   ├── applyRulesMetadata()            ├── applyRulesMetadata()
+│   └── uploadDocument()               └── uploadDocument()
 ```
+
+### applyRulesMetadata()
+
+Método abstracto que cada subclase implementa para validar el documento:
+
+**SoapDocumentProcessingUseCase:**
+- Si es ZIP → `processZipDocument()`
+- Validar extensión y tamaño con `FileValidator`
+
+**S3DocumentProcessingUseCase:**
+- Si es ZIP → `processZipDocument()`
+- Check folder exclusion (regex)
+- Validar extensión y tamaño con `FileValidator`
 
 ---
 
-## Configuracion
+## Configuración
 
 ### Variables de Entorno
 
-| Variable | Default | Descripcion |
+| Variable | Default | Descripción |
 |----------|---------|-------------|
 | `DOCUMENT_REST_ENDPOINT` | `http://localhost:3001` | API REST de productos |
 | `SOAP_ENDPOINT` | `http://localhost:9000/soap/fileservice` | Servicio SOAP |
 | `AWS_ENDPOINT` | `` | Endpoint S3 (LocalStack) |
 | `AWS_BUCKET` | `documents-bucket` | Bucket S3 |
-| `AWS_REGION` | `us-east-1` | Region AWS |
+| `AWS_REGION` | `us-east-1` | Región AWS |
 | `AWS_ACCESS_KEY` | `` | Access key |
 | `AWS_SECRET_KEY` | `` | Secret key |
 
-### Configuracion de Procesadores
+### Configuración de Procesadores (application.yml)
 
 ```yaml
 app:
@@ -786,7 +691,7 @@ app:
         - .*/temp/.*
         - .*/backup/.*
     s3:
-      max-size: 52428800         # 50MB
+      max-size: 52428800          # 50MB
       allowed-types: pdf,txt,csv,zip
       retry-attempts: 3
       retry-backoff-millis: 500
@@ -796,14 +701,14 @@ app:
 
 ## Seguridad
 
-### Proteccion contra ZIP Bombs
+### Protección contra ZIP Bombs
 
-`ZipArchive.extractDocuments()` implementa limites:
+`ZipArchive.extractDocuments()` implementa límites:
 
-- `maxEntries`: 1000 entries maximas por ZIP
-- `maxUncompressedSize`: 100MB tamano maximo descomprimido total
+- `maxEntries`: 1000 entries máximas por ZIP
+- `maxUncompressedSize`: 100MB tamaño máximo descomprimido total
 
-### Sanitizacion de S3 Keys
+### Sanitización de S3 Keys
 
 `S3GatewayAdapter.buildKey()` sanitiza el filename:
 - Elimina `..` (path traversal)
@@ -816,14 +721,11 @@ Queries parametrizados via `DatabaseClient.bind()`:
 ```java
 // CORRECTO
 databaseClient.sql("SELECT ... WHERE id = $1").bind("$1", id)
-
-// INCORRECTO (eliminado)
-databaseClient.sql("SELECT ... WHERE id = '" + id + "'")
 ```
 
 ---
 
-## Compilacion y Ejecucion
+## Compilación y Ejecución
 
 ```bash
 # Compilar
@@ -836,7 +738,7 @@ databaseClient.sql("SELECT ... WHERE id = '" + id + "'")
 DOCUMENT_REST_ENDPOINT=http://localhost:3001 ./gradlew bootRun
 
 # Ejecutar con S3 mock
-AWS_ENDPOINT=http://localhost:4566 ./gradlew bootRun -Ps3
+AWS_ENDPOINT=http://localhost:4566 ./gradlew bootRun
 ```
 
 ---
@@ -859,3 +761,38 @@ curl -X GET "http://localhost:8080/api/v1/products?processor=s3" \
 # Health check
 curl -s http://localhost:8080/actuator/health
 ```
+
+---
+
+## Excepciones
+
+### ProcessingException
+
+Excepción unificada para todos los errores de procesamiento. Incluye:
+- `traceId`: Extraído automáticamente del contexto reactivo via `fromContext()`
+- `documentId`: Opcional
+- `errorCode`: Código de error (`ProcessingResultCodes`)
+
+**Métodos factory:**
+```java
+// Extrae traceId del ContextView automáticamente
+ProcessingException.fromContext(ctx, message, errorCode)
+ProcessingException.fromContext(ctx, message, errorCode, documentId)
+ProcessingException.fromContext(ctx, message, errorCode, cause)
+
+// Con traceId explícito
+ProcessingException.withTraceId(message, errorCode, traceId)
+ProcessingException.withDocumentId(message, errorCode, traceId, documentId)
+```
+
+### DomainException
+
+Base class para todas las excepciones de dominio.
+
+### FileValidationException
+
+Excepción para errores de validación de archivos.
+
+### InvalidBase64Exception
+
+Excepción para errores en decoding Base64.

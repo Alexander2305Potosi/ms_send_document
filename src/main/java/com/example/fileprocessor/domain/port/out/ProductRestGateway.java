@@ -12,17 +12,15 @@ import reactor.core.publisher.Mono;
 public interface ProductRestGateway {
     /**
      * Fetches all products from the external REST API.
-     * @param traceId the trace identifier for request tracking
      * @return Flux of products
      */
-    Flux<ProductInfo> getAllProducts(String traceId);
+    Flux<ProductInfo> getAllProducts();
 
     /**
      * Fetches a specific document for a product.
      * @param productId the product identifier
      * @param documentId the document identifier
-     * @param traceId the trace identifier for request tracking
      * @return Mono with document info
      */
-    Mono<ProductDocumentInfo> getDocument(String productId, String documentId, String traceId);
+    Mono<ProductDocumentInfo> getDocument(String productId, String documentId);
 }

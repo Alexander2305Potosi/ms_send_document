@@ -2,6 +2,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.entity.ProductInfo;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
@@ -43,44 +44,50 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    public Flux<ProductInfo> getAllProducts(String traceId) {
-        log.info("Fetching all products from REST API, traceId: {}", traceId);
+    public Flux<ProductInfo> getAllProducts() {
+        return Flux.deferContextual(ctx -> {
+            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            log.info("Fetching all products from REST API, traceId: {}", traceId);
 
-        return webClient.get()
-            .uri(properties.productsPath())
-            .accept(MediaType.APPLICATION_JSON)
-            .header(ApiConstants.HEADER_TRACE_ID, traceId)
-            .retrieve()
-            .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-            .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-            .map(list -> list.stream().map(json -> mapToProductInfo(json, traceId)).toList())
-            .flatMapMany(Flux::fromIterable)
-            .doOnNext(product -> log.info("Product retrieved: {}", product.getProductId()));
+            return webClient.get()
+                .uri(properties.productsPath())
+                .accept(MediaType.APPLICATION_JSON)
+                .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .map(list -> list.stream().map(json -> mapToProductInfo(json)).toList())
+                .flatMapMany(Flux::fromIterable)
+                .doOnNext(product -> log.info("Product retrieved: {}", product.getProductId()));
+        });
     }
 
     @Override
-    public Mono<ProductDocumentInfo> getDocument(String productId, String documentId, String traceId) {
-        log.info("Fetching document {} for product {} from REST API, traceId: {}", documentId, productId, traceId);
+    public Mono<ProductDocumentInfo> getDocument(String productId, String documentId) {
+        return Mono.deferContextual(ctx -> {
+            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            log.info("Fetching document {} for product {} from REST API, traceId: {}", documentId, productId, traceId);
 
-        String path = properties.productDocumentsPath().replace("{productId}", productId);
+            String path = properties.productDocumentsPath().replace("{productId}", productId);
 
-        return webClient.get()
-            .uri(path + "/{documentId}", documentId)
-            .accept(MediaType.APPLICATION_JSON)
-            .header(ApiConstants.HEADER_TRACE_ID, traceId)
-            .retrieve()
-            .bodyToMono(MAP_TYPE_REF)
-            .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-            .map(json -> mapToProductDocumentInfo(json, traceId))
-            .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
+            return webClient.get()
+                .uri(path + "/{documentId}", documentId)
+                .accept(MediaType.APPLICATION_JSON)
+                .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                .retrieve()
+                .bodyToMono(MAP_TYPE_REF)
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .map(this::mapToProductDocumentInfo)
+                .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
+        });
     }
 
-    private ProductInfo mapToProductInfo(Map<String, Object> json, String traceId) {
+    private ProductInfo mapToProductInfo(Map<String, Object> json) {
         Object docsObj = json.get("documents");
         List<ProductDocumentInfo> documents = (docsObj instanceof List<?>)
             ? ((List<?>) docsObj).stream()
                 .filter(m -> m instanceof Map)
-                .map(m -> mapToProductDocumentInfo((Map<String, Object>) m, traceId))
+                .map(m -> mapToProductDocumentInfo((Map<String, Object>) m))
                 .toList()
             : List.of();
 
@@ -91,7 +98,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .build();
     }
 
-    private ProductDocumentInfo mapToProductDocumentInfo(Map<String, Object> json, String traceId) {
+    private ProductDocumentInfo mapToProductDocumentInfo(Map<String, Object> json) {
         String contentBase64 = (String) json.get("content");
         String filename = (String) json.get("filename");
         String documentId = (String) json.get("documentId");
@@ -103,9 +110,9 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             } catch (Exception e) {
                 log.error("Failed to decode Base64 for document {} ({}): {}",
                     documentId, filename, e.getMessage());
-            throw new com.example.fileprocessor.domain.exception.CommunicationException(
-                    "Base64 decode failed for document: " + documentId + ", traceId: " + traceId,
-                    com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64);
+            throw new ProcessingException(
+                    "Base64 decode failed for document: " + documentId,
+                    com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64, documentId);
             }
         } else {
             content = null; // No content available

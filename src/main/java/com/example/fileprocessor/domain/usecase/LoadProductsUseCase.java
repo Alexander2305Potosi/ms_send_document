@@ -14,7 +14,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /**
  * Use case for loading products and documents from external REST API.
@@ -36,16 +35,14 @@ public class LoadProductsUseCase {
     }
 
     public Flux<LoadProductsResult> execute() {
-        String traceId = UUID.randomUUID().toString();
-        log.info("Starting products load from REST API, traceId: {}", traceId);
+        log.info("Starting products load from REST API");
 
-        return productGateway.getAllProducts(traceId)
+        return productGateway.getAllProducts()
             .flatMap(this::loadProductAndDocuments)
             .doOnError(error -> log.error("Error loading products: {}", error.getMessage()));
     }
 
-    private Flux<LoadProductsResult> loadProductAndDocuments(ProductInfo productInfo) {
-        String traceId = UUID.randomUUID().toString();
+    private Mono<LoadProductsResult> loadProductAndDocuments(ProductInfo productInfo) {
         int docCount = productInfo.getDocuments() != null ? productInfo.getDocuments().size() : 0;
         log.info("Loading product: {} with {} documents",
             productInfo.getProductId(), docCount);
@@ -55,45 +52,37 @@ public class LoadProductsUseCase {
             .name(productInfo.getName())
             .status(DocumentStatus.PENDING.name())
             .createdAt(Instant.now())
-            .traceId(traceId)
             .build();
 
-        Flux<ProductDocumentToProcess> documentsFlux = createDocumentsFlux(productInfo, traceId);
+        Flux<ProductDocumentToProcess> documentsFlux = createDocumentsFlux(productInfo);
 
         return productRepository.save(product)
             .then(documentRepository.saveAll(documentsFlux))
-            .thenMany(Mono.fromCallable(() -> {
-                int documentCount = productInfo.getDocuments() != null
-                    ? productInfo.getDocuments().size()
-                    : 0;
-                return LoadProductsResult.builder()
-                    .productId(productInfo.getProductId())
-                    .name(productInfo.getName())
-                    .documentCount(documentCount)
-                    .status(DocumentStatus.PENDING.name())
-                    .message("Product and documents loaded successfully")
-                    .traceId(traceId)
-                    .processedAt(Instant.now())
-                    .success(true)
-                    .build();
-            }))
-            .doOnNext(result -> log.info("Product {} loaded with {} documents",
+            .thenReturn(LoadProductsResult.builder()
+                .productId(productInfo.getProductId())
+                .name(productInfo.getName())
+                .documentCount(docCount)
+                .status(DocumentStatus.PENDING.name())
+                .message("Product and documents loaded successfully")
+                .processedAt(Instant.now())
+                .success(true)
+                .build())
+            .doOnSuccess(result -> log.info("Product {} loaded with {} documents",
                 result.getProductId(), result.getDocumentCount()));
     }
 
-    private Flux<ProductDocumentToProcess> createDocumentsFlux(ProductInfo productInfo, String traceId) {
+    private Flux<ProductDocumentToProcess> createDocumentsFlux(ProductInfo productInfo) {
         return Flux.fromIterable(productInfo.getDocuments())
-            .map(docInfo -> createProductDocument(productInfo.getProductId(), docInfo, null, traceId));
+            .map(docInfo -> createProductDocument(productInfo.getProductId(), docInfo, null));
     }
 
-    private ProductDocumentToProcess createProductDocument(String productId, ProductDocumentInfo docInfo,
-                                                          String parentId, String traceId) {
+    private ProductDocumentToProcess createProductDocument(String productId, ProductDocumentInfo docInfo, String parentId) {
         return ProductDocumentToProcess.builder()
             .documentId(docInfo.documentId())
             .productId(productId)
             .parentDocumentId(parentId)
             .filename(docInfo.filename())
-            .content(null) // Content will be downloaded on-demand during processing
+            .content(null)
             .contentType(docInfo.contentType())
             .origin(docInfo.origin())
             .status(DocumentStatus.PENDING.name())

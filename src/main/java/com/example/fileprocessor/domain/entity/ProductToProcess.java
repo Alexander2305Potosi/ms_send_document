@@ -17,5 +17,4 @@ public class ProductToProcess {
     private final String status;
     private final Instant createdAt;
     private final Instant processedAt;
-    private final String traceId;
 }

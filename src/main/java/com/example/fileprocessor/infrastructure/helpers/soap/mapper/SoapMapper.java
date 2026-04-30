@@ -1,12 +1,10 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
-import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapNamespaces;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
 import jakarta.xml.bind.JAXBContext;
@@ -38,37 +36,36 @@ public class SoapMapper {
         this.jaxbContext = envelopeWrapper.getJaxbContext();
     }
 
-    public String toSoapXml(DocumentSendRequest request) {
-        log.debug("Converting DocumentSendRequest to XML body for traceId: {}", request.getTraceId());
-
-        String base64Content = request.getFileContent() != null
-            ? Base64.getEncoder().encodeToString(request.getFileContent())
+    public String toSoapXml(String documentId, byte[] content, String filename,
+                           String contentType, long fileSize,
+                           String parentFolder, String childFolder) {
+        String base64Content = content != null
+            ? Base64.getEncoder().encodeToString(content)
             : "";
 
         UploadFileRequest uploadRequest = new UploadFileRequest(
-            base64Content,  // Now properly encoded here in infrastructure
-            request.getFilename(),
-            request.getContentType(),
-            request.getFileSize(),
-            request.getTraceId(),
-            Instant.now().toString(),  // Timestamp generated in infrastructure
-            request.getParentFolder(),
-            request.getChildFolder()
+            base64Content,
+            filename,
+            contentType,
+            fileSize,
+            Instant.now().toString(),
+            parentFolder,
+            childFolder
         );
 
         return marshalRequest(uploadRequest);
     }
 
-    public String toFullSoapMessage(DocumentSendRequest request) {
-        log.debug("Generating full SOAP message for traceId: {}", request.getTraceId());
-
-        String soapBody = toSoapXml(request);
-        return ApiConstants.SOAP_HEADER_PREFIX
-            + ApiConstants.SOAP_HEADER_ENVELOPE_START + SoapNamespaces.SOAP_ENVELOPE + "\"\n"
-            + "               xmlns:file=\"" + SoapNamespaces.FILE_SERVICE + "\">\n"
-            + ApiConstants.SOAP_HEADER_ENVELOPE_END
+    public String toFullSoapMessage(String documentId, byte[] content, String filename,
+                                    String contentType, long fileSize,
+                                    String parentFolder, String childFolder) {
+        String soapBody = toSoapXml(documentId, content, filename, contentType, fileSize, parentFolder, childFolder);
+        return SoapConstants.HEADER_PREFIX
+            + SoapConstants.ENVELOPE_START + SoapConstants.SOAP_ENVELOPE + "\"\n"
+            + "               xmlns:file=\"" + SoapConstants.FILE_SERVICE + "\">\n"
+            + SoapConstants.ENVELOPE_END
             + soapBody
-            + ApiConstants.SOAP_FOOTER_ENVELOPE_END;
+            + SoapConstants.FOOTER_ENVELOPE_END;
     }
 
     private String marshalRequest(UploadFileRequest request) {
@@ -82,13 +79,11 @@ public class SoapMapper {
             return writer.toString();
         } catch (JAXBException e) {
             log.error("Error marshalling SOAP request: {}", e.getMessage());
-            throw new SoapCommunicationException("Failed to marshal SOAP request", ProcessingResultCodes.UNKNOWN_ERROR, null, e);
+            throw ProcessingException.withTraceId("Failed to marshal SOAP request", ProcessingResultCodes.UNKNOWN_ERROR, "", e);
         }
     }
 
-    public ExternalServiceResponse fromSoapXml(String xml, String traceId) {
-        log.debug("Parsing SOAP response for traceId: {}", traceId);
-
+    public ExternalServiceResponse fromSoapXml(String xml) {
         try {
             UploadFileResponse response = envelopeWrapper.unwrapResponse(xml, UploadFileResponse.class);
 
@@ -100,15 +95,16 @@ public class SoapMapper {
                 .status(Objects.requireNonNullElse(response.getStatus(), DEFAULT_STATUS))
                 .message(Objects.requireNonNullElse(response.getMessage(), DEFAULT_MESSAGE))
                 .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), DEFAULT_CORRELATION_ID))
-                .traceId(traceId)
                 .processedAt(processedAt)
                 .externalReference(response.getExternalReference())
                 .build();
+        } catch (ProcessingException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error parsing SOAP response: {}", e.getMessage());
-            throw new SoapCommunicationException(
+            throw ProcessingException.withTraceId(
                 "Failed to parse SOAP response: " + e.getMessage(),
-                ProcessingResultCodes.INVALID_RESPONSE, traceId, e);
+                ProcessingResultCodes.INVALID_RESPONSE, "", e);
         }
     }
 }

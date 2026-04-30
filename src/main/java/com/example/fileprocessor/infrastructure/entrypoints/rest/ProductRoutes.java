@@ -11,7 +11,6 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 
 @Configuration
 public class ProductRoutes {
-
     @Bean
     public RouterFunction<ServerResponse> productRouter(ProductHandler handler) {
         return route()

@@ -16,7 +16,6 @@ class LoadProductsResultTest {
             .documentCount(5)
             .status("PENDING")
             .message("Products loaded")
-            .traceId("trace-123")
             .processedAt(now)
             .success(true)
             .build();
@@ -26,7 +25,6 @@ class LoadProductsResultTest {
         assertEquals(5, result.getDocumentCount());
         assertEquals("PENDING", result.getStatus());
         assertEquals("Products loaded", result.getMessage());
-        assertEquals("trace-123", result.getTraceId());
         assertEquals(now, result.getProcessedAt());
         assertTrue(result.isSuccess());
     }

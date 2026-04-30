@@ -1,10 +1,9 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
-import com.example.fileprocessor.domain.entity.DocumentSendRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import okhttp3.mockwebserver.MockResponse;
@@ -17,6 +16,7 @@ import reactor.test.StepVerifier;
 
 import java.time.Instant;
 
+import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_TRACE_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,18 +54,12 @@ class SoapGatewayAdapterTest {
         mockWebServer.shutdown();
     }
 
-    private DocumentSendRequest createTestRequest() {
-        return DocumentSendRequest.builder()
-            .fileContent("base64content".getBytes())
-            .filename("test.pdf")
-            .contentType("application/pdf")
-            .fileSize(100)
-            .traceId("trace-123")
-            .build();
+    private void createTestRequest() {
+        // Now parameters are passed directly to sendSoap method
     }
 
     @Test
-    void send_shouldReturnResult_whenSuccess() {
+    void sendSoap_shouldReturnResult_whenSuccess() {
         String responseXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
             "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
             " xmlns:file=\"http://example.com/fileservice\">" +
@@ -86,7 +80,8 @@ class SoapGatewayAdapterTest {
             .setBody(responseXml)
             .addHeader("Content-Type", "text/xml"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+                .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .assertNext(result -> {
                 assertTrue(result.isSuccess());
                 assertEquals("123-abc", result.getCorrelationId());
@@ -95,39 +90,42 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_shouldReturnError_whenServerError() {
+    void sendSoap_shouldReturnError_whenServerError() {
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
             .setBody("<?xml version=\"1.0\"?><soap:Fault></faultstring>Server Error</faultstring></soap:Fault>"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
-            .expectErrorMatches(throwable -> throwable instanceof SoapCommunicationException)
+        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+                .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
+            .expectErrorMatches(throwable -> throwable instanceof ProcessingException)
             .verify();
     }
 
     @Test
-    void send_shouldMapClientError_when4xx() {
+    void sendSoap_shouldMapClientError_when4xx() {
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(400)
             .setBody("<soap:Fault>Bad Request</soap:Fault>"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+                .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable ->
-                throwable instanceof SoapCommunicationException &&
-                ProcessingResultCodes.CLIENT_ERROR.equals(((SoapCommunicationException) throwable).getErrorCode()))
+                throwable instanceof ProcessingException &&
+                ProcessingResultCodes.CLIENT_ERROR.equals(((ProcessingException) throwable).getErrorCode()))
             .verify();
     }
 
     @Test
-    void send_shouldIncludeErrorBodyInException() {
+    void sendSoap_shouldIncludeErrorBodyInException() {
         String errorBody = "<soap:Fault><faultstring>Invalid document format</faultstring></soap:Fault>";
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
             .setBody(errorBody));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+                .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable -> {
-                if (!(throwable instanceof SoapCommunicationException)) return false;
+                if (!(throwable instanceof ProcessingException)) return false;
                 String message = throwable.getMessage();
                 return message.contains("Invalid document format");
             })
@@ -135,7 +133,7 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_shouldReturnResult_whenBusinessFailure() {
+    void sendSoap_shouldReturnResult_whenBusinessFailure() {
         String responseXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
             "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
             " xmlns:file=\"http://example.com/fileservice\">" +
@@ -156,7 +154,8 @@ class SoapGatewayAdapterTest {
             .setBody(responseXml)
             .addHeader("Content-Type", "text/xml"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+                .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals("Business validation failed", result.getMessage());
@@ -165,30 +164,32 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_shouldReturnError_withTraceIdInException() {
+    void sendSoap_shouldReturnError_withTraceIdInException() {
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
             .setBody("<soap:Fault>Server Error</soap:Fault>"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+                .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable -> {
-                if (!(throwable instanceof SoapCommunicationException)) return false;
-                SoapCommunicationException sce = (SoapCommunicationException) throwable;
-                return sce.getMessage().contains("trace-123");
+                if (!(throwable instanceof ProcessingException)) return false;
+                ProcessingException sce = (ProcessingException) throwable;
+                return "test-trace".equals(sce.getTraceId());
             })
             .verify();
     }
 
     @Test
-    void send_shouldMap500ToBadGateway() {
+    void sendSoap_shouldMap500ToBadGateway() {
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
             .setBody("<soap:Fault>Internal Error</soap:Fault>"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(gateway.sendSoap("doc-1", "base64content".getBytes(), "test.pdf", "application/pdf", 100, "parent", "child")
+                .contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, "test-trace")))
             .expectErrorMatches(throwable -> {
-                if (!(throwable instanceof SoapCommunicationException)) return false;
-                return ProcessingResultCodes.BAD_GATEWAY.equals(((SoapCommunicationException) throwable).getErrorCode());
+                if (!(throwable instanceof ProcessingException)) return false;
+                return ProcessingResultCodes.BAD_GATEWAY.equals(((ProcessingException) throwable).getErrorCode());
             })
             .verify();
     }

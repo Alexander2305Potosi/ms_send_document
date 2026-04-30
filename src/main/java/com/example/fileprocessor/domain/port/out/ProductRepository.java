@@ -26,8 +26,7 @@ public interface ProductRepository {
      * Updates the status of a product.
      * @param productId the product identifier
      * @param status the new status
-     * @param traceId the trace identifier for logging
      * @return Mono that completes when updated
      */
-    Mono<Void> updateStatus(String productId, String status, String traceId);
+    Mono<Void> updateStatus(String productId, String status);
 }

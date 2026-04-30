@@ -16,14 +16,15 @@ import java.util.Set;
 public class FileValidator {
 
     private static final Logger log = LoggerFactory.getLogger(FileValidator.class);
-    private static final String DEFAULT_FOLDER = ".";
 
     private final FileValidationConfig config;
-    private final Set<String> allowedExtensions;
+
+    public FileValidationConfig getConfig() {
+        return config;
+    }
 
     public FileValidator(FileValidationConfig config) {
         this.config = config;
-        this.allowedExtensions = parseAllowedExtensions(config.allowedTypes());
     }
 
     /**
@@ -32,22 +33,17 @@ public class FileValidator {
      * 2. File size validation
      */
     public Mono<ProductDocumentToProcess> validate(ProductDocumentToProcess document) {
-        return Mono.just(document)
-            .flatMap(doc -> maybeValidate(doc, config.shouldValidateExtension(), this::validateExtension))
-            .flatMap(doc -> maybeValidate(doc, config.shouldValidateSize(), this::validateSize));
-    }
+        Set<String> allowedExtensions = parseAllowedExtensions(config.allowedTypes());
 
-    private Mono<ProductDocumentToProcess> maybeValidate(
-            ProductDocumentToProcess doc,
-            boolean shouldValidate,
-            java.util.function.Function<ProductDocumentToProcess, Mono<ProductDocumentToProcess>> validator) {
-        return shouldValidate ? validator.apply(doc) : Mono.just(doc);
+        return Mono.just(document)
+            .flatMap(doc -> validateExtension(doc, allowedExtensions))
+            .flatMap(doc -> validateSize(doc, config.maxSize()));
     }
 
     // ============ EXTENSION VALIDATION ============
 
-    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess document) {
-        String ext = extension(document);
+    private Mono<ProductDocumentToProcess> validateExtension(ProductDocumentToProcess document, Set<String> allowedExtensions) {
+        String ext = extractFileExtension(document);
         if (!allowedExtensions.contains(ext.toLowerCase())) {
             log.warn("Document {} rejected: extension '{}' not in allowed list {}",
                 document.getFilename(), ext, allowedExtensions);
@@ -60,9 +56,8 @@ public class FileValidator {
 
     // ============ FILE SIZE VALIDATION ============
 
-    private Mono<ProductDocumentToProcess> validateSize(ProductDocumentToProcess document) {
-        long size = fileSize(document);
-        long maxSize = config.maxSize();
+    private Mono<ProductDocumentToProcess> validateSize(ProductDocumentToProcess document, long maxSize) {
+        long size = extractFileSize(document);
 
         if (size > maxSize) {
             log.warn("Document {} exceeds max size: {} > {} bytes",
@@ -79,7 +74,7 @@ public class FileValidator {
     public FolderInfo extractFolderInfo(String origin) {
         var keywords = config.keywords();
         if (keywords == null || keywords.isEmpty() || origin == null || origin.isBlank()) {
-            return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
+            return new FolderInfo(".", ".");
         }
 
         for (String keyword : keywords) {
@@ -88,21 +83,21 @@ public class FileValidator {
                 if (parts.length >= 2) {
                     return new FolderInfo(parts[parts.length - 2], parts[parts.length - 1]);
                 }
-                return new FolderInfo(origin, DEFAULT_FOLDER);
+                return new FolderInfo(origin, ".");
             }
         }
-        return new FolderInfo(DEFAULT_FOLDER, DEFAULT_FOLDER);
+        return new FolderInfo(".", ".");
     }
 
     public record FolderInfo(String parentFolder, String childFolder) {}
 
     // ============ PRIVATE HELPERS ============
 
-    private long fileSize(ProductDocumentToProcess p) {
+    private long extractFileSize(ProductDocumentToProcess p) {
         return p.getContent() != null ? p.getContent().length : 0;
     }
 
-    private String extension(ProductDocumentToProcess p) {
+    private String extractFileExtension(ProductDocumentToProcess p) {
         String filename = p.getFilename();
         int lastDot = filename != null ? filename.lastIndexOf('.') : -1;
         return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : "";
