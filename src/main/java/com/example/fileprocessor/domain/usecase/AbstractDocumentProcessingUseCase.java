@@ -1,6 +1,5 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
 import com.example.fileprocessor.domain.entity.ProductInfo;
@@ -38,10 +37,11 @@ public abstract class AbstractDocumentProcessingUseCase {
         }
 
         return Flux.fromIterable(productInfo.getDocuments())
-            .flatMap(doc -> {
-                String docId = doc.documentId();
-                return uploadDocument(doc, productInfo.getProductId())
-                    .doOnError(e -> log.error("Pipeline error for doc=[{}]: {}", docId, e.getMessage()));
+            .flatMap(docInfo -> {
+                String docId = docInfo.documentId();
+                return productRestGateway.getDocument(productInfo.getProductId(), docId)
+                    .flatMap(doc -> uploadDocument(doc, productInfo.getProductId())
+                        .doOnError(e -> log.error("Pipeline error for doc=[{}]: {}", docId, e.getMessage())));
             });
     }
 
