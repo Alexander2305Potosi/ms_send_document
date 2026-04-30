@@ -20,20 +20,13 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     private static final Logger log = LoggerFactory.getLogger(SoapDocumentProcessingUseCase.class);
 
     private final SoapGateway soapGateway;
-    private final FileValidator fileValidator;
-    private final FolderInfoExtractor folderInfoExtractor;
 
     public SoapDocumentProcessingUseCase(
             ProductDocumentRepository documentRepository,
-            SoapGateway soapGateway,
-            FileValidator fileValidator,
-            FolderInfoExtractor folderInfoExtractor,
-            ProductRestGateway productRestGateway) {
-        super(documentRepository, productRestGateway,
-            new ZipProcessor(fileValidator.getMaxSize(), fileValidator.getAllowedTypes()));
+            ProductRestGateway productRestGateway,
+            SoapGateway soapGateway) {
+        super(documentRepository, productRestGateway);
         this.soapGateway = soapGateway;
-        this.fileValidator = fileValidator;
-        this.folderInfoExtractor = folderInfoExtractor;
     }
 
     @Override
@@ -43,16 +36,9 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     @Override
     protected Mono<DocumentToUpload> applyRulesMetadata(ProductDocumentToProcess pending) {
-        if (pending.isZipArchive()) {
-            return processZipDocument(pending);
-        }
-
-        return fileValidator.validate(pending)
-            .map(validDoc -> {
-                FolderInfo folderInfo = folderInfoExtractor.extract(validDoc.getOrigin());
-                long fileSizeBytes = (long) (validDoc.getFileSizeMb() * 1024 * 1024);
-                return new DocumentToUpload(validDoc, folderInfo, fileSizeBytes, false);
-            });
+        FolderInfo folderInfo = FolderInfo.root();
+        long fileSizeBytes = (long) (pending.getFileSizeMb() * 1024 * 1024);
+        return Mono.just(new DocumentToUpload(pending, folderInfo, fileSizeBytes, false));
     }
 
     @Override

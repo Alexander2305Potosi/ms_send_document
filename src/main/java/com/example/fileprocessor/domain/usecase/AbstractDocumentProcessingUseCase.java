@@ -10,8 +10,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.List;
-
 /**
  * Abstract base for document processing use cases.
  * Handles shared orchestration; subclasses implement gateway-specific behavior.
@@ -22,15 +20,12 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     protected final ProductDocumentRepository documentRepository;
     protected final ProductRestGateway productRestGateway;
-    protected final ZipProcessor zipProcessor;
 
     protected AbstractDocumentProcessingUseCase(
             ProductDocumentRepository documentRepository,
-            ProductRestGateway productRestGateway,
-            ZipProcessor zipProcessor) {
+            ProductRestGateway productRestGateway) {
         this.documentRepository = documentRepository;
         this.productRestGateway = productRestGateway;
-        this.zipProcessor = zipProcessor;
     }
 
     public final Flux<FileUploadResult> executePendingDocuments() {
@@ -92,35 +87,6 @@ public abstract class AbstractDocumentProcessingUseCase {
                 long fileSizeBytes = (long) (fileSizeMb * 1024 * 1024);
                 return documentRepository.updateContent(pending.getDocumentId(), content)
                     .thenReturn(new DocumentToUpload(updated, docToUpload.folderInfo(), fileSizeBytes, docToUpload.skipped()));
-            });
-    }
-
-    protected Mono<DocumentToUpload> processZipDocument(ProductDocumentToProcess zipDoc) {
-        return zipProcessor.extractAndValidate(zipDoc)
-            .flatMap(extraction -> {
-                if (!extraction.hasChildren()) {
-                    return documentRepository.updateStatus(
-                        zipDoc.getDocumentId(), DocumentStatus.SUCCESS.name(), null, null)
-                        .thenReturn(new DocumentToUpload(zipDoc, null, 0, false));
-                }
-                List<ProductDocumentToProcess> children = extraction.children();
-                return documentRepository.saveAll(Flux.fromIterable(children))
-                    .then(zipProcessor.processZipChildren(zipDoc, children,
-                        this::validateMetadataDocument, this::uploadDocument))
-                    .flatMap(result -> {
-                        String status = result.allSucceeded() ?
-                            DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name();
-                        return documentRepository.updateStatus(
-                            zipDoc.getDocumentId(), status, null, result.errorCode())
-                            .thenReturn(new DocumentToUpload(zipDoc, null, 0, !result.allSucceeded()));
-                    });
-            })
-            .onErrorResume(error -> {
-                log.error("ZIP processing failed for {}: {}", zipDoc.getFilename(), error.getMessage());
-                return documentRepository.updateStatus(
-                    zipDoc.getDocumentId(), DocumentStatus.FAILURE.name(),
-                    null, ProcessingResultCodes.ZIP_EXTRACTION_FAILED)
-                    .thenReturn(new DocumentToUpload(zipDoc, null, 0, true));
             });
     }
 

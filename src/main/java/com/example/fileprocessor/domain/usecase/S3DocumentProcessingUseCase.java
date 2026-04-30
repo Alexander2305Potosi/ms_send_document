@@ -21,23 +21,16 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private static final Logger log = LoggerFactory.getLogger(S3DocumentProcessingUseCase.class);
 
     private final S3Gateway s3Gateway;
-    private final FileValidator fileValidator;
     private final FolderExclusionRegexConfig folderExclusionRegex;
-    private final FolderInfoExtractor folderInfoExtractor;
 
     public S3DocumentProcessingUseCase(
             ProductDocumentRepository documentRepository,
+            ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            FileValidator fileValidator,
-            FolderExclusionRegexConfig folderExclusionRegex,
-            FolderInfoExtractor folderInfoExtractor,
-            ProductRestGateway productRestGateway) {
-        super(documentRepository, productRestGateway,
-            new ZipProcessor(fileValidator.getMaxSize(), fileValidator.getAllowedTypes()));
+            FolderExclusionRegexConfig folderExclusionRegex) {
+        super(documentRepository, productRestGateway);
         this.s3Gateway = s3Gateway;
-        this.fileValidator = fileValidator;
         this.folderExclusionRegex = folderExclusionRegex;
-        this.folderInfoExtractor = folderInfoExtractor;
     }
 
     @Override
@@ -47,10 +40,6 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     @Override
     protected Mono<DocumentToUpload> applyRulesMetadata(ProductDocumentToProcess pending) {
-        if (pending.isZipArchive()) {
-            return processZipDocument(pending);
-        }
-
         if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
             log.info("S3 document {} skipped: origin matches exclusion regex: {}",
                 pending.getFilename(), pending.getOrigin());
@@ -60,12 +49,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
                 .thenReturn(new DocumentToUpload(pending, null, 0, true));
         }
 
-        return fileValidator.validate(pending)
-            .map(validDoc -> {
-                FolderInfo folderInfo = folderInfoExtractor.extract(validDoc.getOrigin());
-                long fileSizeBytes = (long) (validDoc.getFileSizeMb() * 1024 * 1024);
-                return new DocumentToUpload(validDoc, folderInfo, fileSizeBytes, false);
-            });
+        FolderInfo folderInfo = FolderInfo.root();
+        long fileSizeBytes = (long) (pending.getFileSizeMb() * 1024 * 1024);
+        return Mono.just(new DocumentToUpload(pending, folderInfo, fileSizeBytes, false));
     }
 
     @Override
