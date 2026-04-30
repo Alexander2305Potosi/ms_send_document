@@ -53,15 +53,10 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     protected final Mono<ProductDocumentToProcess> retrieveDocumentContent(ProductDocumentToProcess doc) {
-        log.info("Downloading content for document {} from REST API", doc.getDocumentId());
+        log.info("Retrieving document {} from REST API", doc.getDocumentId());
 
         return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
-            .flatMap(docInfo -> {
-                byte[] content = docInfo.content() != null ? docInfo.content() : new byte[0];
-                ProductDocumentToProcess updated = doc.withContent(content);
-                return documentRepository.updateContent(doc.getDocumentId(), content)
-                    .thenReturn(updated);
-            });
+            .map(docInfo -> doc.withContent(docInfo.content()));
     }
 
     protected final Mono<ProductDocumentToProcess> validateDocument(ProductDocumentToProcess pending) {
