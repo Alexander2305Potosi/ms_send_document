@@ -14,7 +14,6 @@ public class DocumentValidator {
     private static final Logger log = LoggerFactory.getLogger(DocumentValidator.class);
 
     private final BussinesParamsGateway bussinesParamsGateway;
-    private Pattern cachedFilenamePattern;
 
     public DocumentValidator(BussinesParamsGateway bussinesParamsGateway) {
         this.bussinesParamsGateway = bussinesParamsGateway;
@@ -40,12 +39,9 @@ public class DocumentValidator {
     }
 
     private Mono<ProductDocument> validateFilenamePattern(ProductDocument doc) {
-        Pattern pattern = getCachedFilenamePattern();
-        if (pattern == null) {
-            return Mono.just(doc);
-        }
         String filename = doc.filename();
-        if (filename != null && pattern.matcher(filename).find()) {
+        var filenamePattern = Pattern.compile(bussinesParamsGateway.getValue(BussinesParams.REGEX));
+        if (filename != null && filenamePattern.matcher(filename).find()) {
             return Mono.just(doc);
         }
         log.debug("Document {} skipped - filename does not match pattern", doc.documentId());
@@ -58,16 +54,5 @@ public class DocumentValidator {
             return Long.parseLong(maxFileSize);
         }
         return 0;
-    }
-
-    private Pattern getCachedFilenamePattern() {
-        if (cachedFilenamePattern != null) {
-            return cachedFilenamePattern;
-        }
-        String regex = bussinesParamsGateway.getValue(BussinesParams.REGEX);
-        if (regex != null && !regex.isBlank()) {
-            cachedFilenamePattern = Pattern.compile(regex);
-        }
-        return cachedFilenamePattern;
     }
 }
