@@ -53,11 +53,6 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     protected final Mono<ProductDocumentToProcess> retrieveDocumentContent(ProductDocumentToProcess doc) {
-        if (doc.getContent() != null && doc.getContent().length > 0) {
-            log.debug("Document {} already has content", doc.getDocumentId());
-            return Mono.just(doc);
-        }
-
         log.info("Downloading content for document {} from REST API", doc.getDocumentId());
 
         return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
