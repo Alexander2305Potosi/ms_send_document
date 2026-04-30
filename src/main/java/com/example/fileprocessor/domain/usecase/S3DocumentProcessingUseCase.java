@@ -6,7 +6,6 @@ import com.example.fileprocessor.domain.entity.ProductDocumentToProcess;
 import com.example.fileprocessor.domain.port.out.ProductDocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
-import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -21,16 +20,13 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private static final Logger log = LoggerFactory.getLogger(S3DocumentProcessingUseCase.class);
 
     private final S3Gateway s3Gateway;
-    private final FolderExclusionRegexConfig folderExclusionRegex;
 
     public S3DocumentProcessingUseCase(
             ProductDocumentRepository documentRepository,
             ProductRestGateway productRestGateway,
-            S3Gateway s3Gateway,
-            FolderExclusionRegexConfig folderExclusionRegex) {
+            S3Gateway s3Gateway) {
         super(documentRepository, productRestGateway);
         this.s3Gateway = s3Gateway;
-        this.folderExclusionRegex = folderExclusionRegex;
     }
 
     @Override
@@ -40,15 +36,6 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     @Override
     protected Mono<DocumentToUpload> applyRulesMetadata(ProductDocumentToProcess pending) {
-        if (folderExclusionRegex.shouldExclude(pending.getOrigin())) {
-            log.info("S3 document {} skipped: origin matches exclusion regex: {}",
-                pending.getFilename(), pending.getOrigin());
-            return documentRepository.updateStatus(
-                    pending.getDocumentId(), DocumentStatus.SKIPPED.name(), null,
-                    ProcessingResultCodes.SKIPPED_FOLDER)
-                .thenReturn(new DocumentToUpload(pending, null, 0, true));
-        }
-
         FolderInfo folderInfo = FolderInfo.root();
         long fileSizeBytes = (long) (pending.getFileSizeMb() * 1024 * 1024);
         return Mono.just(new DocumentToUpload(pending, folderInfo, fileSizeBytes, false));
@@ -56,16 +43,6 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     @Override
     protected Mono<FileUploadResult> uploadDocument(DocumentToUpload doc) {
-        if (doc.skipped()) {
-            return Mono.just(FileUploadResult.builder()
-                .status(DocumentStatus.SKIPPED.name())
-                .correlationId(doc.documentId())
-                .processedAt(Instant.now())
-                .success(true)
-                .message("Document skipped due to folder exclusion")
-                .build());
-        }
-
         FolderInfo folderInfo = doc.folderInfo();
 
         return s3Gateway.send(

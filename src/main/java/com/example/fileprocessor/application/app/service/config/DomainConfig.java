@@ -8,8 +8,6 @@ import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.usecase.LoadProductsUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
-import com.example.fileprocessor.domain.valueobject.FolderExclusionRegexConfig;
-import com.example.fileprocessor.infrastructure.helpers.config.ProcessorConfig;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
@@ -42,22 +40,16 @@ public class DomainConfig {
     // ============ S3 Processor ============
 
     @Bean
-    public FolderExclusionRegexConfig s3FolderExclusion(ProcessorConfig config) {
-        return new FolderExclusionRegexConfig(config.getS3().getFolderExclusionRegex());
-    }
-
-    @Bean
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
             ProductDocumentRepository documentRepository,
             ObjectProvider<S3Gateway> s3GatewayProvider,
-            ProductRestGateway productRestGateway,
-            FolderExclusionRegexConfig folderRegex) {
+            ProductRestGateway productRestGateway) {
         S3Gateway s3Gateway = s3GatewayProvider.getIfAvailable();
         if (s3Gateway == null) {
             return null;
         }
         return new S3DocumentProcessingUseCase(
-            documentRepository, productRestGateway, s3Gateway, folderRegex);
+            documentRepository, productRestGateway, s3Gateway);
     }
 }
