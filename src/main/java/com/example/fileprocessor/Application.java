@@ -12,6 +12,7 @@ import org.springframework.context.annotation.ComponentScan;
 @EnableConfigurationProperties({SoapProperties.class, DocumentRestProperties.class})
 @ComponentScan(basePackages = {
     "com.example.fileprocessor.application",
+    "com.example.fileprocessor.domain",
     "com.example.fileprocessor.infrastructure"
 })
 public class Application {

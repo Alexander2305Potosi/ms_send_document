@@ -1,5 +1,6 @@
 package com.example.fileprocessor.domain.util;
 
+import com.example.fileprocessor.domain.exception.InvalidBase64Exception;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -16,19 +17,11 @@ class Base64UtilsTest {
     }
 
     @Test
-    void decode_shouldDecodeBase64ToBytes() {
-        String encoded = "SGVsbG8gV29ybGQ=";
-        byte[] decoded = Base64Utils.decode(encoded);
-
-        assertArrayEquals("Hello World".getBytes(), decoded);
-    }
-
-    @Test
     void encodeDecode_shouldBeReversible() {
         byte[] original = new byte[]{1, 2, 3, 4, 5};
 
         String encoded = Base64Utils.encode(original);
-        byte[] decoded = Base64Utils.decode(encoded);
+        byte[] decoded = Base64Utils.decodeSafe(encoded, "test.txt", "doc-1");
 
         assertArrayEquals(original, decoded);
     }
@@ -42,9 +35,20 @@ class Base64UtilsTest {
     }
 
     @Test
-    void decode_emptyString_shouldReturnNull() {
-        byte[] decoded = Base64Utils.decode("");
+    void decodeSafe_emptyString_shouldThrow() {
+        assertThrows(InvalidBase64Exception.class,
+            () -> Base64Utils.decodeSafe("", "test.txt", "doc-1"));
+    }
 
-        assertNull(decoded);
+    @Test
+    void decodeSafe_nullString_shouldThrow() {
+        assertThrows(InvalidBase64Exception.class,
+            () -> Base64Utils.decodeSafe(null, "test.txt", "doc-1"));
+    }
+
+    @Test
+    void decodeSafe_invalidBase64_shouldThrow() {
+        assertThrows(InvalidBase64Exception.class,
+            () -> Base64Utils.decodeSafe("not-valid!!!base64", "test.txt", "doc-1"));
     }
 }

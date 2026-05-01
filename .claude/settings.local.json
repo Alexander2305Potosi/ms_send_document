@@ -183,7 +183,14 @@
       "Bash(curl -s http://localhost:8080/api/v1/products/load -H \"X-Trace-Id: test-123\")",
       "Bash(curl -s http://localhost:8080/api/v1/products)",
       "Bash(kill 58939)",
-      "Bash(pkill -f \"GradleDaemon\")"
+      "Bash(pkill -f \"GradleDaemon\")",
+      "Bash(javap *)",
+      "Bash(curl -s localhost:8080/actuator/health)",
+      "Bash(curl -s --max-time 10 http://localhost:8080/actuator/health)",
+      "Bash(kill -0 21667)",
+      "Bash(kill 21667)",
+      "Bash(curl -s --max-time 5 http://localhost:8080/actuator/health)",
+      "Bash(JAVA_HOME=/Users/alexander2305/dev-tools/jdk-21.0.10+7/Contents/Home ./gradlew compileTestJava *)"
     ]
   }
 }

@@ -15,16 +15,11 @@ public record SoapProperties(
     @Min(1)
     int timeoutSeconds,
 
-    @Min(0)
-    int retryAttempts,
-
-    @Min(100)
-    int retryBackoffMillis,
-
-    @Min(100)
-    int maxErrorBodyLength
+    @Min(1)
+    int retryAttempts
 ) {
     public SoapProperties {
-        if (maxErrorBodyLength < 100) maxErrorBodyLength = 500;
+        if (timeoutSeconds <= 0) timeoutSeconds = 30;
+        if (retryAttempts <= 0) retryAttempts = 1;
     }
 }

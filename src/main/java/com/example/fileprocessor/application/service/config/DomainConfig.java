@@ -1,13 +1,14 @@
-package com.example.fileprocessor.application.app.service.config;
+package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.service.DocumentValidator;
+import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -17,39 +18,37 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(ProcessorsProperties.class)
 public class DomainConfig {
 
-    // ============ SOAP Processor ============
-
     @Bean
     @ConditionalOnBean(SoapGateway.class)
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
+            ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
-            ObjectProvider<SoapGateway> soapGatewayProvider,
+            SoapGateway soapGateway,
+            DocumentTraceabilityGateway traceabilityGateway,
             ProcessorsProperties properties) {
-        SoapGateway soapGateway = soapGatewayProvider.getIfAvailable();
-        if (soapGateway == null) {
-            return null;
-        }
-        var validator = new DocumentValidator(
-            properties.soap().maxFileSizeBytes(),
-            properties.soap().filenamePattern());
-        return new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validator);
+        return new SoapDocumentProcessingUseCase(
+            productDbGateway,
+            productRestGateway,
+            soapGateway,
+            traceabilityGateway,
+            new RulesBussinesService(properties.soap())
+        );
     }
-
-    // ============ S3 Processor ============
 
     @Bean
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
+            ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
-            ObjectProvider<S3Gateway> s3GatewayProvider,
+            S3Gateway s3Gateway,
+            DocumentTraceabilityGateway traceabilityGateway,
             ProcessorsProperties properties) {
-        S3Gateway s3Gateway = s3GatewayProvider.getIfAvailable();
-        if (s3Gateway == null) {
-            return null;
-        }
-        var validator = new DocumentValidator(
-            properties.s3().maxFileSizeBytes(),
-            properties.s3().filenamePattern());
-        return new S3DocumentProcessingUseCase(productRestGateway, s3Gateway, validator);
+        return new S3DocumentProcessingUseCase(
+            productDbGateway,
+            productRestGateway,
+            s3Gateway,
+            traceabilityGateway,
+            new RulesBussinesService(properties.s3())
+        );
     }
 }

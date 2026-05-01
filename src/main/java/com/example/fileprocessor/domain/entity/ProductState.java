@@ -1,0 +1,12 @@
+package com.example.fileprocessor.domain.entity;
+
+/**
+ * Product state constants.
+ */
+public final class ProductState {
+    public static final String PENDING = "PENDING";
+    public static final String PROCESSED = "PROCESSED";
+    public static final String FAILED = "FAILED";
+
+    private ProductState() {}
+}

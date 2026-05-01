@@ -16,7 +16,7 @@ for /f "tokens=2" %%a in ('tasklist ^| findstr "java.exe"') do (
     wmic process where "ProcessId=%%a" get CommandLine 2>nul | findstr "PortableSoapMock" >nul
     if !errorlevel! equ 0 (
         echo Deteniendo PID: %%a
-e        taskkill /F /PID %%a >nul 2>&1
+        taskkill /F /PID %%a >nul 2>&1
         set "found=true"
     )
 )

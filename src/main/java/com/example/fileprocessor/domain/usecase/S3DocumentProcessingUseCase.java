@@ -1,15 +1,14 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
-import com.example.fileprocessor.domain.service.DocumentValidator;
 import reactor.core.publisher.Mono;
-
-import java.time.Instant;
 
 /**
  * S3-specific document processing use case.
@@ -19,28 +18,20 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private final S3Gateway s3Gateway;
 
     public S3DocumentProcessingUseCase(
+            ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            DocumentValidator documentValidator) {
-        super(productRestGateway, documentValidator);
+            DocumentTraceabilityGateway traceabilityGateway,
+            RulesBussinesGateway documentValidator) {
+        super(productDbGateway, productRestGateway, documentValidator, traceabilityGateway);
         this.s3Gateway = s3Gateway;
     }
 
     @Override
     protected Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId) {
         FileUploadRequest request = buildFileUploadRequest(doc, doc.origin());
-
         return s3Gateway.send(request)
-            .onErrorResume(error -> {
-                String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
-                    ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
-                return Mono.just(FileUploadResult.builder()
-                    .status(DocumentStatus.FAILURE.name())
-                    .errorCode(errorCode)
-                    .processedAt(Instant.now())
-                    .success(false)
-                    .build());
-            });
+            .onErrorResume(this::handleUploadError);
     }
 
     @Override

@@ -21,6 +21,6 @@ public class ExternalServiceResponse {
     private final String externalReference;
 
     public boolean isSuccess() {
-        return DocumentStatus.SUCCESS.name().equalsIgnoreCase(status) || STATUS_OK.equalsIgnoreCase(status);
+        return STATUS_OK.equalsIgnoreCase(status) || "SUCCESS".equalsIgnoreCase(status);
     }
 }

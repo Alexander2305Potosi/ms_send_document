@@ -1,15 +1,24 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.DocumentStatus;
+import com.example.fileprocessor.domain.entity.DocumentTraceability;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.service.DocumentValidator;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.util.ZipDecompressor;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * Abstract base for document processing use cases.
@@ -20,18 +29,46 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
+    protected final ProductDbGateway productDbGateway;
     protected final ProductRestGateway productRestGateway;
-    protected final DocumentValidator documentValidator;
+    protected final RulesBussinesGateway documentValidator;
+    protected final DocumentTraceabilityGateway traceabilityGateway;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return productRestGateway.getAllProducts()
+        return productDbGateway.findByLoadDate(LocalDate.now())
             .concatMap(product -> Flux.fromIterable(product.documents())
                 .flatMap(doc -> productRestGateway.getDocument(product.productId(), doc.documentId())
+                    .flatMapMany(this::decompressIfNeeded)
                     .flatMap(documentValidator::validate)
-                    .flatMap(validated -> uploadDocument(validated, product.productId()))))
+                    .flatMap(validated -> uploadDocument(validated, product.productId())
+                        .flatMap(result -> saveTraceability(validated, product.productId(), result)
+                            .thenReturn(result)))))
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
             .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
+    }
+
+    private Mono<Void> saveTraceability(ProductDocument doc, String productId, FileUploadResult result) {
+        boolean isSuccess = result.isSuccess();
+        DocumentTraceability record = new DocumentTraceability(
+            null,
+            productId,
+            doc.documentId(),
+            doc.filename(),
+            doc.isZip() ? doc.filename() : null,
+            isSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name(),
+            result.getErrorCode(),
+            result.getMessage(),
+            result.getAttemptCount(),
+            isSuccess ? LocalDateTime.now() : null,
+            !isSuccess ? LocalDateTime.now() : null,
+            LocalDateTime.now()
+        );
+        return traceabilityGateway.save(record);
+    }
+
+    private Flux<ProductDocument> decompressIfNeeded(ProductDocument doc) {
+        return ZipDecompressor.decompress(doc);
     }
 
     protected abstract Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId);
@@ -45,9 +82,19 @@ public abstract class AbstractDocumentProcessingUseCase {
             .filename(doc.filename())
             .contentType(doc.contentType())
             .fileSize(doc.size())
-            .parentFolder(".")
-            .childFolder(".")
             .origin(origin)
             .build();
+    }
+
+    protected Mono<FileUploadResult> handleUploadError(Throwable error) {
+        String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
+            ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
+        log.error("Upload failed with errorCode={}: {}", errorCode, error.getMessage());
+        return Mono.just(FileUploadResult.builder()
+            .status(DocumentStatus.FAILURE.name())
+            .errorCode(errorCode)
+            .processedAt(Instant.now())
+            .success(false)
+            .build());
     }
 }
