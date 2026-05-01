@@ -1,10 +1,9 @@
 package com.example.fileprocessor.application.service.config;
 
-import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.service.DefaultDocumentValidationService;
+import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
@@ -26,7 +25,7 @@ public class DomainConfig {
         return new SoapDocumentProcessingUseCase(
             productRestGateway,
             soapGateway,
-            new DefaultDocumentValidationService(properties.soap())
+            new RulesBussinesService(properties.soap())
         );
     }
 
@@ -39,7 +38,7 @@ public class DomainConfig {
         return new S3DocumentProcessingUseCase(
             productRestGateway,
             s3Gateway,
-            new DefaultDocumentValidationService(properties.s3())
+            new RulesBussinesService(properties.s3())
         );
     }
 }

@@ -15,6 +15,7 @@ public class ProductRoutes {
     public RouterFunction<ServerResponse> productRouter(ProductHandler handler) {
         return route()
             .GET(RestApiPaths.API_V1_PRODUCTS, handler::processPendingProducts)
+            .POST(RestApiPaths.API_V1_PRODUCTS_SYNC, handler::syncProducts)
             .build();
     }
 }

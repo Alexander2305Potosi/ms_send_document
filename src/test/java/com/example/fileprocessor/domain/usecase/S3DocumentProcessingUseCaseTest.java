@@ -5,9 +5,9 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.service.DefaultDocumentValidationService;
+import com.example.fileprocessor.domain.service.RulesBussinesService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,7 +38,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        DocumentValidationGateway validator = new DefaultDocumentValidationService(List.of());
+        RulesBussinesGateway validator = new RulesBussinesService(List.of());
         useCase = new S3DocumentProcessingUseCase(productRestGateway, s3Gateway, validator);
     }
 

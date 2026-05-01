@@ -7,7 +7,7 @@ import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.service.DefaultDocumentValidationService;
+import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,7 @@ class SoapDocumentProcessingUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        var validator = new DefaultDocumentValidationService(config(null, null));
+        var validator = new RulesBussinesService(config(null, null));
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validator);
     }
 
@@ -113,7 +113,7 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_whenValidationFails_skipsDocument() {
-        var validatorWithPattern = new DefaultDocumentValidationService(config(null, ".*\\.csv$"));
+        var validatorWithPattern = new RulesBussinesService(config(null, ".*\\.csv$"));
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithPattern);
 
         ProductDocument doc = new ProductDocument(
@@ -132,7 +132,7 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_whenSizeExceedsLimit_skipsDocument() {
-        var validatorWithSize = new DefaultDocumentValidationService(config(100L, null));
+        var validatorWithSize = new RulesBussinesService(config(100L, null));
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithSize);
 
         ProductDocument doc = new ProductDocument(

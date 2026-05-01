@@ -17,7 +17,7 @@ class DocumentValidatorTest {
 
     @Test
     void validate_singleRule_passes() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+        RulesBussinesService validator = new RulesBussinesService(
             config(1000L, null)
         );
 
@@ -28,7 +28,7 @@ class DocumentValidatorTest {
 
     @Test
     void validate_singleRule_fails() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+        RulesBussinesService validator = new RulesBussinesService(
             config(1000L, null)
         );
 
@@ -38,7 +38,7 @@ class DocumentValidatorTest {
 
     @Test
     void validate_multipleRules_allPass() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+        RulesBussinesService validator = new RulesBussinesService(
             config(1000L, ".*\\.pdf$")
         );
 
@@ -49,7 +49,7 @@ class DocumentValidatorTest {
 
     @Test
     void validate_multipleRules_oneFails() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+        RulesBussinesService validator = new RulesBussinesService(
             config(1000L, ".*\\.pdf$")
         );
 
@@ -59,7 +59,7 @@ class DocumentValidatorTest {
 
     @Test
     void validate_emptyConfig_passes() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+        RulesBussinesService validator = new RulesBussinesService(
             config(null, null)
         );
 

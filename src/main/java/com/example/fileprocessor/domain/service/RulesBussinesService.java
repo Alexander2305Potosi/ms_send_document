@@ -1,7 +1,7 @@
 package com.example.fileprocessor.domain.service;
 
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,14 +13,14 @@ import java.util.regex.Pattern;
  * Default implementation of document validation gateway.
  * Applies validation rules to incoming documents based on configuration.
  */
-public class DefaultDocumentValidationService implements DocumentValidationGateway {
+public class RulesBussinesService implements RulesBussinesGateway {
 
-    private static final Logger log = LoggerFactory.getLogger(DefaultDocumentValidationService.class);
+    private static final Logger log = LoggerFactory.getLogger(RulesBussinesService.class);
 
     private final Long maxFileSizeBytes;
     private final Pattern filenamePattern;
 
-    public DefaultDocumentValidationService(ProcessorsProperties.ProcessorConfig config) {
+    public RulesBussinesService(ProcessorsProperties.ProcessorConfig config) {
         this.maxFileSizeBytes = (config.maxFileSizeBytes() != null && config.maxFileSizeBytes() > 0)
             ? config.maxFileSizeBytes()
             : null;

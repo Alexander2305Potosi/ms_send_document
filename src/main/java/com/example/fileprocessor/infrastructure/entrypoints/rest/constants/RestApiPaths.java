@@ -8,4 +8,5 @@ public final class RestApiPaths {
     private RestApiPaths() {}
 
     public static final String API_V1_PRODUCTS = "/api/v1/products";
+    public static final String API_V1_PRODUCTS_SYNC = "/api/v1/products/sync";
 }

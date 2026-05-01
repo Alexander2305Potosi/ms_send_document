@@ -7,7 +7,7 @@ import reactor.core.publisher.Mono;
  * Gateway interface for document validation.
  * Abstracts the validation implementation from domain logic.
  */
-public interface DocumentValidationGateway {
+public interface RulesBussinesGateway {
 
     Mono<ProductDocument> validate(ProductDocument doc);
 }

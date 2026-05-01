@@ -2,7 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import reactor.core.publisher.Mono;
@@ -17,7 +17,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     public SoapDocumentProcessingUseCase(
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
-            DocumentValidationGateway documentValidator) {
+            RulesBussinesGateway documentValidator) {
         super(productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
     }

@@ -1,8 +1,9 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
-import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.SyncProductsUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,9 +20,6 @@ import java.util.UUID;
 
 import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_TRACE_ID;
 
-/**
- * Handler for product-related REST endpoints.
- */
 @Component
 public class ProductHandler {
 
@@ -29,12 +27,15 @@ public class ProductHandler {
 
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
+    private final SyncProductsUseCase syncProductsUseCase;
 
     public ProductHandler(
             SoapDocumentProcessingUseCase soapDocumentUseCase,
-            ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider) {
+            ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider,
+            SyncProductsUseCase syncProductsUseCase) {
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
+        this.syncProductsUseCase = syncProductsUseCase;
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
@@ -52,6 +53,26 @@ public class ProductHandler {
             return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_NDJSON)
                 .body(results, com.example.fileprocessor.domain.entity.FileUploadResult.class);
+        }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
+    }
+
+    public Mono<ServerResponse> syncProducts(ServerRequest request) {
+        String traceId = resolveTraceId(request);
+
+        return Mono.deferContextual(ctx -> {
+            log.info("Starting product sync, traceId: {}", traceId);
+            return syncProductsUseCase.execute()
+                .then(Mono.fromCallable(() -> ServerResponse.ok()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(java.util.Map.of("status", "OK", "message", "Products synced successfully"))
+                    .await()
+                ))
+                .onErrorResume(error -> {
+                    log.error("Product sync failed for traceId {}: {}", traceId, error.getMessage());
+                    return Mono.just(ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(java.util.Map.of("status", "ERROR", "message", error.getMessage())));
+                });
         }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 

@@ -4,7 +4,7 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
@@ -24,7 +24,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
     protected final ProductRestGateway productRestGateway;
-    protected final DocumentValidationGateway documentValidator;
+    protected final RulesBussinesGateway documentValidator;
 
     public Flux<FileUploadResult> executePendingDocuments() {
         return productRestGateway.getAllProducts()
