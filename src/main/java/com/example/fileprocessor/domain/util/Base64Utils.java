@@ -12,13 +12,6 @@ public final class Base64Utils {
 
     private Base64Utils() {}
 
-    public static byte[] decode(String base64Content) {
-        if (base64Content == null || base64Content.isBlank()) {
-            return null;
-        }
-        return Base64.getDecoder().decode(base64Content);
-    }
-
     public static byte[] decodeSafe(String encoded, String filename, String documentId) {
         if (encoded == null || encoded.isBlank()) {
             throw new InvalidBase64Exception(

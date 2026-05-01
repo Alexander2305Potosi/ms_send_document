@@ -14,8 +14,6 @@ class FileUploadRequestTest {
             .filename("test.pdf")
             .contentType("application/pdf")
             .fileSize(3L)
-            .parentFolder("parent")
-            .childFolder("child")
             .origin("origin")
             .build();
 
@@ -24,8 +22,6 @@ class FileUploadRequestTest {
         assertEquals("test.pdf", request.getFilename());
         assertEquals("application/pdf", request.getContentType());
         assertEquals(3L, request.getFileSize());
-        assertEquals("parent", request.getParentFolder());
-        assertEquals("child", request.getChildFolder());
         assertEquals("origin", request.getOrigin());
     }
 

@@ -48,8 +48,8 @@ public class SoapMapper {
                 fileUploadRequest.getContentType(),
                 fileUploadRequest.getFileSize(),
                 Instant.now().toString(),
-                fileUploadRequest.getParentFolder(),
-                fileUploadRequest.getChildFolder()
+                ".",
+                "."
         );
 
         return marshalRequest(uploadRequest);
@@ -95,9 +95,8 @@ public class SoapMapper {
                 .processedAt(processedAt)
                 .externalReference(response.getExternalReference())
                 .build();
-        } catch (ProcessingException e) {
-            throw e;
         } catch (Exception e) {
+            if (e instanceof ProcessingException pe) throw pe;
             log.error("Error parsing SOAP response: {}", e.getMessage());
             throw ProcessingException.withTraceId(
                 "Failed to parse SOAP response: " + e.getMessage(),

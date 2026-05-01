@@ -14,7 +14,5 @@ public class FileUploadRequest {
     private String filename;
     private String contentType;
     private long fileSize;
-    private String parentFolder;
-    private String childFolder;
     private String origin;
 }

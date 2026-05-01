@@ -3,7 +3,6 @@ package com.example.fileprocessor.infrastructure.drivenadapters.aws;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
@@ -42,13 +41,26 @@ public class S3GatewayAdapter implements S3Gateway {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             log.info("Sending S3 upload request for documentId: {}, traceId: {}", request.getDocumentId(), traceId);
 
+            byte[] content = request.getContent();
+            if (content == null || content.length == 0) {
+                log.warn("S3 upload skipped for documentId={} - content is null or empty", request.getDocumentId());
+                return Mono.just(FileUploadResult.builder()
+                    .status(DocumentStatus.FAILURE.name())
+                    .errorCode(ProcessingResultCodes.EMPTY_CONTENT)
+                    .traceId(traceId)
+                    .message("Cannot upload empty content to S3")
+                    .processedAt(Instant.now())
+                    .success(false)
+                    .build());
+            }
+
             String key = buildKey(traceId, request.getFilename());
 
             PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(s3Properties.bucketName())
                 .key(key)
                 .contentType(request.getContentType())
-                .contentLength(request.getContent() != null ? (long) request.getContent().length : 0L)
+                .contentLength((long) content.length)
                 .metadata(Map.of(
                     "traceId", traceId,
                     "originalFilename", request.getFilename(),
@@ -56,7 +68,7 @@ public class S3GatewayAdapter implements S3Gateway {
                 ))
                 .build();
 
-            CompletableFuture<PutObjectResponse> future = s3Client.putObject(putRequest, AsyncRequestBody.fromBytes(request.getContent()));
+            CompletableFuture<PutObjectResponse> future = s3Client.putObject(putRequest, AsyncRequestBody.fromBytes(content));
 
             return Mono.fromFuture(future)
                 .timeout(Duration.ofSeconds(s3Properties.timeoutSeconds()))
@@ -90,7 +102,7 @@ public class S3GatewayAdapter implements S3Gateway {
         if (error instanceof TimeoutException) {
             return Mono.just(FileUploadResult.builder()
                 .status(DocumentStatus.FAILURE.name())
-                .errorCode(ProcessingResultCodes.GATEWAY_TIMEOUT)
+                .errorCode(S3ErrorCodes.GATEWAY_TIMEOUT)
                 .traceId(traceId)
                 .processedAt(Instant.now())
                 .success(false)
@@ -114,31 +126,31 @@ public class S3GatewayAdapter implements S3Gateway {
             Integer statusCode = e.statusCode();
             if (statusCode != null) {
                 if (statusCode == 403) {
-                    return ProcessingResultCodes.ACCESS_DENIED_ERROR;
+                    return S3ErrorCodes.ACCESS_DENIED;
                 }
                 if (statusCode == 404) {
-                    return ProcessingResultCodes.NOT_FOUND_ERROR;
+                    return S3ErrorCodes.NOT_FOUND;
                 }
                 if (statusCode == 503) {
-                    return ProcessingResultCodes.SERVICE_UNAVAILABLE_ERROR;
+                    return S3ErrorCodes.SERVICE_UNAVAILABLE;
                 }
             }
             String awsErrorCode = e.awsErrorDetails() != null ? e.awsErrorDetails().errorCode() : null;
             if ("Throttling".equals(awsErrorCode) || "ThrottlingException".equals(awsErrorCode)) {
-                return ProcessingResultCodes.SERVICE_UNAVAILABLE_ERROR;
+                return S3ErrorCodes.SERVICE_UNAVAILABLE;
             }
             if ("AccessDenied".equals(awsErrorCode)) {
-                return ProcessingResultCodes.ACCESS_DENIED_ERROR;
+                return S3ErrorCodes.ACCESS_DENIED;
             }
         }
         if (error instanceof software.amazon.awssdk.core.exception.SdkException e) {
             String name = e.getClass().getSimpleName();
             if (name.contains("ServiceException") || name.contains("SocketTimeout")
                 || name.contains("ConnectTimeout")) {
-                return ProcessingResultCodes.SERVICE_UNAVAILABLE_ERROR;
+                return S3ErrorCodes.SERVICE_UNAVAILABLE;
             }
         }
-        return ProcessingResultCodes.UNKNOWN_ERROR;
+        return S3ErrorCodes.UNKNOWN_ERROR;
     }
 
     private boolean isRetryableException(Throwable throwable) {

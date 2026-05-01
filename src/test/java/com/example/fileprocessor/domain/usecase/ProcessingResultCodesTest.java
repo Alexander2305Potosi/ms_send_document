@@ -1,6 +1,5 @@
-package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
+package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -9,42 +8,34 @@ class ProcessingResultCodesTest {
 
     @Test
     void allCodes_areNonNull() {
-        assertNotNull(ProcessingResultCodes.GATEWAY_TIMEOUT);
-        assertNotNull(ProcessingResultCodes.BAD_GATEWAY);
-        assertNotNull(ProcessingResultCodes.CLIENT_ERROR);
-        assertNotNull(ProcessingResultCodes.UNKNOWN_ERROR);
+        assertNotNull(ProcessingResultCodes.EMPTY_CONTENT);
         assertNotNull(ProcessingResultCodes.INVALID_BASE64);
-        assertNotNull(ProcessingResultCodes.SERVICE_UNAVAILABLE_ERROR);
-        assertNotNull(ProcessingResultCodes.ACCESS_DENIED_ERROR);
-        assertNotNull(ProcessingResultCodes.NOT_FOUND_ERROR);
+        assertNotNull(ProcessingResultCodes.INVALID_RESPONSE);
+        assertNotNull(ProcessingResultCodes.UNKNOWN_ERROR);
+        assertNotNull(ProcessingResultCodes.UPLOAD_FAILED);
     }
 
     @Test
     void codes_areNonEmpty() {
-        assertFalse(ProcessingResultCodes.GATEWAY_TIMEOUT.isBlank());
-        assertFalse(ProcessingResultCodes.BAD_GATEWAY.isBlank());
-        assertFalse(ProcessingResultCodes.CLIENT_ERROR.isBlank());
-        assertFalse(ProcessingResultCodes.UNKNOWN_ERROR.isBlank());
+        assertFalse(ProcessingResultCodes.EMPTY_CONTENT.isBlank());
         assertFalse(ProcessingResultCodes.INVALID_BASE64.isBlank());
+        assertFalse(ProcessingResultCodes.INVALID_RESPONSE.isBlank());
+        assertFalse(ProcessingResultCodes.UNKNOWN_ERROR.isBlank());
+        assertFalse(ProcessingResultCodes.UPLOAD_FAILED.isBlank());
     }
 
     @Test
-    void gatewayTimeout_isCorrectValue() {
-        assertEquals("GATEWAY_TIMEOUT", ProcessingResultCodes.GATEWAY_TIMEOUT);
+    void emptyContent_isCorrectValue() {
+        assertEquals("EMPTY_CONTENT", ProcessingResultCodes.EMPTY_CONTENT);
     }
 
     @Test
-    void badGateway_isCorrectValue() {
-        assertEquals("BAD_GATEWAY", ProcessingResultCodes.BAD_GATEWAY);
+    void invalidBase64_isCorrectValue() {
+        assertEquals("INVALID_BASE64", ProcessingResultCodes.INVALID_BASE64);
     }
 
     @Test
-    void serviceUnavailable_isCorrectValue() {
-        assertEquals("SERVICE_UNAVAILABLE_ERROR", ProcessingResultCodes.SERVICE_UNAVAILABLE_ERROR);
-    }
-
-    @Test
-    void accessDenied_isCorrectValue() {
-        assertEquals("ACCESS_DENIED_ERROR", ProcessingResultCodes.ACCESS_DENIED_ERROR);
+    void uploadFailed_isCorrectValue() {
+        assertEquals("UPLOAD_FAILED", ProcessingResultCodes.UPLOAD_FAILED);
     }
 }

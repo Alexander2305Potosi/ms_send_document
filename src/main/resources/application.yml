@@ -5,18 +5,7 @@ server:
 spring:
   application:
     name: file-processor-service
-  r2dbc:
-    url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
-  h2:
-    console:
-      enabled: ${H2_CONSOLE_ENABLED:false}
   webflux:
-    multipart:
-      max-in-memory-size: 10MB
-      max-disk-usage-per-part: 10MB
-      max-parts: 10
     hiddenmethod:
       filter:
         enabled: false
@@ -41,9 +30,6 @@ app:
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
-    retry-attempts: 3
-    retry-backoff-millis: 1000
-    max-error-body-length: 500
   document-rest:
     endpoint: ${DOCUMENT_REST_ENDPOINT:http://localhost:3001}
     products-path: /api/products
@@ -74,13 +60,8 @@ app:
 spring:
   config:
     activate:
-      on-profile: soap
-
----
-spring:
-  config:
-    activate:
       on-profile: s3
+app:
   aws:
     s3:
       bucket-name: documents-bucket

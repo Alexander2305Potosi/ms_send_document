@@ -5,10 +5,10 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.service.DocumentValidator;
-import com.example.fileprocessor.infrastructure.config.ProcessorsProperties.ProcessorConfig;
+import com.example.fileprocessor.domain.service.DefaultDocumentValidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,8 +39,7 @@ class SoapDocumentProcessingUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        ProcessorConfig config = new ProcessorConfig(null, null);
-        DocumentValidator validator = new DocumentValidator(config);
+        DocumentValidationGateway validator = new DefaultDocumentValidationService(List.of());
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validator);
     }
 
@@ -110,8 +109,9 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_whenValidationFails_skipsDocument() {
-        ProcessorConfig configWithPattern = new ProcessorConfig(null, ".*\\.csv$");
-        DocumentValidator validatorWithPattern = new DocumentValidator(configWithPattern);
+        DocumentValidationGateway validatorWithPattern = new DefaultDocumentValidationService(List.of(
+            new com.example.fileprocessor.domain.service.rules.FilenamePatternRule(".*\\.csv$")
+        ));
 
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithPattern);
 
@@ -122,7 +122,6 @@ class SoapDocumentProcessingUseCaseTest {
         when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
-        // Document should be skipped because filename doesn't match .csv pattern
         StepVerifier.create(useCase.executePendingDocuments())
             .expectNextCount(0)
             .verifyComplete();
@@ -132,8 +131,9 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_whenSizeExceedsLimit_skipsDocument() {
-        ProcessorConfig configWithSize = new ProcessorConfig(100L, null);
-        DocumentValidator validatorWithSize = new DocumentValidator(configWithSize);
+        DocumentValidationGateway validatorWithSize = new DefaultDocumentValidationService(List.of(
+            new com.example.fileprocessor.domain.service.rules.MaxSizeRule(100L)
+        ));
 
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithSize);
 
@@ -144,7 +144,6 @@ class SoapDocumentProcessingUseCaseTest {
         when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
-        // Document should be skipped because size exceeds 100 bytes limit
         StepVerifier.create(useCase.executePendingDocuments())
             .expectNextCount(0)
             .verifyComplete();

@@ -57,24 +57,14 @@ dependencies {
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.1")
     runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.4")
 
-    // R2DBC + H2 (reactive database for traceability)
-    implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
-    implementation("io.r2dbc:r2dbc-h2")
-    runtimeOnly("com.h2database:h2")
-
     // AWS S3
     implementation("software.amazon.awssdk:s3:2.28.29")
     implementation("software.amazon.awssdk:netty-nio-client:2.28.29")
-
-    // Resilience4j - Circuit Breaker (FIX #4)
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-reactor:2.2.0")
 
     // Monitoring & Tracing
     implementation("io.micrometer:micrometer-core")
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
     implementation("io.micrometer:micrometer-registry-prometheus")
-    implementation("io.projectreactor:reactor-tools")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")

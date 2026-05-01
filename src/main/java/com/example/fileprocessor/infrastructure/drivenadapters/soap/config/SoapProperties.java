@@ -13,18 +13,9 @@ public record SoapProperties(
     String endpoint,
 
     @Min(1)
-    int timeoutSeconds,
-
-    @Min(0)
-    int retryAttempts,
-
-    @Min(100)
-    int retryBackoffMillis,
-
-    @Min(100)
-    int maxErrorBodyLength
+    int timeoutSeconds
 ) {
     public SoapProperties {
-        if (maxErrorBodyLength < 100) maxErrorBodyLength = 500;
+        if (timeoutSeconds <= 0) timeoutSeconds = 30;
     }
 }

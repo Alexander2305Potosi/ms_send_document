@@ -1,133 +1,69 @@
 package com.example.fileprocessor.domain.service;
 
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.infrastructure.config.ProcessorsProperties.ProcessorConfig;
+import com.example.fileprocessor.domain.service.rules.FilenamePatternRule;
+import com.example.fileprocessor.domain.service.rules.MaxSizeRule;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.util.List;
 
 class DocumentValidatorTest {
 
-    private static ProductDocument doc(String documentId, String filename, long size) {
-        return new ProductDocument(documentId, filename, new byte[0], "application/octet-stream", size, false, "origin");
+    private static ProductDocument doc(String documentId, String filename, String contentType, long size) {
+        return new ProductDocument(documentId, filename, new byte[0], contentType, size, false, "origin");
     }
 
     @Test
-    void validate_whenAllValid_passes() {
-        ProcessorConfig config = new ProcessorConfig(52428800L, ".*\\.pdf$");
-        DocumentValidator validator = new DocumentValidator(config);
+    void validate_singleRule_passes() {
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
+            new MaxSizeRule(1000L)
+        ));
 
-        ProductDocument doc = doc("doc-1", "test.pdf", 1024);
-
-        StepVerifier.create(validator.validate(doc))
-            .expectNext(doc)
+        StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 500)))
+            .expectNextCount(1)
             .verifyComplete();
     }
 
     @Test
-    void validate_whenSizeExceedsLimit_rejects() {
-        ProcessorConfig config = new ProcessorConfig(1000L, ".*");
-        DocumentValidator validator = new DocumentValidator(config);
+    void validate_singleRule_fails() {
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
+            new MaxSizeRule(1000L)
+        ));
 
-        ProductDocument doc = doc("doc-1", "test.pdf", 5000);
-
-        StepVerifier.create(validator.validate(doc))
+        StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 2000)))
             .verifyComplete();
     }
 
     @Test
-    void validate_whenSizeWithinLimit_passes() {
-        ProcessorConfig config = new ProcessorConfig(10000L, ".*");
-        DocumentValidator validator = new DocumentValidator(config);
+    void validate_multipleRules_allPass() {
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
+            new MaxSizeRule(1000L),
+            new FilenamePatternRule(".*\\.pdf$")
+        ));
 
-        ProductDocument doc = doc("doc-1", "test.pdf", 5000);
-
-        StepVerifier.create(validator.validate(doc))
-            .expectNextMatches(d -> d.documentId().equals("doc-1"))
+        StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 500)))
+            .expectNextCount(1)
             .verifyComplete();
     }
 
     @Test
-    void validate_whenFilenameDoesNotMatchPattern_rejects() {
-        ProcessorConfig config = new ProcessorConfig(null, ".*\\.pdf$");
-        DocumentValidator validator = new DocumentValidator(config);
+    void validate_multipleRules_oneFails() {
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
+            new MaxSizeRule(1000L),
+            new FilenamePatternRule(".*\\.pdf$")
+        ));
 
-        ProductDocument doc = doc("doc-1", "test.csv", 1024);
-
-        StepVerifier.create(validator.validate(doc))
+        StepVerifier.create(validator.validate(doc("doc-1", "test.csv", "application/pdf", 500)))
             .verifyComplete();
     }
 
     @Test
-    void validate_whenFilenameMatchesPattern_passes() {
-        ProcessorConfig config = new ProcessorConfig(null, ".*\\.pdf$");
-        DocumentValidator validator = new DocumentValidator(config);
+    void validate_emptyRulesList_passes() {
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of());
 
-        ProductDocument doc = doc("doc-1", "test.pdf", 1024);
-
-        StepVerifier.create(validator.validate(doc))
-            .expectNext(doc)
-            .verifyComplete();
-    }
-
-    @Test
-    void validate_whenBothRulesNull_passes() {
-        ProcessorConfig config = new ProcessorConfig(null, null);
-        DocumentValidator validator = new DocumentValidator(config);
-
-        ProductDocument doc = doc("doc-1", "anything.anything", 999999999L);
-
-        StepVerifier.create(validator.validate(doc))
-            .expectNext(doc)
-            .verifyComplete();
-    }
-
-    @Test
-    void validate_whenSizeZero_noSizeValidation() {
-        ProcessorConfig config = new ProcessorConfig(0L, ".*");
-        DocumentValidator validator = new DocumentValidator(config);
-
-        ProductDocument doc = doc("doc-1", "test.pdf", 999999999L);
-
-        StepVerifier.create(validator.validate(doc))
-            .expectNext(doc)
-            .verifyComplete();
-    }
-
-    @Test
-    void validate_whenFilenameEmpty_noFilenameValidation() {
-        ProcessorConfig config = new ProcessorConfig(1000L, "");
-        DocumentValidator validator = new DocumentValidator(config);
-
-        ProductDocument doc = doc("doc-1", "anything.anything", 500);
-
-        StepVerifier.create(validator.validate(doc))
-            .expectNext(doc)
-            .verifyComplete();
-    }
-
-    @Test
-    void validate_whenBothRulesFail_rejects() {
-        ProcessorConfig config = new ProcessorConfig(1000L, ".*\\.pdf$");
-        DocumentValidator validator = new DocumentValidator(config);
-
-        ProductDocument doc = doc("doc-1", "test.csv", 5000);
-
-        StepVerifier.create(validator.validate(doc))
-            .verifyComplete();
-    }
-
-    @Test
-    void validate_sizeLimitInclusive() {
-        ProcessorConfig config = new ProcessorConfig(1000L, ".*");
-        DocumentValidator validator = new DocumentValidator(config);
-
-        ProductDocument docAtLimit = doc("doc-1", "test.pdf", 1000);
-
-        StepVerifier.create(validator.validate(docAtLimit))
-            .expectNext(docAtLimit)
+        StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 999999)))
+            .expectNextCount(1)
             .verifyComplete();
     }
 }

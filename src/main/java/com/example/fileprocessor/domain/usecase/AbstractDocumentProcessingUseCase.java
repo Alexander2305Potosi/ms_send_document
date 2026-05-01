@@ -1,15 +1,18 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.service.DocumentValidator;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.time.Instant;
 
 /**
  * Abstract base for document processing use cases.
@@ -21,7 +24,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
     protected final ProductRestGateway productRestGateway;
-    protected final DocumentValidator documentValidator;
+    protected final DocumentValidationGateway documentValidator;
 
     public Flux<FileUploadResult> executePendingDocuments() {
         return productRestGateway.getAllProducts()
@@ -45,9 +48,19 @@ public abstract class AbstractDocumentProcessingUseCase {
             .filename(doc.filename())
             .contentType(doc.contentType())
             .fileSize(doc.size())
-            .parentFolder(".")
-            .childFolder(".")
             .origin(origin)
             .build();
+    }
+
+    protected Mono<FileUploadResult> handleUploadError(Throwable error) {
+        String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
+            ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
+        log.error("Upload failed with errorCode={}: {}", errorCode, error.getMessage());
+        return Mono.just(FileUploadResult.builder()
+            .status(DocumentStatus.FAILURE.name())
+            .errorCode(errorCode)
+            .processedAt(Instant.now())
+            .success(false)
+            .build());
     }
 }

@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,14 +22,15 @@ class SoapMapperTest {
 
     @Test
     void toSoapXml_shouldGenerateValidSoapBody() {
-        String xml = soapMapper.toSoapXml(
-            "testContent".getBytes(),
-            "test.pdf",
-            "application/pdf",
-            1234L,
-            "parent",
-            "child"
-        );
+        FileUploadRequest request = FileUploadRequest.builder()
+            .documentId("doc-1")
+            .content("testContent".getBytes())
+            .filename("test.pdf")
+            .contentType("application/pdf")
+            .fileSize(1234L)
+            .build();
+
+        String xml = soapMapper.toSoapXml(request);
 
         assertNotNull(xml);
         assertFalse(xml.contains("soap:Envelope"), "Should NOT contain SOAP envelope");
