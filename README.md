@@ -24,6 +24,8 @@ com.example.fileprocessor/
 │   │   └── SyncProductsUseCase.java                 # Sincroniza productos a H2
 │   ├── service/
 │   │   └── RulesBussinesService.java    # Validación de documentos (tamaño, patrón filename)
+│   ├── util/
+│   │   └── ZipDecompressor.java       # Descompresión de archivos ZIP
 │   ├── port/out/
 │   │   ├── ProductRestGateway.java       # Puerto REST productos (origen externo)
 │   │   ├── ProductDbGateway.java         # Puerto BD local (H2)
@@ -143,14 +145,57 @@ Health check de la aplicación.
 6. ProductRestGateway.getDocument(productId, docId)
         │ Obtiene documento completo (con contenido)
         ▼
-7. RulesBussinesGateway.validate(document)
+7. ZipDecompressor.decompress() [si isZip=true]
+        │ Expande ZIP en archivos individuales
+        ▼
+8. RulesBussinesGateway.validate(document)
         │ Valida tamaño y patrón filename
         ▼
-8. uploadDocument() → SoapGateway.send() o S3Gateway.send()
+9. uploadDocument() → SoapGateway.send() o S3Gateway.send()
         │
         ▼
-9. FileUploadResult stream → Cliente (NDJSON)
+10. FileUploadResult stream → Cliente (NDJSON)
 ```
+
+---
+
+## Descompresion de archivos ZIP
+
+Cuando un `ProductDocument` tiene `isZip=true`, su contenido se descomprime y cada archivo individual se procesa separadamente.
+
+### Comportamiento
+
+| Escenario | Resultado |
+|----------|-----------|
+| Documento normal (`isZip=false`) | Se procesa tal cual |
+| Documento ZIP con 3 archivos | Se expande en 3 `ProductDocument` individuales |
+| ZIP vacio | Se loguea warning, no produce documentos |
+| ZIP corrupto | `ProcessingException` con errorCode `INVALID_ZIP` |
+
+### Inferencia de contentType
+
+Los archivos descomprimidos inferen su `contentType` segun la extension:
+
+| Extension | ContentType |
+|----------|-------------|
+| `.pdf` | `application/pdf` |
+| `.csv` | `text/csv` |
+| `.txt` | `text/plain` |
+| `.docx` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+| `.xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| otra | `application/octet-stream` |
+
+### Ejemplo
+
+Un documento ZIP con `documentId=doc-1` y `filename=documents.zip` que contiene `test.pdf` y `data.csv`:
+
+```
+ZIP: doc-1/documents.zip (isZip=true)
+  ├── test.pdf  →  doc-1/test.pdf (isZip=false, contentType=application/pdf)
+  └── data.csv  →  doc-1/data.csv (isZip=false, contentType=text/csv)
+```
+
+Cada archivo pasa por validacion y upload independientemente.
 
 ---
 
@@ -255,6 +300,13 @@ onErrorResume() → status=FAILURE
 Result: {success:false, status:FAILURE, errorCode:UPLOAD_FAILED}
 ```
 
+### 4. Documento ZIP
+```
+isZip=true → ZipDecompressor.decompress()
+           → Flux de archivos individuales
+           → cada archivo pasa por validate() y uploadDocument()
+```
+
 ---
 
 ## Codigos de Error (ProcessingResultCodes)
@@ -264,6 +316,7 @@ Result: {success:false, status:FAILURE, errorCode:UPLOAD_FAILED}
 | `EMPTY_CONTENT` | Documento sin contenido |
 | `INVALID_BASE64` | Fallo al decodificar Base64 |
 | `INVALID_RESPONSE` | Respuesta invalida del servicio externo |
+| `INVALID_ZIP` | Archivo ZIP corrupto o invalido |
 | `UPLOAD_FAILED` | Error en envio (SOAP/S3) |
 | `UNKNOWN_ERROR` | Error no categorizado |
 
@@ -277,6 +330,7 @@ AbstractDocumentProcessingUseCase
 ├── executePendingDocuments()     ← FINAL (template method)
 │   ├── productDbGateway.findByLoadDate()  ← H2
 │   ├── productRestGateway.getDocument()   ← REST externa
+│   ├── ZipDecompressor.decompress()        ← Descompresión ZIP
 │   ├── rulesBussinesGateway.validate()    ← Validacion
 │   └── uploadDocument()                 ← ABSTRACT (subclase implementa)
 │
