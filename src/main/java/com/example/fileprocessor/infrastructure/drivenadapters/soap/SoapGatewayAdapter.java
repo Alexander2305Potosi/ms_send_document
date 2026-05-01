@@ -104,6 +104,10 @@ public class SoapGatewayAdapter implements SoapGateway {
                     .onErrorResume(ConnectException.class, ex -> {
                         log.error("SOAP connection error for traceId={}: {}", traceId, ex.getMessage());
                         return Mono.just(buildErrorResult(traceId, SoapErrorCodes.SERVICE_UNAVAILABLE, ex.getMessage(), attemptCount.get()));
+                    })
+                    .onErrorResume(Throwable.class, ex -> {
+                        log.error("SOAP unexpected error for traceId={}: {}", traceId, ex.getMessage());
+                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR, ex.getMessage(), attemptCount.get()));
                     });
         });
     }
