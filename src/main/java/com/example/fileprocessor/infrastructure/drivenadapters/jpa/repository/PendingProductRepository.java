@@ -9,5 +9,5 @@ import java.util.List;
 
 @Repository
 public interface PendingProductRepository extends JpaRepository<PendingProductEntity, String> {
-    List<PendingProductEntity> findByLoadDateBetween(LocalDateTime start, LocalDateTime end);
+    List<PendingProductEntity> findByLoadDateBetweenAndState(LocalDateTime start, LocalDateTime end, String state);
 }

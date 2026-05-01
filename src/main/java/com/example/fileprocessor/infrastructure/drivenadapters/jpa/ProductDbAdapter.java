@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.jpa;
 
 import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.infrastructure.drivenadapters.jpa.entity.PendingProductEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.jpa.repository.PendingProductRepository;
@@ -24,7 +25,8 @@ public class ProductDbAdapter implements ProductDbGateway {
     public Flux<Product> findByLoadDate(LocalDate loadDate) {
         LocalDateTime startOfDay = loadDate.atStartOfDay();
         LocalDateTime endOfDay = loadDate.atTime(LocalTime.MAX);
-        return Flux.fromIterable(repository.findByLoadDateBetween(startOfDay, endOfDay))
+        return Flux.fromIterable(
+                repository.findByLoadDateBetweenAndState(startOfDay, endOfDay, ProductState.PENDING))
             .map(this::toProduct);
     }
 
