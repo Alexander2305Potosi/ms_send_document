@@ -19,6 +19,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -95,7 +96,7 @@ class SoapDocumentProcessingUseCaseTest {
     void executePendingDocuments_processesAllDocuments() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", List.of(doc));
+        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -118,7 +119,7 @@ class SoapDocumentProcessingUseCaseTest {
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", List.of(doc));
+        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
@@ -137,7 +138,7 @@ class SoapDocumentProcessingUseCaseTest {
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 500, false, "origin");
-        Product product = new Product("prod-1", "Test", List.of(doc));
+        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));

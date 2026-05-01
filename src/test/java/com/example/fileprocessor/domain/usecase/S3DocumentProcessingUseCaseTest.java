@@ -8,6 +8,7 @@ import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
+import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +19,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,9 +38,13 @@ class S3DocumentProcessingUseCaseTest {
 
     private S3DocumentProcessingUseCase useCase;
 
+    private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
+        return new ProcessorsProperties.ProcessorConfig(maxFileSizeBytes, filenamePattern);
+    }
+
     @BeforeEach
     void setUp() {
-        RulesBussinesGateway validator = new RulesBussinesService(List.of());
+        RulesBussinesGateway validator = new RulesBussinesService(config(null, null));
         useCase = new S3DocumentProcessingUseCase(productRestGateway, s3Gateway, validator);
     }
 
@@ -90,7 +96,7 @@ class S3DocumentProcessingUseCaseTest {
     void executePendingDocuments_processesAllDocuments() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", List.of(doc));
+        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -110,7 +116,7 @@ class S3DocumentProcessingUseCaseTest {
     void executePendingDocuments_whenError_logsAndContinues() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", List.of(doc));
+        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult failureResult = FileUploadResult.builder()
             .status(DocumentStatus.FAILURE.name())
