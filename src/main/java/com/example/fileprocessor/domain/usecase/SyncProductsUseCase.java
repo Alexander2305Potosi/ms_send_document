@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.ProductPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,7 @@ public class SyncProductsUseCase {
             product.productId(),
             product.name(),
             LocalDateTime.now(),
-            "PENDING",
+            ProductState.PENDING,
             null,
             product.documents()
         );

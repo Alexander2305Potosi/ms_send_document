@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.jpa;
 
 import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.ProductPersistenceGateway;
 import com.example.fileprocessor.infrastructure.drivenadapters.jpa.entity.PendingProductEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.jpa.repository.PendingProductRepository;
@@ -28,10 +29,9 @@ public class ProductPersistenceAdapter implements ProductPersistenceGateway {
             product.productId(),
             product.name(),
             product.loadDate(),
-            "PENDING"
+            ProductState.PENDING
         );
-        repository.save(entity);
-        log.info("Product {} saved with PENDING state", product.productId());
+        log.info("Product {} saved with {} state", product.productId(), ProductState.PENDING);
         return Mono.empty();
     }
 }
