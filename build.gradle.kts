@@ -78,6 +78,7 @@ dependencies {
     // H2 Database
     runtimeOnly("com.h2database:h2")
     implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
+    implementation("io.r2dbc:r2dbc-h2:1.0.0.RELEASE")
 }
 
 tasks.withType<Test> {
