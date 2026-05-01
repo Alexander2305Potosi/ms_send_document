@@ -4,8 +4,9 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 /**
  * Abstract base for document processing use cases.
@@ -23,11 +25,12 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
+    protected final ProductDbGateway productDbGateway;
     protected final ProductRestGateway productRestGateway;
     protected final RulesBussinesGateway documentValidator;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return productRestGateway.getAllProducts()
+        return productDbGateway.findByLoadDate(LocalDate.now())
             .concatMap(product -> Flux.fromIterable(product.documents())
                 .flatMap(doc -> productRestGateway.getDocument(product.productId(), doc.documentId())
                     .flatMap(documentValidator::validate)

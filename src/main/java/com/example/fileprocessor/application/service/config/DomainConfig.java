@@ -1,5 +1,6 @@
 package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
@@ -19,10 +20,12 @@ public class DomainConfig {
     @Bean
     @ConditionalOnBean(SoapGateway.class)
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
+            ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
+            productDbGateway,
             productRestGateway,
             soapGateway,
             new RulesBussinesService(properties.soap())
@@ -32,10 +35,12 @@ public class DomainConfig {
     @Bean
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
+            ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
+            productDbGateway,
             productRestGateway,
             s3Gateway,
             new RulesBussinesService(properties.s3())

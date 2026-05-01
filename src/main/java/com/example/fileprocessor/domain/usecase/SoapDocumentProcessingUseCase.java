@@ -2,8 +2,9 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import reactor.core.publisher.Mono;
 
@@ -15,10 +16,11 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     private final SoapGateway soapGateway;
 
     public SoapDocumentProcessingUseCase(
+            ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             RulesBussinesGateway documentValidator) {
-        super(productRestGateway, documentValidator);
+        super(productDbGateway, productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
     }
 

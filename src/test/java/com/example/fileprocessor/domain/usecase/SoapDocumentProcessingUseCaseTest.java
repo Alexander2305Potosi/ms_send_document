@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
@@ -31,6 +32,9 @@ import static org.mockito.Mockito.*;
 class SoapDocumentProcessingUseCaseTest {
 
     @Mock
+    private ProductDbGateway productDbGateway;
+
+    @Mock
     private ProductRestGateway productRestGateway;
 
     @Mock
@@ -45,7 +49,7 @@ class SoapDocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         var validator = new RulesBussinesService(config(null, null));
-        useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validator);
+        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, validator);
     }
 
     @Test
@@ -103,7 +107,7 @@ class SoapDocumentProcessingUseCaseTest {
             .success(true)
             .build();
 
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
+        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
@@ -115,13 +119,13 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenValidationFails_skipsDocument() {
         var validatorWithPattern = new RulesBussinesService(config(null, ".*\\.csv$"));
-        useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithPattern);
+        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, validatorWithPattern);
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
         Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
+        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())
@@ -134,13 +138,13 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenSizeExceedsLimit_skipsDocument() {
         var validatorWithSize = new RulesBussinesService(config(100L, null));
-        useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithSize);
+        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, validatorWithSize);
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 500, false, "origin");
         Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
+        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())

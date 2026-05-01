@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
@@ -31,6 +32,9 @@ import static org.mockito.Mockito.*;
 class S3DocumentProcessingUseCaseTest {
 
     @Mock
+    private ProductDbGateway productDbGateway;
+
+    @Mock
     private ProductRestGateway productRestGateway;
 
     @Mock
@@ -45,7 +49,7 @@ class S3DocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         RulesBussinesGateway validator = new RulesBussinesService(config(null, null));
-        useCase = new S3DocumentProcessingUseCase(productRestGateway, s3Gateway, validator);
+        useCase = new S3DocumentProcessingUseCase(productDbGateway, productRestGateway, s3Gateway, validator);
     }
 
     @Test
@@ -103,7 +107,7 @@ class S3DocumentProcessingUseCaseTest {
             .success(true)
             .build();
 
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
+        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
@@ -123,7 +127,7 @@ class S3DocumentProcessingUseCaseTest {
             .success(false)
             .build();
 
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product));
+        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(failureResult));
 
