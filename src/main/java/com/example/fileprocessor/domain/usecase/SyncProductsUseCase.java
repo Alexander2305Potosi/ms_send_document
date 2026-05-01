@@ -3,6 +3,7 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.port.out.ProductPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -10,6 +11,7 @@ import java.time.LocalDateTime;
 /**
  * Use case for syncing products from REST API to local database.
  */
+@Component
 public class SyncProductsUseCase {
 
     private final ProductRestGateway productRestGateway;
