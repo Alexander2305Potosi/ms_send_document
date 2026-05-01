@@ -25,13 +25,15 @@ public class ProductPersistenceAdapter implements ProductPersistenceGateway {
     @Override
     @Transactional
     public Mono<Void> save(Product product) {
-        PendingProductEntity entity = new PendingProductEntity(
-            product.productId(),
-            product.name(),
-            product.loadDate(),
-            ProductState.PENDING
-        );
-        log.info("Product {} saved with {} state", product.productId(), ProductState.PENDING);
-        return Mono.empty();
+        return Mono.fromRunnable(() -> {
+            PendingProductEntity entity = new PendingProductEntity(
+                product.productId(),
+                product.name(),
+                product.loadDate(),
+                product.state()
+            );
+            repository.save(entity);
+            log.info("Product {} saved with {} state", product.productId(), product.state());
+        });
     }
 }
