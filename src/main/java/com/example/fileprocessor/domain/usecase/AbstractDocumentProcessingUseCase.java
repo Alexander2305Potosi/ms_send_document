@@ -59,7 +59,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             isSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name(),
             result.getErrorCode(),
             result.getMessage(),
-            1,
+            result.getAttemptCount(),
             isSuccess ? LocalDateTime.now() : null,
             !isSuccess ? LocalDateTime.now() : null,
             LocalDateTime.now()

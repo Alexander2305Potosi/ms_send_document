@@ -10,21 +10,25 @@ class SoapPropertiesTest {
     void soapProperties_recordCreatesValidProperties() {
         SoapProperties props = new SoapProperties(
             "http://localhost:9000/soap",
-            30
+            30,
+            3
         );
 
         assertEquals("http://localhost:9000/soap", props.endpoint());
         assertEquals(30, props.timeoutSeconds());
+        assertEquals(3, props.retryAttempts());
     }
 
     @Test
     void soapProperties_withValidValues() {
         SoapProperties props = new SoapProperties(
             "http://soap.example.com/service",
-            60
+            60,
+            5
         );
 
         assertEquals("http://soap.example.com/service", props.endpoint());
         assertEquals(60, props.timeoutSeconds());
+        assertEquals(5, props.retryAttempts());
     }
 }

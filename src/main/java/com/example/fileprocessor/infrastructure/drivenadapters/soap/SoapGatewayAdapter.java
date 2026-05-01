@@ -24,6 +24,7 @@ import java.net.ConnectException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * SOAP gateway adapter for file upload operations.
@@ -55,11 +56,15 @@ public class SoapGatewayAdapter implements SoapGateway {
     public Mono<FileUploadResult> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.info("Sending SOAP request for traceId: {}, endpoint: {}", traceId, properties.endpoint());
+            int maxRetries = properties.retryAttempts();
+            AtomicInteger attemptCount = new AtomicInteger(1);
+
+            log.info("Sending SOAP request for traceId: {}, endpoint: {}, retryAttempts: {}",
+                    traceId, properties.endpoint(), maxRetries);
 
             String soapEnvelope = soapMapper.toFullSoapMessage(request);
 
-            return webClient.post()
+            Mono<ExternalServiceResponse> retryableMono = webClient.post()
                     .contentType(MediaType.TEXT_XML)
                     .header("SOAPAction", SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD)
                     .bodyValue(soapEnvelope)
@@ -69,27 +74,52 @@ public class SoapGatewayAdapter implements SoapGateway {
                     .map(soapMapper::fromSoapXml)
                     .doOnNext(response -> log.info("SOAP response received for traceId={}: correlationId={}",
                             traceId, response.getCorrelationId()))
-                    .map(this::toFileUploadResult)
+                    .doOnError(e -> {
+                        int currentAttempt = attemptCount.incrementAndGet();
+                        log.warn("SOAP request attempt {}/{} failed for traceId={}: {}",
+                                currentAttempt, maxRetries + 1, traceId, e.getMessage());
+                    });
+
+            return retryableMono
+                    .retryWhen(reactor.util.retry.Retry.backoff(maxRetries, Duration.ofMillis(500))
+                            .filter(this::isRetryable)
+                            .doBeforeRetry(signal -> {
+                                int currentAttempt = attemptCount.incrementAndGet();
+                                log.info("Retrying SOAP request for traceId={}, attempt {}/{}",
+                                        traceId, currentAttempt, maxRetries + 1);
+                            }))
+                    .map(response -> toFileUploadResult(response, attemptCount.get()))
                     .onErrorResume(WebClientResponseException.class, ex -> {
                         log.error("SOAP HTTP error for traceId={}: {} {}", traceId, ex.getStatusCode(), ex.getMessage());
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.BAD_GATEWAY, ex.getMessage()));
+                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.BAD_GATEWAY, ex.getMessage(), attemptCount.get()));
                     })
                     .onErrorResume(TimeoutException.class, ex -> {
                         log.error("SOAP timeout for traceId={}", traceId);
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.GATEWAY_TIMEOUT, "Timeout after " + properties.timeoutSeconds() + "s"));
+                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.GATEWAY_TIMEOUT, "Timeout after " + properties.timeoutSeconds() + "s", attemptCount.get()));
                     })
                     .onErrorResume(IOException.class, ex -> {
                         log.error("SOAP IO error for traceId={}: {}", traceId, ex.getMessage());
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR, ex.getMessage()));
+                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR, ex.getMessage(), attemptCount.get()));
                     })
                     .onErrorResume(ConnectException.class, ex -> {
                         log.error("SOAP connection error for traceId={}: {}", traceId, ex.getMessage());
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.SERVICE_UNAVAILABLE, ex.getMessage()));
+                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.SERVICE_UNAVAILABLE, ex.getMessage(), attemptCount.get()));
                     });
         });
     }
 
-    private FileUploadResult buildErrorResult(String traceId, String errorCode, String message) {
+    private boolean isRetryable(Throwable throwable) {
+        if (throwable instanceof WebClientResponseException wce) {
+            int statusCode = wce.getStatusCode().value();
+            return statusCode == 503 || statusCode == 502 || statusCode == 504 || statusCode == 429;
+        }
+        if (throwable instanceof TimeoutException || throwable instanceof ConnectException) {
+            return true;
+        }
+        return false;
+    }
+
+    private FileUploadResult buildErrorResult(String traceId, String errorCode, String message, int attemptCount) {
         return FileUploadResult.builder()
                 .status(DocumentStatus.FAILURE.name())
                 .errorCode(errorCode)
@@ -97,10 +127,11 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .message(message)
                 .processedAt(Instant.now())
                 .success(false)
+                .attemptCount(attemptCount)
                 .build();
     }
 
-    private FileUploadResult toFileUploadResult(ExternalServiceResponse response) {
+    private FileUploadResult toFileUploadResult(ExternalServiceResponse response, int attemptCount) {
         return FileUploadResult.builder()
                 .status(response.getStatus())
                 .message(response.getMessage())
@@ -108,6 +139,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .processedAt(response.getProcessedAt())
                 .externalReference(response.getExternalReference())
                 .success(response.isSuccess())
+                .attemptCount(attemptCount)
                 .build();
     }
 }

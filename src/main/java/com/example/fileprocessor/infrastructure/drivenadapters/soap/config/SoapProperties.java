@@ -13,9 +13,13 @@ public record SoapProperties(
     String endpoint,
 
     @Min(1)
-    int timeoutSeconds
+    int timeoutSeconds,
+
+    @Min(1)
+    int retryAttempts
 ) {
     public SoapProperties {
         if (timeoutSeconds <= 0) timeoutSeconds = 30;
+        if (retryAttempts <= 0) retryAttempts = 1;
     }
 }

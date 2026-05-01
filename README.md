@@ -367,7 +367,25 @@ app:
     soap:
       max-file-size-bytes: 10485760       # 10MB
       filename-pattern: ".*\\.(pdf|docx|txt)$"
+      retry-attempts: 3                   # Numero de reintentos en caso de fallo
 ```
+
+### Reintentos SOAP
+
+El gateway SOAP (`SoapGatewayAdapter`) implementa reintentos automaticos configurables:
+
+| Condicion de Reintento | Codigos de Error HTTP |
+|------------------------|----------------------|
+| **503 Service Unavailable** | `SERVICE_UNAVAILABLE` |
+| **502 Bad Gateway** | `BAD_GATEWAY` |
+| **504 Gateway Timeout** | `GATEWAY_TIMEOUT` |
+| **429 Too Many Requests** | `RATE_LIMITED` |
+| **Timeout de conexion** | `GATEWAY_TIMEOUT` |
+| **ConnectException** | `SERVICE_UNAVAILABLE` |
+
+**Backoff:** 500ms entre intentos
+
+**Trazabilidad:** El numero de intentos realizados se guarda en `historico_documentos.numero_intentos`.
 
 ---
 

@@ -38,6 +38,7 @@ app:
   soap:
     endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
     timeout-seconds: 30
+    retry-attempts: 3
   document-rest:
     endpoint: ${DOCUMENT_REST_ENDPOINT:http://localhost:3001}
     products-path: /api/products
