@@ -8,5 +8,4 @@ import java.time.LocalDateTime;
 
 public interface ProductRepository extends R2dbcRepository<ProductEntity, String> {
     Flux<ProductEntity> findByLoadDateBetween(LocalDateTime start, LocalDateTime end);
-    Flux<ProductEntity> findByState(String state);
 }

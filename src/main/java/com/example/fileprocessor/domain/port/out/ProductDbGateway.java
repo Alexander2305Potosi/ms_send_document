@@ -9,6 +9,6 @@ import reactor.core.publisher.Mono;
  */
 public interface ProductDbGateway {
     Flux<Product> findByLoadDate(java.time.LocalDate loadDate);
-    Flux<Product> findAll();
     Mono<Void> updateEstado(String productId, String estado);
+    Flux<Product> findAll();
 }

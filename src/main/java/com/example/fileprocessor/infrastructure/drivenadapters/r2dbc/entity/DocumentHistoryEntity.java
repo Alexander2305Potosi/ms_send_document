@@ -11,10 +11,10 @@ public class DocumentHistoryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "nombre_producto", nullable = false)
+    @Column(name = "id_producto", nullable = false)
     private String productId;
 
-    @Column(name = "nombre_documento", nullable = false)
+    @Column(name = "id_documento", nullable = false)
     private String documentId;
 
     @Column(name = "nombre_archivo", nullable = false)

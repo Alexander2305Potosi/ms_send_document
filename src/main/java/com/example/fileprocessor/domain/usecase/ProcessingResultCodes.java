@@ -20,5 +20,4 @@ public final class ProcessingResultCodes {
 
     // Generic error codes (business level)
     public static final String UNKNOWN_ERROR = "UNKNOWN_ERROR";
-    public static final String UPLOAD_FAILED = "UPLOAD_FAILED";
 }
