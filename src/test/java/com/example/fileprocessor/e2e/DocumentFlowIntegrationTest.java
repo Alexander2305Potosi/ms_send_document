@@ -9,8 +9,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = Application.class)
 @TestPropertySource(properties = {
-    "spring.r2dbc.url=r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1",
-    "spring.sql.init.mode=never"
+    "spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",
+    "spring.sql.init.mode=never",
+    "spring.jpa.hibernate.ddl-auto=none"
 })
 class DocumentFlowIntegrationTest {
 
