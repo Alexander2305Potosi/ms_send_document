@@ -9,9 +9,10 @@ Microservicio reactivo basado en Spring WebFlux que obtiene productos con sus do
 1. [Arquitectura](#arquitectura-clean-architecture)
 2. [API Endpoints](#api-endpoints)
 3. [Flujo de Datos](#flujo-de-datos)
-4. [Base de Datos H2](#base-de-datos-h2)
+4. [Base de Datos H2 con R2DBC](#base-de-datos-h2-con-r2dbc)
    - [Tabla: productos_pendientes](#tabla-productos_pendientes)
    - [Tabla: historico_documentos](#tabla-historico_documentos)
+   - [Consultas SQL utiles](#consultas-sql-utiles)
 5. [Descompresion de archivos ZIP](#descompresion-de-archivos-zip)
 6. [Estados de Productos](#estados-de-productos-productstate)
 7. [Validacion de Documentos](#validacion-de-documentos-rulesbussinesservice)
@@ -70,16 +71,12 @@ com.example.fileprocessor/
 │
 └── infrastructure/                    # Capa de infraestructura
     ├── drivenadapters/
-    │   ├── jpa/                       # Adaptadores JPA para H2
-    │   │   ├── ProductPersistenceAdapter.java
-    │   │   ├── ProductDbAdapter.java
-    │   │   ├── DocumentTraceabilityAdapter.java  # Adaptador de trazabilidad
-    │   │   ├── entity/
-    │   │   │   ├── PendingProductEntity.java
-    │   │   │   └── DocumentTraceabilityEntity.java
-    │   │   └── repository/
-    │   │       ├── PendingProductRepository.java
-    │   │       └── DocumentTraceabilityRepository.java
+    │   ├── r2dbc/                       # Adaptadores R2DBC para H2 (reactivo)
+    │   │   ├── ProductPersistenceR2dbcAdapter.java
+    │   │   ├── ProductDbR2dbcAdapter.java
+    │   │   ├── DocumentTraceabilityR2dbcAdapter.java
+    │   │   ├── PendingProductRowMapper.java
+    │   │   └── DocumentTraceabilityRowMapper.java
     │   ├── restclient/
     │   │   └── ProductRestGatewayAdapter.java
     │   ├── soap/
@@ -193,7 +190,9 @@ Health check de la aplicacion.
 
 ---
 
-## Base de Datos H2
+## Base de Datos H2 con R2DBC
+
+El servicio utiliza **R2DBC** (Reactive Relational Database Connectivity) para acceso a la base de datos H2. Esto permite operaciones **completamente reactivas y no bloqueantes** dentro del pipeline de Spring WebFlux.
 
 ### Tabla: productos_pendientes
 
@@ -255,7 +254,7 @@ Tabla que almacena la trazabilidad completa de cada intento de envio de document
 
 ### Acceso a Consola H2
 - URL: `http://localhost:8080/h2-console`
-- JDBC URL: `jdbc:h2:mem:fileprocessor`
+- R2DBC URL: `r2dbc:h2:mem:///fileprocessor`
 - User: `sa`
 - Password: (vacio)
 
@@ -275,14 +274,13 @@ SELECT * FROM historico_documentos WHERE estado = 'FAILURE';
 SELECT * FROM productos_pendientes WHERE estado = 'PENDING';
 ```
 
-### Configuracion
+### Configuracion (R2DBC)
 ```yaml
 spring:
-  datasource:
-    url: jdbc:h2:mem:fileprocessor;DB_CLOSE_DELAY=-1
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
+  r2dbc:
+    url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
   h2:
     console:
       enabled: true
@@ -466,10 +464,11 @@ DocumentTraceability record = new DocumentTraceability(
 traceabilityGateway.save(record)
         │
         ▼
-DocumentTraceabilityAdapter.save()
+DocumentTraceabilityR2dbcAdapter.save()
         │
         ▼
-Mono.fromRunnable(() -> repository.save(entity))
+databaseClient.sql("INSERT INTO historico_documentos ...")
+    .bind(...).then()  // Reactor non-blocking
 ```
 
 ---
