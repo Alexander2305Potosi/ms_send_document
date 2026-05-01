@@ -34,7 +34,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return productDbGateway.findByLoadDate(LocalDate.now())
             .concatMap(product -> Flux.fromIterable(product.documents())
                 .flatMap(doc -> productRestGateway.getDocument(product.productId(), doc.documentId())
-                    .flatMap(this::decompressIfNeeded)
+                    .flatMapMany(this::decompressIfNeeded)
                     .flatMap(documentValidator::validate)
                     .flatMap(validated -> uploadDocument(validated, product.productId()))))
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
