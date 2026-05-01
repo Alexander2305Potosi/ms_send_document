@@ -1,6 +1,6 @@
 # File Processor Service
 
-Microservicio reactivo basado en Spring WebFlux que obtiene productos con sus documentos asociados desde una API REST externa y los envía a un servicio SOAP externo o AWS S3.
+Microservicio reactivo basado en Spring WebFlux que obtiene productos con sus documentos asociados desde una API REST externa, los persiste en base de datos H2 y los envía a un servicio SOAP externo o AWS S3.
 
 ## Arquitectura (Clean Architecture)
 
@@ -8,279 +8,264 @@ El proyecto sigue **Clean Architecture** con capas claras:
 
 ```
 com.example.fileprocessor/
-├── domain/                          # Capa de dominio (puro Java, sin frameworks)
-│   ├── entity/                      # Entidades de negocio
-│   │   ├── Product.java               # Producto desde REST API
-│   │   ├── ProductDocument.java       # Documento dentro de ProductInfo
-│   │   ├── FileUploadRequest.java     # Request para upload a gateway
-│   │   ├── FileUploadResult.java      # Resultado de upload/procesamiento
-│   │   ├── ExternalServiceResponse.java # Respuesta genérica de servicio externo
-│   │   ├── DocumentStatus.java        # Estados de documento (constantes)
-│   │   └── ProductStatus.java         # Estados de producto
-│   ├── usecase/                      # Casos de uso
+├── domain/                              # Capa de dominio (puro Java, sin frameworks)
+│   ├── entity/
+│   │   ├── Product.java                  # Producto
+│   │   ├── ProductDocument.java          # Documento dentro de Product
+│   │   ├── ProductState.java             # Constantes de estado: PENDING, PROCESSED, FAILED
+│   │   ├── FileUploadRequest.java        # Request para upload a gateway
+│   │   ├── FileUploadResult.java         # Resultado de upload/procesamiento
+│   │   ├── DocumentStatus.java           # Estados de documento (SUCCESS, FAILURE)
+│   │   └── ExternalServiceResponse.java  # Respuesta genérica de servicio externo
+│   ├── usecase/
 │   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base
 │   │   ├── SoapDocumentProcessingUseCase.java       # Implementación SOAP
 │   │   ├── S3DocumentProcessingUseCase.java         # Implementación S3
-│   │   └── ProcessingResultCodes.java               # Códigos de resultado
+│   │   └── SyncProductsUseCase.java                 # Sincroniza productos a H2
 │   ├── service/
-│   │   └── DocumentValidator.java   # Validación centralizada de documentos
-│   ├── port/
-│   │   ├── out/
-│   │   │   ├── ProductRestGateway.java  # Puerto REST productos
-│   │   │   ├── S3Gateway.java          # Puerto S3
-│   │   │   ├── SoapGateway.java       # Puerto SOAP
-│   │   │   └── BussinesParamsGateway.java # Puerto configuración
-│   │   └── in/ (vacío - sin use cases de entrada REST directos)
+│   │   └── RulesBussinesService.java    # Validación de documentos (tamaño, patrón filename)
+│   ├── port/out/
+│   │   ├── ProductRestGateway.java       # Puerto REST productos (origen externo)
+│   │   ├── ProductDbGateway.java         # Puerto BD local (H2)
+│   │   ├── ProductPersistenceGateway.java # Puerto para persistir productos
+│   │   ├── RulesBussinesGateway.java     # Puerto de validación
+│   │   ├── S3Gateway.java                 # Puerto S3
+│   │   └── SoapGateway.java              # Puerto SOAP
 │   └── exception/
 │       ├── DomainException.java
 │       ├── FileValidationException.java
-│       └── ProcessingException.java   # Excepción unificada de procesamiento
+│       └── ProcessingException.java
 │
-├── application/                      # Configuración de aplicación
-│   └── app-service/
-│       └── config/
-│           └── DomainConfig.java      # Beans de casos de uso
+├── application/                         # Configuración de aplicación
+│   └── service/config/
+│       └── DomainConfig.java           # Beans de casos de uso
 │
-└── infrastructure/                   # Capa de infraestructura
-    ├── entrypoints/
-    │   └── rest/
-    │       ├── ProductRoutes.java     # RouterFunction
-    │       ├── handler/
-    │       │   └── ProductHandler.java # Lógica de handlers
-    │       └── constants/
-    │           ├── RestApiPaths.java
-    │           └── ApiConstants.java  # Constantes API (message-id, processor types)
+└── infrastructure/                    # Capa de infraestructura
     ├── drivenadapters/
-    │   ├── rest-client/
+    │   ├── jpa/                       # Adaptadores JPA para H2
+    │   │   ├── ProductPersistenceAdapter.java
+    │   │   ├── ProductDbAdapter.java
+    │   │   ├── entity/PendingProductEntity.java
+    │   │   └── repository/PendingProductRepository.java
+    │   ├── restclient/
     │   │   └── ProductRestGatewayAdapter.java
     │   ├── soap/
     │   │   ├── SoapGatewayAdapter.java
-    │   │   └── config/
-    │   │       └── SoapProperties.java
+    │   │   └── config/SoapProperties.java
     │   └── aws/
     │       ├── S3GatewayAdapter.java
-    │       ├── config/
-    │       │   ├── BussinesParams.java       # Enum de parámetros de negocio
-    │       │   ├── ProcessingProperties.java # ConfigProperties para params
-    │       │   └── ProcessingPropertiesConfig.java
-    └── helpers/
-        └── soap/
-            ├── SoapConstants.java     # Constantes SOAP (namespaces, envelopes)
-            ├── mapper/
-            │   └── SoapMapper.java    # Mapeo XML ↔ objetos
-            └── xml/
-                └── SoapEnvelopeWrapper.java # Wrapper de envelope SOAP
-```
-
-### Reglas de Dependencia
-
-- **Domain** no depende de ninguna otra capa (puro Java)
-- **Domain** no contiene anotaciones Spring (`@Component`, etc.)
-- **Infrastructure** y **Application** dependen de Domain
-- **Application** expone los beans via `DomainConfig.java`
-
----
-
-## Flujo de Procesamiento de Documentos
-
-### Pipeline de Procesamiento
-
-El pipeline usa **Reactor** (Project Reactor) con operaciones reactivas:
-
-```
-executePendingDocuments()
-    │
-    ▼
-validate(doc) → ProductDocumentValidator.validate()
-    │         ├── Validación de tamaño (maxFileSize de BussinesParams)
-    │         └── Validación de patrón filename (regex de BussinesParams)
-    ▼
-uploadDocument(doc) → SOAP o S3 según el caso de uso
-```
-
-### Validación de Documentos (DocumentValidator)
-
-`DocumentValidator` centraliza las validaciones de documentos:
-
-1. **Validación de tamaño**: Verifica que `doc.size() <= maxFileSize` (configurable via `BussinesParams.MAX_FILE_SIZE`)
-2. **Validación de patrón**: Verifica que el filename matchee el regex (configurable via `BussinesParams.REGEX`)
-
-Ambas validaciones se leen desde `BussinesParamsGateway`, lo que permite cambiar los parámetros sin recompilar.
-
-### Casos de Error en Validación
-
-| Caso | Resultado |
-|------|-----------|
-| Archivo excede maxFileSize | Documento ignorado (Mono.empty()) |
-| Filename no matchea regex | Documento ignorado (Mono.empty()) |
-
----
-
-## Escenarios de Procesamiento de Documentos
-
-### 1. Escenario: Procesamiento Exitoso
-
-**Condición:** Todos los documentos se procesan sin errores.
-
-```
-Flujo:
-1. executePendingDocuments() → obtiene productos desde REST API
-2. Por cada documento pendiente:
-   ├── validate() → pasa validación de tamaño y regex
-   └── uploadDocument() → SOAP o S3 exitoso
-3. Resultado = SUCCESS
-
-Resultado:
-- FileUploadResult.success = true
-- correlationId = ID del servicio externo
-```
-
-### 2. Escenario: Fallo en Gateway
-
-**Condición:** Error de red o servicio no disponible.
-
-```
-Flujo:
-1. validate() → pasa validación
-2. uploadDocument() → ProcessingException (timeout, 503, etc.)
-3. onErrorResume() → status=FAILURE
-
-Resultado:
-- FileUploadResult.success = false
-- errorCode = GATEWAY_TIMEOUT | BAD_GATEWAY | SERVICE_UNAVAILABLE
-```
-
-### 3. Escenario: Documento Ignorado por Validación
-
-**Condición:** El documento no pasa las validaciones.
-
-```
-Flujo:
-1. validate() → size excede límite O filename no matchea regex
-2. log.warn() → "Document skipped"
-3. return Mono.empty() → documento no se procesa
-
-Resultado:
-- Documento no aparece en resultados
-- No se ejecuta uploadDocument()
-```
-
-### 4. Escenario: Claim Atómico (Concurrency)
-
-**Condición:** Múltiples pods procesan el mismo documento.
-
-```
-Flujo:
-1. Pod A y Pod B llaman getDocument() concurrently
-2. Solo el primero en proceed continúa
-3. El otro hace skip
-
-Resultado:
-- Solo 1 pod procesa el documento
-- El otro continúa con el siguiente
-```
-
----
-
-## BussinesParamsGateway - Configuración Centralizada
-
-`BussinesParamsGateway` es un puerto que permite obtener parámetros de negocio configurables:
-
-### Parámetros Disponibles
-
-| Enum | Descripción | Default |
-|------|-------------|---------|
-| `REGEX` | Patrón regex para validar filenames | `".*\\.(pdf\|csv)$"` |
-| `MAX_FILE_SIZE` | Tamaño máximo de archivo en bytes | `52428800` (50MB) |
-
-### Configuración en application.yml
-
-```yaml
-params:
-  regex: ".*\\.(pdf|csv)$"
-  maxFileSize: 52428800
-```
-
-### Implementación
-
-`ProcessingProperties` implementa `BussinesParamsGateway` leyendo del prefijo `params.*` en `application.yml`.
-
----
-
-## Códigos de Error (ProcessingResultCodes)
-
-| Código | Descripción | Retry |
-|--------|-------------|-------|
-| `GATEWAY_TIMEOUT` | Timeout en gateway | Si |
-| `BAD_GATEWAY` | Error 500 del servicio | Si |
-| `SERVICE_UNAVAILABLE_ERROR` | Servicio no disponible | Si |
-| `ACCESS_DENIED_ERROR` | Error 403 (S3) | No |
-| `NOT_FOUND_ERROR` | Error 404 (S3) | No |
-| `CLIENT_ERROR` | Error 4xx del servicio | No |
-| `UNKNOWN_ERROR` | Error no categorizado | No |
-
----
-
-## Estados de Documento (DocumentStatus)
-
-```
-SUCCESS    → Procesamiento exitoso
-FAILURE    → Error permanente
+    │       └── config/S3Properties.java
+    └── entrypoints/rest/
+        ├── ProductRoutes.java
+        ├── handler/ProductHandler.java
+        └── constants/
+            ├── RestApiPaths.java
+            └── ApiConstants.java
 ```
 
 ---
 
 ## API Endpoints
 
-### GET /api/v1/products/load
+### GET /api/v1/products
 
-Carga productos desde REST API externa.
-
-**Headers:**
-- `message-id`: (opcional) Trace ID para correlación
-
-**Response:**
-```json
-{
-  "traceId": "550e8400-e29b-41d4-a716-446655440000",
-  "operationType": "LOAD",
-  "status": "LOADING",
-  "message": "Product loading from REST API started",
-  "success": true
-}
-```
-
-### GET /api/v1/products?processor={soap|s3}
-
-Procesa documentos pendientes.
+Procesa documentos pendientes de productos en la fecha actual desde base de datos H2.
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlación
 
-**Parámetros:**
+**Query Parameters:**
 - `processor`: `soap` (default) | `s3`
 
-**Response:**
+**Response:** Server-Sent Events (NDJSON)
 ```json
-{
-  "traceId": "660e8400-e29b-41d4-a716-446655440001",
-  "operationType": "PROCESS",
-  "status": "PROCESSING",
-  "message": "Pending product documents processing started",
-  "success": true
-}
+{"correlationId":"corr-123","status":"SUCCESS","success":true,"processedAt":"2026-04-30T20:15:00Z"}
+{"correlationId":"corr-124","status":"FAILURE","success":false,"errorCode":"UPLOAD_FAILED"}
+```
+
+### POST /api/v1/products/sync
+
+Sincroniza productos desde API REST externa hacia base de datos H2 (estado PENDING).
+
+**Headers:**
+- `message-id`: (opcional) Trace ID para correlación
+
+**Response:** HTTP 200 (async fire-and-forget)
+```json
+{"status":"OK","message":"Products sync initiated"}
 ```
 
 ### GET /actuator/health
 
 Health check de la aplicación.
 
-**Response:**
-```json
-{
-  "status": "UP"
+---
+
+## Flujo de Datos
+
+### Flujo de Sincronizacion (POST /api/v1/products/sync)
+
+```
+1. Cliente                          2. REST API Externa
+   POST /api/v1/products/sync  ──►  GET /api/products
+   ◄────────────────────────────────
+        [Product, Product, ...]
+              │
+              ▼
+3. SyncProductsUseCase.execute()
+        │
+        ▼
+4. ProductPersistenceGateway.save()
+        │ (cada producto se persiste con state=PENDING)
+        ▼
+5. H2 (pending_products)
+```
+
+### Flujo de Procesamiento (GET /api/v1/products)
+
+```
+1. Cliente
+   GET /api/v1/products?processor=soap
+        │
+        ▼
+2. AbstractDocumentProcessingUseCase.executePendingDocuments()
+        │
+        ▼
+3. ProductDbGateway.findByLoadDate(LocalDate.now())
+        │ Filtra: loadDate=hoy AND state=PENDING
+        ▼
+4. H2 → [Product prod-1, prod-2, ...]
+        │
+        ▼
+5. Por cada Product → Flux.fromIterable(documents)
+        │
+        ▼
+6. ProductRestGateway.getDocument(productId, docId)
+        │ Obtiene documento completo (con contenido)
+        ▼
+7. RulesBussinesGateway.validate(document)
+        │ Valida tamaño y patrón filename
+        ▼
+8. uploadDocument() → SoapGateway.send() o S3Gateway.send()
+        │
+        ▼
+9. FileUploadResult stream → Cliente (NDJSON)
+```
+
+---
+
+## Base de Datos H2
+
+### Tabla: pending_products
+
+| Columna | Tipo | Descripcion |
+|--------|------|-------------|
+| `product_id` | VARCHAR (PK) | Identificador unico |
+| `name` | VARCHAR | Nombre del producto |
+| `load_date` | TIMESTAMP | Fecha de carga (filtrado diario) |
+| `state` | VARCHAR | PENDING / PROCESSED / FAILED |
+| `message_error` | VARCHAR | Mensaje de error si hubo fallo |
+| `created_at` | TIMESTAMP | Fecha creacion registro |
+| `updated_at` | TIMESTAMP | Fecha ultima actualizacion |
+
+### Acceso a Consola H2
+- URL: `http://localhost:8080/h2-console`
+- JDBC URL: `jdbc:h2:mem:fileprocessor`
+- User: `sa`
+- Password: (vacío)
+
+### Configuracion
+```yaml
+spring:
+  datasource:
+    url: jdbc:h2:mem:fileprocessor;DB_CLOSE_DELAY=-1
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  h2:
+    console:
+      enabled: true
+```
+
+---
+
+## Estados de Productos (ProductState)
+
+```java
+public final class ProductState {
+    public static final String PENDING = "PENDING";     // Nuevo, esperando procesamiento
+    public static final String PROCESSED = "PROCESSED"; // Procesado exitosamente
+    public static final String FAILED = "FAILED";       // Fallo en procesamiento
 }
 ```
+
+### Transiciones
+```
+[PENDING] ────► [PROCESSED]  Cuando todos los documentos se envian exitosamente
+    │
+    ▼
+[FAILED]      Cuando hay error irrecuperable
+```
+
+---
+
+## Validacion de Documentos (RulesBussinesService)
+
+`RulesBussinesService` valida cada documento antes de enviarlo:
+
+| Regla | Config | Comportamiento |
+|-------|--------|----------------|
+| **Tamaño maximo** | `processors.{soap,s3}.max-file-size-bytes` | Rechaza si `doc.size() > max` |
+| **Patron filename** | `processors.{soap,s3}.filename-pattern` | Rechaza si filename no matchea regex |
+
+### Configuracion
+```yaml
+app:
+  processors:
+    s3:
+      max-file-size-bytes: 52428800        # 50MB
+      filename-pattern: ".*\\.(pdf|csv)$"
+    soap:
+      max-file-size-bytes: 10485760       # 10MB
+      filename-pattern: ".*\\.(pdf|docx|txt)$"
+```
+
+---
+
+## Escenarios de Procesamiento
+
+### 1. Exitoso
+```
+validate() → pasa
+uploadDocument() → SUCCESS
+Result: {success:true, status:SUCCESS}
+```
+
+### 2. Validacion Fallida (documento ignorado)
+```
+validate() → size excede limite O filename no matchea
+return Mono.empty() → documento no se procesa
+Result: (no aparece en stream)
+```
+
+### 3. Error en Gateway
+```
+uploadDocument() → exception
+onErrorResume() → status=FAILURE
+Result: {success:false, status:FAILURE, errorCode:UPLOAD_FAILED}
+```
+
+---
+
+## Codigos de Error (ProcessingResultCodes)
+
+| Codigo | Descripcion |
+|--------|-------------|
+| `EMPTY_CONTENT` | Documento sin contenido |
+| `INVALID_BASE64` | Fallo al decodificar Base64 |
+| `INVALID_RESPONSE` | Respuesta invalida del servicio externo |
+| `UPLOAD_FAILED` | Error en envio (SOAP/S3) |
+| `UNKNOWN_ERROR` | Error no categorizado |
 
 ---
 
@@ -290,85 +275,47 @@ Health check de la aplicación.
 AbstractDocumentProcessingUseCase
 │
 ├── executePendingDocuments()     ← FINAL (template method)
-│   ├── getAllProducts()          ← ProductRestGateway
-│   ├── getDocument()              ← ProductRestGateway
-│   ├── validate()                ← DocumentValidator
-│   └── uploadDocument()          ← ABSTRACT (subclase implementa)
+│   ├── productDbGateway.findByLoadDate()  ← H2
+│   ├── productRestGateway.getDocument()   ← REST externa
+│   ├── rulesBussinesGateway.validate()    ← Validacion
+│   └── uploadDocument()                 ← ABSTRACT (subclase implementa)
 │
 ├── SoapDocumentProcessingUseCase
-│   └── uploadDocument()          → SoapGateway.send()
+│   └── uploadDocument() → SoapGateway.send()
 │
 └── S3DocumentProcessingUseCase
-    └── uploadDocument()          → S3Gateway.send()
+    └── uploadDocument() → S3Gateway.send()
 ```
 
 ---
 
-## Configuración
+## Variables de Entorno
 
-### Variables de Entorno
-
-| Variable | Default | Descripción |
+| Variable | Default | Descripcion |
 |----------|---------|-------------|
 | `DOCUMENT_REST_ENDPOINT` | `http://localhost:3001` | API REST de productos |
 | `SOAP_ENDPOINT` | `http://localhost:9000/soap/fileservice` | Servicio SOAP |
-| `AWS_ENDPOINT` | `` | Endpoint S3 (LocalStack) |
 | `AWS_BUCKET` | `documents-bucket` | Bucket S3 |
 | `AWS_REGION` | `us-east-1` | Región AWS |
 | `AWS_ACCESS_KEY` | `` | Access key |
 | `AWS_SECRET_KEY` | `` | Secret key |
 
-### Configuración de Procesadores (application.yml)
-
-```yaml
-app:
-  soap:
-    endpoint: ${SOAP_ENDPOINT}
-    timeout-seconds: 30
-    retry-attempts: 3
-    retry-backoff-millis: 1000
-  document-rest:
-    endpoint: ${DOCUMENT_REST_ENDPOINT}
-    products-path: /api/products
-    product-documents-path: /api/products/{productId}/documents
-    timeout-seconds: 15
-
-params:
-  regex: ".*\\.(pdf|csv)$"
-  maxFileSize: 52428800
-
-spring:
-  r2dbc:
-    url: r2dbc:h2:mem:///fileprocessor
-```
-
 ---
 
-## Seguridad
-
-### Sanitización de S3 Keys
-
-`S3GatewayAdapter.buildKey()` sanitiza el filename:
-- Elimina `..` (path traversal)
-- Elimina `/` y `\` (path separators)
-- Previene escribir fuera del bucket
-
----
-
-## Compilación y Ejecución
+## Compilacion y Ejecucion
 
 ```bash
-# Compilar
-./gradlew clean build
+# Compilar y tests
+./gradlew build
 
 # Ejecutar tests
 ./gradlew test
 
-# Ejecutar con perfil SOAP
-SPRING_PROFILES_ACTIVE=soap ./gradlew bootRun
+# Ejecutar (perfil default = SOAP)
+./gradlew bootRun
 
 # Ejecutar con perfil S3
-SPRING_PROFILES_ACTIVE=s3 ./gradlew bootRun
+./gradlew bootRun -Ps3
 ```
 
 ---
@@ -376,17 +323,14 @@ SPRING_PROFILES_ACTIVE=s3 ./gradlew bootRun
 ## Ejemplos de curl
 
 ```bash
-# Cargar productos
-curl -X GET http://localhost:8080/api/v1/products/load \
-  -H "message-id: my-trace-123"
+# Sincronizar productos a H2
+curl -X POST http://localhost:8080/api/v1/products/sync
 
 # Procesar con SOAP
-curl -X GET "http://localhost:8080/api/v1/products?processor=soap" \
-  -H "message-id: my-trace-123"
+curl "http://localhost:8080/api/v1/products?processor=soap"
 
 # Procesar con S3
-curl -X GET "http://localhost:8080/api/v1/products?processor=s3" \
-  -H "message-id: my-trace-123"
+curl "http://localhost:8080/api/v1/products?processor=s3"
 
 # Health check
 curl -s http://localhost:8080/actuator/health
@@ -398,21 +342,15 @@ curl -s http://localhost:8080/actuator/health
 
 ### ProcessingException
 
-Excepción unificada para todos los errores de procesamiento. Incluye:
-- `traceId`: Extraído automáticamente del contexto reactivo via `fromContext()`
+Excepcion unificada para todos los errores de procesamiento. Incluye:
+- `traceId`: Extraido automaticamente del contexto reactivo via `fromContext()`
 - `documentId`: Opcional
-- `errorCode`: Código de error (`ProcessingResultCodes`)
+- `errorCode`: Codigo de error (`ProcessingResultCodes`)
 
-**Métodos factory:**
+**Metodos factory:**
 ```java
-// Extrae traceId del ContextView automáticamente
 ProcessingException.fromContext(ctx, message, errorCode)
-ProcessingException.fromContext(ctx, message, errorCode, documentId)
-ProcessingException.fromContext(ctx, message, errorCode, cause)
-
-// Con traceId explícito
 ProcessingException.withTraceId(message, errorCode, traceId)
-ProcessingException.withDocumentId(message, errorCode, traceId, documentId)
 ```
 
 ### DomainException
@@ -421,4 +359,4 @@ Base class para todas las excepciones de dominio.
 
 ### FileValidationException
 
-Excepción para errores de validación de archivos.
+Excepcion para errores de validacion de archivos.
