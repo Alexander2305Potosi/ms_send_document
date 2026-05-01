@@ -5,10 +5,10 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.service.DefaultDocumentValidationService;
+import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,9 +37,13 @@ class SoapDocumentProcessingUseCaseTest {
 
     private SoapDocumentProcessingUseCase useCase;
 
+    private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
+        return new ProcessorsProperties.ProcessorConfig(maxFileSizeBytes, filenamePattern);
+    }
+
     @BeforeEach
     void setUp() {
-        DocumentValidationGateway validator = new DefaultDocumentValidationService(List.of());
+        var validator = new DefaultDocumentValidationService(config(null, null));
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validator);
     }
 
@@ -109,10 +113,7 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_whenValidationFails_skipsDocument() {
-        DocumentValidationGateway validatorWithPattern = new DefaultDocumentValidationService(List.of(
-            new com.example.fileprocessor.domain.service.rules.FilenamePatternRule(".*\\.csv$")
-        ));
-
+        var validatorWithPattern = new DefaultDocumentValidationService(config(null, ".*\\.csv$"));
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithPattern);
 
         ProductDocument doc = new ProductDocument(
@@ -131,10 +132,7 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_whenSizeExceedsLimit_skipsDocument() {
-        DocumentValidationGateway validatorWithSize = new DefaultDocumentValidationService(List.of(
-            new com.example.fileprocessor.domain.service.rules.MaxSizeRule(100L)
-        ));
-
+        var validatorWithSize = new DefaultDocumentValidationService(config(100L, null));
         useCase = new SoapDocumentProcessingUseCase(productRestGateway, soapGateway, validatorWithSize);
 
         ProductDocument doc = new ProductDocument(

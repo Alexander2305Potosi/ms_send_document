@@ -1,12 +1,9 @@
 package com.example.fileprocessor.domain.service;
 
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.service.rules.FilenamePatternRule;
-import com.example.fileprocessor.domain.service.rules.MaxSizeRule;
+import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
-
-import java.util.List;
 
 class DocumentValidatorTest {
 
@@ -14,11 +11,15 @@ class DocumentValidatorTest {
         return new ProductDocument(documentId, filename, new byte[0], contentType, size, false, "origin");
     }
 
+    private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
+        return new ProcessorsProperties.ProcessorConfig(maxFileSizeBytes, filenamePattern);
+    }
+
     @Test
     void validate_singleRule_passes() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
-            new MaxSizeRule(1000L)
-        ));
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+            config(1000L, null)
+        );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 500)))
             .expectNextCount(1)
@@ -27,9 +28,9 @@ class DocumentValidatorTest {
 
     @Test
     void validate_singleRule_fails() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
-            new MaxSizeRule(1000L)
-        ));
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+            config(1000L, null)
+        );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 2000)))
             .verifyComplete();
@@ -37,10 +38,9 @@ class DocumentValidatorTest {
 
     @Test
     void validate_multipleRules_allPass() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
-            new MaxSizeRule(1000L),
-            new FilenamePatternRule(".*\\.pdf$")
-        ));
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+            config(1000L, ".*\\.pdf$")
+        );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 500)))
             .expectNextCount(1)
@@ -49,18 +49,19 @@ class DocumentValidatorTest {
 
     @Test
     void validate_multipleRules_oneFails() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of(
-            new MaxSizeRule(1000L),
-            new FilenamePatternRule(".*\\.pdf$")
-        ));
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+            config(1000L, ".*\\.pdf$")
+        );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.csv", "application/pdf", 500)))
             .verifyComplete();
     }
 
     @Test
-    void validate_emptyRulesList_passes() {
-        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(List.of());
+    void validate_emptyConfig_passes() {
+        DefaultDocumentValidationService validator = new DefaultDocumentValidationService(
+            config(null, null)
+        );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 999999)))
             .expectNextCount(1)

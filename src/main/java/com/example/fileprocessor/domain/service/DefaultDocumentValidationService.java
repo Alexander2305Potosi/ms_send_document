@@ -2,65 +2,45 @@ package com.example.fileprocessor.domain.service;
 
 import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.DocumentValidationGateway;
-import com.example.fileprocessor.domain.service.rules.FilenamePatternRule;
-import com.example.fileprocessor.domain.service.rules.MaxSizeRule;
-import com.example.fileprocessor.domain.service.ValidationRule;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Default implementation of document validation gateway.
- * Applies all configured ValidationRules to incoming documents.
+ * Applies validation rules to incoming documents based on configuration.
  */
 public class DefaultDocumentValidationService implements DocumentValidationGateway {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultDocumentValidationService.class);
 
-    private final List<ValidationRule> rules;
+    private final Long maxFileSizeBytes;
+    private final Pattern filenamePattern;
 
-    /**
-     * Constructor accepting pre-built rules list.
-     */
-    public DefaultDocumentValidationService(List<ValidationRule> rules) {
-        this.rules = rules;
-    }
-
-    /**
-     * Constructor accepting processor configuration.
-     * Builds rules from configuration properties.
-     */
     public DefaultDocumentValidationService(ProcessorsProperties.ProcessorConfig config) {
-        this.rules = buildRules(config);
-    }
-
-    private static List<ValidationRule> buildRules(ProcessorsProperties.ProcessorConfig config) {
-        List<ValidationRule> rules = new ArrayList<>();
-
-        if (config.maxFileSizeBytes() != null && config.maxFileSizeBytes() > 0) {
-            rules.add(new MaxSizeRule(config.maxFileSizeBytes()));
-        }
-
-        if (config.filenamePattern() != null && !config.filenamePattern().isBlank()) {
-            rules.add(new FilenamePatternRule(config.filenamePattern()));
-        }
-
-        return rules;
+        this.maxFileSizeBytes = (config.maxFileSizeBytes() != null && config.maxFileSizeBytes() > 0)
+            ? config.maxFileSizeBytes()
+            : null;
+        this.filenamePattern = (config.filenamePattern() != null && !config.filenamePattern().isBlank())
+            ? Pattern.compile(config.filenamePattern())
+            : null;
     }
 
     @Override
     public Mono<ProductDocument> validate(ProductDocument doc) {
         return Mono.defer(() -> {
-            for (ValidationRule rule : rules) {
-                if (!rule.isValid(doc)) {
-                    log.debug("Document {} skipped: {}",
-                        doc.documentId(), rule.reasonIfInvalid(doc));
-                    return Mono.empty();
-                }
+            if (maxFileSizeBytes != null && doc.size() > maxFileSizeBytes) {
+                log.debug("Document {} skipped: size {} exceeds max {}",
+                    doc.documentId(), doc.size(), maxFileSizeBytes);
+                return Mono.empty();
+            }
+            if (filenamePattern != null && !filenamePattern.matcher(doc.filename()).matches()) {
+                log.debug("Document {} skipped: filename {} does not match pattern {}",
+                    doc.documentId(), doc.filename(), filenamePattern.pattern());
+                return Mono.empty();
             }
             return Mono.just(doc);
         });
