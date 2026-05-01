@@ -3,6 +3,7 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
 import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
@@ -20,8 +21,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
+            DocumentTraceabilityGateway traceabilityGateway,
             RulesBussinesGateway documentValidator) {
-        super(productDbGateway, productRestGateway, documentValidator);
+        super(productDbGateway, productRestGateway, documentValidator, traceabilityGateway);
         this.s3Gateway = s3Gateway;
     }
 

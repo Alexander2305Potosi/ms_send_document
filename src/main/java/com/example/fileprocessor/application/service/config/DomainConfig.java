@@ -1,5 +1,6 @@
 package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
 import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -23,11 +24,13 @@ public class DomainConfig {
             ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
+            DocumentTraceabilityGateway traceabilityGateway,
             ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
             productDbGateway,
             productRestGateway,
             soapGateway,
+            traceabilityGateway,
             new RulesBussinesService(properties.soap())
         );
     }
@@ -38,11 +41,13 @@ public class DomainConfig {
             ProductDbGateway productDbGateway,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
+            DocumentTraceabilityGateway traceabilityGateway,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
             productDbGateway,
             productRestGateway,
             s3Gateway,
+            traceabilityGateway,
             new RulesBussinesService(properties.s3())
         );
     }

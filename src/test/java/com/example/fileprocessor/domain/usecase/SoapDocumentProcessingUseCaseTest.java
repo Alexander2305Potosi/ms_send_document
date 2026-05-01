@@ -40,6 +40,9 @@ class SoapDocumentProcessingUseCaseTest {
     @Mock
     private SoapGateway soapGateway;
 
+    @Mock
+    private com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway traceabilityGateway;
+
     private SoapDocumentProcessingUseCase useCase;
 
     private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
@@ -49,7 +52,8 @@ class SoapDocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         var validator = new RulesBussinesService(config(null, null));
-        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, validator);
+        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validator);
+        lenient().when(traceabilityGateway.save(any())).thenReturn(Mono.empty());
     }
 
     @Test
@@ -119,7 +123,7 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenValidationFails_skipsDocument() {
         var validatorWithPattern = new RulesBussinesService(config(null, ".*\\.csv$"));
-        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, validatorWithPattern);
+        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validatorWithPattern);
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
@@ -138,7 +142,7 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenSizeExceedsLimit_skipsDocument() {
         var validatorWithSize = new RulesBussinesService(config(100L, null));
-        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, validatorWithSize);
+        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validatorWithSize);
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 500, false, "origin");

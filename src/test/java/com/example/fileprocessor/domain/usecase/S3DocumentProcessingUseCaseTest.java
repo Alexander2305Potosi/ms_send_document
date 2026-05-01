@@ -40,6 +40,9 @@ class S3DocumentProcessingUseCaseTest {
     @Mock
     private com.example.fileprocessor.domain.port.out.S3Gateway s3Gateway;
 
+    @Mock
+    private com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway traceabilityGateway;
+
     private S3DocumentProcessingUseCase useCase;
 
     private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
@@ -49,7 +52,8 @@ class S3DocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         RulesBussinesGateway validator = new RulesBussinesService(config(null, null));
-        useCase = new S3DocumentProcessingUseCase(productDbGateway, productRestGateway, s3Gateway, validator);
+        useCase = new S3DocumentProcessingUseCase(productDbGateway, productRestGateway, s3Gateway, traceabilityGateway, validator);
+        lenient().when(traceabilityGateway.save(any())).thenReturn(Mono.empty());
     }
 
     @Test

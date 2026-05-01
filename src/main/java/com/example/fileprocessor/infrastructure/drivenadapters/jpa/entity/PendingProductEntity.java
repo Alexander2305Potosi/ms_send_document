@@ -4,29 +4,29 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "pending_products")
+@Table(name = "productos_pendientes")
 public class PendingProductEntity {
 
     @Id
-    @Column(name = "product_id")
+    @Column(name = "nombre_producto")
     private String productId;
 
-    @Column(name = "name")
+    @Column(name = "nombre")
     private String name;
 
-    @Column(name = "load_date")
+    @Column(name = "fecha_carga")
     private LocalDateTime loadDate;
 
-    @Column(name = "state")
+    @Column(name = "estado")
     private String state;
 
-    @Column(name = "message_error")
+    @Column(name = "mensaje_error")
     private String messageError;
 
-    @Column(name = "created_at")
+    @Column(name = "fecha_creacion")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Column(name = "fecha_actualizacion")
     private LocalDateTime updatedAt;
 
     public PendingProductEntity() {}

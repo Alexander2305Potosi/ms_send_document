@@ -1,9 +1,11 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
+import com.example.fileprocessor.domain.entity.DocumentTraceability;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
 import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
@@ -16,6 +18,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * Abstract base for document processing use cases.
@@ -29,6 +32,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected final ProductDbGateway productDbGateway;
     protected final ProductRestGateway productRestGateway;
     protected final RulesBussinesGateway documentValidator;
+    protected final DocumentTraceabilityGateway traceabilityGateway;
 
     public Flux<FileUploadResult> executePendingDocuments() {
         return productDbGateway.findByLoadDate(LocalDate.now())
@@ -36,10 +40,31 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .flatMap(doc -> productRestGateway.getDocument(product.productId(), doc.documentId())
                     .flatMapMany(this::decompressIfNeeded)
                     .flatMap(documentValidator::validate)
-                    .flatMap(validated -> uploadDocument(validated, product.productId()))))
+                    .flatMap(validated -> uploadDocument(validated, product.productId())
+                        .flatMap(result -> saveTraceability(validated, product.productId(), result)
+                            .thenReturn(result)))))
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
             .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
+    }
+
+    private Mono<Void> saveTraceability(ProductDocument doc, String productId, FileUploadResult result) {
+        boolean isSuccess = result.isSuccess();
+        DocumentTraceability record = new DocumentTraceability(
+            null,
+            productId,
+            doc.documentId(),
+            doc.filename(),
+            doc.isZip() ? doc.filename() : null,
+            isSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name(),
+            result.getErrorCode(),
+            result.getMessage(),
+            1,
+            isSuccess ? LocalDateTime.now() : null,
+            !isSuccess ? LocalDateTime.now() : null,
+            LocalDateTime.now()
+        );
+        return traceabilityGateway.save(record);
     }
 
     private Flux<ProductDocument> decompressIfNeeded(ProductDocument doc) {
