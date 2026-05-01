@@ -6,13 +6,13 @@ import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.Prod
 public class ProductMapper {
 
     public static ProductEntity toEntity(Product domain) {
-        ProductEntity entity = new ProductEntity();
-        entity.setProductId(domain.productId());
-        entity.setName(domain.name());
-        entity.setLoadDate(domain.loadDate());
-        entity.setState(domain.state());
-        entity.setMessageError(domain.messageError());
-        return entity;
+        return ProductEntity.builder()
+            .productId(domain.productId())
+            .name(domain.name())
+            .loadDate(domain.loadDate())
+            .state(domain.state())
+            .messageError(domain.messageError())
+            .build();
     }
 
     public static Product toDomain(ProductEntity entity) {
