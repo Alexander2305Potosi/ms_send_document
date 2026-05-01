@@ -15,6 +15,9 @@ public final class ProcessingResultCodes {
     // Response validation error codes
     public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
 
+    // ZIP decompression error codes
+    public static final String INVALID_ZIP = "INVALID_ZIP";
+
     // Generic error codes (business level)
     public static final String UNKNOWN_ERROR = "UNKNOWN_ERROR";
     public static final String UPLOAD_FAILED = "UPLOAD_FAILED";

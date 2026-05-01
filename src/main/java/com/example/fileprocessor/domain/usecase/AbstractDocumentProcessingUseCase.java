@@ -7,6 +7,7 @@ import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.util.ZipDecompressor;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,11 +34,16 @@ public abstract class AbstractDocumentProcessingUseCase {
         return productDbGateway.findByLoadDate(LocalDate.now())
             .concatMap(product -> Flux.fromIterable(product.documents())
                 .flatMap(doc -> productRestGateway.getDocument(product.productId(), doc.documentId())
+                    .flatMap(this::decompressIfNeeded)
                     .flatMap(documentValidator::validate)
                     .flatMap(validated -> uploadDocument(validated, product.productId()))))
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
             .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
+    }
+
+    private Flux<ProductDocument> decompressIfNeeded(ProductDocument doc) {
+        return ZipDecompressor.decompress(doc);
     }
 
     protected abstract Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId);
