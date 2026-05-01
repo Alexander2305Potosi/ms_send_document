@@ -121,7 +121,7 @@ class SoapDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_whenValidationFails_skipsDocument() {
+    void executePendingDocuments_whenValidationFails_emitsFailureResult() {
         var validatorWithPattern = new RulesBussinesService(config(null, ".*\\.csv$"));
         useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validatorWithPattern);
 
@@ -133,14 +133,18 @@ class SoapDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())
-            .expectNextCount(0)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+            })
             .verifyComplete();
 
+        verify(traceabilityGateway, times(1)).save(any());
         verify(soapGateway, never()).send(any(FileUploadRequest.class));
     }
 
     @Test
-    void executePendingDocuments_whenSizeExceedsLimit_skipsDocument() {
+    void executePendingDocuments_whenSizeExceedsLimit_emitsFailureResult() {
         var validatorWithSize = new RulesBussinesService(config(100L, null));
         useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validatorWithSize);
 
@@ -152,9 +156,13 @@ class SoapDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())
-            .expectNextCount(0)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+            })
             .verifyComplete();
 
+        verify(traceabilityGateway, times(1)).save(any());
         verify(soapGateway, never()).send(any(FileUploadRequest.class));
     }
 }

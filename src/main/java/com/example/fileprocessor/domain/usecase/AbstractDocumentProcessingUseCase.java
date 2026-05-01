@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.DocumentTraceability;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
 import com.example.fileprocessor.domain.port.out.ProductDbGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -37,15 +38,43 @@ public abstract class AbstractDocumentProcessingUseCase {
     public Flux<FileUploadResult> executePendingDocuments() {
         return productDbGateway.findByLoadDate(LocalDate.now())
             .concatMap(product -> Flux.fromIterable(product.documents())
-                .flatMap(doc -> productRestGateway.getDocument(product.productId(), doc.documentId())
-                    .flatMapMany(this::decompressIfNeeded)
-                    .flatMap(documentValidator::validate)
-                    .flatMap(validated -> uploadDocument(validated, product.productId())
-                        .flatMap(result -> saveTraceability(validated, product.productId(), result)
-                            .thenReturn(result)))))
+                .flatMap(doc -> processDocument(doc, product.productId())))
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
             .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
+    }
+
+    private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId) {
+        Flux<ProductDocument> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
+            .flatMapMany(this::decompressIfNeeded)
+            .flatMap(documentValidator::validate)
+            .switchIfEmpty(Mono.defer(() -> {
+                ProcessingException validationError = new ProcessingException(
+                    "Document validation failed", ProcessingResultCodes.INVALID_RESPONSE, doc.documentId());
+                return Mono.error(validationError);
+            }));
+
+        return documentFlux
+            .flatMap(validated -> uploadDocument(validated, productId)
+                .flatMap(result -> saveTraceability(validated, productId, result)
+                    .thenReturn(result)))
+            .onErrorResume(error -> saveFailedTraceability(doc, productId, error))
+            .single();
+    }
+
+    private Mono<FileUploadResult> saveFailedTraceability(ProductDocument doc, String productId, Throwable error) {
+        String errorCode = error instanceof ProcessingException pe
+            ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
+
+        FileUploadResult result = FileUploadResult.builder()
+            .status(DocumentStatus.FAILURE.name())
+            .errorCode(errorCode)
+            .processedAt(Instant.now())
+            .success(false)
+            .build();
+
+        return saveTraceability(doc, productId, result)
+            .thenReturn(result);
     }
 
     private Mono<Void> saveTraceability(ProductDocument doc, String productId, FileUploadResult result) {
