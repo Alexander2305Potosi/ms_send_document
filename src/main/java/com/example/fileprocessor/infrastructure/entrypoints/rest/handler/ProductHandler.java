@@ -61,12 +61,13 @@ public class ProductHandler {
 
         return Mono.deferContextual(ctx -> {
             log.info("Starting product sync, traceId: {}", traceId);
-            return syncProductsUseCase.execute()
+            syncProductsUseCase.execute()
                 .doOnError(error -> log.error("Product sync failed for traceId {}: {}", traceId, error.getMessage()))
                 .doOnSuccess(v -> log.info("Product sync completed for traceId: {}", traceId))
-                .thenReturn(ServerResponse.ok()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(java.util.Map.of("status", "OK", "message", "Products sync initiated")));
+                .subscribe();
+            return ServerResponse.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(java.util.Map.of("status", "OK", "message", "Products sync initiated"));
         }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 
