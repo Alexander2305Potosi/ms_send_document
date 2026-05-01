@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.DocumentTraceability;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
 import com.example.fileprocessor.domain.port.out.ProductDbGateway;
@@ -20,6 +21,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Abstract base for document processing use cases.
@@ -37,11 +39,30 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     public Flux<FileUploadResult> executePendingDocuments() {
         return productDbGateway.findByLoadDate(LocalDate.now())
-            .concatMap(product -> Flux.fromIterable(product.documents())
-                .flatMap(doc -> processDocument(doc, product.productId())))
+            .concatMap(product -> {
+                String productId = product.productId();
+                return markProductInProgress(productId)
+                    .thenMany(Flux.fromIterable(product.documents())
+                        .flatMap(doc -> processDocument(doc, productId))
+                        .collectList()
+                        .flatMapMany(results -> {
+                            markProductFinished(productId, results).subscribe();
+                            return Flux.fromIterable(results);
+                        }));
+            })
             .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
             .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
             .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
+    }
+
+    private Mono<Void> markProductInProgress(String productId) {
+        return productDbGateway.updateEstado(productId, ProductState.IN_PROGRESS);
+    }
+
+    private Mono<Void> markProductFinished(String productId, List<FileUploadResult> results) {
+        boolean anyFailure = results.stream().anyMatch(r -> !r.isSuccess());
+        String finalState = anyFailure ? ProductState.FAILED : ProductState.PROCESSED;
+        return productDbGateway.updateEstado(productId, finalState);
     }
 
     private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId) {

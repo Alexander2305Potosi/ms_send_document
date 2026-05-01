@@ -54,6 +54,7 @@ class S3DocumentProcessingUseCaseTest {
         RulesBussinesGateway validator = new RulesBussinesService(config(null, null));
         useCase = new S3DocumentProcessingUseCase(productDbGateway, productRestGateway, s3Gateway, traceabilityGateway, validator);
         lenient().when(traceabilityGateway.save(any())).thenReturn(Mono.empty());
+        lenient().when(productDbGateway.updateEstado(anyString(), any())).thenReturn(Mono.empty());
     }
 
     @Test

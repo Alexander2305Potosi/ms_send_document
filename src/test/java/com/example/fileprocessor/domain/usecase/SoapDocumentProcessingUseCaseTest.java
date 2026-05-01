@@ -54,6 +54,7 @@ class SoapDocumentProcessingUseCaseTest {
         var validator = new RulesBussinesService(config(null, null));
         useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validator);
         lenient().when(traceabilityGateway.save(any())).thenReturn(Mono.empty());
+        lenient().when(productDbGateway.updateEstado(anyString(), any())).thenReturn(Mono.empty());
     }
 
     @Test
