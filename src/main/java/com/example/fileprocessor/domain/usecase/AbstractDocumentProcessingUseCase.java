@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
@@ -64,6 +65,7 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId) {
         Flux<ProductDocument> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
+            .map(this::toProductDocument)
             .flatMapMany(this::decompressIfNeeded)
             .flatMap(documentValidator::validate)
             .switchIfEmpty(Mono.defer(() -> {
@@ -115,6 +117,18 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     private Flux<ProductDocument> decompressIfNeeded(ProductDocument doc) {
         return ZipDecompressor.decompress(doc);
+    }
+
+    private ProductDocument toProductDocument(ProductDocumentFile file) {
+        return ProductDocument.builder()
+            .documentId(file.documentId())
+            .filename(file.filename())
+            .content(file.content())
+            .contentType(file.contentType())
+            .size(file.size())
+            .isZip(file.isZip())
+            .origin(file.origin())
+            .build();
     }
 
     protected abstract Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId);

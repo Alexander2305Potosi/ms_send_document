@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -60,7 +61,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    public Mono<ProductDocument> getDocument(String productId, String documentId) {
+    public Mono<ProductDocumentFile> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             log.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}", new Object[]{documentId, productId, traceId});
@@ -74,7 +75,18 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .retrieve()
                 .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .map(this::mapToProductDocument)
+                .map(response -> {
+                    ProductDocument doc = mapToProductDocument(response);
+                    return ProductDocumentFile.builder()
+                        .documentId(doc.documentId())
+                        .filename(doc.filename())
+                        .content(doc.content())
+                        .contentType(doc.contentType())
+                        .size(doc.size())
+                        .isZip(doc.isZip())
+                        .origin(doc.origin())
+                        .build();
+                })
                 .doOnNext(doc -> log.log(Level.INFO, "Document {0} retrieved for product {1}", new Object[]{documentId, productId}));
         });
     }

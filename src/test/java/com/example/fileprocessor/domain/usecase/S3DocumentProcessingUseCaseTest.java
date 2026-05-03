@@ -6,6 +6,7 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -107,6 +108,15 @@ class S3DocumentProcessingUseCaseTest {
     void executePendingDocuments_processesAllDocuments() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+        ProductDocumentFile docFile = ProductDocumentFile.builder()
+            .documentId(doc.documentId())
+            .filename(doc.filename())
+            .content(doc.content())
+            .contentType(doc.contentType())
+            .size(doc.size())
+            .isZip(doc.isZip())
+            .origin(doc.origin())
+            .build();
         Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult successResult = FileUploadResult.builder()
@@ -116,7 +126,7 @@ class S3DocumentProcessingUseCaseTest {
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
-        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(docFile));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
         StepVerifier.create(useCase.executePendingDocuments())
@@ -128,6 +138,15 @@ class S3DocumentProcessingUseCaseTest {
     void executePendingDocuments_whenError_logsAndContinues() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+        ProductDocumentFile docFile = ProductDocumentFile.builder()
+            .documentId(doc.documentId())
+            .filename(doc.filename())
+            .content(doc.content())
+            .contentType(doc.contentType())
+            .size(doc.size())
+            .isZip(doc.isZip())
+            .origin(doc.origin())
+            .build();
         Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult failureResult = FileUploadResult.builder()
@@ -137,7 +156,7 @@ class S3DocumentProcessingUseCaseTest {
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
-        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(docFile));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(failureResult));
 
         StepVerifier.create(useCase.executePendingDocuments())
