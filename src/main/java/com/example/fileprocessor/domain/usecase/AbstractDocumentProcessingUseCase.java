@@ -44,7 +44,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 String productId = product.productId();
                 return productRepository.updateEstadoById(id, ProductState.IN_PROGRESS)
                     .thenMany(Flux.fromIterable(product.documents())
-                        .flatMap(doc -> processDocument(doc, productId, id))
+                        .flatMap(doc -> processDocument(doc, productId))
                         .collectList()
                         .flatMapMany(results -> {
                             markProductFinished(id, results).subscribe();
@@ -62,7 +62,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return productRepository.updateEstadoById(id, finalState);
     }
 
-    private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId, Long id) {
+    private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId) {
         Flux<ProductDocument> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
             .flatMapMany(this::decompressIfNeeded)
             .flatMap(documentValidator::validate)
