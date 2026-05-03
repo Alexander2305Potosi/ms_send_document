@@ -17,6 +17,7 @@ public class ProductMapper {
 
     public static Product toDomain(ProductEntity entity) {
         return Product.builder()
+            .id(entity.getId())
             .productId(entity.getProductId())
             .name(entity.getName())
             .loadDate(entity.getLoadDate())

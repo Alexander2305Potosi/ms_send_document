@@ -12,4 +12,5 @@ public interface ProductRepository {
     Flux<Product> findAll();
     Mono<Void> save(Product product);
     Mono<Void> updateEstado(String productId, String estado);
+    Mono<Void> updateEstadoById(Long id, String estado);
 }

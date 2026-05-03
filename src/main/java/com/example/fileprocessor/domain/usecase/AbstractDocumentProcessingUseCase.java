@@ -40,13 +40,14 @@ public abstract class AbstractDocumentProcessingUseCase {
     public Flux<FileUploadResult> executePendingDocuments() {
         return productRepository.findByLoadDate(LocalDate.now())
             .concatMap(product -> {
+                Long id = product.id();
                 String productId = product.productId();
-                return markProductInProgress(productId)
+                return productRepository.updateEstadoById(id, ProductState.IN_PROGRESS)
                     .thenMany(Flux.fromIterable(product.documents())
-                        .flatMap(doc -> processDocument(doc, productId))
+                        .flatMap(doc -> processDocument(doc, productId, id))
                         .collectList()
                         .flatMapMany(results -> {
-                            markProductFinished(productId, results).subscribe();
+                            markProductFinished(id, results).subscribe();
                             return Flux.fromIterable(results);
                         }));
             })
@@ -55,17 +56,13 @@ public abstract class AbstractDocumentProcessingUseCase {
             .doOnCancel(() -> log.log(Level.WARNING, "Pipeline {0} cancelled", new Object[]{implementationName()}));
     }
 
-    private Mono<Void> markProductInProgress(String productId) {
-        return productRepository.updateEstado(productId, ProductState.IN_PROGRESS);
-    }
-
-    private Mono<Void> markProductFinished(String productId, List<FileUploadResult> results) {
+    private Mono<Void> markProductFinished(Long id, List<FileUploadResult> results) {
         boolean anyFailure = results.stream().anyMatch(r -> !r.isSuccess());
         String finalState = anyFailure ? ProductState.FAILED : ProductState.PROCESSED;
-        return productRepository.updateEstado(productId, finalState);
+        return productRepository.updateEstadoById(id, finalState);
     }
 
-    private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId) {
+    private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId, Long id) {
         Flux<ProductDocument> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
             .flatMapMany(this::decompressIfNeeded)
             .flatMap(documentValidator::validate)
@@ -100,20 +97,19 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     private Mono<Void> saveHistory(ProductDocument doc, String productId, FileUploadResult result) {
         boolean isSuccess = result.isSuccess();
-        DocumentHistory record = new DocumentHistory(
-            null,
-            productId,
-            doc.documentId(),
-            doc.filename(),
-            doc.isZip() ? doc.filename() : null,
-            isSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name(),
-            result.getErrorCode(),
-            result.getMessage(),
-            result.getAttemptCount(),
-            isSuccess ? LocalDateTime.now() : null,
-            !isSuccess ? LocalDateTime.now() : null,
-            LocalDateTime.now()
-        );
+        DocumentHistory record = DocumentHistory.builder()
+            .productId(productId)
+            .documentId(doc.documentId())
+            .filename(doc.filename())
+            .compressedFilename(doc.isZip() ? doc.filename() : null)
+            .status(isSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name())
+            .errorCode(result.getErrorCode())
+            .failureReason(result.getMessage())
+            .attemptCount(result.getAttemptCount())
+            .sentAt(isSuccess ? LocalDateTime.now() : null)
+            .failedAt(!isSuccess ? LocalDateTime.now() : null)
+            .createdAt(LocalDateTime.now())
+            .build();
         return historyRepository.save(record);
     }
 

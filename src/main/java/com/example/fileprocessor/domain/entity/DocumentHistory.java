@@ -1,7 +1,10 @@
 package com.example.fileprocessor.domain.entity;
 
+import lombok.Builder;
+
 import java.time.LocalDateTime;
 
+@Builder
 public record DocumentHistory(
     Long id,
     String productId,

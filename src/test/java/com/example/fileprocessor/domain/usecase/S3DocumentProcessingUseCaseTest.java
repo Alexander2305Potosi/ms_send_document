@@ -56,6 +56,7 @@ class S3DocumentProcessingUseCaseTest {
         useCase = new S3DocumentProcessingUseCase(productRepository, productRestGateway, s3Gateway, historyRepository, validator);
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
         lenient().when(productRepository.updateEstado(anyString(), any())).thenReturn(Mono.empty());
+        lenient().when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
     }
 
     @Test
@@ -106,7 +107,7 @@ class S3DocumentProcessingUseCaseTest {
     void executePendingDocuments_processesAllDocuments() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -114,6 +115,7 @@ class S3DocumentProcessingUseCaseTest {
             .build();
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
@@ -126,7 +128,7 @@ class S3DocumentProcessingUseCaseTest {
     void executePendingDocuments_whenError_logsAndContinues() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult failureResult = FileUploadResult.builder()
             .status(DocumentStatus.FAILURE.name())
@@ -134,6 +136,7 @@ class S3DocumentProcessingUseCaseTest {
             .build();
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(failureResult));
 

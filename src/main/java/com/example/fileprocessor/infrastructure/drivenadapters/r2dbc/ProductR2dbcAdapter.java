@@ -50,4 +50,14 @@ public class ProductR2dbcAdapter implements ProductRepository {
             })
             .then();
     }
+
+    @Override
+    public Mono<Void> updateEstadoById(Long id, String estado) {
+        return repository.findById(id)
+            .flatMap(entity -> {
+                entity.setState(estado);
+                return repository.save(entity);
+            })
+            .then();
+    }
 }

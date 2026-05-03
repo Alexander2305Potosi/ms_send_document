@@ -33,6 +33,7 @@ public class SyncProductsUseCase {
 
     private Mono<Void> saveProduct(Product product) {
         Product productToSave = new Product(
+            null,
             product.productId(),
             product.name(),
             LocalDateTime.now(),

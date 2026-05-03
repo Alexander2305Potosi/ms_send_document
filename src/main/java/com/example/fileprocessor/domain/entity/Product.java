@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 
 @Builder
 public record Product(
+    Long id,
     String productId,
     String name,
     LocalDateTime loadDate,

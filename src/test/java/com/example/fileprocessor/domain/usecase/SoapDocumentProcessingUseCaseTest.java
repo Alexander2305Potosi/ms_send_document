@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -56,6 +56,7 @@ class SoapDocumentProcessingUseCaseTest {
         useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validator);
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
         lenient().when(productRepository.updateEstado(anyString(), any())).thenReturn(Mono.empty());
+        lenient().when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
     }
 
     @Test
@@ -106,7 +107,7 @@ class SoapDocumentProcessingUseCaseTest {
     void executePendingDocuments_processesAllDocuments() {
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -114,6 +115,7 @@ class SoapDocumentProcessingUseCaseTest {
             .build();
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
@@ -129,9 +131,10 @@ class SoapDocumentProcessingUseCaseTest {
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
-        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())
@@ -152,9 +155,10 @@ class SoapDocumentProcessingUseCaseTest {
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 500, false, "origin");
-        Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())
