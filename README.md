@@ -1,6 +1,6 @@
 # File Processor Service
 
-Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos con sus documentos asociados desde una API REST externa, los persiste en base de datos H2 y los envía a un servicio SOAP externo o AWS S3.
+Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos con sus documentos asociados desde una API REST externa, los persiste en base de datos H2 (desarrollo) o PostgreSQL (produccion) y los envia a un servicio SOAP externo o AWS S3.
 
 ---
 
@@ -9,7 +9,7 @@ Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos co
 1. [Arquitectura (Clean Architecture)](#arquitectura-clean-architecture)
 2. [API Endpoints](#api-endpoints)
 3. [Flujo de Datos](#flujo-de-datos)
-4. [Base de Datos H2 con R2DBC](#base-de-datos-h2-con-r2dbc)
+4. [Base de Datos](#base-de-datos)
 5. [Descompresion de archivos ZIP](#descompresion-de-archivos-zip)
 6. [Estados de Productos (ProductState)](#estados-de-productos-productstate)
 7. [Validacion de Documentos (RulesBussinesService)](#validacion-de-documentos-rulesbussinesservice)
@@ -42,25 +42,24 @@ com.example.fileprocessor/
 │   │   ├── FileUploadRequest.java                # Request para upload a gateway (SOAP/S3)
 │   │   ├── FileUploadResult.java                 # Resultado de upload con status, errorCode, attemptCount
 │   │   ├── DocumentStatus.java                   # Enum: SUCCESS, FAILURE
-│   │   ├── DocumentTraceability.java             # Record: trazabilidad de envio a BD
+│   │   ├── DocumentHistory.java                  # Record: trazabilidad de envio a BD
 │   │   └── ExternalServiceResponse.java          # Respuesta generica de servicio externo
 │   ├── usecase/
 │   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base
 │   │   ├── SoapDocumentProcessingUseCase.java       # Implementacion SOAP
 │   │   ├── S3DocumentProcessingUseCase.java         # Implementacion S3
-│   │   ├── SyncProductsUseCase.java                 # Sincroniza productos a H2
+│   │   ├── SyncProductsUseCase.java                 # Sincroniza productos a BD
 │   │   └── ProcessingResultCodes.java               # Constantes de codigos de error
 │   ├── service/
-│   │   └── RulesBussinesService.java              # Validacion: tamaño, patron filename
+│   │   └── RulesBussinesService.java              # Validacion: tamano, patron filename
 │   ├── util/
 │   │   ├── ZipDecompressor.java                   # Descompresion de ZIP con inferencia de contentType
 │   │   └── Base64Utils.java                       # Encoding/decoding seguro de Base64
 │   ├── port/out/
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
-│   │   ├── ProductDbGateway.java                  # Puerto: consulta de productos en BD local
-│   │   ├── ProductPersistenceGateway.java         # Puerto: persistencia de productos
+│   │   ├── ProductRepository.java                 # Puerto: persistencia y consulta de productos
+│   │   ├── DocumentHistoryRepository.java         # Puerto: trazabilidad de envios
 │   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
-│   │   ├── DocumentTraceabilityGateway.java       # Puerto: trazabilidad de envios
 │   │   ├── S3Gateway.java                         # Puerto: envio a S3
 │   │   └── SoapGateway.java                       # Puerto: envio a SOAP
 │   └── exception/
@@ -77,17 +76,17 @@ com.example.fileprocessor/
     ├── config/
     │   └── ProcessorsProperties.java              # @ConfigurationProperties("app.processors")
     ├── drivenadapters/
-    │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC para H2
-    │   │   ├── ProductR2dbcAdapter.java            # Implementa ProductDbGateway + ProductPersistenceGateway
-    │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentTraceabilityGateway
+    │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
+    │   │   ├── ProductR2dbcAdapter.java            # Implementa ProductRepository
+    │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentHistoryRepository
     │   │   ├── entity/
     │   │   │   ├── ProductEntity.java              # @Entity @Table("productos")
     │   │   │   └── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos")
     │   │   ├── mapper/
     │   │   │   ├── ProductMapper.java              # Product <-> ProductEntity
-    │   │   │   └── DocumentHistoryMapper.java      # DocumentTraceability <-> DocumentHistoryEntity
+    │   │   │   └── DocumentHistoryMapper.java      # DocumentHistory <-> DocumentHistoryEntity
     │   │   └── repository/
-    │   │       ├── ProductRepository.java          # R2dbcRepository<ProductEntity, String>
+    │   │       ├── ProductRepository.java          # R2dbcRepository<ProductEntity, Long>
     │   │       └── DocumentHistoryRepository.java  # R2dbcRepository<DocumentHistoryEntity, Long>
     │   ├── restclient/
     │   │   ├── ProductRestGatewayAdapter.java      # WebClient a API REST externa
@@ -116,8 +115,8 @@ com.example.fileprocessor/
     │       └── ApiConstants.java                   # Constantes (headers, parametros)
     └── helpers/soap/
         ├── SoapConstants.java                      # Namespaces SOAP, templates XML
-        └── mapper/
-            └── SoapMapper.java                     # JAXB marshalling/unmarshalling + Base64
+        ├── mapper/
+        │   └── SoapMapper.java                     # JAXB marshalling/unmarshalling + Base64
         └── xml/
             ├── SoapEnvelopeWrapper.java            # Envoltorio SOAP con parseo DOM seguro
             └── model/
@@ -129,10 +128,11 @@ com.example.fileprocessor/
 
 ```
 src/main/resources/
-├── application.yml          # Configuracion base
-├── application-dev.yml      # Perfil desarrollo (DEBUG, timeouts cortos)
-├── application-prod.yml     # Perfil produccion (WARN, graceful shutdown)
-└── schema.sql               # DDL: tablas productos_pendientes e historico_documentos
+├── application.yml              # Configuracion base
+├── application-dev.yml          # Perfil desarrollo (DEBUG, timeouts cortos)
+├── application-prod.yml         # Perfil produccion (WARN, graceful shutdown)
+├── schema.sql                   # DDL para H2 (desarrollo)
+└── schema-postgresql.sql        # DDL para PostgreSQL (produccion)
 ```
 
 ---
@@ -141,7 +141,7 @@ src/main/resources/
 
 ### GET /api/v1/products
 
-Procesa documentos pendientes de productos en la fecha actual desde base de datos H2. Los productos en estado PENDING se marcan IN_PROGRESS durante el procesamiento y al finalizar pasan a PROCESSED o FAILED.
+Procesa documentos pendientes de productos en la fecha actual desde base de datos. Los productos en estado PENDING se marcan IN_PROGRESS durante el procesamiento y al finalizar pasan a PROCESSED o FAILED.
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion. Si no se envia, se genera un UUID automatico.
@@ -161,7 +161,7 @@ Procesa documentos pendientes de productos en la fecha actual desde base de dato
 
 ### POST /api/v1/products/sync
 
-Sincroniza productos desde la API REST externa hacia la base de datos H2. Cada producto se persiste con `estado=PENDING` y `fecha_carga=now()`.
+Sincroniza productos desde la API REST externa hacia la base de datos. Cada producto se persiste con `estado=PENDING` y `fecha_carga=now()`.
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion.
@@ -191,10 +191,10 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 3. SyncProductsUseCase.execute()
    ├── productRestGateway.getAllProducts()
    ├── Cada producto → Product(state=PENDING, loadDate=now())
-   └── productPersistenceGateway.save()
+   └── productRepository.save()
                │
                ▼
-4. H2 (productos)  — tabla definida en schema.sql como "productos_pendientes"
+4. BD (productos)
 ```
 
 ### Flujo de Procesamiento (GET /api/v1/products)
@@ -213,10 +213,10 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 3. AbstractDocumentProcessingUseCase.executePendingDocuments()
         │
         ▼
-4. ProductDbGateway.findByLoadDate(LocalDate.now())
+4. ProductRepository.findByLoadDate(LocalDate.now())
         │  Filtra: fecha_carga=hoy AND estado=PENDING
         ▼
-5. H2 → Flux<Product>
+5. BD → Flux<Product>
         │
         ▼
 6. Por cada producto: markProductInProgress(productId)
@@ -229,10 +229,12 @@ Health check. Expone health, info, metrics, loggers y prometheus.
    ├── ZipDecompressor.decompress()  [si isZip=true]
    │     └── Expande ZIP en archivos individuales
    ├── RulesBussinesGateway.validate(document)
-   │     └── Valida tamaño maximo y patron filename
+   │     └── Valida tamano maximo y patron filename
+   │     └── Documentos invalidos se omiten (Mono.empty())
+   │     └── Si todos son invalidos → ProcessingException(INVALID_RESPONSE)
    ├── uploadDocument() → SoapGateway.send() o S3Gateway.send()
    │     └── Con reintentos automaticos + backoff
-   └── saveTraceability(doc, productId, result)
+   └── saveHistory(doc, productId, result)
          └── INSERT en historico_documentos
         │
         ▼
@@ -244,11 +246,13 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 
 ---
 
-## Base de Datos H2 con R2DBC
+## Base de Datos
 
-El servicio utiliza **R2DBC** (Reactive Relational Database Connectivity) con `r2dbc-h2` para acceso no bloqueante a H2. Las entidades JPA (`@Entity`) se combinan con repositorios reactivos (`R2dbcRepository`) para mantener la reactividad de extremo a extremo.
+El servicio utiliza **R2DBC** (Reactive Relational Database Connectivity) para acceso no bloqueante a base de datos.
 
-### Configuracion R2DBC
+### Desarrollo: H2
+
+En desarrollo se usa H2 en memoria con `r2dbc-h2`. El esquema se crea via `schema.sql`.
 
 ```yaml
 spring:
@@ -262,21 +266,42 @@ spring:
       path: /h2-console
 ```
 
-### Tabla: productos_pendientes
+### Produccion: PostgreSQL
 
-Almacena los productos sincronizados desde la API REST externa. El esquema DDL esta en `schema.sql`.
+En produccion se usa PostgreSQL con `r2dbc-postgresql`. Para configurarlo, agregar la dependencia y ajustar la configuracion:
+
+```kotlin
+// build.gradle.kts
+runtimeOnly("org.postgresql:r2dbc-postgresql")
+runtimeOnly("org.postgresql:postgresql")
+```
+
+```yaml
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fileprocessor}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+```
+
+El script DDL para PostgreSQL esta en `src/main/resources/schema-postgresql.sql`. Para aplicarlo:
+
+```bash
+psql -h <host> -U <user> -d <database> -f schema-postgresql.sql
+```
+
+### Tabla: productos
+
+Almacena los productos sincronizados desde la API REST externa.
 
 | Columna | Tipo | Descripcion |
 |--------|------|-------------|
-| `nombre_producto` | VARCHAR (PK) | Identificador unico del producto |
-| `nombre` | VARCHAR | Nombre del producto |
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id_producto` | VARCHAR(255) | Identificador del producto en el sistema externo |
+| `nombre` | VARCHAR(500) | Nombre del producto |
 | `fecha_carga` | TIMESTAMP | Fecha de carga para filtrado diario |
-| `estado` | VARCHAR | PENDING / IN_PROGRESS / PROCESSED / FAILED |
-| `mensaje_error` | VARCHAR | Mensaje de error si hubo fallo |
-| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
-| `fecha_actualizacion` | TIMESTAMP | Fecha de ultima actualizacion |
-
-> **Nota:** La entidad JPA `ProductEntity` usa `@Table(name = "productos")`, mientras que el DDL en `schema.sql` crea la tabla como `productos_pendientes`. En H2 embebido, la tabla se crea via `schema.sql` con el nombre `productos_pendientes`. Verificar la configuracion de `spring.sql.init.mode` para controlar la inicializacion.
+| `estado` | VARCHAR(20) | PENDING / IN_PROGRESS / PROCESSED / FAILED |
+| `mensaje_error` | VARCHAR(2000) | Mensaje de error si hubo fallo |
 
 ### Tabla: historico_documentos
 
@@ -284,20 +309,35 @@ Almacena la trazabilidad completa de cada intento de envio de documentos.
 
 | Columna | Tipo | Descripcion |
 |--------|------|-------------|
-| `id` | BIGINT AUTO_INCREMENT (PK) | Identificador unico |
-| `nombre_producto` | VARCHAR | Referencia al producto |
-| `nombre_documento` | VARCHAR | ID del documento (original o ruta si vino de ZIP) |
-| `nombre_archivo` | VARCHAR | Nombre del archivo enviado |
-| `nombre_comprimido` | VARCHAR | Si es ZIP, nombre del archivo ZIP original |
-| `estado` | VARCHAR | SUCCESS / FAILURE |
-| `codigo_error` | VARCHAR | Codigo de error categorizado |
-| `razon_fallo` | VARCHAR | Mensaje de error legible |
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id_producto` | VARCHAR(255) | Referencia al producto |
+| `id_documento` | VARCHAR(500) | ID del documento (original o ruta si vino de ZIP) |
+| `nombre_archivo` | VARCHAR(500) | Nombre del archivo enviado |
+| `nombre_comprimido` | VARCHAR(500) | Si es ZIP, nombre del archivo ZIP original |
+| `estado` | VARCHAR(20) | SUCCESS / FAILURE |
+| `codigo_error` | VARCHAR(100) | Codigo de error categorizado |
+| `razon_fallo` | VARCHAR(2000) | Mensaje de error legible |
 | `numero_intentos` | INT | Numero de intentos realizados (default: 1) |
 | `fecha_envio` | TIMESTAMP | Timestamp de envio exitoso (nullable) |
 | `fecha_fallo` | TIMESTAMP | Timestamp de fallo (nullable) |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 
-### Acceso a Consola H2
+### Indices
+
+```sql
+-- historico_documentos
+CREATE INDEX idx_hist_producto   ON historico_documentos (id_producto);
+CREATE INDEX idx_hist_estado     ON historico_documentos (estado);
+CREATE INDEX idx_hist_created    ON historico_documentos (fecha_creacion DESC);
+
+-- productos
+CREATE INDEX idx_prod_estado       ON productos (estado);
+CREATE INDEX idx_prod_fecha_carga  ON productos (fecha_carga);
+CREATE INDEX idx_prod_producto_id  ON productos (id_producto);
+CREATE INDEX idx_prod_carga_estado ON productos (fecha_carga, estado);
+```
+
+### Acceso a Consola H2 (solo desarrollo)
 
 - **URL:** `http://localhost:8080/h2-console`
 - **JDBC URL:** `jdbc:h2:mem:fileprocessor`
@@ -311,25 +351,25 @@ Almacena la trazabilidad completa de cada intento de envio de documentos.
 SELECT * FROM historico_documentos ORDER BY fecha_creacion DESC;
 
 -- Ver envios de un producto especifico
-SELECT * FROM historico_documentos WHERE nombre_producto = 'prod-123';
+SELECT * FROM historico_documentos WHERE id_producto = 'prod-123';
 
 -- Ver solo fallos
 SELECT * FROM historico_documentos WHERE estado = 'FAILURE';
 
 -- Ver productos pendientes
-SELECT * FROM productos_pendientes WHERE estado = 'PENDING';
+SELECT * FROM productos WHERE estado = 'PENDING';
 
 -- Ver productos en progreso
-SELECT * FROM productos_pendientes WHERE estado = 'IN_PROGRESS';
+SELECT * FROM productos WHERE estado = 'IN_PROGRESS';
 
 -- Contar envios por estado
 SELECT estado, COUNT(*) FROM historico_documentos GROUP BY estado;
 
 -- Productos con fallos hoy
-SELECT pp.nombre_producto, pp.estado, hd.codigo_error, hd.razon_fallo
-FROM productos_pendientes pp
-JOIN historico_documentos hd ON pp.nombre_producto = hd.nombre_producto
-WHERE hd.estado = 'FAILURE' AND pp.fecha_carga >= CURRENT_DATE();
+SELECT p.id_producto, p.estado, h.codigo_error, h.razon_fallo
+FROM productos p
+JOIN historico_documentos h ON p.id_producto = h.id_producto
+WHERE h.estado = 'FAILURE' AND p.fecha_carga >= CURRENT_DATE();
 ```
 
 ---
@@ -409,11 +449,11 @@ public final class ProductState {
 
 ## Validacion de Documentos (RulesBussinesService)
 
-`RulesBussinesService` valida cada documento antes de enviarlo. Los documentos que no pasan la validacion se ignoran silenciosamente (no generan error, no aparecen en el stream, no se registran en trazabilidad).
+`RulesBussinesService` valida cada documento antes de enviarlo. Los documentos que no pasan la validacion se ignoran silenciosamente (retornan `Mono.empty()`, no generan error, no aparecen en el stream, no se registran en trazabilidad). Si todos los documentos de un producto fallan la validacion, se emite una `ProcessingException` con codigo `INVALID_RESPONSE` y se registra en la trazabilidad como fallo.
 
 | Regla | Configuracion | Comportamiento |
 |-------|--------------|----------------|
-| **Tamaño maximo** | `app.processors.{soap,s3}.max-file-size-bytes` | Omite si `doc.size() > max` |
+| **Tamano maximo** | `app.processors.{soap,s3}.max-file-size-bytes` | Omite si `doc.size() > max` |
 | **Patron filename** | `app.processors.{soap,s3}.filename-pattern` | Omite si filename no coincide con la regex |
 
 ### Configuracion por defecto
@@ -454,23 +494,24 @@ El campo `attemptCount` en `FileUploadResult` y `numero_intentos` en `historico_
 Producto PENDING → IN_PROGRESS
 validate() → pasa
 uploadDocument() → SUCCESS
-saveTraceability() → historico_documentos (estado=SUCCESS, fecha_envio=now)
+saveHistory() → historico_documentos (estado=SUCCESS, fecha_envio=now)
 Producto → PROCESSED
 Stream: {"success":true, "status":"SUCCESS"}
 ```
 
 ### 2. Validacion Fallida (documento ignorado)
 ```
-validate() → tamaño excede limite O filename no coincide
+validate() → tamano excede limite O filename no coincide
 return Mono.empty() → documento no se procesa
 Sin registro en trazabilidad, sin entrada en stream
+Si todos los docs del producto son invalidos → ProcessingException(INVALID_RESPONSE)
 ```
 
 ### 3. Error en Gateway
 ```
 uploadDocument() → exception (con reintentos agotados)
-onErrorResume() → status=FAILURE, errorCode segun tipo de error
-saveTraceability() → historico_documentos (estado=FAILURE, codigo_error, fecha_fallo=now)
+saveFailedHistory() → construye FileUploadResult(status=FAILURE)
+saveHistory() → historico_documentos (estado=FAILURE, codigo_error, fecha_fallo=now)
 Producto → FAILED
 Stream: {"success":false, "status":"FAILURE", "errorCode":"GATEWAY_TIMEOUT", "attemptCount":3}
 ```
@@ -479,23 +520,23 @@ Stream: {"success":false, "status":"FAILURE", "errorCode":"GATEWAY_TIMEOUT", "at
 ```
 isZip=true → ZipDecompressor.decompress()
            → Flux de archivos individuales
-           → cada archivo pasa por validate(), uploadDocument(), saveTraceability()
+           → cada archivo pasa por validate(), uploadDocument(), saveHistory()
            → cada archivo genera su propio registro en historico_documentos
 ```
 
 ### 5. Error en Descompresion ZIP
 ```
 ZipDecompressor.decompress() → ProcessingException(INVALID_ZIP)
-onErrorResume() → status=FAILURE
-saveTraceability() → historico_documentos (codigo_error=INVALID_ZIP)
+onErrorResume() en saveFailedHistory() → status=FAILURE
+saveHistory() → historico_documentos (codigo_error=INVALID_ZIP)
 Stream: {"success":false, "status":"FAILURE", "errorCode":"INVALID_ZIP"}
 ```
 
 ### 6. Error de Base64
 ```
 Base64Utils.decodeSafe() → InvalidBase64Exception(INVALID_BASE64)
-onErrorResume() → status=FAILURE
-saveTraceability() → historico_documentos (codigo_error=INVALID_BASE64)
+saveFailedHistory() → status=FAILURE
+saveHistory() → historico_documentos (codigo_error=INVALID_BASE64)
 Stream: {"success":false, "status":"FAILURE", "errorCode":"INVALID_BASE64"}
 ```
 
@@ -513,7 +554,6 @@ Definidos en `domain/usecase/ProcessingResultCodes.java`:
 | `INVALID_BASE64` | Fallo al decodificar Base64 |
 | `INVALID_RESPONSE` | Respuesta SOAP invalida o malformada |
 | `INVALID_ZIP` | Archivo ZIP corrupto o invalido |
-| `UPLOAD_FAILED` | Error generico en envio |
 | `UNKNOWN_ERROR` | Error no categorizado |
 
 ### Errores de Gateway SOAP (SoapErrorCodes)
@@ -545,21 +585,23 @@ Definidos en `infrastructure/drivenadapters/aws/S3ErrorCodes.java`:
 
 ## Trazabilidad de Envios
 
-Cada documento procesado deja un registro en `historico_documentos` a traves del adaptador `DocumentHistoryR2dbcAdapter` (implementa `DocumentTraceabilityGateway`).
+Cada documento procesado deja un registro en `historico_documentos` a traves del adaptador `DocumentHistoryR2dbcAdapter` (implementa `DocumentHistoryRepository`).
 
-### Mapeo de FileUploadResult a DocumentTraceability
+### Mapeo de FileUploadResult a DocumentHistory
 
 ```
-FileUploadResult                    DocumentTraceability
-──────────────                      ────────────────────
-status=SUCCESS               →      estado = "SUCCESS"
-success=true                 →      fecha_envio = now()
+FileUploadResult                    DocumentHistory
+──────────────                      ───────────────
+status=SUCCESS               →      status = "SUCCESS"
+success=true                 →      sentAt = now()
+                                    failedAt = null
 correlationId                →      (no se persiste directamente)
-errorCode                    →      codigo_error
-message                      →      razon_fallo
-attemptCount                 →      numero_intentos
-status=FAILURE               →      estado = "FAILURE"
-success=false                →      fecha_fallo = now()
+errorCode                    →      errorCode
+message                      →      failureReason
+attemptCount                 →      attemptCount
+status=FAILURE               →      status = "FAILURE"
+success=false                →      sentAt = null
+                                    failedAt = now()
 ```
 
 ### Flujo de Persistencia
@@ -568,33 +610,35 @@ success=false                →      fecha_fallo = now()
 uploadDocument() → FileUploadResult
         │
         ▼
-saveTraceability(doc, productId, result)
+saveHistory(doc, productId, result)
         │
         ▼
-DocumentTraceability record(
+new DocumentHistory(
     null,                              // id (auto-generado)
-    productId,                         // nombre_producto
-    doc.documentId(),                  // nombre_documento (doc-1/test.pdf si es de ZIP)
-    doc.filename(),                    // nombre_archivo
-    doc.isZip() ? doc.filename() : null, // nombre_comprimido
-    isSuccess ? "SUCCESS" : "FAILURE",   // estado
-    result.getErrorCode(),             // codigo_error
-    result.getMessage(),               // razon_fallo
-    result.getAttemptCount(),          // numero_intentos
-    isSuccess ? now : null,            // fecha_envio
-    !isSuccess ? now : null,           // fecha_fallo
-    now                                // fecha_creacion
+    productId,                         // productId
+    doc.documentId(),                  // documentId (ej: "doc-1/test.pdf" si es de ZIP)
+    doc.filename(),                    // filename
+    doc.isZip() ? doc.filename() : null, // compressedFilename
+    isSuccess ? "SUCCESS" : "FAILURE", // status
+    result.getErrorCode(),             // errorCode
+    result.getMessage(),               // failureReason
+    result.getAttemptCount(),          // attemptCount
+    isSuccess ? now : null,            // sentAt
+    !isSuccess ? now : null,           // failedAt
+    now                                // createdAt
 )
         │
         ▼
-traceabilityGateway.save(record)
+historyRepository.save(record)
         │
         ▼
 DocumentHistoryR2dbcAdapter.save()
         │
         ▼
-databaseClient.sql("INSERT INTO historico_documentos ...")
-    .bind(...).then()
+DocumentHistoryMapper.toEntity(record) → DocumentHistoryEntity
+        │
+        ▼
+repository.save(entity) → INSERT en historico_documentos
 ```
 
 ---
@@ -607,18 +651,20 @@ El patron se implementa en `AbstractDocumentProcessingUseCase`:
 AbstractDocumentProcessingUseCase
 │
 ├── executePendingDocuments()           ← FINAL (template method)
-│   ├── productDbGateway.findByLoadDate()    → H2 (PENDING, hoy)
+│   ├── productRepository.findByLoadDate()    → BD (PENDING, hoy)
 │   ├── markProductInProgress()              → estado = IN_PROGRESS
 │   ├── processDocument(doc, productId)
 │   │   ├── productRestGateway.getDocument() → REST externa
 │   │   ├── decompressIfNeeded()             → ZipDecompressor
 │   │   ├── documentValidator.validate()     → RulesBussinesService
 │   │   ├── uploadDocument()                 → ABSTRACT
-│   │   └── saveTraceability()               → H2 (historico_documentos)
+│   │   └── saveHistory()                    → BD (historico_documentos)
 │   └── markProductFinished()               → PROCESSED o FAILED
 │
 ├── uploadDocument()                     ← ABSTRACT
 │   └── buildFileUploadRequest()         ← helper protegido
+│
+├── handleUploadError()                  ← helper protegido (reusable por subclases)
 │
 ├── SoapDocumentProcessingUseCase
 │   └── uploadDocument() → SoapGateway.send()
@@ -626,6 +672,12 @@ AbstractDocumentProcessingUseCase
 └── S3DocumentProcessingUseCase
     └── uploadDocument() → S3Gateway.send()
 ```
+
+### Subclases
+
+**SoapDocumentProcessingUseCase** — Envia documentos via SOAP. Bean definido en `DomainConfig` con validador configurado desde `properties.soap()`.
+
+**S3DocumentProcessingUseCase** — Envia documentos via S3. Bean condicional (`@ConditionalOnBean(S3Gateway.class)`) definido en `DomainConfig` con validador desde `properties.s3()`. Se usa `ObjectProvider` en el handler para manejar su disponibilidad opcional.
 
 ---
 
@@ -721,6 +773,11 @@ app:
 | `AWS_REGION` | `us-east-1` | Region AWS |
 | `AWS_ACCESS_KEY` | (vacio) | AWS Access Key (opcional, usa DefaultCredentialsProvider si no se setea) |
 | `AWS_SECRET_KEY` | (vacio) | AWS Secret Key (opcional) |
+| `DB_HOST` | `localhost` | Host de PostgreSQL (solo prod) |
+| `DB_PORT` | `5432` | Puerto de PostgreSQL |
+| `DB_NAME` | `fileprocessor` | Nombre de base de datos PostgreSQL |
+| `DB_USER` | `postgres` | Usuario de PostgreSQL |
+| `DB_PASSWORD` | `postgres` | Password de PostgreSQL |
 
 ---
 
@@ -764,7 +821,7 @@ app:
 ## Ejemplos de curl
 
 ```bash
-# Sincronizar productos desde API REST a H2
+# Sincronizar productos desde API REST a BD
 curl -X POST http://localhost:8080/api/v1/products/sync \
   -H "message-id: my-trace-123"
 
@@ -830,21 +887,6 @@ Los tests siguen la misma estructura de paquetes que `src/main`, bajo `src/test/
 - **PiTest** para mutation testing (umbral de mutantes matados: 60%)
 - **JaCoCo** para cobertura de codigo (umbral: 75%)
 
-### Configuracion de test
-
-```yaml
-# src/test/resources/application-test.yml
-spring:
-  web-application-type: reactive
-  r2dbc:
-    url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
-logging:
-  level:
-    com.example.fileprocessor: DEBUG
-```
-
 ### Ejecutar tests
 
 ```bash
@@ -867,7 +909,8 @@ logging:
 | **Framework** | Spring Boot 3.3.5 + WebFlux |
 | **Lenguaje** | Java 21 |
 | **Build** | Gradle 8.12.1 (Kotlin DSL) |
-| **Base de datos** | H2 (embebida) |
+| **Base de datos (dev)** | H2 (embebida) |
+| **Base de datos (prod)** | PostgreSQL |
 | **Acceso a datos** | R2DBC + Spring Data R2DBC |
 | **API REST externa** | WebClient (no bloqueante) |
 | **Gateway SOAP** | WebClient + JAXB + DOM |
