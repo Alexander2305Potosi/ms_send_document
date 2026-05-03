@@ -6,6 +6,7 @@ import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
 
-public interface ProductRepository extends R2dbcRepository<ProductEntity, String> {
+public interface ProductRepository extends R2dbcRepository<ProductEntity, Long> {
     Flux<ProductEntity> findByLoadDateBetween(LocalDateTime start, LocalDateTime end);
+    Flux<ProductEntity> findByProductId(String productId);
 }

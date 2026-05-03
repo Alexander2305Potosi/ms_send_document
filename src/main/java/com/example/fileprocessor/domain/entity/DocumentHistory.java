@@ -2,7 +2,7 @@ package com.example.fileprocessor.domain.entity;
 
 import java.time.LocalDateTime;
 
-public record DocumentTraceability(
+public record DocumentHistory(
     Long id,
     String productId,
     String documentId,

@@ -9,8 +9,6 @@ import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.Pr
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
@@ -21,11 +19,13 @@ import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Component
 public class ProductRestGatewayAdapter implements ProductRestGateway {
 
-    private static final Logger log = LoggerFactory.getLogger(ProductRestGatewayAdapter.class);
+    private static final Logger log = Logger.getLogger(ProductRestGatewayAdapter.class.getName());
 
     private final WebClient webClient;
     private final DocumentRestProperties properties;
@@ -45,7 +45,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     public Flux<Product> getAllProducts() {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.info("Fetching all products from REST API, traceId: {}", traceId);
+            log.log(Level.INFO, "Fetching all products from REST API, traceId: {0}", new Object[]{traceId});
 
             return webClient.get()
                 .uri(properties.productsPath())
@@ -55,7 +55,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .bodyToFlux(ProductResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .map(this::mapToProduct)
-                .doOnNext(product -> log.info("Product retrieved: {}", product.productId()));
+                .doOnNext(product -> log.log(Level.INFO, "Product retrieved: {0}", new Object[]{product.productId()}));
         });
     }
 
@@ -63,7 +63,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     public Mono<ProductDocument> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.info("Fetching document {} for product {} from REST API, traceId: {}", documentId, productId, traceId);
+            log.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}", new Object[]{documentId, productId, traceId});
 
             String path = properties.productDocumentsPath().replace("{productId}", productId);
 
@@ -75,7 +75,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .map(this::mapToProductDocument)
-                .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
+                .doOnNext(doc -> log.log(Level.INFO, "Document {0} retrieved for product {1}", new Object[]{documentId, productId}));
         });
     }
 
@@ -103,8 +103,8 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             try {
                 content = Base64Utils.decodeSafe(contentBase64, filename, documentId);
             } catch (Exception e) {
-                log.error("Failed to decode Base64 for document {} ({}): {}",
-                    documentId, filename, e.getMessage());
+                log.log(Level.SEVERE, "Failed to decode Base64 for document {0} ({1}): {2}",
+                    new Object[]{documentId, filename, e.getMessage()});
                 throw new ProcessingException(
                     "Base64 decode failed for document: " + documentId,
                     com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64, documentId);

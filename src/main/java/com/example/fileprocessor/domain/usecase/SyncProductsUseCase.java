@@ -2,7 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductState;
-import com.example.fileprocessor.domain.port.out.ProductPersistenceGateway;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -16,13 +16,13 @@ import java.time.LocalDateTime;
 public class SyncProductsUseCase {
 
     private final ProductRestGateway productRestGateway;
-    private final ProductPersistenceGateway productPersistenceGateway;
+    private final ProductRepository productRepository;
 
     public SyncProductsUseCase(
             ProductRestGateway productRestGateway,
-            ProductPersistenceGateway productPersistenceGateway) {
+            ProductRepository productRepository) {
         this.productRestGateway = productRestGateway;
-        this.productPersistenceGateway = productPersistenceGateway;
+        this.productRepository = productRepository;
     }
 
     public Mono<Void> execute() {
@@ -40,6 +40,6 @@ public class SyncProductsUseCase {
             null,
             product.documents()
         );
-        return productPersistenceGateway.save(productToSave);
+        return productRepository.save(productToSave);
     }
 }

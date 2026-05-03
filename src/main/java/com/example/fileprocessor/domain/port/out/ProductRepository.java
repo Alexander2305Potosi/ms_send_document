@@ -5,10 +5,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * Port for querying products from local database.
+ * Port for product repository operations.
  */
-public interface ProductDbGateway {
+public interface ProductRepository {
     Flux<Product> findByLoadDate(java.time.LocalDate loadDate);
-    Mono<Void> updateEstado(String productId, String estado);
     Flux<Product> findAll();
+    Mono<Void> save(Product product);
+    Mono<Void> updateEstado(String productId, String estado);
 }

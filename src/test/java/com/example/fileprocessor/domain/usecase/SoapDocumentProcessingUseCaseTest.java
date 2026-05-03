@@ -1,11 +1,12 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.ProductDbGateway;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
@@ -32,7 +33,7 @@ import static org.mockito.Mockito.*;
 class SoapDocumentProcessingUseCaseTest {
 
     @Mock
-    private ProductDbGateway productDbGateway;
+    private ProductRepository productRepository;
 
     @Mock
     private ProductRestGateway productRestGateway;
@@ -41,7 +42,7 @@ class SoapDocumentProcessingUseCaseTest {
     private SoapGateway soapGateway;
 
     @Mock
-    private com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway traceabilityGateway;
+    private com.example.fileprocessor.domain.port.out.DocumentHistoryRepository historyRepository;
 
     private SoapDocumentProcessingUseCase useCase;
 
@@ -52,9 +53,9 @@ class SoapDocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         var validator = new RulesBussinesService(config(null, null));
-        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validator);
-        lenient().when(traceabilityGateway.save(any())).thenReturn(Mono.empty());
-        lenient().when(productDbGateway.updateEstado(anyString(), any())).thenReturn(Mono.empty());
+        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validator);
+        lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
+        lenient().when(productRepository.updateEstado(anyString(), any())).thenReturn(Mono.empty());
     }
 
     @Test
@@ -112,7 +113,7 @@ class SoapDocumentProcessingUseCaseTest {
             .success(true)
             .build();
 
-        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
@@ -124,13 +125,13 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenValidationFails_emitsFailureResult() {
         var validatorWithPattern = new RulesBussinesService(config(null, ".*\\.csv$"));
-        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validatorWithPattern);
+        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validatorWithPattern);
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
         Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
-        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())
@@ -140,20 +141,20 @@ class SoapDocumentProcessingUseCaseTest {
             })
             .verifyComplete();
 
-        verify(traceabilityGateway, times(1)).save(any());
+        verify(historyRepository, times(1)).save(any());
         verify(soapGateway, never()).send(any(FileUploadRequest.class));
     }
 
     @Test
     void executePendingDocuments_whenSizeExceedsLimit_emitsFailureResult() {
         var validatorWithSize = new RulesBussinesService(config(100L, null));
-        useCase = new SoapDocumentProcessingUseCase(productDbGateway, productRestGateway, soapGateway, traceabilityGateway, validatorWithSize);
+        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validatorWithSize);
 
         ProductDocument doc = new ProductDocument(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 500, false, "origin");
         Product product = new Product("prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
-        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
 
         StepVerifier.create(useCase.executePendingDocuments())
@@ -163,7 +164,7 @@ class SoapDocumentProcessingUseCaseTest {
             })
             .verifyComplete();
 
-        verify(traceabilityGateway, times(1)).save(any());
+        verify(historyRepository, times(1)).save(any());
         verify(soapGateway, never()).send(any(FileUploadRequest.class));
     }
 }

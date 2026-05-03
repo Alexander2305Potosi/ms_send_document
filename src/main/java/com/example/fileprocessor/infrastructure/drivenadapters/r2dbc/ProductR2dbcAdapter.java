@@ -1,10 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.Product;
-import com.example.fileprocessor.domain.port.out.ProductDbGateway;
-import com.example.fileprocessor.domain.port.out.ProductPersistenceGateway;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.mapper.ProductMapper;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -14,11 +12,11 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Component
-public class ProductR2dbcAdapter implements ProductDbGateway, ProductPersistenceGateway {
+public class ProductR2dbcAdapter implements ProductRepository {
 
-    private final ProductRepository repository;
+    private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository repository;
 
-    public ProductR2dbcAdapter(ProductRepository repository) {
+    public ProductR2dbcAdapter(com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository repository) {
         this.repository = repository;
     }
 
@@ -38,18 +36,18 @@ public class ProductR2dbcAdapter implements ProductDbGateway, ProductPersistence
     }
 
     @Override
-    public Mono<Void> updateEstado(String productId, String estado) {
-        return repository.findById(productId)
-            .flatMap(entity -> {
-                entity.setState(estado);
-                return repository.save(entity);
-            })
+    public Mono<Void> save(Product product) {
+        return repository.save(ProductMapper.toEntity(product))
             .then();
     }
 
     @Override
-    public Mono<Void> save(Product product) {
-        return repository.save(ProductMapper.toEntity(product))
+    public Mono<Void> updateEstado(String productId, String estado) {
+        return repository.findByProductId(productId)
+            .flatMap(entity -> {
+                entity.setState(estado);
+                return repository.save(entity);
+            })
             .then();
     }
 }

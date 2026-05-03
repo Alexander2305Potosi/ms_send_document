@@ -1,11 +1,12 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.Product;
 import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.ProductDbGateway;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
@@ -32,7 +33,7 @@ import static org.mockito.Mockito.*;
 class S3DocumentProcessingUseCaseTest {
 
     @Mock
-    private ProductDbGateway productDbGateway;
+    private ProductRepository productRepository;
 
     @Mock
     private ProductRestGateway productRestGateway;
@@ -41,7 +42,7 @@ class S3DocumentProcessingUseCaseTest {
     private com.example.fileprocessor.domain.port.out.S3Gateway s3Gateway;
 
     @Mock
-    private com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway traceabilityGateway;
+    private com.example.fileprocessor.domain.port.out.DocumentHistoryRepository historyRepository;
 
     private S3DocumentProcessingUseCase useCase;
 
@@ -52,9 +53,9 @@ class S3DocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         RulesBussinesGateway validator = new RulesBussinesService(config(null, null));
-        useCase = new S3DocumentProcessingUseCase(productDbGateway, productRestGateway, s3Gateway, traceabilityGateway, validator);
-        lenient().when(traceabilityGateway.save(any())).thenReturn(Mono.empty());
-        lenient().when(productDbGateway.updateEstado(anyString(), any())).thenReturn(Mono.empty());
+        useCase = new S3DocumentProcessingUseCase(productRepository, productRestGateway, s3Gateway, historyRepository, validator);
+        lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
+        lenient().when(productRepository.updateEstado(anyString(), any())).thenReturn(Mono.empty());
     }
 
     @Test
@@ -112,7 +113,7 @@ class S3DocumentProcessingUseCaseTest {
             .success(true)
             .build();
 
-        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
@@ -132,7 +133,7 @@ class S3DocumentProcessingUseCaseTest {
             .success(false)
             .build();
 
-        when(productDbGateway.findByLoadDate(any())).thenReturn(Flux.just(product));
+        when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(doc));
         when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(failureResult));
 

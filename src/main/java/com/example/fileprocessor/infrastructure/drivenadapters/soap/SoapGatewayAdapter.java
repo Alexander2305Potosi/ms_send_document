@@ -9,8 +9,6 @@ import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapP
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
@@ -25,6 +23,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * SOAP gateway adapter for file upload operations.
@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class SoapGatewayAdapter implements SoapGateway {
 
-    private static final Logger log = LoggerFactory.getLogger(SoapGatewayAdapter.class);
+    private static final Logger log = Logger.getLogger(SoapGatewayAdapter.class.getName());
 
     private final WebClient webClient;
     private final SoapProperties properties;
@@ -59,8 +59,8 @@ public class SoapGatewayAdapter implements SoapGateway {
             int maxRetries = properties.retryAttempts();
             AtomicInteger attemptCount = new AtomicInteger(1);
 
-            log.info("Sending SOAP request for traceId: {}, endpoint: {}, retryAttempts: {}",
-                    traceId, properties.endpoint(), maxRetries);
+            log.log(Level.INFO, "Sending SOAP request for traceId: {0}, endpoint: {1}, retryAttempts: {2}",
+                    new Object[]{traceId, properties.endpoint(), maxRetries});
 
             String soapEnvelope = soapMapper.toFullSoapMessage(request);
 
@@ -72,12 +72,12 @@ public class SoapGatewayAdapter implements SoapGateway {
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                     .map(soapMapper::fromSoapXml)
-                    .doOnNext(response -> log.info("SOAP response received for traceId={}: correlationId={}",
-                            traceId, response.getCorrelationId()))
+                    .doOnNext(response -> log.log(Level.INFO, "SOAP response received for traceId={0}: correlationId={1}",
+                            new Object[]{traceId, response.getCorrelationId()}))
                     .doOnError(e -> {
                         int currentAttempt = attemptCount.incrementAndGet();
-                        log.warn("SOAP request attempt {}/{} failed for traceId={}: {}",
-                                currentAttempt, maxRetries + 1, traceId, e.getMessage());
+                        log.log(Level.WARNING, "SOAP request attempt {0}/{1} failed for traceId={2}: {3}",
+                                new Object[]{currentAttempt, maxRetries + 1, traceId, e.getMessage()});
                     });
 
             return retryableMono
@@ -85,28 +85,28 @@ public class SoapGatewayAdapter implements SoapGateway {
                             .filter(this::isRetryable)
                             .doBeforeRetry(signal -> {
                                 int currentAttempt = attemptCount.incrementAndGet();
-                                log.info("Retrying SOAP request for traceId={}, attempt {}/{}",
-                                        traceId, currentAttempt, maxRetries + 1);
+                                log.log(Level.INFO, "Retrying SOAP request for traceId={0}, attempt {1}/{2}",
+                                        new Object[]{traceId, currentAttempt, maxRetries + 1});
                             }))
                     .map(response -> toFileUploadResult(response, attemptCount.get()))
                     .onErrorResume(WebClientResponseException.class, ex -> {
-                        log.error("SOAP HTTP error for traceId={}: {} {}", traceId, ex.getStatusCode(), ex.getMessage());
+                        log.log(Level.SEVERE, "SOAP HTTP error for traceId={0}: {1} {2}", new Object[]{traceId, ex.getStatusCode(), ex.getMessage()});
                         return Mono.just(buildErrorResult(traceId, SoapErrorCodes.BAD_GATEWAY, ex.getMessage(), attemptCount.get()));
                     })
                     .onErrorResume(TimeoutException.class, ex -> {
-                        log.error("SOAP timeout for traceId={}", traceId);
+                        log.log(Level.SEVERE, "SOAP timeout for traceId={0}", new Object[]{traceId});
                         return Mono.just(buildErrorResult(traceId, SoapErrorCodes.GATEWAY_TIMEOUT, "Timeout after " + properties.timeoutSeconds() + "s", attemptCount.get()));
                     })
                     .onErrorResume(IOException.class, ex -> {
-                        log.error("SOAP IO error for traceId={}: {}", traceId, ex.getMessage());
+                        log.log(Level.SEVERE, "SOAP IO error for traceId={0}: {1}", new Object[]{traceId, ex.getMessage()});
                         return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR, ex.getMessage(), attemptCount.get()));
                     })
                     .onErrorResume(ConnectException.class, ex -> {
-                        log.error("SOAP connection error for traceId={}: {}", traceId, ex.getMessage());
+                        log.log(Level.SEVERE, "SOAP connection error for traceId={0}: {1}", new Object[]{traceId, ex.getMessage()});
                         return Mono.just(buildErrorResult(traceId, SoapErrorCodes.SERVICE_UNAVAILABLE, ex.getMessage(), attemptCount.get()));
                     })
                     .onErrorResume(Throwable.class, ex -> {
-                        log.error("SOAP unexpected error for traceId={}: {}", traceId, ex.getMessage());
+                        log.log(Level.SEVERE, "SOAP unexpected error for traceId={0}: {1}", new Object[]{traceId, ex.getMessage()});
                         return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR, ex.getMessage(), attemptCount.get()));
                     });
         });
