@@ -22,36 +22,27 @@ public class DocumentHistoryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "id_producto", nullable = false)
-    private String productId;
-
-    @Column(name = "id_documento", nullable = false)
+    @Column(name = "document_id", nullable = false)
     private String documentId;
 
-    @Column(name = "nombre_archivo", nullable = false)
-    private String filename;
+    @Column(name = "product_id", nullable = false)
+    private String productId;
 
-    @Column(name = "nombre_comprimido")
-    private String compressedFilename;
+    @Column(name = "use_case", nullable = false)
+    private String useCase;
 
-    @Column(name = "estado", nullable = false)
+    @Column(name = "status", nullable = false)
     private String status;
 
-    @Column(name = "codigo_error")
+    @Column(name = "error_code")
     private String errorCode;
 
-    @Column(name = "razon_fallo")
-    private String failureReason;
+    @Column(name = "error_message")
+    private String errorMessage;
 
-    @Column(name = "numero_intentos", nullable = false)
-    private int attemptCount;
+    @Column(name = "retry", nullable = false)
+    private Integer retry = 0;
 
-    @Column(name = "fecha_envio")
-    private LocalDateTime sentAt;
-
-    @Column(name = "fecha_fallo")
-    private LocalDateTime failedAt;
-
-    @Column(name = "fecha_creacion", nullable = false)
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 }

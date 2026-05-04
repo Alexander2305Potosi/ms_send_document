@@ -3,7 +3,7 @@ package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
-import com.example.fileprocessor.domain.usecase.SyncProductsUseCase;
+import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
@@ -27,15 +27,15 @@ public class ProductHandler {
 
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
-    private final SyncProductsUseCase syncProductsUseCase;
+    private final SyncDocumentsUseCase syncDocumentsUseCase;
 
     public ProductHandler(
             SoapDocumentProcessingUseCase soapDocumentUseCase,
             ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider,
-            SyncProductsUseCase syncProductsUseCase) {
+            SyncDocumentsUseCase syncDocumentsUseCase) {
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
-        this.syncProductsUseCase = syncProductsUseCase;
+        this.syncDocumentsUseCase = syncDocumentsUseCase;
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
@@ -60,14 +60,14 @@ public class ProductHandler {
         String traceId = resolveTraceId(request);
 
         return Mono.deferContextual(ctx -> {
-            log.log(Level.INFO, "Starting product sync, traceId: {0}", new Object[]{traceId});
-            syncProductsUseCase.execute()
-                .doOnError(error -> log.log(Level.SEVERE, "Product sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
-                .doOnSuccess(v -> log.log(Level.INFO, "Product sync completed for traceId: {0}", new Object[]{traceId}))
+            log.log(Level.INFO, "Starting document sync, traceId: {0}", new Object[]{traceId});
+            syncDocumentsUseCase.execute()
+                .doOnError(error -> log.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
+                .doOnSuccess(v -> log.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
                 .subscribe();
             return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(java.util.Map.of("status", "OK", "message", "Products sync initiated"));
+                .bodyValue(java.util.Map.of("status", "OK", "message", "Document sync initiated"));
         }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 

@@ -3,8 +3,8 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -18,12 +18,12 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private final S3Gateway s3Gateway;
 
     public S3DocumentProcessingUseCase(
-            ProductRepository productRepository,
+            DocumentRepository documentRepository,
+            DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            DocumentHistoryRepository historyRepository,
             RulesBussinesGateway documentValidator) {
-        super(productRepository, historyRepository, productRestGateway, documentValidator);
+        super(documentRepository, historyRepository, productRestGateway, documentValidator);
         this.s3Gateway = s3Gateway;
     }
 

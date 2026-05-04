@@ -4,6 +4,7 @@ import lombok.Builder;
 
 @Builder
 public record ProductDocumentFile(
+    String productId,
     String documentId,
     String filename,
     byte[] content,

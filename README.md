@@ -11,7 +11,7 @@ Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos co
 3. [Flujo de Datos](#flujo-de-datos)
 4. [Base de Datos](#base-de-datos)
 5. [Descompresion de archivos ZIP](#descompresion-de-archivos-zip)
-6. [Estados de Productos (ProductState)](#estados-de-productos-productstate)
+6. [Estados de Documentos (ProductState)](#estados-de-documentos-productstate)
 7. [Validacion de Documentos (RulesBussinesService)](#validacion-de-documentos-rulesbussinesservice)
 8. [Escenarios de Procesamiento](#escenarios-de-procesamiento)
 9. [Codigos de Error](#codigos-de-error)
@@ -36,30 +36,32 @@ com.example.fileprocessor/
 │
 ├── domain/                                       # Capa de dominio
 │   ├── entity/
-│   │   ├── Product.java                          # Record: producto con lista de documentos
-│   │   ├── ProductDocument.java                  # Record: documento (puede ser ZIP)
-│   │   ├── ProductState.java                     # Constantes: PENDING, IN_PROGRESS, PROCESSED, FAILED
-│   │   ├── FileUploadRequest.java                # Request para upload a gateway (SOAP/S3)
-│   │   ├── FileUploadResult.java                 # Resultado de upload con status, errorCode, attemptCount
+│   │   ├── Document.java                         # Record: documento con metadatos completos
+│   │   ├── DocumentHistory.java                  # Record: trazabilidad de envio a servicio externo
 │   │   ├── DocumentStatus.java                   # Enum: SUCCESS, FAILURE
-│   │   ├── DocumentHistory.java                  # Record: trazabilidad de envio a BD
+│   │   ├── ProductDocumentFile.java              # Record: documento obtenido de REST API
+│   │   ├── ProductDocumentHistory.java           # Record: documento (21 campos, inclui productId, isZip, pais)
+│   │   ├── ProductState.java                     # Constantes: PENDING, IN_PROGRESS, PROCESSED, FAILED, SYNCED
+│   │   ├── FileUploadRequest.java                # Request para upload a gateway (SOAP/S3)
+│   │   ├── FileUploadResult.java                 # Resultado de upload con status, errorCode, correlationId
+│   │   ├── HomologationResult.java               # Resultado de homologacion origin/pais
 │   │   └── ExternalServiceResponse.java          # Respuesta generica de servicio externo
 │   ├── usecase/
-│   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base
+│   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base (procesa desde documento)
 │   │   ├── SoapDocumentProcessingUseCase.java       # Implementacion SOAP
 │   │   ├── S3DocumentProcessingUseCase.java         # Implementacion S3
-│   │   ├── SyncProductsUseCase.java                 # Sincroniza productos a BD
+│   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y documentos desde REST API
 │   │   └── ProcessingResultCodes.java               # Constantes de codigos de error
 │   ├── service/
-│   │   └── RulesBussinesService.java              # Validacion: tamano, patron filename
+│   │   └── RulesBussinesService.java              # Validacion: tamano maximo, patron filename
 │   ├── util/
 │   │   ├── ZipDecompressor.java                   # Descompresion de ZIP con inferencia de contentType
 │   │   └── Base64Utils.java                       # Encoding/decoding seguro de Base64
 │   ├── port/out/
+│   │   ├── DocumentRepository.java               # Puerto: persistencia y consulta de documentos
+│   │   ├── DocumentHistoryRepository.java        # Puerto: trazabilidad de envios (historico)
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
-│   │   ├── ProductRepository.java                 # Puerto: persistencia y consulta de productos
-│   │   ├── DocumentHistoryRepository.java         # Puerto: trazabilidad de envios
-│   │   ├── RulesBussinesGateway.java             # Puerto: validacion de documentos
+│   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
 │   │   ├── S3Gateway.java                         # Puerto: envio a S3
 │   │   ├── SoapGateway.java                       # Puerto: envio a SOAP
 │   │   └── HomologationRepository.java           # Puerto: homologacion de origin y pais (SOAP)
@@ -78,56 +80,56 @@ com.example.fileprocessor/
     │   └── ProcessorsProperties.java              # @ConfigurationProperties("app.processors")
     ├── drivenadapters/
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
-    │   │   ├── ProductR2dbcAdapter.java            # Implementa ProductRepository
-    │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentHistoryRepository
+    │   │   ├── DocumentR2dbcAdapter.java          # Implementa DocumentRepository
+    │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository
     │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (cache en memoria)
     │   │   ├── entity/
-    │   │   │   ├── ProductEntity.java              # @Entity @Table("productos")
+    │   │   │   ├── DocumentEntity.java             # @Entity @Table("documento")
     │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos")
     │   │   │   ├── CategoryManualEntity.java       # @Entity @Table("categoria_manual")
     │   │   │   └── CountryHomologatedEntity.java  # @Entity @Table("pais_homologado")
     │   │   ├── mapper/
-    │   │   │   ├── ProductMapper.java              # Product <-> ProductEntity
-    │   │   │   └── DocumentHistoryMapper.java      # DocumentHistory <-> DocumentHistoryEntity
+    │   │   │   ├── DocumentMapper.java             # Document <-> DocumentEntity
+    │   │   │   └── DocumentHistoryMapper.java     # DocumentHistory <-> DocumentHistoryEntity
     │   │   └── repository/
-    │   │       ├── ProductRepository.java         # R2dbcRepository<ProductEntity, Long>
-    │   │       ├── DocumentHistoryRepository.java  # R2dbcRepository<DocumentHistoryEntity, Long>
-    │   │       ├── CategoryManualRepository.java   # R2dbcRepository<CategoryManualEntity, Long>
+    │   │       ├── DocumentRepository.java        # R2dbcRepository<DocumentEntity, Long>
+    │   │       ├── DocumentHistoryRepository.java # R2dbcRepository<DocumentHistoryEntity, Long>
+    │   │       ├── CategoryManualRepository.java  # R2dbcRepository<CategoryManualEntity, Long>
     │   │       └── CountryHomologatedRepository.java # R2dbcRepository<CountryHomologatedEntity, Long>
     │   ├── restclient/
-    │   │   ├── ProductRestGatewayAdapter.java      # WebClient a API REST externa
+    │   │   ├── ProductRestGatewayAdapter.java     # WebClient a API REST externa
     │   │   └── dto/
     │   │       ├── ProductResponse.java            # DTO JSON de producto
     │   │       └── ProductDocumentResponse.java    # DTO JSON de documento (Base64)
     │   ├── soap/
-    │   │   ├── SoapGatewayAdapter.java             # Envio SOAP con reintentos + backoff
-    │   │   ├── SoapErrorCodes.java                 # Constantes de error SOAP
+    │   │   ├── SoapGatewayAdapter.java            # Envio SOAP con reintentos + backoff
+    │   │   ├── SoapErrorCodes.java                # Constantes de error SOAP
     │   │   └── config/
-    │   │       └── SoapProperties.java             # @ConfigurationProperties("app.soap")
+    │   │       └── SoapProperties.java            # @ConfigurationProperties("app.soap")
     │   └── aws/
-    │       ├── S3GatewayAdapter.java               # Envio S3 async con reintentos
-    │       ├── S3ErrorCodes.java                   # Constantes de error S3
+    │       ├── S3GatewayAdapter.java              # Envio S3 async con reintentos
+    │       ├── S3ErrorCodes.java                  # Constantes de error S3
     │       └── config/
-    │           ├── AwsConfig.java                   # Bean S3AsyncClient
-    │           └── S3Properties.java                # @ConfigurationProperties("app.aws.s3")
+    │           ├── AwsConfig.java                 # Bean S3AsyncClient
+    │           └── S3Properties.java              # @ConfigurationProperties("app.aws.s3")
     ├── entrypoints/rest/
-    │   ├── ProductRoutes.java                      # Router function (WebFlux funcional)
+    │   ├── ProductRoutes.java                    # Router function (WebFlux funcional)
     │   ├── handler/
-    │   │   └── ProductHandler.java                 # Handler de endpoints REST
+    │   │   └── ProductHandler.java                # Handler de endpoints REST
     │   ├── config/
-    │   │   └── DocumentRestProperties.java         # @ConfigurationProperties("app.document-rest")
+    │   │   └── DocumentRestProperties.java        # @ConfigurationProperties("app.document-rest")
     │   └── constants/
-    │       ├── RestApiPaths.java                   # Rutas de la API
-    │       └── ApiConstants.java                   # Constantes (headers, parametros)
+    │       ├── RestApiPaths.java                  # Rutas de la API
+    │       └── ApiConstants.java                  # Constantes (headers, parametros)
     └── helpers/soap/
-        ├── SoapConstants.java                      # Namespaces SOAP, templates XML
+        ├── SoapConstants.java                   # Namespaces SOAP, templates XML
         ├── mapper/
-        │   └── SoapMapper.java                     # JAXB marshalling/unmarshalling + Base64
+        │   └── SoapMapper.java                   # JAXB marshalling/unmarshalling + Base64
         └── xml/
-            ├── SoapEnvelopeWrapper.java            # Envoltorio SOAP con parseo DOM seguro
+            ├── SoapEnvelopeWrapper.java         # Envoltorio SOAP con parseo DOM seguro
             └── model/
-                ├── UploadFileRequest.java           # @XmlRootElement para request SOAP
-                └── UploadFileResponse.java          # @XmlRootElement para response SOAP
+                ├── UploadFileRequest.java       # @XmlRootElement para request SOAP
+                └── UploadFileResponse.java      # @XmlRootElement para response SOAP
 ```
 
 ### Recursos
@@ -135,10 +137,13 @@ com.example.fileprocessor/
 ```
 src/main/resources/
 ├── application.yml              # Configuracion base
-├── application-dev.yml          # Perfil desarrollo (DEBUG, timeouts cortos)
+├── application-dev.yml         # Perfil desarrollo (DEBUG, timeouts cortos)
 ├── application-prod.yml         # Perfil produccion (WARN, graceful shutdown)
 ├── schema.sql                   # DDL para H2 (desarrollo)
-└── schema-postgresql.sql        # DDL para PostgreSQL (produccion)
+└── schema-postgresql.sql         # DDL para PostgreSQL (produccion)
+
+docs/migrations/
+└── 001_create_documento_tables.sql  # DDL para las nuevas tablas
 ```
 
 ---
@@ -147,7 +152,7 @@ src/main/resources/
 
 ### GET /api/v1/products
 
-Procesa documentos pendientes de productos en la fecha actual desde base de datos. Los productos en estado PENDING se marcan IN_PROGRESS durante el procesamiento y al finalizar pasan a PROCESSED o FAILED.
+Procesa documentos pendientes desde la tabla `documento` en estado PENDING. Cada documento se obtiene de la API REST externa, se envia directamente al gateway (SOAP o S3) sin descompresion ni validacion adicionales, y se registra en `historico_documentos`.
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion. Si no se envia, se genera un UUID automatico.
@@ -155,7 +160,7 @@ Procesa documentos pendientes de productos en la fecha actual desde base de dato
 **Query Parameters:**
 - `processor`: `soap` (default) | `s3` — Selecciona el gateway de salida.
 
-**Response:** `Content-Type: application/x-ndjson` (Server-Sent Events / NDJSON)
+**Response:** `Content-Type: application/x-ndjson` (NDJSON stream)
 ```json
 {"correlationId":"corr-123","status":"SUCCESS","success":true,"processedAt":"2026-04-30T20:15:00Z","errorCode":null,"attemptCount":1}
 {"correlationId":"corr-124","status":"FAILURE","success":false,"processedAt":"2026-04-30T20:15:01Z","errorCode":"GATEWAY_TIMEOUT","attemptCount":3}
@@ -167,14 +172,14 @@ Procesa documentos pendientes de productos en la fecha actual desde base de dato
 
 ### POST /api/v1/products/sync
 
-Sincroniza productos desde la API REST externa hacia la base de datos. Cada producto se persiste con `estado=PENDING` y `fecha_carga=now()`.
+Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Por cada producto se listan sus documentos, se obtiene el contenido de cada uno desde la API REST, se descomprime si es ZIP, se valida con `RulesBussinesGateway`, y se persiste en la tabla `documento` con `state=SYNCED` y `status=PENDING`.
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion.
 
 **Response:** HTTP 200 (fire-and-forget — la operacion se ejecuta asincronamente)
 ```json
-{"status":"OK","message":"Products sync initiated"}
+{"status":"OK","message":"Document sync initiated"}
 ```
 
 ### GET /actuator/health
@@ -194,13 +199,21 @@ Health check. Expone health, info, metrics, loggers y prometheus.
          [ProductResponse, ...]
                │
                ▼
-3. SyncProductsUseCase.execute()
+3. SyncDocumentsUseCase.execute()
    ├── productRestGateway.getAllProducts()
-   ├── Cada producto → Product(state=PENDING, loadDate=now())
-   └── productRepository.save()
-               │
-               ▼
-4. BD (productos)
+   │     └── Flux<ProductDocumentHistory> (doc plano con productId, sin ProductHistory)
+   │
+   └── Por cada documento:
+       ├── productRestGateway.getDocument(productId, documentId)
+       │     └── GET {productDocumentsPath}/{documentId}
+       │     └── Decodifica Base64 via Base64Utils.decodeSafe()
+       ├── isZip = isZip(filename)  [inferencia por extension]
+       ├── ZipDecompressor.decompress()  [si isZip=true]
+       │     └── Primero guarda el ZIP (parent=null)
+       │     └── Luego guarda cada archivo expandido (parent=filename_del_zip)
+       ├── RulesBussinesGateway.validate(doc, false)  [solo patron nombre, sin check de tamano]
+       └── documentRepository.save()
+           └── INSERT en tabla documento (state=SYNCED, status=PENDING)
 ```
 
 ### Flujo de Procesamiento (GET /api/v1/products)
@@ -219,36 +232,31 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 3. AbstractDocumentProcessingUseCase.executePendingDocuments()
         │
         ▼
-4. ProductRepository.findByLoadDate(LocalDate.now())
-        │  Filtra: fecha_carga=hoy AND estado=PENDING
+4. documentRepository.findByStatus("PENDING")
+   └── Filtra: status=PENDING en tabla documento
         ▼
-5. BD → Flux<Product>
+5. BD → Flux<Document>
         │
         ▼
-6. Por cada producto: markProductInProgress(productId)
-        │  Actualiza estado a IN_PROGRESS
-        ▼
-7. Por cada documento: processDocument(doc, productId)
-   ├── ProductRestGateway.getDocument(productId, docId)
+6. Por cada documento: processDocument(doc)
+   ├── documentRepository.updateState(docId, "IN_PROGRESS")
+   ├── productRestGateway.getDocument(doc.productId(), doc.documentId())
    │     └── GET {productDocumentsPath}/{docId}
    │     └── Decodifica Base64 via Base64Utils.decodeSafe()
-   ├── ZipDecompressor.decompress()  [si isZip=true]
-   │     └── Expande ZIP en archivos individuales
-   ├── RulesBussinesGateway.validate(document)
-   │     └── Valida tamano maximo y patron filename
-   │     └── Documentos invalidos se omiten (Mono.empty())
-   │     └── Si todos son invalidos → ProcessingException(INVALID_RESPONSE)
+   ├── RulesBussinesGateway.validate(doc, true)  [patron nombre + tamano]
+   │     └── Si no pasa → updateState(PROCESSED), skip (no se envia)
    ├── uploadDocument() → SoapGateway.send() o S3Gateway.send()
    │     └── Con reintentos automaticos + backoff
-   └── saveHistory(doc, productId, result)
-         └── INSERT en historico_documentos
+   ├── saveHistory(doc, result) → INSERT en historico_documentos
+   │     └── useCase = "SOAP" o "S3"
+   │     └── retry = numero de intento actual
+   └── documentRepository.updateStatus(docId, result.isSuccess ? "PROCESSED" : "FAILED")
         │
         ▼
-8. Por cada producto: markProductFinished(productId, results)
-        │  Si todos SUCCESS → PROCESSED, si algun FAILURE → FAILED
-        ▼
-9. Flux<FileUploadResult> → NDJSON stream al cliente
+7. Flux<FileUploadResult> → NDJSON stream al cliente
 ```
+
+**Nota:** durante el procesamiento NO se aplica `ZipDecompressor` (ZIP ya fue descomprimido durante sync). La validacion de nombre y tamano si se aplica en procesamiento.
 
 ---
 
@@ -290,50 +298,51 @@ spring:
     password: ${DB_PASSWORD:postgres}
 ```
 
-El script DDL para PostgreSQL esta en `src/main/resources/schema-postgresql.sql`. Para aplicarlo:
+### Tabla: documento
 
-```bash
-psql -h <host> -U <user> -d <database> -f schema-postgresql.sql
-```
-
-### Tabla: productos
-
-Almacena los productos sincronizados desde la API REST externa.
+Almacena los documentos sincronizados desde la API REST externa. Es la tabla central de procesamiento — el endpoint de procesamiento consulta directamente esta tabla.
 
 | Columna | Tipo | Descripcion |
-|--------|------|-------------|
+|---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
-| `id_producto` | VARCHAR(255) | Identificador del producto en el sistema externo |
-| `nombre` | VARCHAR(500) | Nombre del producto |
-| `fecha_carga` | TIMESTAMP | Fecha de carga para filtrado diario |
-| `estado` | VARCHAR(20) | PENDING / IN_PROGRESS / PROCESSED / FAILED |
-| `mensaje_error` | VARCHAR(2000) | Mensaje de error si hubo fallo |
+| `id_document` | VARCHAR(100) | ID del documento en el sistema externo |
+| `product_id` | VARCHAR(100) | ID del producto padre |
+| `active` | BOOLEAN | Si el documento esta activo (default: TRUE) |
+| `doc_key` | VARCHAR(255) | Clave de documento (nullable) |
+| `name` | VARCHAR(255) | Nombre del archivo |
+| `owner` | VARCHAR(255) | Propietario del documento |
+| `path` | TEXT | Ruta del documento (nullable) |
+| `status` | VARCHAR(50) | Estado de procesamiento: PENDING / IN_PROGRESS / PROCESSED / FAILED |
+| `version_contract` | VARCHAR(50) | Version de contrato (nullable) |
+| `state` | VARCHAR(100) | Estado de sincronizacion: SYNCED / PENDING |
+| `error_message` | TEXT | Mensaje de error si hubo fallo |
+| `is_zip` | BOOLEAN | Si es un archivo ZIP comprimido |
+| `parent_zip_name` | VARCHAR(255) | Si viene de un ZIP, nombre del ZIP padre (nullable) |
+| `created_at` | TIMESTAMP | Fecha de creacion del registro |
+| `updated_at` | TIMESTAMP | Fecha de ultima actualizacion |
 
 ### Tabla: historico_documentos
 
-Almacena la trazabilidad completa de cada intento de envio de documentos.
+Almacena la trazabilidad completa de cada intento de envio de documentos a los servicios externos (SOAP o S3). Cada registro representa un intento individual, lo que permite hacer retry tracking por caso de uso.
 
 | Columna | Tipo | Descripcion |
-|--------|------|-------------|
+|---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
-| `id_producto` | VARCHAR(255) | Referencia al producto |
-| `id_documento` | VARCHAR(500) | ID del documento (original o ruta si vino de ZIP) |
-| `nombre_archivo` | VARCHAR(500) | Nombre del archivo enviado |
-| `nombre_comprimido` | VARCHAR(500) | Si es ZIP, nombre del archivo ZIP original |
-| `estado` | VARCHAR(20) | SUCCESS / FAILURE |
-| `codigo_error` | VARCHAR(100) | Codigo de error categorizado |
-| `razon_fallo` | VARCHAR(2000) | Mensaje de error legible |
-| `numero_intentos` | INT | Numero de intentos realizados (default: 1) |
-| `fecha_envio` | TIMESTAMP | Timestamp de envio exitoso (nullable) |
-| `fecha_fallo` | TIMESTAMP | Timestamp de fallo (nullable) |
-| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
+| `document_id` | VARCHAR(100) | ID del documento (original o ruta si vino de ZIP) |
+| `product_id` | VARCHAR(100) | ID del producto padre |
+| `use_case` | VARCHAR(100) | Caso de uso que realizo el envio: SOAP o S3 |
+| `status` | VARCHAR(50) | SUCCESS / FAILURE |
+| `error_code` | VARCHAR(50) | Codigo de error categorizado |
+| `error_message` | TEXT | Mensaje de error legible |
+| `retry` | INTEGER | Numero de intento actual (0 = primer intento) |
+| `created_at` | TIMESTAMP | Fecha y hora del intento |
 
 ### Tabla: categoria_manual
 
 Almacena la homologacion de categorias de manuales. Se usa para resolver el `origin` de los documentos en el caso de uso SOAP usando busqueda contains.
 
 | Columna | Tipo | Descripcion |
-|--------|------|-------------|
+|---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `categoria` | VARCHAR(255) | Codigo de categoria (ej: "manual_tecnico") |
 | `descripcion_manual` | VARCHAR(500) | Descripcion legible (ej: "Manual Tecnico del Producto") |
@@ -344,7 +353,7 @@ Almacena la homologacion de categorias de manuales. Se usa para resolver el `ori
 Almacena la homologacion de paises. Se usa para resolver el `pais` de los documentos en el caso de uso SOAP.
 
 | Columna | Tipo | Descripcion |
-|--------|------|-------------|
+|---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `pais` | VARCHAR(255) | Codigo de pais (ej: "AR", "CL") |
 | `pais_homologado` | VARCHAR(255) | Nombre homologado del pais (ej: "Argentina", "Chile") |
@@ -353,17 +362,23 @@ Almacena la homologacion de paises. Se usa para resolver el `pais` de los docume
 ### Indices
 
 ```sql
--- historico_documentos
-CREATE INDEX idx_hist_producto   ON historico_documentos (id_producto);
-CREATE INDEX idx_hist_estado     ON historico_documentos (estado);
-CREATE INDEX idx_hist_created    ON historico_documentos (fecha_creacion DESC);
+-- documento
+CREATE INDEX idx_documento_status ON documento(status);
+CREATE INDEX idx_documento_product_id ON documento(product_id);
+CREATE INDEX idx_documento_document_id ON documento(id_document);
 
--- productos
-CREATE INDEX idx_prod_estado       ON productos (estado);
-CREATE INDEX idx_prod_fecha_carga  ON productos (fecha_carga);
-CREATE INDEX idx_prod_producto_id  ON productos (id_producto);
-CREATE INDEX idx_prod_carga_estado ON productos (fecha_carga, estado);
+-- historico_documentos
+CREATE INDEX idx_historico_document_id ON historico_documentos(document_id);
+CREATE INDEX idx_historico_document_use_case ON historico_documentos(document_id, use_case);
+
+-- categoria_manual
+CREATE INDEX idx_cat_manual_categoria ON categoria_manual(categoria);
+
+-- pais_homologado
+CREATE INDEX idx_pais_codigo ON pais_homologado(pais);
 ```
+
+---
 
 ## Homologacion de Origin y Pais (SOAP)
 
@@ -373,17 +388,23 @@ El caso de uso SOAP realiza una homologacion de `origin` y `pais` antes de envia
 
 ```
 Documento.origin = "manual_tecnico"
-        ↓
+        │
+        ▼
 Busca en categoria_manual (usa contains + eliminacion de tildes)
-        ↓
+        │
+        ▼
 descripcion_manual = "Manual Tecnico del Producto"
-        ↓
+        │
+        ▼
 Documento.pais = "AR"
-        ↓
+        │
+        ▼
 Busca en pais_homologado WHERE pais = "AR"
-        ↓
+        │
+        ▼
 pais_homologado = "Argentina"
-        ↓
+        │
+        ▼
 FileUploadRequest.origin = "Manual Tecnico del Producto"
 FileUploadRequest.paisHomologado = "Argentina"
 ```
@@ -432,44 +453,61 @@ INSERT INTO pais_homologado (pais, pais_homologado) VALUES
 
 ```sql
 -- Ver todos los envios
-SELECT * FROM historico_documentos ORDER BY fecha_creacion DESC;
+SELECT * FROM historico_documentos ORDER BY created_at DESC;
 
--- Ver envios de un producto especifico
-SELECT * FROM historico_documentos WHERE id_producto = 'prod-123';
+-- Ver envios de un documento especifico
+SELECT * FROM historico_documentos WHERE document_id = 'doc-123';
 
--- Ver solo fallos
-SELECT * FROM historico_documentos WHERE estado = 'FAILURE';
+-- Ver solo envios por SOAP
+SELECT * FROM historico_documentos WHERE use_case = 'SOAP';
 
--- Ver productos pendientes
-SELECT * FROM productos WHERE estado = 'PENDING';
+-- Ver envios con retry > 0 (reintentos)
+SELECT * FROM historico_documentos WHERE retry > 0 ORDER BY created_at DESC;
 
--- Ver productos en progreso
-SELECT * FROM productos WHERE estado = 'IN_PROGRESS';
+-- Ver documentos pendientes de procesamiento
+SELECT * FROM documento WHERE status = 'PENDING';
 
--- Contar envios por estado
-SELECT estado, COUNT(*) FROM historico_documentos GROUP BY estado;
+-- Ver documentos fallidos
+SELECT * FROM documento WHERE status = 'FAILED';
 
--- Productos con fallos hoy
-SELECT p.id_producto, p.estado, h.codigo_error, h.razon_fallo
-FROM productos p
-JOIN historico_documentos h ON p.id_producto = h.id_producto
-WHERE h.estado = 'FAILURE' AND p.fecha_carga >= CURRENT_DATE();
+-- Ver documentos descomprimidos de un ZIP
+SELECT * FROM documento WHERE parent_zip_name = 'documents.zip';
+
+-- Contar envios por caso de uso y estado
+SELECT use_case, status, COUNT(*) FROM historico_documentos GROUP BY use_case, status;
+
+-- Ver ultimo retry de cada documento por caso de uso
+SELECT h.*
+FROM historico_documentos h
+JOIN (
+  SELECT document_id, use_case, MAX(created_at) as max_created
+  FROM historico_documentos
+  GROUP BY document_id, use_case
+) latest ON h.document_id = latest.document_id AND h.use_case = latest.use_case AND h.created_at = latest.max_created;
 ```
 
 ---
 
 ## Descompresion de archivos ZIP
 
-`ZipDecompressor.decompress()` expande documentos ZIP. El `documentId` resultante incluye la ruta: `originalId/filename`. Cada archivo expandido se procesa y persiste independientemente.
+`ZipDecompressor.decompress()` expande documentos ZIP. Se aplica **unicamente** durante la sincronizacion (sync), no durante el procesamiento.
 
-### Comportamiento
+### Inferencia de isZip
+
+`isZip` se infiere de la extension del archivo en `ProductRestGatewayAdapter`:
+
+```java
+private boolean isZip(String filename) {
+    return filename != null && filename.toLowerCase().endsWith(".zip");
+}
+```
+
+### Comportamiento durante Sync
 
 | Escenario | Resultado |
 |-----------|-----------|
-| Documento normal (`isZip=false`) | Se procesa tal cual |
-| Documento ZIP con N archivos | Se expande en N `ProductDocument` individuales |
-| ZIP vacio | `Flux.empty()`, no produce documentos |
-| ZIP corrupto | `ProcessingException` con errorCode `INVALID_ZIP` |
+| Documento normal (`isZip=false`) | Se guarda tal cual en `documento` |
+| Documento ZIP (`isZip=true`) | Primero se guarda el ZIP con `parent_zip_name=NULL`, luego cada archivo expandido se guarda con `parent_zip_name=filename_del_zip` |
 
 ### Inferencia de contentType
 
@@ -484,26 +522,26 @@ WHERE h.estado = 'FAILURE' AND p.fecha_carga >= CURRENT_DATE();
 
 ### Ejemplo
 
-Un documento ZIP con `documentId=doc-1` y `filename=documents.zip` que contiene `test.pdf` y `data.csv`:
+Un documento ZIP con `id_document=doc-1` y `name=documents.zip` que contiene `test.pdf` y `data.csv`:
 
 ```
 ZIP: doc-1/documents.zip (isZip=true)
-  ├── test.pdf  →  documentId="doc-1/test.pdf", isZip=false, contentType=application/pdf
-  └── data.csv  →  documentId="doc-1/data.csv", isZip=false, contentType=text/csv
+  ├── documents.zip  → id_document="doc-1", parent_zip_name=null, isZip=true
+  ├── test.pdf       → id_document="doc-1/test.pdf", parent_zip_name="documents.zip", isZip=false
+  └── data.csv       → id_document="doc-1/data.csv", parent_zip_name="documents.zip", isZip=false
 ```
-
-Cada archivo expandido genera su propio registro en `historico_documentos`.
 
 ---
 
-## Estados de Productos (ProductState)
+## Estados de Documentos (ProductState)
 
 ```java
 public final class ProductState {
-    public static final String PENDING = "PENDING";         // Sincronizado, esperando procesamiento
+    public static final String PENDING    = "PENDING";     // Esperando procesamiento
     public static final String IN_PROGRESS = "IN_PROGRESS"; // En procesamiento actual
-    public static final String PROCESSED = "PROCESSED";     // Todos los documentos enviados exitosamente
-    public static final String FAILED = "FAILED";           // Al menos un documento fallo
+    public static final String PROCESSED = "PROCESSED"; // Enviado exitosamente
+    public static final String FAILED    = "FAILED";     // Agoto reintentos o fallo permanente
+    public static final String SYNCED    = "SYNCED";     // Sincronizado desde REST API, listo para procesar
 }
 ```
 
@@ -513,7 +551,11 @@ public final class ProductState {
                sync
                  │
                  ▼
-            [PENDING]
+              [SYNCED]          ← sincronizado, en tabla documento
+                 │
+                 │  (luego status=PENDING)
+                 ▼
+             [PENDING]
                  │
                  │  executePendingDocuments()
                  ▼
@@ -521,24 +563,37 @@ public final class ProductState {
                  │
         ┌────────┴────────┐
         ▼                 ▼
-  [PROCESSED]        [FAILED]
-  (todos docs OK)    (al menos un doc fallo)
+    [PROCESSED]        [FAILED]
+    (envio OK)     (reintentos agotados)
 ```
-
-- **PENDING → IN_PROGRESS**: `markProductInProgress()` al iniciar el procesamiento del producto.
-- **IN_PROGRESS → PROCESSED**: `markProductFinished()` cuando todos los documentos resultan SUCCESS.
-- **IN_PROGRESS → FAILED**: `markProductFinished()` cuando al menos un documento resulta FAILURE.
 
 ---
 
 ## Validacion de Documentos (RulesBussinesService)
 
-`RulesBussinesService` valida cada documento antes de enviarlo. Los documentos que no pasan la validacion se ignoran silenciosamente (retornan `Mono.empty()`, no generan error, no aparecen en el stream, no se registran en trazabilidad). Si todos los documentos de un producto fallan la validacion, se emite una `ProcessingException` con codigo `INVALID_RESPONSE` y se registra en la trazabilidad como fallo.
+`RulesBussinesService` implementa validacion en **dos fases**:
 
-| Regla | Configuracion | Comportamiento |
-|-------|--------------|----------------|
-| **Tamano maximo** | `app.processors.{soap,s3}.max-file-size-bytes` | Omite si `doc.size() > max` |
-| **Patron filename** | `app.processors.{soap,s3}.filename-pattern` | Omite si filename no coincide con la regex |
+### Fase 1 — Sincronizacion (Sync)
+
+Se aplica durante `POST /api/v1/products/sync`. Solo valida el **patron de nombre de archivo**. El tamano maximo no se verifica (configurado a `Long.MAX_VALUE` internamente). Los documentos que no pasan la validacion se omiten silenciosamente.
+
+### Fase 2 — Procesamiento (Processing)
+
+Se aplica durante `GET /api/v1/products`. Valida tanto el **tamano maximo** como el **patron de nombre de archivo**. Si un documento no pasa la validacion, se marca como `PROCESSED` (skip) sin enviarse al gateway.
+
+### Interface dual
+
+`RulesBussinesGateway` expone dos metodos:
+
+```java
+Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc);
+Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc, boolean includeSizeCheck);
+```
+
+| Regla | Sync | Processing |
+|-------|------|------------|
+| **Tamano maximo** | Ignorado | Omite si `doc.size() > max` |
+| **Patron filename** | Omite si no coincide | Omite si no coincide |
 
 ### Configuracion por defecto
 
@@ -553,7 +608,7 @@ app:
       filename-pattern: ".*\\.(pdf|docx|txt)$"
 ```
 
-### Reintentos
+### Reintentos en Gateway
 
 Ambos gateways (SOAP y S3) implementan reintentos automaticos con backoff.
 
@@ -567,61 +622,57 @@ Ambos gateways (SOAP y S3) implementan reintentos automaticos con backoff.
 - Backoff: `app.aws.s3.retry-backoff-millis` (default: 500ms)
 - Condiciones reintentables: `TimeoutException`, `SdkException`
 
-El campo `attemptCount` en `FileUploadResult` y `numero_intentos` en `historico_documentos` reflejan el numero de intentos realizados.
-
 ---
 
 ## Escenarios de Procesamiento
 
 ### 1. Exitoso
 ```
-Producto PENDING → IN_PROGRESS
-validate() → pasa
+Documento PENDING → IN_PROGRESS
 uploadDocument() → SUCCESS
-saveHistory() → historico_documentos (estado=SUCCESS, fecha_envio=now)
-Producto → PROCESSED
+saveHistory() → historico_documentos (status=SUCCESS, retry=0, use_case=SOAP/S3)
+Documento status → PROCESSED
 Stream: {"success":true, "status":"SUCCESS"}
 ```
 
-### 2. Validacion Fallida (documento ignorado)
+### 2. Validacion Fallida en Sync (documento ignorado)
 ```
-validate() → tamano excede limite O filename no coincide
-return Mono.empty() → documento no se procesa
-Sin registro en trazabilidad, sin entrada en stream
-Si todos los docs del producto son invalidos → ProcessingException(INVALID_RESPONSE)
+Sync: RulesBussinesGateway.validate() → tamano excede limite o filename no coincide
+Sync: documento no se guarda en tabla documento (se omite silenciosamente)
 ```
 
-### 3. Error en Gateway
+### 3. Error en Gateway (con reintentos)
 ```
-uploadDocument() → exception (con reintentos agotados)
-saveFailedHistory() → construye FileUploadResult(status=FAILURE)
-saveHistory() → historico_documentos (estado=FAILURE, codigo_error, fecha_fallo=now)
-Producto → FAILED
-Stream: {"success":false, "status":"FAILURE", "errorCode":"GATEWAY_TIMEOUT", "attemptCount":3}
-```
-
-### 4. Documento ZIP
-```
-isZip=true → ZipDecompressor.decompress()
-           → Flux de archivos individuales
-           → cada archivo pasa por validate(), uploadDocument(), saveHistory()
-           → cada archivo genera su propio registro en historico_documentos
+uploadDocument() → exception
+handleUploadError() → getRetryCount() desde historico_documentos
+saveHistory() → historico_documentos (status=FAILURE, retry=N, use_case=SOAP/S3)
+  - Si retry < 3: status=PENDING (se reintentara)
+  - Si retry >= 3: status=FAILED, documento.status=FAILED
+Stream: {"success":false, "status":"FAILURE", "errorCode":"GATEWAY_TIMEOUT", "retry":3}
 ```
 
-### 5. Error en Descompresion ZIP
+### 4. Documento ZIP en Sync
 ```
-ZipDecompressor.decompress() → ProcessingException(INVALID_ZIP)
-onErrorResume() en saveFailedHistory() → status=FAILURE
-saveHistory() → historico_documentos (codigo_error=INVALID_ZIP)
-Stream: {"success":false, "status":"FAILURE", "errorCode":"INVALID_ZIP"}
+Sync: isZip=true → ZipDecompressor.decompress()
+           → Primero guarda el ZIP (parent=null)
+           → Luego cada archivo expandido se guarda con parent=zipFilename
+           → Cada archivo pasa por RulesBussinesGateway.validate()
+           → Se guardan en tabla documento con status=PENDING
+Procesamiento: cada entrada de la tabla documento se procesa independientemente
 ```
 
-### 6. Error de Base64
+### 5. Error en Descompresion ZIP en Sync
 ```
-Base64Utils.decodeSafe() → InvalidBase64Exception(INVALID_BASE64)
-saveFailedHistory() → status=FAILURE
-saveHistory() → historico_documentos (codigo_error=INVALID_BASE64)
-Stream: {"success":false, "status":"FAILURE", "errorCode":"INVALID_BASE64"}
+Sync: ZipDecompressor.decompress() → ProcessingException(INVALID_ZIP)
+Sync: saveHistory() → historico_documentos (errorCode=INVALID_ZIP)
+Sync: documento no se guarda
+```
+
+### 6. Error de Base64 en Sync
+```
+Sync: Base64Utils.decodeSafe() → InvalidBase64Exception(INVALID_BASE64)
+Sync: saveHistory() → historico_documentos (errorCode=INVALID_BASE64)
+Sync: documento no se guarda
 ```
 
 ---
@@ -633,7 +684,7 @@ Stream: {"success":false, "status":"FAILURE", "errorCode":"INVALID_BASE64"}
 Definidos en `domain/usecase/ProcessingResultCodes.java`:
 
 | Codigo | Descripcion |
-|--------|-------------|
+|--------|------------|
 | `EMPTY_CONTENT` | Documento sin contenido |
 | `INVALID_BASE64` | Fallo al decodificar Base64 |
 | `INVALID_RESPONSE` | Respuesta SOAP invalida o malformada |
@@ -669,24 +720,13 @@ Definidos en `infrastructure/drivenadapters/aws/S3ErrorCodes.java`:
 
 ## Trazabilidad de Envios
 
-Cada documento procesado deja un registro en `historico_documentos` a traves del adaptador `DocumentHistoryR2dbcAdapter` (implementa `DocumentHistoryRepository`).
+Cada documento procesado deja un registro en `historico_documentos` con el `use_case` que lo envio (SOAP o S3), lo que permite tracking por caso de uso y analisis de reintentos.
 
-### Mapeo de FileUploadResult a DocumentHistory
+### Campos clave
 
-```
-FileUploadResult                    DocumentHistory
-──────────────                      ───────────────
-status=SUCCESS               →      status = "SUCCESS"
-success=true                 →      sentAt = now()
-                                    failedAt = null
-correlationId                →      (no se persiste directamente)
-errorCode                    →      errorCode
-message                      →      failureReason
-attemptCount                 →      attemptCount
-status=FAILURE               →      status = "FAILURE"
-success=false                →      sentAt = null
-                                    failedAt = now()
-```
+- **`use_case`**: Identifica el gateway usado ("SOAP" o "S3"). Permite saber cual caso de uso proceso el documento.
+- **`retry`**: Numero de intento actual (0 = primer intento, 1 = primer reintento, etc.). Se consulta `getRetryCount()` desde `historico_documentos` antes de cada intento.
+- **`document_id`**: Incluye la ruta cuando el documento viene de un ZIP (ej: `doc-1/test.pdf`).
 
 ### Flujo de Persistencia
 
@@ -694,35 +734,23 @@ success=false                →      sentAt = null
 uploadDocument() → FileUploadResult
         │
         ▼
-saveHistory(doc, productId, result)
+handleUploadSuccess() o handleUploadError()
         │
         ▼
-new DocumentHistory(
-    null,                              // id (auto-generado)
-    productId,                         // productId
-    doc.documentId(),                  // documentId (ej: "doc-1/test.pdf" si es de ZIP)
-    doc.filename(),                    // filename
-    doc.isZip() ? doc.filename() : null, // compressedFilename
+DocumentHistory(
+    null,                          // id (auto-generado)
+    document.documentId(),        // document_id
+    document.productId(),         // product_id
+   implementationName(),         // use_case = "SOAP" o "S3"
     isSuccess ? "SUCCESS" : "FAILURE", // status
-    result.getErrorCode(),             // errorCode
-    result.getMessage(),               // failureReason
-    result.getAttemptCount(),          // attemptCount
-    isSuccess ? now : null,            // sentAt
-    !isSuccess ? now : null,           // failedAt
-    now                                // createdAt
+    errorCode,                    // error_code
+    errorMessage,                // error_message
+    retryCount,                  // retry = numero de intento
+    now                          // created_at
 )
         │
         ▼
 historyRepository.save(record)
-        │
-        ▼
-DocumentHistoryR2dbcAdapter.save()
-        │
-        ▼
-DocumentHistoryMapper.toEntity(record) → DocumentHistoryEntity
-        │
-        ▼
-repository.save(entity) → INSERT en historico_documentos
 ```
 
 ---
@@ -735,23 +763,23 @@ El patron se implementa en `AbstractDocumentProcessingUseCase`:
 AbstractDocumentProcessingUseCase
 │
 ├── executePendingDocuments()           ← FINAL (template method)
-│   ├── productRepository.findByLoadDate()    → BD (PENDING, hoy)
-│   ├── markProductInProgress()              → estado = IN_PROGRESS
-│   ├── processDocument(doc, productId)
-│   │   ├── productRestGateway.getDocument() → REST externa
-│   │   ├── decompressIfNeeded()             → ZipDecompressor
-│   │   ├── documentValidator.validate()     → RulesBussinesService
-│   │   ├── uploadDocument()                 → ABSTRACT
-│   │   └── saveHistory()                    → BD (historico_documentos)
-│   └── markProductFinished()               → PROCESSED o FAILED
+│   ├── documentRepository.findByStatus("PENDING")  → BD (tabla documento)
+│   ├── updateState(docId, "IN_PROGRESS")
+│   ├── Por cada documento:
+│   │   ├── productRestGateway.getDocument(productId, docId) → REST externa
+│   │   ├── toProductDocument(file) → ProductDocumentHistory
+│   │   ├── uploadDocument()       → ABSTRACT (SOAP o S3)
+│   │   ├── handleUploadSuccess() o handleUploadError() → historico_documentos
+│   │   └── updateStatus(docId, status, message)
+│   │
 │
 ├── uploadDocument()                     ← ABSTRACT
 │   └── buildFileUploadRequest()         ← helper protegido
 │
-├── handleUploadError()                  ← helper protegido (reusable por subclases)
+├── handleUploadError(Throwable)          ← helper protegido (reusable por subclases)
 │
 ├── SoapDocumentProcessingUseCase
-│   └── uploadDocument() → SoapGateway.send()
+│   └── uploadDocument() → HomologationRepository.resolve() → SoapGateway.send()
 │
 └── S3DocumentProcessingUseCase
     └── uploadDocument() → S3Gateway.send()
@@ -759,9 +787,9 @@ AbstractDocumentProcessingUseCase
 
 ### Subclases
 
-**SoapDocumentProcessingUseCase** — Envia documentos via SOAP. Bean definido en `DomainConfig` con validador configurado desde `properties.soap()`.
+**SoapDocumentProcessingUseCase** — Envia documentos via SOAP con homologacion de origin y pais. Bean definido en `DomainConfig`.
 
-**S3DocumentProcessingUseCase** — Envia documentos via S3. Bean condicional (`@ConditionalOnBean(S3Gateway.class)`) definido en `DomainConfig` con validador desde `properties.s3()`. Se usa `ObjectProvider` en el handler para manejar su disponibilidad opcional.
+**S3DocumentProcessingUseCase** — Envia documentos via S3. Bean condicional (`@ConditionalOnBean(S3Gateway.class)`) definido en `DomainConfig`. Se usa `ObjectProvider` en el handler para manejar su disponibilidad opcional.
 
 ---
 
@@ -905,7 +933,7 @@ app:
 ## Ejemplos de curl
 
 ```bash
-# Sincronizar productos desde API REST a BD
+# Sincronizar productos y documentos desde API REST a BD
 curl -X POST http://localhost:8080/api/v1/products/sync \
   -H "message-id: my-trace-123"
 
@@ -989,7 +1017,7 @@ Los tests siguen la misma estructura de paquetes que `src/main`, bajo `src/test/
 ## Stack Tecnologico
 
 | Componente | Tecnologia |
-|-----------|-----------|
+|-----------|------------|
 | **Framework** | Spring Boot 3.3.5 + WebFlux |
 | **Lenguaje** | Java 21 |
 | **Build** | Gradle 8.12.1 (Kotlin DSL) |

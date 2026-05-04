@@ -2,14 +2,13 @@ package com.example.fileprocessor.domain.entity;
 
 import lombok.Builder;
 
+import java.time.LocalDateTime;
+
 @Builder
-public record ProductDocumentHistory(
-    String productId,
-    boolean isZip,
-    String pais,
+public record Document(
     Long id,
     String documentId,
-    Boolean active,
+    String productId,
     String docKey,
     String name,
     String owner,
@@ -18,10 +17,8 @@ public record ProductDocumentHistory(
     String versionContract,
     String state,
     String errorMessage,
-    String filename,
-    String contentType,
-    Long size,
-    String origin,
-    byte[] content,
-    String parentZipName
+    Boolean isZip,
+    String parentZipName,
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt
 ) {}

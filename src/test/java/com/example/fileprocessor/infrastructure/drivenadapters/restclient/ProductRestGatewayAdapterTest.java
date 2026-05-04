@@ -1,6 +1,5 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse;
@@ -12,17 +11,17 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ProductRestGatewayAdapterTest {
 
+    private static final String PROD_ID = "prod-1";
+
     @Test
-    void mapToProduct_withDocuments() {
+    void mapToProductDocument_withDocuments() {
         ProductDocumentResponse docResponse = new ProductDocumentResponse(
             "doc-1", "test.pdf", "VGVzdENvbnRlbnQ=", "application/pdf", 12L, false, "origin", "AR"
         );
-        ProductResponse productResponse = new ProductResponse(
-            "prod-1", "Test Product", List.of(docResponse)
-        );
 
-        ProductDocumentHistory doc = mapToProductDocument(docResponse);
+        ProductDocumentHistory doc = mapToProductDocument(PROD_ID, docResponse);
 
+        assertEquals(PROD_ID, doc.productId());
         assertEquals("doc-1", doc.documentId());
         assertEquals("test.pdf", doc.filename());
         assertEquals("application/pdf", doc.contentType());
@@ -39,8 +38,9 @@ class ProductRestGatewayAdapterTest {
             "doc-1", "test.pdf", base64Content, "application/pdf", 12L, false, "origin", "AR"
         );
 
-        ProductDocumentHistory doc = mapToProductDocument(response);
+        ProductDocumentHistory doc = mapToProductDocument(PROD_ID, response);
 
+        assertEquals(PROD_ID, doc.productId());
         assertEquals("doc-1", doc.documentId());
         assertNotNull(doc.content());
         assertEquals("origin", doc.origin());
@@ -53,8 +53,9 @@ class ProductRestGatewayAdapterTest {
             "doc-1", "test.pdf", null, "application/pdf", null, false, "origin", "AR"
         );
 
-        ProductDocumentHistory doc = mapToProductDocument(response);
+        ProductDocumentHistory doc = mapToProductDocument(PROD_ID, response);
 
+        assertEquals(PROD_ID, doc.productId());
         assertEquals("doc-1", doc.documentId());
         assertNull(doc.content());
         assertEquals(0L, doc.size());
@@ -67,8 +68,9 @@ class ProductRestGatewayAdapterTest {
             "doc-1", "test.zip", "VGVzdENvbnRlbnQ=", "application/zip", 12L, true, "origin", "AR"
         );
 
-        ProductDocumentHistory doc = mapToProductDocument(response);
+        ProductDocumentHistory doc = mapToProductDocument(PROD_ID, response);
 
+        assertEquals(PROD_ID, doc.productId());
         assertTrue(doc.isZip());
         assertEquals("test.zip", doc.filename());
         assertEquals("AR", doc.pais());
@@ -80,11 +82,9 @@ class ProductRestGatewayAdapterTest {
             "prod-1", "Test Product", List.of()
         );
 
-        ProductHistory product = mapToProduct(productResponse);
+        List<ProductDocumentHistory> documents = mapToProductDocumentHistory(productResponse);
 
-        assertEquals("prod-1", product.productId());
-        assertEquals("Test Product", product.name());
-        assertTrue(product.documents().isEmpty());
+        assertTrue(documents.isEmpty());
     }
 
     @Test
@@ -93,13 +93,21 @@ class ProductRestGatewayAdapterTest {
             "prod-1", "Test Product", null
         );
 
-        ProductHistory product = mapToProduct(productResponse);
+        List<ProductDocumentHistory> documents = mapToProductDocumentHistory(productResponse);
 
-        assertEquals("prod-1", product.productId());
-        assertTrue(product.documents().isEmpty());
+        assertTrue(documents.isEmpty());
     }
 
-    private ProductDocumentHistory mapToProductDocument(ProductDocumentResponse json) {
+    private List<ProductDocumentHistory> mapToProductDocumentHistory(ProductResponse json) {
+        if (json.documents() == null || json.documents().isEmpty()) {
+            return List.of();
+        }
+        return json.documents().stream()
+            .map(doc -> mapToProductDocument(json.productId(), doc))
+            .toList();
+    }
+
+    private ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
         byte[] content = null;
         if (json.content() != null && !json.content().isBlank()) {
             content = com.example.fileprocessor.domain.util.Base64Utils.decodeSafe(
@@ -108,6 +116,7 @@ class ProductRestGatewayAdapterTest {
         long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
         boolean isZip = Boolean.TRUE.equals(json.isZip());
         return ProductDocumentHistory.builder()
+            .productId(productId)
             .documentId(json.documentId())
             .filename(json.filename())
             .content(content)
@@ -116,19 +125,6 @@ class ProductRestGatewayAdapterTest {
             .isZip(isZip)
             .origin(json.origin())
             .pais(json.pais())
-            .build();
-    }
-
-    private ProductHistory mapToProduct(ProductResponse json) {
-        List<ProductDocumentHistory> documents = json.documents() != null
-            ? json.documents().stream()
-                .map(this::mapToProductDocument)
-                .toList()
-            : List.of();
-        return ProductHistory.builder()
-            .productId(json.productId())
-            .name(json.name())
-            .documents(documents)
             .build();
     }
 }

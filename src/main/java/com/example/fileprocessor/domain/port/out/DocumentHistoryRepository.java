@@ -5,7 +5,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface DocumentHistoryRepository {
-    Mono<Void> save(DocumentHistory record);
-    Flux<DocumentHistory> findByProductId(String productId);
-    Flux<DocumentHistory> findByStatus(String status);
+    Mono<Void> save(DocumentHistory history);
+    Flux<DocumentHistory> findByDocumentId(String documentId);
+    Mono<Integer> getRetryCount(String documentId, String useCase);
 }

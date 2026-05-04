@@ -2,7 +2,6 @@ package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
-import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
@@ -19,7 +18,6 @@ import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -43,7 +41,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    public Flux<ProductHistory> getAllProducts() {
+    public Flux<ProductDocumentHistory> getAllProducts() {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             log.log(Level.INFO, "Fetching all products from REST API, traceId: {0}", new Object[]{traceId});
@@ -55,8 +53,9 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .retrieve()
                 .bodyToFlux(ProductResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .map(this::mapToProduct)
-                .doOnNext(product -> log.log(Level.INFO, "Product retrieved: {0}", new Object[]{product.productId()}));
+                .flatMap(this::mapToProductDocumentHistory)
+                .doOnNext(doc -> log.log(Level.INFO, "Product document retrieved: productId={0}, documentId={1}",
+                    new Object[]{doc.productId(), doc.documentId()}));
         });
     }
 
@@ -64,7 +63,8 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     public Mono<ProductDocumentFile> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}", new Object[]{documentId, productId, traceId});
+            log.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
+                new Object[]{documentId, productId, traceId});
 
             String path = properties.productDocumentsPath().replace("{productId}", productId);
 
@@ -76,8 +76,9 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .map(response -> {
-                    ProductDocumentHistory doc = mapToProductDocument(response);
+                    ProductDocumentHistory doc = mapToProductDocument(productId, response);
                     return ProductDocumentFile.builder()
+                        .productId(productId)
                         .documentId(doc.documentId())
                         .filename(doc.filename())
                         .content(doc.content())
@@ -88,25 +89,20 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                         .pais(doc.pais())
                         .build();
                 })
-                .doOnNext(doc -> log.log(Level.INFO, "Document {0} retrieved for product {1}", new Object[]{documentId, productId}));
+                .doOnNext(doc -> log.log(Level.INFO, "Document {0} retrieved for product {1}",
+                    new Object[]{documentId, productId}));
         });
     }
 
-    private ProductHistory mapToProduct(ProductResponse json) {
-        List<ProductDocumentHistory> documents = json.documents() != null
-            ? json.documents().stream()
-                .map(this::mapToProductDocument)
-                .toList()
-            : List.of();
-
-        return ProductHistory.builder()
-            .productId(json.productId())
-            .name(json.name())
-            .documents(documents)
-            .build();
+    private Flux<ProductDocumentHistory> mapToProductDocumentHistory(ProductResponse json) {
+        if (json.documents() == null || json.documents().isEmpty()) {
+            return Flux.empty();
+        }
+        return Flux.fromIterable(json.documents())
+            .map(doc -> mapToProductDocument(json.productId(), doc));
     }
 
-    private ProductDocumentHistory mapToProductDocument(ProductDocumentResponse json) {
+    private ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
         String contentBase64 = json.content();
         String filename = json.filename();
         String documentId = json.documentId();
@@ -127,17 +123,22 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         }
 
         long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
-        boolean isZip = Boolean.TRUE.equals(json.isZip());
 
         return ProductDocumentHistory.builder()
+            .productId(productId)
             .documentId(documentId)
+            .name(filename)
             .filename(filename)
-            .content(content)
             .contentType(json.contentType())
             .size(size)
-            .isZip(isZip)
+            .isZip(isZip(filename))
             .origin(json.origin())
             .pais(json.pais())
+            .content(content)
             .build();
+    }
+
+    private boolean isZip(String filename) {
+        return filename != null && filename.toLowerCase().endsWith(".zip");
     }
 }

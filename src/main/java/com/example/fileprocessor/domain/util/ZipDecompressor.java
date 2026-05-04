@@ -53,14 +53,14 @@ public final class ZipDecompressor {
 
     private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, ProductDocumentHistory original) {
         return ProductDocumentHistory.builder()
+            .productId(original.productId())
             .documentId(original.documentId() + "/" + filename)
             .filename(filename)
-            .content(content)
             .contentType(inferContentType(filename))
-            .size(content.length)
+            .size((long) content.length)
             .isZip(false)
-            .origin(original.origin())
             .pais(original.pais())
+            .parentZipName(original.filename())
             .build();
     }
 

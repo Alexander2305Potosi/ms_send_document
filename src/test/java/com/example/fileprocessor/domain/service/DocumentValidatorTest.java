@@ -7,8 +7,19 @@ import reactor.test.StepVerifier;
 
 class DocumentValidatorTest {
 
-    private static ProductDocumentHistory doc(String documentId, String filename, String contentType, long size) {
-        return new ProductDocumentHistory(documentId, filename, new byte[0], contentType, size, false, "origin", "AR");
+    private static ProductDocumentHistory doc(String documentId, String name, String contentType, long size) {
+        return ProductDocumentHistory.builder()
+            .productId("prod-1")
+            .isZip(false)
+            .pais("AR")
+            .documentId(documentId)
+            .name(name)
+            .filename(name)
+            .contentType(contentType)
+            .size(size)
+            .origin("origin")
+            .content(new byte[0])
+            .build();
     }
 
     private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
@@ -18,7 +29,7 @@ class DocumentValidatorTest {
     @Test
     void validate_singleRule_passes() {
         RulesBussinesService validator = new RulesBussinesService(
-            config(1000L, null)
+            config(null, ".*\\.pdf$")
         );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 500)))
@@ -27,19 +38,19 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_singleRule_fails() {
+    void validate_patternFails() {
         RulesBussinesService validator = new RulesBussinesService(
-            config(1000L, null)
+            config(null, ".*\\.pdf$")
         );
 
-        StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 2000)))
+        StepVerifier.create(validator.validate(doc("doc-1", "test.csv", "application/pdf", 500)))
             .verifyComplete();
     }
 
     @Test
     void validate_multipleRules_allPass() {
         RulesBussinesService validator = new RulesBussinesService(
-            config(1000L, ".*\\.pdf$")
+            config(null, ".*\\.(pdf|docx)$")
         );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 500)))
@@ -50,7 +61,7 @@ class DocumentValidatorTest {
     @Test
     void validate_multipleRules_oneFails() {
         RulesBussinesService validator = new RulesBussinesService(
-            config(1000L, ".*\\.pdf$")
+            config(null, ".*\\.pdf$")
         );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.csv", "application/pdf", 500)))
@@ -58,7 +69,7 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_emptyConfig_passes() {
+    void validate_noPattern_passes() {
         RulesBussinesService validator = new RulesBussinesService(
             config(null, null)
         );
