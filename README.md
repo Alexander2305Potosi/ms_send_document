@@ -59,11 +59,10 @@ com.example.fileprocessor/
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
 │   │   ├── ProductRepository.java                 # Puerto: persistencia y consulta de productos
 │   │   ├── DocumentHistoryRepository.java         # Puerto: trazabilidad de envios
-│   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
+│   │   ├── RulesBussinesGateway.java             # Puerto: validacion de documentos
 │   │   ├── S3Gateway.java                         # Puerto: envio a S3
 │   │   ├── SoapGateway.java                       # Puerto: envio a SOAP
-│   │   ├── CategoryManualRepository.java          # Puerto: homologacion de origin (SOAP)
-│   │   └── PaisHomologadoRepository.java         # Puerto: homologacion de pais (SOAP)
+│   │   └── HomologationRepository.java           # Puerto: homologacion de origin y pais (SOAP)
 │   └── exception/
 │       ├── DomainException.java                   # Base abstracta (RuntimeException + errorCode)
 │       ├── FileValidationException.java           # Error de validacion de archivo
@@ -81,13 +80,12 @@ com.example.fileprocessor/
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
     │   │   ├── ProductR2dbcAdapter.java            # Implementa ProductRepository
     │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentHistoryRepository
-    │   │   ├── CategoryManualR2dbcAdapter.java     # Implementa CategoryManualRepository (cache)
-    │   │   ├── PaisHomologadoR2dbcAdapter.java     # Implementa PaisHomologadoRepository (cache)
+    │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (cache en memoria)
     │   │   ├── entity/
     │   │   │   ├── ProductEntity.java              # @Entity @Table("productos")
     │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos")
     │   │   │   ├── CategoryManualEntity.java       # @Entity @Table("categoria_manual")
-    │   │   │   └── PaisHomologadoEntity.java       # @Entity @Table("pais_homologado")
+    │   │   │   └── CountryHomologatedEntity.java  # @Entity @Table("pais_homologado")
     │   │   ├── mapper/
     │   │   │   ├── ProductMapper.java              # Product <-> ProductEntity
     │   │   │   └── DocumentHistoryMapper.java      # DocumentHistory <-> DocumentHistoryEntity
@@ -95,7 +93,7 @@ com.example.fileprocessor/
     │   │       ├── ProductRepository.java         # R2dbcRepository<ProductEntity, Long>
     │   │       ├── DocumentHistoryRepository.java  # R2dbcRepository<DocumentHistoryEntity, Long>
     │   │       ├── CategoryManualRepository.java   # R2dbcRepository<CategoryManualEntity, Long>
-    │   │       └── PaisHomologadoRepository.java   # R2dbcRepository<PaisHomologadoEntity, Long>
+    │   │       └── CountryHomologatedRepository.java # R2dbcRepository<CountryHomologatedEntity, Long>
     │   ├── restclient/
     │   │   ├── ProductRestGatewayAdapter.java      # WebClient a API REST externa
     │   │   └── dto/
@@ -332,14 +330,13 @@ Almacena la trazabilidad completa de cada intento de envio de documentos.
 
 ### Tabla: categoria_manual
 
-Almacena la homologacion de categorias de manuales. Se usa para resolver el `origin` de los documentos en el caso de uso SOAP.
+Almacena la homologacion de categorias de manuales. Se usa para resolver el `origin` de los documentos en el caso de uso SOAP usando busqueda contains.
 
 | Columna | Tipo | Descripcion |
 |--------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `categoria` | VARCHAR(255) | Codigo de categoria (ej: "manual_tecnico") |
 | `descripcion_manual` | VARCHAR(500) | Descripcion legible (ej: "Manual Tecnico del Producto") |
-| `fecha_vigencia` | DATE | Fecha hasta la cual es valida la categoria (nullable) |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 
 ### Tabla: pais_homologado
@@ -377,10 +374,9 @@ El caso de uso SOAP realiza una homologacion de `origin` y `pais` antes de envia
 ```
 Documento.origin = "manual_tecnico"
         ↓
-Busca en categoria_manual WHERE categoria = "manual_tecnico" AND fecha_vigencia >= CURRENT_DATE
+Busca en categoria_manual (usa contains + eliminacion de tildes)
         ↓
 descripcion_manual = "Manual Tecnico del Producto"
-vigencia = "2026-12-31"
         ↓
 Documento.pais = "AR"
         ↓
@@ -389,21 +385,34 @@ Busca en pais_homologado WHERE pais = "AR"
 pais_homologado = "Argentina"
         ↓
 FileUploadRequest.origin = "Manual Tecnico del Producto"
-FileUploadRequest.vigencia = "2026-12-31"
 FileUploadRequest.paisHomologado = "Argentina"
 ```
 
+### Busqueda con Contains y Eliminacion de Tildes
+
+La homologacion de origin usa busqueda tipo `contains` con normalizacion de tildes:
+
+1. Se normaliza el origin del documento eliminando tildes y conviertiendo a minusculas
+2. Se itera sobre las categorias cargadas en cache
+3. Se compara el origen normalizado contra cada clave de categoria (tambien normalizada)
+4. Si la clave normalizada **contiene** el origin normalizado, se usa esa descripcion
+
+Ejemplo:
+- Documento.origin = "manual_tecnico"
+- Categoria en cache: `categoria="manual_tecnico"` → `descripcion_manual="Manual Tecnico del Producto"`
+- Resultado: origin se homologa a "Manual Tecnico del Producto"
+
 ### Cache en Memoria
 
-Los repositorios `CategoryManualRepository` y `PaisHomologadoRepository` cargan sus datos una sola vez en un `ConcurrentHashMap` al primer acceso. Las consultas siguientes usan el cache sin acceder a la base de datos.
+`HomologationR2dbcAdapter` carga todas las categorias y paises una sola vez en `ConcurrentHashMap` al primer acceso. Las consultas siguientes usan el cache sin acceder a la base de datos. El cache se carga lazy (solo cuando se necesita por primera vez).
 
 ### Datos de Ejemplo
 
 ```sql
 -- Categoria manual
-INSERT INTO categoria_manual (categoria, descripcion_manual, fecha_vigencia) VALUES
-('manual_tecnico', 'Manual Tecnico del Producto', '2026-12-31'),
-('manual_usuario', 'Manual de Usuario', '2026-12-31');
+INSERT INTO categoria_manual (categoria, descripcion_manual) VALUES
+('manual_tecnico', 'Manual Tecnico del Producto'),
+('manual_usuario', 'Manual de Usuario');
 
 -- Pais homologado
 INSERT INTO pais_homologado (pais, pais_homologado) VALUES
