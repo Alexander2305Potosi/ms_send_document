@@ -5,8 +5,6 @@ import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SyncProductsUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -17,13 +15,15 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_TRACE_ID;
 
 @Component
 public class ProductHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(ProductHandler.class);
+    private static final Logger log = Logger.getLogger(ProductHandler.class.getName());
 
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
@@ -46,9 +46,9 @@ public class ProductHandler {
 
         return Mono.deferContextual(ctx -> {
             var results = getProcessor(processorType).executePendingDocuments()
-                .doOnNext(result -> log.info("Document processed: correlationId={}, status={}",
-                    result.getCorrelationId(), result.getStatus()))
-                .doOnError(error -> log.error("Processing failed for traceId {}: {}", traceId, error.getMessage()));
+                .doOnNext(result -> log.log(Level.INFO, "Document processed: correlationId={0}, status={1}",
+                    new Object[]{result.getCorrelationId(), result.getStatus()}))
+                .doOnError(error -> log.log(Level.SEVERE, "Processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}));
 
             return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_NDJSON)
@@ -60,10 +60,10 @@ public class ProductHandler {
         String traceId = resolveTraceId(request);
 
         return Mono.deferContextual(ctx -> {
-            log.info("Starting product sync, traceId: {}", traceId);
+            log.log(Level.INFO, "Starting product sync, traceId: {0}", new Object[]{traceId});
             syncProductsUseCase.execute()
-                .doOnError(error -> log.error("Product sync failed for traceId {}: {}", traceId, error.getMessage()))
-                .doOnSuccess(v -> log.info("Product sync completed for traceId: {}", traceId))
+                .doOnError(error -> log.log(Level.SEVERE, "Product sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
+                .doOnSuccess(v -> log.log(Level.INFO, "Product sync completed for traceId: {0}", new Object[]{traceId}))
                 .subscribe();
             return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_JSON)

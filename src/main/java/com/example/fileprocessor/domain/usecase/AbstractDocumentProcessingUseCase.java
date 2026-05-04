@@ -1,81 +1,142 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.entity.DocumentTraceability;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
-import com.example.fileprocessor.domain.port.out.ProductDbGateway;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.entity.ProductDocumentFile;
+import com.example.fileprocessor.domain.entity.ProductState;
+import com.example.fileprocessor.domain.exception.ProcessingException;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import lombok.AllArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Abstract base for document processing use cases.
- * Handles shared orchestration; subclasses implement gateway-specific behavior.
+ * Handles shared orchestration; subclasses implement repository-specific behavior.
  */
 @AllArgsConstructor
 public abstract class AbstractDocumentProcessingUseCase {
 
-    protected final Logger log = LoggerFactory.getLogger(getClass());
+    protected final Logger log = Logger.getLogger(getClass().getName());
 
-    protected final ProductDbGateway productDbGateway;
+    protected final ProductRepository productRepository;
+    protected final DocumentHistoryRepository historyRepository;
     protected final ProductRestGateway productRestGateway;
     protected final RulesBussinesGateway documentValidator;
-    protected final DocumentTraceabilityGateway traceabilityGateway;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return productDbGateway.findByLoadDate(LocalDate.now())
-            .concatMap(product -> Flux.fromIterable(product.documents())
-                .flatMap(doc -> productRestGateway.getDocument(product.productId(), doc.documentId())
-                    .flatMapMany(this::decompressIfNeeded)
-                    .flatMap(documentValidator::validate)
-                    .flatMap(validated -> uploadDocument(validated, product.productId())
-                        .flatMap(result -> saveTraceability(validated, product.productId(), result)
-                            .thenReturn(result)))))
-            .doOnTerminate(() -> log.info("Pipeline {} completed", implementationName()))
-            .doOnError(e -> log.error("Pipeline error: {}", e.getMessage()))
-            .doOnCancel(() -> log.warn("Pipeline {} cancelled", implementationName()));
+        return productRepository.findByLoadDate(LocalDate.now())
+            .concatMap(product -> {
+                Long id = product.id();
+                String productId = product.productId();
+                return productRepository.updateEstadoById(id, ProductState.IN_PROGRESS)
+                    .thenMany(Flux.fromIterable(product.documents())
+                        .flatMap(doc -> processDocument(doc, productId))
+                        .collectList()
+                        .flatMapMany(results -> {
+                            markProductFinished(id, results).subscribe();
+                            return Flux.fromIterable(results);
+                        }));
+            })
+            .doOnTerminate(() -> log.log(Level.INFO, "Pipeline {0} completed", new Object[]{implementationName()}))
+            .doOnError(e -> log.log(Level.SEVERE, "Pipeline error: {0}", new Object[]{e.getMessage()}))
+            .doOnCancel(() -> log.log(Level.WARNING, "Pipeline {0} cancelled", new Object[]{implementationName()}));
     }
 
-    private Mono<Void> saveTraceability(ProductDocument doc, String productId, FileUploadResult result) {
+    private Mono<Void> markProductFinished(Long id, List<FileUploadResult> results) {
+        boolean anyFailure = results.stream().anyMatch(r -> !r.isSuccess());
+        String finalState = anyFailure ? ProductState.FAILED : ProductState.PROCESSED;
+        return productRepository.updateEstadoById(id, finalState);
+    }
+
+    protected Mono<FileUploadResult> processDocument(ProductDocumentHistory doc, String productId) {
+        Flux<ProductDocumentHistory> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
+            .map(this::toProductDocument)
+            .flatMapMany(this::decompressIfNeeded)
+            .flatMap(documentValidator::validate)
+            .switchIfEmpty(Mono.defer(() -> {
+                ProcessingException validationError = new ProcessingException(
+                    "Document validation failed", ProcessingResultCodes.INVALID_RESPONSE, doc.documentId());
+                return Mono.error(validationError);
+            }));
+
+        return documentFlux
+            .flatMap(validated -> uploadDocument(validated, productId)
+                .flatMap(result -> saveHistory(validated, productId, result)
+                    .thenReturn(result)))
+            .onErrorResume(error -> saveFailedHistory(doc, productId, error))
+            .single();
+    }
+
+    private Mono<FileUploadResult> saveFailedHistory(ProductDocumentHistory doc, String productId, Throwable error) {
+        String errorCode = error instanceof ProcessingException pe
+            ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
+
+        FileUploadResult result = FileUploadResult.builder()
+            .status(DocumentStatus.FAILURE.name())
+            .errorCode(errorCode)
+            .processedAt(Instant.now())
+            .success(false)
+            .build();
+
+        return saveHistory(doc, productId, result)
+            .thenReturn(result);
+    }
+
+    private Mono<Void> saveHistory(ProductDocumentHistory doc, String productId, FileUploadResult result) {
         boolean isSuccess = result.isSuccess();
-        DocumentTraceability record = new DocumentTraceability(
-            null,
-            productId,
-            doc.documentId(),
-            doc.filename(),
-            doc.isZip() ? doc.filename() : null,
-            isSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name(),
-            result.getErrorCode(),
-            result.getMessage(),
-            result.getAttemptCount(),
-            isSuccess ? LocalDateTime.now() : null,
-            !isSuccess ? LocalDateTime.now() : null,
-            LocalDateTime.now()
-        );
-        return traceabilityGateway.save(record);
+        DocumentHistory record = DocumentHistory.builder()
+            .productId(productId)
+            .documentId(doc.documentId())
+            .filename(doc.filename())
+            .compressedFilename(doc.isZip() ? doc.filename() : null)
+            .status(isSuccess ? DocumentStatus.SUCCESS.name() : DocumentStatus.FAILURE.name())
+            .errorCode(result.getErrorCode())
+            .failureReason(result.getMessage())
+            .attemptCount(result.getAttemptCount())
+            .sentAt(isSuccess ? LocalDateTime.now() : null)
+            .failedAt(!isSuccess ? LocalDateTime.now() : null)
+            .createdAt(LocalDateTime.now())
+            .build();
+        return historyRepository.save(record);
     }
 
-    private Flux<ProductDocument> decompressIfNeeded(ProductDocument doc) {
+    private Flux<ProductDocumentHistory> decompressIfNeeded(ProductDocumentHistory doc) {
         return ZipDecompressor.decompress(doc);
     }
 
-    protected abstract Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId);
+    protected ProductDocumentHistory toProductDocument(ProductDocumentFile file) {
+        return ProductDocumentHistory.builder()
+            .documentId(file.documentId())
+            .filename(file.filename())
+            .content(file.content())
+            .contentType(file.contentType())
+            .size(file.size())
+            .isZip(file.isZip())
+            .origin(file.origin())
+            .pais(file.pais())
+            .build();
+    }
+
+    protected abstract Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId);
 
     protected abstract String implementationName();
 
-    protected FileUploadRequest buildFileUploadRequest(ProductDocument doc, String origin) {
+    protected FileUploadRequest buildFileUploadRequest(ProductDocumentHistory doc, String origin) {
         return FileUploadRequest.builder()
             .documentId(doc.documentId())
             .content(doc.content() != null ? doc.content() : new byte[0])
@@ -89,7 +150,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected Mono<FileUploadResult> handleUploadError(Throwable error) {
         String errorCode = error instanceof com.example.fileprocessor.domain.exception.ProcessingException pe
             ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
-        log.error("Upload failed with errorCode={}: {}", errorCode, error.getMessage());
+        log.log(Level.SEVERE, "Upload failed with errorCode={0}: {1}", new Object[]{errorCode, error.getMessage()});
         return Mono.just(FileUploadResult.builder()
             .status(DocumentStatus.FAILURE.name())
             .errorCode(errorCode)

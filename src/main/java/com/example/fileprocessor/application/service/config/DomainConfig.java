@@ -1,7 +1,8 @@
 package com.example.fileprocessor.application.service.config;
 
-import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
-import com.example.fileprocessor.domain.port.out.ProductDbGateway;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.port.out.HomologationRepository;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
@@ -21,33 +22,35 @@ public class DomainConfig {
     @Bean
     @ConditionalOnBean(SoapGateway.class)
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
-            ProductDbGateway productDbGateway,
+            ProductRepository productRepository,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
-            DocumentTraceabilityGateway traceabilityGateway,
-            ProcessorsProperties properties) {
+            DocumentHistoryRepository historyRepository,
+            ProcessorsProperties properties,
+            HomologationRepository homologationRepository) {
         return new SoapDocumentProcessingUseCase(
-            productDbGateway,
+            productRepository,
             productRestGateway,
             soapGateway,
-            traceabilityGateway,
-            new RulesBussinesService(properties.soap())
+            historyRepository,
+            new RulesBussinesService(properties.soap()),
+            homologationRepository
         );
     }
 
     @Bean
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
-            ProductDbGateway productDbGateway,
+            ProductRepository productRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            DocumentTraceabilityGateway traceabilityGateway,
+            DocumentHistoryRepository historyRepository,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
-            productDbGateway,
+            productRepository,
             productRestGateway,
             s3Gateway,
-            traceabilityGateway,
+            historyRepository,
             new RulesBussinesService(properties.s3())
         );
     }

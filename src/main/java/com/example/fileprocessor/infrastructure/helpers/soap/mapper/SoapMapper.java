@@ -11,19 +11,19 @@ import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFil
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.StringWriter;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Component
 public class SoapMapper {
 
-    private static final Logger log = LoggerFactory.getLogger(SoapMapper.class);
+    private static final Logger log = Logger.getLogger(SoapMapper.class.getName());
 
     private static final String DEFAULT_STATUS = "UNKNOWN";
     private static final String DEFAULT_MESSAGE = "No message received";
@@ -75,7 +75,7 @@ public class SoapMapper {
             marshaller.marshal(request, writer);
             return writer.toString();
         } catch (JAXBException e) {
-            log.error("Error marshalling SOAP request: {}", e.getMessage());
+            log.log(Level.SEVERE, "Error marshalling SOAP request: {0}", new Object[]{e.getMessage()});
             throw ProcessingException.withTraceId("Failed to marshal SOAP request", ProcessingResultCodes.UNKNOWN_ERROR, "", e);
         }
     }
@@ -97,7 +97,7 @@ public class SoapMapper {
                 .build();
         } catch (Exception e) {
             if (e instanceof ProcessingException pe) throw pe;
-            log.error("Error parsing SOAP response: {}", e.getMessage());
+            log.log(Level.SEVERE, "Error parsing SOAP response: {0}", new Object[]{e.getMessage()});
             throw ProcessingException.withTraceId(
                 "Failed to parse SOAP response: " + e.getMessage(),
                 ProcessingResultCodes.INVALID_RESPONSE, "", e);

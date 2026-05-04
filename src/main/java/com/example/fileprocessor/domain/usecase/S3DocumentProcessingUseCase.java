@@ -2,9 +2,9 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocument;
-import com.example.fileprocessor.domain.port.out.DocumentTraceabilityGateway;
-import com.example.fileprocessor.domain.port.out.ProductDbGateway;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -18,17 +18,17 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private final S3Gateway s3Gateway;
 
     public S3DocumentProcessingUseCase(
-            ProductDbGateway productDbGateway,
+            ProductRepository productRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            DocumentTraceabilityGateway traceabilityGateway,
+            DocumentHistoryRepository historyRepository,
             RulesBussinesGateway documentValidator) {
-        super(productDbGateway, productRestGateway, documentValidator, traceabilityGateway);
+        super(productRepository, historyRepository, productRestGateway, documentValidator);
         this.s3Gateway = s3Gateway;
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId) {
+    protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId) {
         FileUploadRequest request = buildFileUploadRequest(doc, doc.origin());
         return s3Gateway.send(request)
             .onErrorResume(this::handleUploadError);

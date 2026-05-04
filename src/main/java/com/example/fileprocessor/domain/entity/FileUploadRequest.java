@@ -15,4 +15,5 @@ public class FileUploadRequest {
     private String contentType;
     private long fileSize;
     private String origin;
+    private String paisHomologado;
 }

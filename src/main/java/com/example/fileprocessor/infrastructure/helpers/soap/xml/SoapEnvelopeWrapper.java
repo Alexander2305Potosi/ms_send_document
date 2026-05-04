@@ -7,8 +7,6 @@ import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFil
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -22,11 +20,13 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Component
 public class SoapEnvelopeWrapper {
 
-    private static final Logger log = LoggerFactory.getLogger(SoapEnvelopeWrapper.class);
+    private static final Logger log = Logger.getLogger(SoapEnvelopeWrapper.class.getName());
 
     private final JAXBContext jaxbContext;
     private final DocumentBuilderFactory documentBuilderFactory;
@@ -73,7 +73,7 @@ public class SoapEnvelopeWrapper {
                 transformerFactory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
                 transformerFactory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
             } catch (Exception e) {
-                log.warn("Failed to configure secure TransformerFactory: {}", e.getMessage());
+                log.log(Level.WARNING, "Failed to configure secure TransformerFactory: {0}", new Object[]{e.getMessage()});
             }
             Transformer transformer = transformerFactory.newTransformer();
             transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
@@ -87,7 +87,7 @@ public class SoapEnvelopeWrapper {
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Error unmarshalling SOAP response: {}", e.getMessage());
+            log.log(Level.SEVERE, "Error unmarshalling SOAP response: {0}", new Object[]{e.getMessage()});
             throw ProcessingException.withTraceId(SoapConstants.MSG_PARSE_ERROR, ProcessingResultCodes.INVALID_RESPONSE, null, e);
         }
     }

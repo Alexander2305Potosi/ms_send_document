@@ -12,5 +12,6 @@ public record ProductDocumentResponse(
     @JsonProperty("contentType") String contentType,
     @JsonProperty("size") Long size,
     @JsonProperty("isZip") Boolean isZip,
-    @JsonProperty("origin") String origin
+    @JsonProperty("origin") String origin,
+    @JsonProperty("pais") String pais
 ) {}

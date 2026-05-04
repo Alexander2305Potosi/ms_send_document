@@ -1,8 +1,11 @@
 package com.example.fileprocessor.domain.entity;
 
+import lombok.Builder;
+
 import java.time.LocalDateTime;
 
-public record DocumentTraceability(
+@Builder
+public record DocumentHistory(
     Long id,
     String productId,
     String documentId,

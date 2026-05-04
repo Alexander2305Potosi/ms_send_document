@@ -1,12 +1,12 @@
 package com.example.fileprocessor.domain.service;
 
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  */
 public class RulesBussinesService implements RulesBussinesGateway {
 
-    private static final Logger log = LoggerFactory.getLogger(RulesBussinesService.class);
+    private static final Logger log = Logger.getLogger(RulesBussinesService.class.getName());
 
     private final Long maxFileSizeBytes;
     private final Pattern filenamePattern;
@@ -30,16 +30,16 @@ public class RulesBussinesService implements RulesBussinesGateway {
     }
 
     @Override
-    public Mono<ProductDocument> validate(ProductDocument doc) {
+    public Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc) {
         return Mono.defer(() -> {
             if (maxFileSizeBytes != null && doc.size() > maxFileSizeBytes) {
-                log.debug("Document {} skipped: size {} exceeds max {}",
-                    doc.documentId(), doc.size(), maxFileSizeBytes);
+                log.log(Level.FINE, "Document {0} skipped: size {1} exceeds max {2}",
+                    new Object[]{doc.documentId(), doc.size(), maxFileSizeBytes});
                 return Mono.empty();
             }
             if (filenamePattern != null && !filenamePattern.matcher(doc.filename()).matches()) {
-                log.debug("Document {} skipped: filename {} does not match pattern {}",
-                    doc.documentId(), doc.filename(), filenamePattern.pattern());
+                log.log(Level.FINE, "Document {0} skipped: filename {1} does not match pattern {2}",
+                    new Object[]{doc.documentId(), doc.filename(), filenamePattern.pattern()});
                 return Mono.empty();
             }
             return Mono.just(doc);

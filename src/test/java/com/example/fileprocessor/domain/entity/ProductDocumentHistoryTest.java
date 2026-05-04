@@ -4,19 +4,20 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ProductDocumentTest {
+class ProductDocumentHistoryTest {
 
     @Test
     void productDocument_record_createsValidDocument() {
         byte[] content = new byte[]{1, 2, 3};
-        ProductDocument doc = new ProductDocument(
+        ProductDocumentHistory doc = new ProductDocumentHistory(
             "doc-1",
             "test.pdf",
             content,
             "application/pdf",
             1024L,
             true,
-            "origin"
+            "origin",
+            "AR"
         );
 
         assertEquals("doc-1", doc.documentId());
@@ -26,18 +27,20 @@ class ProductDocumentTest {
         assertEquals(1024L, doc.size());
         assertTrue(doc.isZip());
         assertEquals("origin", doc.origin());
+        assertEquals("AR", doc.pais());
     }
 
     @Test
     void size_returnsCorrectValue() {
-        ProductDocument doc = new ProductDocument(
+        ProductDocumentHistory doc = new ProductDocumentHistory(
             "doc-1",
             "test.pdf",
             new byte[100],
             "application/pdf",
             100L,
             false,
-            "origin"
+            "origin",
+            "AR"
         );
 
         assertEquals(100L, doc.size());
@@ -45,14 +48,15 @@ class ProductDocumentTest {
 
     @Test
     void isZip_whenFalse() {
-        ProductDocument doc = new ProductDocument(
+        ProductDocumentHistory doc = new ProductDocumentHistory(
             "doc-1",
             "test.pdf",
             new byte[0],
             "application/pdf",
             0L,
             false,
-            "origin"
+            "origin",
+            "AR"
         );
 
         assertFalse(doc.isZip());

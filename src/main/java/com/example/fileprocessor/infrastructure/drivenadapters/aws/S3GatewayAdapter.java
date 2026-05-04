@@ -7,7 +7,6 @@ import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
@@ -21,11 +20,14 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @org.springframework.context.annotation.Profile("s3")
-@Slf4j
 @Component
 public class S3GatewayAdapter implements S3Gateway {
+
+    private static final Logger log = Logger.getLogger(S3GatewayAdapter.class.getName());
 
     private final S3AsyncClient s3Client;
     private final S3Properties s3Properties;
@@ -39,11 +41,11 @@ public class S3GatewayAdapter implements S3Gateway {
     public Mono<FileUploadResult> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.info("Sending S3 upload request for documentId: {}, traceId: {}", request.getDocumentId(), traceId);
+            log.log(Level.INFO, "Sending S3 upload request for documentId: {0}, traceId: {1}", new Object[]{request.getDocumentId(), traceId});
 
             byte[] content = request.getContent();
             if (content == null || content.length == 0) {
-                log.warn("S3 upload skipped for documentId={} - content is null or empty", request.getDocumentId());
+                log.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
                 return Mono.just(FileUploadResult.builder()
                     .status(DocumentStatus.FAILURE.name())
                     .errorCode(ProcessingResultCodes.EMPTY_CONTENT)
@@ -76,12 +78,12 @@ public class S3GatewayAdapter implements S3Gateway {
                     .filter(this::isRetryableException)
                     .doBeforeRetry(retrySignal -> {
                         long attempt = retrySignal.totalRetries() + 1;
-                        log.warn("Retrying S3 upload for documentId={}, attempt {}/{} (backoff={}ms)",
-                            request.getDocumentId(), attempt, s3Properties.retryAttempts(),
-                            s3Properties.retryBackoffMillis() * attempt);
+                        log.log(Level.WARNING, "Retrying S3 upload for documentId={0}, attempt {1}/{2} (backoff={3}ms)",
+                            new Object[]{request.getDocumentId(), attempt, s3Properties.retryAttempts(),
+                            s3Properties.retryBackoffMillis() * attempt});
                     }))
                 .map(completed -> {
-                    log.info("S3 upload successful: {} -> {}/{}", request.getFilename(), s3Properties.bucketName(), key);
+                    log.log(Level.INFO, "S3 upload successful: {0} -> {1}/{2}", new Object[]{request.getFilename(), s3Properties.bucketName(), key});
                     return FileUploadResult.builder()
                         .status(DocumentStatus.SUCCESS.name())
                         .message("Uploaded to S3: " + s3Properties.bucketName() + "/" + key)
@@ -97,7 +99,7 @@ public class S3GatewayAdapter implements S3Gateway {
     }
 
     private Mono<FileUploadResult> handleS3Error(Throwable error, String documentId, String traceId) {
-        log.error("S3 upload failed for documentId {}: {}", documentId, error.getMessage());
+        log.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, error.getMessage()});
 
         if (error instanceof TimeoutException) {
             return Mono.just(FileUploadResult.builder()
@@ -110,7 +112,7 @@ public class S3GatewayAdapter implements S3Gateway {
         }
 
         String errorCode = categorizeS3Error(error);
-        log.error("S3 error categorized as {} for documentId {}", errorCode, documentId);
+        log.log(Level.WARNING, "S3 error categorized as {0} for documentId {1}", new Object[]{errorCode, documentId});
 
         return Mono.just(FileUploadResult.builder()
             .status(DocumentStatus.FAILURE.name())
