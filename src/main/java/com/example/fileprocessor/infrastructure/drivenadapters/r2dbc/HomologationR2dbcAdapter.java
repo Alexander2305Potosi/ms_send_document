@@ -3,59 +3,92 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 import com.example.fileprocessor.domain.entity.HomologationResult;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.entity.CategoryManual;
-import com.example.fileprocessor.domain.entity.PaisHomologado;
+import com.example.fileprocessor.domain.entity.CountryHomologated;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CategoryManualEntity;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.PaisHomologadoEntity;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CountryHomologatedEntity;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CountryHomologatedRepository;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.text.Normalizer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 @Component
 public class HomologationR2dbcAdapter implements HomologationRepository {
 
     private static final Logger log = Logger.getLogger(HomologationR2dbcAdapter.class.getName());
 
-    private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository categoryRepository;
-    private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.PaisHomologadoRepository paisRepository;
+    private final CategoryManualRepository categoryRepository;
+    private final CountryHomologatedRepository countryRepository;
 
     private Map<String, CategoryManual> categoryCache = new ConcurrentHashMap<>();
-    private Map<String, PaisHomologado> paisCache = new ConcurrentHashMap<>();
+    private Map<String, CountryHomologated> countryCache = new ConcurrentHashMap<>();
     private boolean cacheLoaded = false;
 
     public HomologationR2dbcAdapter(
-            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository categoryRepository,
-            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.PaisHomologadoRepository paisRepository) {
+            CategoryManualRepository categoryRepository,
+            CountryHomologatedRepository countryRepository) {
         this.categoryRepository = categoryRepository;
-        this.paisRepository = paisRepository;
+        this.countryRepository = countryRepository;
     }
 
     @Override
-    public Mono<HomologationResult> resolve(String origin, String pais) {
+    public Mono<HomologationResult> resolve(String origin, String country) {
         if (!cacheLoaded) {
-            return loadCache().then(resolveFromCache(origin, pais));
+            return loadCache().then(resolveFromCache(origin, country));
         }
-        return resolveFromCache(origin, pais);
+        return resolveFromCache(origin, country);
     }
 
-    private Mono<HomologationResult> resolveFromCache(String origin, String pais) {
-        String resolvedOrigin = origin;
+    private Mono<HomologationResult> resolveFromCache(String origin, String country) {
+        String resolvedOrigin = resolveOrigin(origin);
+        String resolvedCountry = resolveCountry(country);
 
-        CategoryManual category = categoryCache.get(origin);
-        if (category != null) {
-            resolvedOrigin = category.descripcionManual() != null ? category.descripcionManual() : origin;
+        return Mono.just(new HomologationResult(resolvedOrigin, resolvedCountry));
+    }
+
+    private String resolveOrigin(String origin) {
+        if (origin == null || origin.isBlank()) {
+            return origin;
         }
 
-        String resolvedPais = pais;
-        PaisHomologado paisHomologado = paisCache.get(pais);
-        if (paisHomologado != null) {
-            resolvedPais = paisHomologado.paisHomologado() != null ? paisHomologado.paisHomologado() : pais;
+        String normalized = removeDiacritics(origin.toLowerCase());
+
+        for (Map.Entry<String, CategoryManual> entry : categoryCache.entrySet()) {
+            String key = entry.getKey();
+            if (key != null && removeDiacritics(key.toLowerCase()).contains(normalized)) {
+                CategoryManual category = entry.getValue();
+                return category.descripcionManual() != null ? category.descripcionManual() : origin;
+            }
         }
 
-        return Mono.just(new HomologationResult(resolvedOrigin, resolvedPais));
+        return origin;
+    }
+
+    private String resolveCountry(String country) {
+        if (country == null || country.isBlank()) {
+            return country;
+        }
+
+        CountryHomologated homologated = countryCache.get(country);
+        if (homologated != null) {
+            return homologated.countryHomologated() != null ? homologated.countryHomologated() : country;
+        }
+
+        return country;
+    }
+
+    private static final Pattern DIACRITICS_PATTERN = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
+
+    private String removeDiacritics(String text) {
+        if (text == null) return null;
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD);
+        return DIACRITICS_PATTERN.matcher(normalized).replaceAll("");
     }
 
     private Mono<Void> loadCache() {
@@ -73,19 +106,19 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             })
             .then();
 
-        Mono<Void> loadPais = paisRepository.findAll()
+        Mono<Void> loadCountries = countryRepository.findAll()
             .collectMap(
-                PaisHomologadoEntity::getPais,
-                entity -> new PaisHomologado(entity.getPais(), entity.getPaisHomologado())
+                CountryHomologatedEntity::getCountry,
+                entity -> new CountryHomologated(entity.getCountry(), entity.getCountryHomologated())
             )
             .doOnNext(map -> {
-                paisCache.clear();
-                paisCache.putAll(map);
-                log.log(Level.INFO, "Pais cache loaded with {0} entries", new Object[]{paisCache.size()});
+                countryCache.clear();
+                countryCache.putAll(map);
+                log.log(Level.INFO, "Country cache loaded with {0} entries", new Object[]{countryCache.size()});
             })
             .then();
 
-        return Mono.zip(loadCategories, loadPais)
+        return Mono.zip(loadCategories, loadCountries)
             .doOnNext(tuple -> cacheLoaded = true)
             .then();
     }

@@ -16,17 +16,17 @@ import java.time.LocalDateTime;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class PaisHomologadoEntity {
+public class CountryHomologatedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "pais", nullable = false)
-    private String pais;
+    private String country;
 
     @Column(name = "pais_homologado", nullable = false)
-    private String paisHomologado;
+    private String countryHomologated;
 
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime createdAt;
