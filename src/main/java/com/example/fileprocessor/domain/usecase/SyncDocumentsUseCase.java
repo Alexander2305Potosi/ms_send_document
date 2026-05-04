@@ -8,14 +8,12 @@ import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.util.ZipDecompressor;
 import lombok.AllArgsConstructor;
 import lombok.extern.java.Log;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.Set;
 import java.util.logging.Level;
 
 @Component
@@ -28,31 +26,23 @@ public class SyncDocumentsUseCase {
     private final RulesBussinesGateway documentValidator;
 
     public Mono<String> execute() {
-        log.info("Starting document sync");
+        log.log(Level.INFO, "Starting document sync");
         return productRepository.findAll()
-            .concatMap(productRestGateway::getDocumentsByProduct)
-            .flatMap(this::processDocument)
-            .then(Mono.fromCallable(() -> {
-                String msg = "Document sync completed";
-                log.info(msg);
-                return msg;
-            }))
-            .doOnError(e -> log.severe("Document sync failed: " + e.getMessage()));
+            .count()
+            .flatMap(total -> {
+                log.log(Level.INFO, "Found {0} products in database", new Object[]{total});
+                return Flux.from(productRepository.findAll())
+                    .concatMap(productRestGateway::getDocumentsByProduct)
+                    .flatMap(this::processDocument)
+                    .then(Mono.just("Document sync completed"));
+            })
+            .doOnError(e -> log.log(Level.SEVERE, "Document sync failed: " + e.getMessage()));
     }
 
     private Mono<Void> processDocument(ProductDocumentHistory doc) {
         String productId = doc.productId();
-        if (doc.isZip()) {
-            return saveDocument(doc, productId, null)
-                .thenMany(ZipDecompressor.decompress(doc))
-                .flatMap(decompressed ->
-                    documentValidator.validate(decompressed)
-                        .flatMap(validated -> saveDocument(validated, productId, doc.filename())))
-                .then();
-        } else {
-            return documentValidator.validate(doc)
-                .flatMap(validated -> saveDocument(validated, productId, null));
-        }
+        return documentValidator.validate(doc)
+            .flatMap(validated -> saveDocument(validated, productId, null));
     }
 
     private Mono<Void> saveDocument(ProductDocumentHistory doc, String productId, String parentZipName) {
