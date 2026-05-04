@@ -61,7 +61,9 @@ com.example.fileprocessor/
 │   │   ├── DocumentHistoryRepository.java         # Puerto: trazabilidad de envios
 │   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
 │   │   ├── S3Gateway.java                         # Puerto: envio a S3
-│   │   └── SoapGateway.java                       # Puerto: envio a SOAP
+│   │   ├── SoapGateway.java                       # Puerto: envio a SOAP
+│   │   ├── CategoryManualRepository.java          # Puerto: homologacion de origin (SOAP)
+│   │   └── PaisHomologadoRepository.java         # Puerto: homologacion de pais (SOAP)
 │   └── exception/
 │       ├── DomainException.java                   # Base abstracta (RuntimeException + errorCode)
 │       ├── FileValidationException.java           # Error de validacion de archivo
@@ -79,15 +81,21 @@ com.example.fileprocessor/
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
     │   │   ├── ProductR2dbcAdapter.java            # Implementa ProductRepository
     │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentHistoryRepository
+    │   │   ├── CategoryManualR2dbcAdapter.java     # Implementa CategoryManualRepository (cache)
+    │   │   ├── PaisHomologadoR2dbcAdapter.java     # Implementa PaisHomologadoRepository (cache)
     │   │   ├── entity/
     │   │   │   ├── ProductEntity.java              # @Entity @Table("productos")
-    │   │   │   └── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos")
+    │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos")
+    │   │   │   ├── CategoryManualEntity.java       # @Entity @Table("categoria_manual")
+    │   │   │   └── PaisHomologadoEntity.java       # @Entity @Table("pais_homologado")
     │   │   ├── mapper/
     │   │   │   ├── ProductMapper.java              # Product <-> ProductEntity
     │   │   │   └── DocumentHistoryMapper.java      # DocumentHistory <-> DocumentHistoryEntity
     │   │   └── repository/
-    │   │       ├── ProductRepository.java          # R2dbcRepository<ProductEntity, Long>
-    │   │       └── DocumentHistoryRepository.java  # R2dbcRepository<DocumentHistoryEntity, Long>
+    │   │       ├── ProductRepository.java         # R2dbcRepository<ProductEntity, Long>
+    │   │       ├── DocumentHistoryRepository.java  # R2dbcRepository<DocumentHistoryEntity, Long>
+    │   │       ├── CategoryManualRepository.java   # R2dbcRepository<CategoryManualEntity, Long>
+    │   │       └── PaisHomologadoRepository.java   # R2dbcRepository<PaisHomologadoEntity, Long>
     │   ├── restclient/
     │   │   ├── ProductRestGatewayAdapter.java      # WebClient a API REST externa
     │   │   └── dto/
@@ -322,6 +330,29 @@ Almacena la trazabilidad completa de cada intento de envio de documentos.
 | `fecha_fallo` | TIMESTAMP | Timestamp de fallo (nullable) |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 
+### Tabla: categoria_manual
+
+Almacena la homologacion de categorias de manuales. Se usa para resolver el `origin` de los documentos en el caso de uso SOAP.
+
+| Columna | Tipo | Descripcion |
+|--------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `categoria` | VARCHAR(255) | Codigo de categoria (ej: "manual_tecnico") |
+| `descripcion_manual` | VARCHAR(500) | Descripcion legible (ej: "Manual Tecnico del Producto") |
+| `fecha_vigencia` | DATE | Fecha hasta la cual es valida la categoria (nullable) |
+| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
+
+### Tabla: pais_homologado
+
+Almacena la homologacion de paises. Se usa para resolver el `pais` de los documentos en el caso de uso SOAP.
+
+| Columna | Tipo | Descripcion |
+|--------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `pais` | VARCHAR(255) | Codigo de pais (ej: "AR", "CL") |
+| `pais_homologado` | VARCHAR(255) | Nombre homologado del pais (ej: "Argentina", "Chile") |
+| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
+
 ### Indices
 
 ```sql
@@ -335,6 +366,50 @@ CREATE INDEX idx_prod_estado       ON productos (estado);
 CREATE INDEX idx_prod_fecha_carga  ON productos (fecha_carga);
 CREATE INDEX idx_prod_producto_id  ON productos (id_producto);
 CREATE INDEX idx_prod_carga_estado ON productos (fecha_carga, estado);
+```
+
+## Homologacion de Origin y Pais (SOAP)
+
+El caso de uso SOAP realiza una homologacion de `origin` y `pais` antes de enviar el documento.
+
+### Flujo de Homologacion
+
+```
+Documento.origin = "manual_tecnico"
+        ↓
+Busca en categoria_manual WHERE categoria = "manual_tecnico" AND fecha_vigencia >= CURRENT_DATE
+        ↓
+descripcion_manual = "Manual Tecnico del Producto"
+vigencia = "2026-12-31"
+        ↓
+Documento.pais = "AR"
+        ↓
+Busca en pais_homologado WHERE pais = "AR"
+        ↓
+pais_homologado = "Argentina"
+        ↓
+FileUploadRequest.origin = "Manual Tecnico del Producto"
+FileUploadRequest.vigencia = "2026-12-31"
+FileUploadRequest.paisHomologado = "Argentina"
+```
+
+### Cache en Memoria
+
+Los repositorios `CategoryManualRepository` y `PaisHomologadoRepository` cargan sus datos una sola vez en un `ConcurrentHashMap` al primer acceso. Las consultas siguientes usan el cache sin acceder a la base de datos.
+
+### Datos de Ejemplo
+
+```sql
+-- Categoria manual
+INSERT INTO categoria_manual (categoria, descripcion_manual, fecha_vigencia) VALUES
+('manual_tecnico', 'Manual Tecnico del Producto', '2026-12-31'),
+('manual_usuario', 'Manual de Usuario', '2026-12-31');
+
+-- Pais homologado
+INSERT INTO pais_homologado (pais, pais_homologado) VALUES
+('AR', 'Argentina'),
+('CL', 'Chile'),
+('CO', 'Colombia');
 ```
 
 ### Acceso a Consola H2 (solo desarrollo)
