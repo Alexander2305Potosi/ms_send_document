@@ -2,6 +2,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
+import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
@@ -55,6 +56,28 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .flatMap(this::mapToProductDocumentHistory)
                 .doOnNext(doc -> log.log(Level.INFO, "Product document retrieved: productId={0}, documentId={1}",
+                    new Object[]{doc.productId(), doc.documentId()}));
+        });
+    }
+
+    @Override
+    public Flux<ProductDocumentHistory> getDocumentsByProduct(ProductHistory product) {
+        return Flux.deferContextual(ctx -> {
+            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            log.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
+                new Object[]{product.productId(), traceId});
+
+            String path = properties.productDocumentsPath().replace("{productId}", product.productId());
+
+            return webClient.get()
+                .uri(path)
+                .accept(MediaType.APPLICATION_JSON)
+                .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                .retrieve()
+                .bodyToFlux(ProductDocumentResponse.class)
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .map(doc -> mapToProductDocument(product.productId(), doc))
+                .doOnNext(doc -> log.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
                     new Object[]{doc.productId(), doc.documentId()}));
         });
     }

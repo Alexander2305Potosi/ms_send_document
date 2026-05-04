@@ -2,8 +2,10 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
@@ -13,20 +15,28 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Set;
+import java.util.logging.Level;
+
 @Component
 @Log
 @AllArgsConstructor
 public class SyncDocumentsUseCase {
+    private final ProductRepository productRepository;
     private final DocumentRepository documentRepository;
     private final ProductRestGateway productRestGateway;
     private final RulesBussinesGateway documentValidator;
 
-    public Mono<Void> execute() {
+    public Mono<String> execute() {
         log.info("Starting document sync");
-        return productRestGateway.getAllProducts()
+        return productRepository.findAll()
+            .concatMap(productRestGateway::getDocumentsByProduct)
             .flatMap(this::processDocument)
-            .then()
-            .doOnTerminate(() -> log.info("Document sync completed"))
+            .then(Mono.fromCallable(() -> {
+                String msg = "Document sync completed";
+                log.info(msg);
+                return msg;
+            }))
             .doOnError(e -> log.severe("Document sync failed: " + e.getMessage()));
     }
 
