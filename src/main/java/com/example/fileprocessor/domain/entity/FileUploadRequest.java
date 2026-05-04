@@ -3,6 +3,8 @@ package com.example.fileprocessor.domain.entity;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.time.LocalDate;
+
 /**
  * Request object for file upload operations.
  */
@@ -15,4 +17,6 @@ public class FileUploadRequest {
     private String contentType;
     private long fileSize;
     private String origin;
+    private LocalDate vigencia;
+    private String paisHomologado;
 }

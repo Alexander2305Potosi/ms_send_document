@@ -16,7 +16,8 @@ class ProductDocumentHistoryTest {
             "application/pdf",
             1024L,
             true,
-            "origin"
+            "origin",
+            "AR"
         );
 
         assertEquals("doc-1", doc.documentId());
@@ -26,6 +27,7 @@ class ProductDocumentHistoryTest {
         assertEquals(1024L, doc.size());
         assertTrue(doc.isZip());
         assertEquals("origin", doc.origin());
+        assertEquals("AR", doc.pais());
     }
 
     @Test
@@ -37,7 +39,8 @@ class ProductDocumentHistoryTest {
             "application/pdf",
             100L,
             false,
-            "origin"
+            "origin",
+            "AR"
         );
 
         assertEquals(100L, doc.size());
@@ -52,7 +55,8 @@ class ProductDocumentHistoryTest {
             "application/pdf",
             0L,
             false,
-            "origin"
+            "origin",
+            "AR"
         );
 
         assertFalse(doc.isZip());

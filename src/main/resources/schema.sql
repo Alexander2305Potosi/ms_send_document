@@ -21,3 +21,20 @@ CREATE TABLE IF NOT EXISTS productos (
     estado VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     mensaje_error VARCHAR(2000)
 );
+
+CREATE TABLE IF NOT EXISTS categoria_manual (
+    id BIGSERIAL PRIMARY KEY,
+    categoria VARCHAR(255) NOT NULL UNIQUE,
+    descripcion_manual VARCHAR(500) NOT NULL,
+    fecha_vigencia DATE,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_cat_categoria_vigencia ON categoria_manual (categoria, fecha_vigencia);
+
+CREATE TABLE IF NOT EXISTS pais_homologado (
+    id BIGSERIAL PRIMARY KEY,
+    pais VARCHAR(255) NOT NULL UNIQUE,
+    pais_homologado VARCHAR(255) NOT NULL,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

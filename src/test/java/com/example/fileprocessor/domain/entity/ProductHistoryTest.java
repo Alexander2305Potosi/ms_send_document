@@ -11,7 +11,7 @@ class ProductHistoryTest {
 
     @Test
     void product_record_createsValidProduct() {
-        ProductDocumentHistory doc = new ProductDocumentHistory("doc-1", "test.pdf", new byte[0], "application/pdf", 100L, false, "origin");
+        ProductDocumentHistory doc = new ProductDocumentHistory("doc-1", "test.pdf", new byte[0], "application/pdf", 100L, false, "origin", "AR");
         ProductHistory product = new ProductHistory(null, "prod-1", "Test Product", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         assertEquals("prod-1", product.productId());

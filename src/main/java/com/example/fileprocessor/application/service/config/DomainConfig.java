@@ -1,6 +1,8 @@
 package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.port.out.CategoryManualRepository;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.port.out.PaisHomologadoRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -25,13 +27,17 @@ public class DomainConfig {
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             DocumentHistoryRepository historyRepository,
-            ProcessorsProperties properties) {
+            ProcessorsProperties properties,
+            CategoryManualRepository categoryRepository,
+            PaisHomologadoRepository paisRepository) {
         return new SoapDocumentProcessingUseCase(
             productRepository,
             productRestGateway,
             soapGateway,
             historyRepository,
-            new RulesBussinesService(properties.soap())
+            new RulesBussinesService(properties.soap()),
+            categoryRepository,
+            paisRepository
         );
     }
 

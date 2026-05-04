@@ -67,7 +67,7 @@ class S3DocumentProcessingUseCaseTest {
     @Test
     void uploadDocument_whenSuccess_returnsSuccessResult() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -90,7 +90,7 @@ class S3DocumentProcessingUseCaseTest {
     @Test
     void uploadDocument_whenError_returnsFailureResult() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
 
         when(s3Gateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.error(new RuntimeException("S3 error")));
@@ -106,7 +106,7 @@ class S3DocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_processesAllDocuments() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
         ProductDocumentFile docFile = ProductDocumentFile.builder()
             .documentId(doc.documentId())
             .filename(doc.filename())
@@ -115,6 +115,7 @@ class S3DocumentProcessingUseCaseTest {
             .size(doc.size())
             .isZip(doc.isZip())
             .origin(doc.origin())
+            .pais(doc.pais())
             .build();
         ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
@@ -136,7 +137,7 @@ class S3DocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenError_logsAndContinues() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
         ProductDocumentFile docFile = ProductDocumentFile.builder()
             .documentId(doc.documentId())
             .filename(doc.filename())
@@ -145,6 +146,7 @@ class S3DocumentProcessingUseCaseTest {
             .size(doc.size())
             .isZip(doc.isZip())
             .origin(doc.origin())
+            .pais(doc.pais())
             .build();
         ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 

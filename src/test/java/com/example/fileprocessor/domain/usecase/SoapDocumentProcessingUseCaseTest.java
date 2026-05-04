@@ -6,11 +6,15 @@ import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
+import com.example.fileprocessor.domain.port.out.CategoryManualRepository;
+import com.example.fileprocessor.domain.port.out.PaisHomologadoRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CategoryManualEntity;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.PaisHomologadoEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +48,12 @@ class SoapDocumentProcessingUseCaseTest {
     @Mock
     private com.example.fileprocessor.domain.port.out.DocumentHistoryRepository historyRepository;
 
+    @Mock
+    private CategoryManualRepository categoryRepository;
+
+    @Mock
+    private PaisHomologadoRepository paisRepository;
+
     private SoapDocumentProcessingUseCase useCase;
 
     private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
@@ -53,7 +63,7 @@ class SoapDocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         var validator = new RulesBussinesService(config(null, null));
-        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validator);
+        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validator, categoryRepository, paisRepository);
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
         lenient().when(productRepository.updateEstado(anyString(), any())).thenReturn(Mono.empty());
         lenient().when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
@@ -67,7 +77,19 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void uploadDocument_whenSuccess_returnsSuccessResult() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
+
+        CategoryManualEntity categoryEntity = CategoryManualEntity.builder()
+            .categoria("origin")
+            .descripcionManual("Manual de Origin")
+            .build();
+        PaisHomologadoEntity paisEntity = PaisHomologadoEntity.builder()
+            .pais("AR")
+            .paisHomologado("Argentina")
+            .build();
+
+        when(categoryRepository.findByCategoria("origin")).thenReturn(Mono.just(categoryEntity));
+        when(paisRepository.findByPais("AR")).thenReturn(Mono.just(paisEntity));
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -90,8 +112,19 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void uploadDocument_whenError_returnsFailureResult() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
 
+        CategoryManualEntity categoryEntity = CategoryManualEntity.builder()
+            .categoria("origin")
+            .descripcionManual("Manual de Origin")
+            .build();
+        PaisHomologadoEntity paisEntity = PaisHomologadoEntity.builder()
+            .pais("AR")
+            .paisHomologado("Argentina")
+            .build();
+
+        when(categoryRepository.findByCategoria("origin")).thenReturn(Mono.just(categoryEntity));
+        when(paisRepository.findByPais("AR")).thenReturn(Mono.just(paisEntity));
         when(soapGateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.error(new RuntimeException("SOAP error")));
 
@@ -106,7 +139,7 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_processesAllDocuments() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
         ProductDocumentFile docFile = ProductDocumentFile.builder()
             .documentId(doc.documentId())
             .filename(doc.filename())
@@ -115,8 +148,18 @@ class SoapDocumentProcessingUseCaseTest {
             .size(doc.size())
             .isZip(doc.isZip())
             .origin(doc.origin())
+            .pais(doc.pais())
             .build();
         ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+
+        CategoryManualEntity categoryEntity = CategoryManualEntity.builder()
+            .categoria("origin")
+            .descripcionManual("Manual de Origin")
+            .build();
+        PaisHomologadoEntity paisEntity = PaisHomologadoEntity.builder()
+            .pais("AR")
+            .paisHomologado("Argentina")
+            .build();
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -126,6 +169,8 @@ class SoapDocumentProcessingUseCaseTest {
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(docFile));
+        when(categoryRepository.findByCategoria("origin")).thenReturn(Mono.just(categoryEntity));
+        when(paisRepository.findByPais("AR")).thenReturn(Mono.just(paisEntity));
         when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(successResult));
 
         StepVerifier.create(useCase.executePendingDocuments())
@@ -136,10 +181,10 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenValidationFails_emitsFailureResult() {
         var validatorWithPattern = new RulesBussinesService(config(null, ".*\\.csv$"));
-        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validatorWithPattern);
+        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validatorWithPattern, categoryRepository, paisRepository);
 
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1L, false, "origin", "AR");
         ProductDocumentFile docFile = ProductDocumentFile.builder()
             .documentId(doc.documentId())
             .filename(doc.filename())
@@ -148,6 +193,7 @@ class SoapDocumentProcessingUseCaseTest {
             .size(doc.size())
             .isZip(doc.isZip())
             .origin(doc.origin())
+            .pais(doc.pais())
             .build();
         ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
@@ -169,10 +215,10 @@ class SoapDocumentProcessingUseCaseTest {
     @Test
     void executePendingDocuments_whenSizeExceedsLimit_emitsFailureResult() {
         var validatorWithSize = new RulesBussinesService(config(100L, null));
-        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validatorWithSize);
+        useCase = new SoapDocumentProcessingUseCase(productRepository, productRestGateway, soapGateway, historyRepository, validatorWithSize, categoryRepository, paisRepository);
 
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 500, false, "origin");
+            "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 500L, false, "origin", "AR");
         ProductDocumentFile docFile = ProductDocumentFile.builder()
             .documentId(doc.documentId())
             .filename(doc.filename())
@@ -181,6 +227,7 @@ class SoapDocumentProcessingUseCaseTest {
             .size(doc.size())
             .isZip(doc.isZip())
             .origin(doc.origin())
+            .pais(doc.pais())
             .build();
         ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 

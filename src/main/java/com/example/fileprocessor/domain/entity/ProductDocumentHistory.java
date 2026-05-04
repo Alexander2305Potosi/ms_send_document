@@ -10,5 +10,6 @@ public record ProductDocumentHistory(
     String contentType,
     long size,
     boolean isZip,
-    String origin
+    String origin,
+    String pais
 ) {}

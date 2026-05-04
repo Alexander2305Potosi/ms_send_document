@@ -63,7 +63,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return productRepository.updateEstadoById(id, finalState);
     }
 
-    private Mono<FileUploadResult> processDocument(ProductDocumentHistory doc, String productId) {
+    protected Mono<FileUploadResult> processDocument(ProductDocumentHistory doc, String productId) {
         Flux<ProductDocumentHistory> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
             .map(this::toProductDocument)
             .flatMapMany(this::decompressIfNeeded)
@@ -119,7 +119,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return ZipDecompressor.decompress(doc);
     }
 
-    private ProductDocumentHistory toProductDocument(ProductDocumentFile file) {
+    protected ProductDocumentHistory toProductDocument(ProductDocumentFile file) {
         return ProductDocumentHistory.builder()
             .documentId(file.documentId())
             .filename(file.filename())
@@ -128,6 +128,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .size(file.size())
             .isZip(file.isZip())
             .origin(file.origin())
+            .pais(file.pais())
             .build();
     }
 

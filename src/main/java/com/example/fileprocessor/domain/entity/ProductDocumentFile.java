@@ -10,5 +10,6 @@ public record ProductDocumentFile(
     String contentType,
     long size,
     boolean isZip,
-    String origin
+    String origin,
+    String pais
 ) {}

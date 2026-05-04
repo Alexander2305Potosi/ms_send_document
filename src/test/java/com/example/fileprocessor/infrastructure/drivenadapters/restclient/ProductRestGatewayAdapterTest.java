@@ -15,14 +15,12 @@ class ProductRestGatewayAdapterTest {
     @Test
     void mapToProduct_withDocuments() {
         ProductDocumentResponse docResponse = new ProductDocumentResponse(
-            "doc-1", "test.pdf", "VGVzdENvbnRlbnQ=", "application/pdf", 12L, false, "origin"
+            "doc-1", "test.pdf", "VGVzdENvbnRlbnQ=", "application/pdf", 12L, false, "origin", "AR"
         );
         ProductResponse productResponse = new ProductResponse(
             "prod-1", "Test Product", List.of(docResponse)
         );
 
-        // Use reflection to test private method since it's complex to mock WebClient
-        // Instead, we test the mapping by creating the objects directly
         ProductDocumentHistory doc = mapToProductDocument(docResponse);
 
         assertEquals("doc-1", doc.documentId());
@@ -31,14 +29,14 @@ class ProductRestGatewayAdapterTest {
         assertEquals(12L, doc.size());
         assertFalse(doc.isZip());
         assertEquals("origin", doc.origin());
+        assertEquals("AR", doc.pais());
     }
 
     @Test
     void mapToProductDocument_withBase64Content() {
-        // Base64 of "TestContent"
         String base64Content = "VGVzdENvbnRlbnQ=";
         ProductDocumentResponse response = new ProductDocumentResponse(
-            "doc-1", "test.pdf", base64Content, "application/pdf", 12L, false, "origin"
+            "doc-1", "test.pdf", base64Content, "application/pdf", 12L, false, "origin", "AR"
         );
 
         ProductDocumentHistory doc = mapToProductDocument(response);
@@ -46,12 +44,13 @@ class ProductRestGatewayAdapterTest {
         assertEquals("doc-1", doc.documentId());
         assertNotNull(doc.content());
         assertEquals("origin", doc.origin());
+        assertEquals("AR", doc.pais());
     }
 
     @Test
     void mapToProductDocument_withNullContent() {
         ProductDocumentResponse response = new ProductDocumentResponse(
-            "doc-1", "test.pdf", null, "application/pdf", null, false, "origin"
+            "doc-1", "test.pdf", null, "application/pdf", null, false, "origin", "AR"
         );
 
         ProductDocumentHistory doc = mapToProductDocument(response);
@@ -59,18 +58,20 @@ class ProductRestGatewayAdapterTest {
         assertEquals("doc-1", doc.documentId());
         assertNull(doc.content());
         assertEquals(0L, doc.size());
+        assertEquals("AR", doc.pais());
     }
 
     @Test
     void mapToProductDocument_withZipFlag() {
         ProductDocumentResponse response = new ProductDocumentResponse(
-            "doc-1", "test.zip", "VGVzdENvbnRlbnQ=", "application/zip", 12L, true, "origin"
+            "doc-1", "test.zip", "VGVzdENvbnRlbnQ=", "application/zip", 12L, true, "origin", "AR"
         );
 
         ProductDocumentHistory doc = mapToProductDocument(response);
 
         assertTrue(doc.isZip());
         assertEquals("test.zip", doc.filename());
+        assertEquals("AR", doc.pais());
     }
 
     @Test
@@ -98,7 +99,6 @@ class ProductRestGatewayAdapterTest {
         assertTrue(product.documents().isEmpty());
     }
 
-    // Helper methods that replicate the adapter's mapping logic
     private ProductDocumentHistory mapToProductDocument(ProductDocumentResponse json) {
         byte[] content = null;
         if (json.content() != null && !json.content().isBlank()) {
@@ -115,6 +115,7 @@ class ProductRestGatewayAdapterTest {
             .size(size)
             .isZip(isZip)
             .origin(json.origin())
+            .pais(json.pais())
             .build();
     }
 

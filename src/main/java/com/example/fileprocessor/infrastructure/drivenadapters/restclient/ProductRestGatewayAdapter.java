@@ -85,6 +85,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                         .size(doc.size())
                         .isZip(doc.isZip())
                         .origin(doc.origin())
+                        .pais(doc.pais())
                         .build();
                 })
                 .doOnNext(doc -> log.log(Level.INFO, "Document {0} retrieved for product {1}", new Object[]{documentId, productId}));
@@ -136,6 +137,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .size(size)
             .isZip(isZip)
             .origin(json.origin())
+            .pais(json.pais())
             .build();
     }
 }

@@ -8,7 +8,7 @@ import reactor.test.StepVerifier;
 class DocumentValidatorTest {
 
     private static ProductDocumentHistory doc(String documentId, String filename, String contentType, long size) {
-        return new ProductDocumentHistory(documentId, filename, new byte[0], contentType, size, false, "origin");
+        return new ProductDocumentHistory(documentId, filename, new byte[0], contentType, size, false, "origin", "AR");
     }
 
     private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {
