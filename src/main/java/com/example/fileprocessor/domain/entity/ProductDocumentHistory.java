@@ -3,7 +3,7 @@ package com.example.fileprocessor.domain.entity;
 import lombok.Builder;
 
 @Builder
-public record ProductDocument(
+public record ProductDocumentHistory(
     String documentId,
     String filename,
     byte[] content,

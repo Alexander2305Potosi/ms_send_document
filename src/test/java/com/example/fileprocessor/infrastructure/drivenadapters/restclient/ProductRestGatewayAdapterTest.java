@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
 import com.example.fileprocessor.domain.entity.ProductHistory;
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ class ProductRestGatewayAdapterTest {
 
         // Use reflection to test private method since it's complex to mock WebClient
         // Instead, we test the mapping by creating the objects directly
-        ProductDocument doc = mapToProductDocument(docResponse);
+        ProductDocumentHistory doc = mapToProductDocument(docResponse);
 
         assertEquals("doc-1", doc.documentId());
         assertEquals("test.pdf", doc.filename());
@@ -41,7 +41,7 @@ class ProductRestGatewayAdapterTest {
             "doc-1", "test.pdf", base64Content, "application/pdf", 12L, false, "origin"
         );
 
-        ProductDocument doc = mapToProductDocument(response);
+        ProductDocumentHistory doc = mapToProductDocument(response);
 
         assertEquals("doc-1", doc.documentId());
         assertNotNull(doc.content());
@@ -54,7 +54,7 @@ class ProductRestGatewayAdapterTest {
             "doc-1", "test.pdf", null, "application/pdf", null, false, "origin"
         );
 
-        ProductDocument doc = mapToProductDocument(response);
+        ProductDocumentHistory doc = mapToProductDocument(response);
 
         assertEquals("doc-1", doc.documentId());
         assertNull(doc.content());
@@ -67,7 +67,7 @@ class ProductRestGatewayAdapterTest {
             "doc-1", "test.zip", "VGVzdENvbnRlbnQ=", "application/zip", 12L, true, "origin"
         );
 
-        ProductDocument doc = mapToProductDocument(response);
+        ProductDocumentHistory doc = mapToProductDocument(response);
 
         assertTrue(doc.isZip());
         assertEquals("test.zip", doc.filename());
@@ -99,7 +99,7 @@ class ProductRestGatewayAdapterTest {
     }
 
     // Helper methods that replicate the adapter's mapping logic
-    private ProductDocument mapToProductDocument(ProductDocumentResponse json) {
+    private ProductDocumentHistory mapToProductDocument(ProductDocumentResponse json) {
         byte[] content = null;
         if (json.content() != null && !json.content().isBlank()) {
             content = com.example.fileprocessor.domain.util.Base64Utils.decodeSafe(
@@ -107,7 +107,7 @@ class ProductRestGatewayAdapterTest {
         }
         long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
         boolean isZip = Boolean.TRUE.equals(json.isZip());
-        return ProductDocument.builder()
+        return ProductDocumentHistory.builder()
             .documentId(json.documentId())
             .filename(json.filename())
             .content(content)
@@ -119,7 +119,7 @@ class ProductRestGatewayAdapterTest {
     }
 
     private ProductHistory mapToProduct(ProductResponse json) {
-        List<ProductDocument> documents = json.documents() != null
+        List<ProductDocumentHistory> documents = json.documents() != null
             ? json.documents().stream()
                 .map(this::mapToProductDocument)
                 .toList()

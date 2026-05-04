@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -76,7 +76,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .map(response -> {
-                    ProductDocument doc = mapToProductDocument(response);
+                    ProductDocumentHistory doc = mapToProductDocument(response);
                     return ProductDocumentFile.builder()
                         .documentId(doc.documentId())
                         .filename(doc.filename())
@@ -92,7 +92,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     private ProductHistory mapToProduct(ProductResponse json) {
-        List<ProductDocument> documents = json.documents() != null
+        List<ProductDocumentHistory> documents = json.documents() != null
             ? json.documents().stream()
                 .map(this::mapToProductDocument)
                 .toList()
@@ -105,7 +105,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .build();
     }
 
-    private ProductDocument mapToProductDocument(ProductDocumentResponse json) {
+    private ProductDocumentHistory mapToProductDocument(ProductDocumentResponse json) {
         String contentBase64 = json.content();
         String filename = json.filename();
         String documentId = json.documentId();
@@ -128,7 +128,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
         boolean isZip = Boolean.TRUE.equals(json.isZip());
 
-        return ProductDocument.builder()
+        return ProductDocumentHistory.builder()
             .documentId(documentId)
             .filename(filename)
             .content(content)

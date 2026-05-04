@@ -1,7 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -27,7 +27,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId) {
+    protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId) {
         return soapGateway.send(buildFileUploadRequest(doc, null))
             .onErrorResume(this::handleUploadError);
     }

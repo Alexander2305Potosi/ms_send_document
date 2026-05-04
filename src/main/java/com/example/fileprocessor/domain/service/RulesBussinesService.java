@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.service;
 
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import reactor.core.publisher.Mono;
@@ -30,7 +30,7 @@ public class RulesBussinesService implements RulesBussinesGateway {
     }
 
     @Override
-    public Mono<ProductDocument> validate(ProductDocument doc) {
+    public Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc) {
         return Mono.defer(() -> {
             if (maxFileSizeBytes != null && doc.size() > maxFileSizeBytes) {
                 log.log(Level.FINE, "Document {0} skipped: size {1} exceeds max {2}",

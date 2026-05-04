@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.util;
 
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import reactor.core.publisher.Flux;
@@ -19,27 +19,27 @@ public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
-    public static Flux<ProductDocument> decompress(ProductDocument zipDoc) {
+    public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc) {
         if (!zipDoc.isZip()) {
             return Flux.just(zipDoc);
         }
 
-        List<ProductDocument> entries = readZipEntries(zipDoc);
+        List<ProductDocumentHistory> entries = readZipEntries(zipDoc);
         if (entries.isEmpty()) {
             return Flux.empty();
         }
         return Flux.fromIterable(entries);
     }
 
-    private static List<ProductDocument> readZipEntries(ProductDocument zipDoc) {
-        List<ProductDocument> entries = new ArrayList<>();
+    private static List<ProductDocumentHistory> readZipEntries(ProductDocumentHistory zipDoc) {
+        List<ProductDocumentHistory> entries = new ArrayList<>();
         try (ZipInputStream zis = new ZipInputStream(
                 new ByteArrayInputStream(zipDoc.content()))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
                     byte[] decompressed = zis.readAllBytes();
-                    ProductDocument expanded = buildProductDocument(entry.getName(), decompressed, zipDoc);
+                    ProductDocumentHistory expanded = buildProductDocument(entry.getName(), decompressed, zipDoc);
                     entries.add(expanded);
                 }
             }
@@ -51,8 +51,8 @@ public final class ZipDecompressor {
         return entries;
     }
 
-    private static ProductDocument buildProductDocument(String filename, byte[] content, ProductDocument original) {
-        return ProductDocument.builder()
+    private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, ProductDocumentHistory original) {
+        return ProductDocumentHistory.builder()
             .documentId(original.documentId() + "/" + filename)
             .filename(filename)
             .content(content)

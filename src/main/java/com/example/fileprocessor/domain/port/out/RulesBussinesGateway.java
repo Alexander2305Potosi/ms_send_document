@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -9,5 +9,5 @@ import reactor.core.publisher.Mono;
  */
 public interface RulesBussinesGateway {
 
-    Mono<ProductDocument> validate(ProductDocument doc);
+    Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc);
 }

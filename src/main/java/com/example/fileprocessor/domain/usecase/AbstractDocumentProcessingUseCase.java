@@ -4,7 +4,7 @@ import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -63,8 +63,8 @@ public abstract class AbstractDocumentProcessingUseCase {
         return productRepository.updateEstadoById(id, finalState);
     }
 
-    private Mono<FileUploadResult> processDocument(ProductDocument doc, String productId) {
-        Flux<ProductDocument> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
+    private Mono<FileUploadResult> processDocument(ProductDocumentHistory doc, String productId) {
+        Flux<ProductDocumentHistory> documentFlux = productRestGateway.getDocument(productId, doc.documentId())
             .map(this::toProductDocument)
             .flatMapMany(this::decompressIfNeeded)
             .flatMap(documentValidator::validate)
@@ -82,7 +82,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .single();
     }
 
-    private Mono<FileUploadResult> saveFailedHistory(ProductDocument doc, String productId, Throwable error) {
+    private Mono<FileUploadResult> saveFailedHistory(ProductDocumentHistory doc, String productId, Throwable error) {
         String errorCode = error instanceof ProcessingException pe
             ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
 
@@ -97,7 +97,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .thenReturn(result);
     }
 
-    private Mono<Void> saveHistory(ProductDocument doc, String productId, FileUploadResult result) {
+    private Mono<Void> saveHistory(ProductDocumentHistory doc, String productId, FileUploadResult result) {
         boolean isSuccess = result.isSuccess();
         DocumentHistory record = DocumentHistory.builder()
             .productId(productId)
@@ -115,12 +115,12 @@ public abstract class AbstractDocumentProcessingUseCase {
         return historyRepository.save(record);
     }
 
-    private Flux<ProductDocument> decompressIfNeeded(ProductDocument doc) {
+    private Flux<ProductDocumentHistory> decompressIfNeeded(ProductDocumentHistory doc) {
         return ZipDecompressor.decompress(doc);
     }
 
-    private ProductDocument toProductDocument(ProductDocumentFile file) {
-        return ProductDocument.builder()
+    private ProductDocumentHistory toProductDocument(ProductDocumentFile file) {
+        return ProductDocumentHistory.builder()
             .documentId(file.documentId())
             .filename(file.filename())
             .content(file.content())
@@ -131,11 +131,11 @@ public abstract class AbstractDocumentProcessingUseCase {
             .build();
     }
 
-    protected abstract Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId);
+    protected abstract Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId);
 
     protected abstract String implementationName();
 
-    protected FileUploadRequest buildFileUploadRequest(ProductDocument doc, String origin) {
+    protected FileUploadRequest buildFileUploadRequest(ProductDocumentHistory doc, String origin) {
         return FileUploadRequest.builder()
             .documentId(doc.documentId())
             .content(doc.content() != null ? doc.content() : new byte[0])

@@ -1,14 +1,14 @@
 package com.example.fileprocessor.domain.service;
 
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 class DocumentValidatorTest {
 
-    private static ProductDocument doc(String documentId, String filename, String contentType, long size) {
-        return new ProductDocument(documentId, filename, new byte[0], contentType, size, false, "origin");
+    private static ProductDocumentHistory doc(String documentId, String filename, String contentType, long size) {
+        return new ProductDocumentHistory(documentId, filename, new byte[0], contentType, size, false, "origin");
     }
 
     private static ProcessorsProperties.ProcessorConfig config(Long maxFileSizeBytes, String filenamePattern) {

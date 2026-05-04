@@ -1,11 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductHistory;
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
@@ -67,7 +66,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenSuccess_returnsSuccessResult() {
-        ProductDocument doc = new ProductDocument(
+        ProductDocumentHistory doc = new ProductDocumentHistory(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
 
         FileUploadResult successResult = FileUploadResult.builder()
@@ -90,7 +89,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenError_returnsFailureResult() {
-        ProductDocument doc = new ProductDocument(
+        ProductDocumentHistory doc = new ProductDocumentHistory(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
 
         when(s3Gateway.send(any(FileUploadRequest.class)))
@@ -106,7 +105,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_processesAllDocuments() {
-        ProductDocument doc = new ProductDocument(
+        ProductDocumentHistory doc = new ProductDocumentHistory(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
         ProductDocumentFile docFile = ProductDocumentFile.builder()
             .documentId(doc.documentId())
@@ -136,7 +135,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_whenError_logsAndContinues() {
-        ProductDocument doc = new ProductDocument(
+        ProductDocumentHistory doc = new ProductDocumentHistory(
             "doc-1", "test.pdf", new byte[]{1}, "application/pdf", 1, false, "origin");
         ProductDocumentFile docFile = ProductDocumentFile.builder()
             .documentId(doc.documentId())

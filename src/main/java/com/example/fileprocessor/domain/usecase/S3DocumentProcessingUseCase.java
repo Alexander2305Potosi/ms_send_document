@@ -2,7 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocument;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -28,7 +28,7 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocument doc, String productId) {
+    protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId) {
         FileUploadRequest request = buildFileUploadRequest(doc, doc.origin());
         return s3Gateway.send(request)
             .onErrorResume(this::handleUploadError);
