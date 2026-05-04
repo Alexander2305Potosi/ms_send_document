@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -31,8 +31,8 @@ public class SyncProductsUseCase {
             .then();
     }
 
-    private Mono<Void> saveProduct(Product product) {
-        Product productToSave = new Product(
+    private Mono<Void> saveProduct(ProductHistory product) {
+        ProductHistory productToSave = new ProductHistory(
             null,
             product.productId(),
             product.name(),

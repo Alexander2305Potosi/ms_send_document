@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.mapper.ProductMapper;
 import org.springframework.stereotype.Component;
@@ -21,7 +21,7 @@ public class ProductR2dbcAdapter implements ProductRepository {
     }
 
     @Override
-    public Flux<Product> findByLoadDate(LocalDate loadDate) {
+    public Flux<ProductHistory> findByLoadDate(LocalDate loadDate) {
         LocalDateTime startOfDay = loadDate.atStartOfDay();
         LocalDateTime endOfDay = loadDate.atTime(LocalTime.MAX);
         return repository.findByLoadDateBetween(startOfDay, endOfDay)
@@ -30,13 +30,13 @@ public class ProductR2dbcAdapter implements ProductRepository {
     }
 
     @Override
-    public Flux<Product> findAll() {
+    public Flux<ProductHistory> findAll() {
         return repository.findAll()
             .map(ProductMapper::toDomain);
     }
 
     @Override
-    public Mono<Void> save(Product product) {
+    public Mono<Void> save(ProductHistory product) {
         return repository.save(ProductMapper.toEntity(product))
             .then();
     }

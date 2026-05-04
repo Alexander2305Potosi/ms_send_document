@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse;
@@ -79,7 +79,7 @@ class ProductRestGatewayAdapterTest {
             "prod-1", "Test Product", List.of()
         );
 
-        Product product = mapToProduct(productResponse);
+        ProductHistory product = mapToProduct(productResponse);
 
         assertEquals("prod-1", product.productId());
         assertEquals("Test Product", product.name());
@@ -92,7 +92,7 @@ class ProductRestGatewayAdapterTest {
             "prod-1", "Test Product", null
         );
 
-        Product product = mapToProduct(productResponse);
+        ProductHistory product = mapToProduct(productResponse);
 
         assertEquals("prod-1", product.productId());
         assertTrue(product.documents().isEmpty());
@@ -118,13 +118,13 @@ class ProductRestGatewayAdapterTest {
             .build();
     }
 
-    private Product mapToProduct(ProductResponse json) {
+    private ProductHistory mapToProduct(ProductResponse json) {
         List<ProductDocument> documents = json.documents() != null
             ? json.documents().stream()
                 .map(this::mapToProductDocument)
                 .toList()
             : List.of();
-        return Product.builder()
+        return ProductHistory.builder()
             .productId(json.productId())
             .name(json.name())
             .documents(documents)

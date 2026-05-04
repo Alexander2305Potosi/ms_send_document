@@ -5,7 +5,7 @@ import lombok.Builder;
 import java.time.LocalDateTime;
 
 @Builder
-public record Product(
+public record ProductHistory(
     Long id,
     String productId,
     String name,

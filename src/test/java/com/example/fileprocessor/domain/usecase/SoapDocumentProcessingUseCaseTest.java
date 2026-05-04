@@ -4,7 +4,7 @@ import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductDocument;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
@@ -117,7 +117,7 @@ class SoapDocumentProcessingUseCaseTest {
             .isZip(doc.isZip())
             .origin(doc.origin())
             .build();
-        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         FileUploadResult successResult = FileUploadResult.builder()
             .status(DocumentStatus.SUCCESS.name())
@@ -150,7 +150,7 @@ class SoapDocumentProcessingUseCaseTest {
             .isZip(doc.isZip())
             .origin(doc.origin())
             .build();
-        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());
@@ -183,7 +183,7 @@ class SoapDocumentProcessingUseCaseTest {
             .isZip(doc.isZip())
             .origin(doc.origin())
             .build();
-        Product product = new Product(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
+        ProductHistory product = new ProductHistory(1L, "prod-1", "Test", LocalDateTime.now(), "ACTIVE", null, List.of(doc));
 
         when(productRepository.findByLoadDate(any())).thenReturn(Flux.just(product));
         when(productRepository.updateEstadoById(anyLong(), anyString())).thenReturn(Mono.empty());

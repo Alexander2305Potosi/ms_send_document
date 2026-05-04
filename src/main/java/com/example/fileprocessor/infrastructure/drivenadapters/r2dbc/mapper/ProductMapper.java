@@ -1,11 +1,11 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.mapper;
 
-import com.example.fileprocessor.domain.entity.Product;
+import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.ProductEntity;
 
 public class ProductMapper {
 
-    public static ProductEntity toEntity(Product domain) {
+    public static ProductEntity toEntity(ProductHistory domain) {
         return ProductEntity.builder()
             .productId(domain.productId())
             .name(domain.name())
@@ -15,8 +15,8 @@ public class ProductMapper {
             .build();
     }
 
-    public static Product toDomain(ProductEntity entity) {
-        return Product.builder()
+    public static ProductHistory toDomain(ProductEntity entity) {
+        return ProductHistory.builder()
             .id(entity.getId())
             .productId(entity.getProductId())
             .name(entity.getName())
