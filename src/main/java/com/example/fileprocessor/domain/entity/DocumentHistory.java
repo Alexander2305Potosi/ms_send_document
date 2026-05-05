@@ -7,15 +7,22 @@ import java.time.LocalDateTime;
 @Builder
 public record DocumentHistory(
     Long id,
-    String productId,
     String documentId,
-    String filename,
-    String compressedFilename,
+    String productId,
+    Boolean active,
+    String docKey,
+    String name,
+    String owner,
+    String path,
+    String state,
+    String versionContract,
+    String errorMessage,
+    Boolean isZip,
+    String parentZipName,
+    String useCase,
     String status,
     String errorCode,
-    String failureReason,
-    int attemptCount,
-    LocalDateTime sentAt,
-    LocalDateTime failedAt,
-    LocalDateTime createdAt
+    Integer retry,
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt
 ) {}

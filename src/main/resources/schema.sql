@@ -1,17 +1,27 @@
 CREATE TABLE IF NOT EXISTS historico_documentos (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    id_producto VARCHAR(255) NOT NULL,
-    id_documento VARCHAR(500) NOT NULL,
-    nombre_archivo VARCHAR(500) NOT NULL,
-    nombre_comprimido VARCHAR(500),
-    estado VARCHAR(20) NOT NULL DEFAULT 'FAILURE',
-    codigo_error VARCHAR(100),
-    razon_fallo VARCHAR(2000),
-    numero_intentos INT NOT NULL DEFAULT 1,
-    fecha_envio TIMESTAMP,
-    fecha_fallo TIMESTAMP,
-    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id_documento VARCHAR(100) NOT NULL,
+    id_producto VARCHAR(100) NOT NULL,
+    activo BOOLEAN DEFAULT TRUE,
+    clave_documento VARCHAR(255),
+    nombre VARCHAR(255),
+    propietario VARCHAR(255),
+    ruta TEXT,
+    estado VARCHAR(100) NOT NULL,
+    version_contrato VARCHAR(50),
+    mensaje_error TEXT,
+    es_zip BOOLEAN DEFAULT FALSE,
+    nombre_zip_padre VARCHAR(255),
+    caso_uso VARCHAR(100),
+    resultado VARCHAR(50),
+    codigo_error VARCHAR(50),
+    reintentos INT NOT NULL DEFAULT 0,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(id_documento);
+CREATE INDEX IF NOT EXISTS idx_historico_estado ON historico_documentos(estado);
 
 CREATE TABLE IF NOT EXISTS productos (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

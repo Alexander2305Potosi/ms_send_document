@@ -25,7 +25,6 @@ public class ProductR2dbcAdapter implements ProductRepository {
         LocalDateTime startOfDay = loadDate.atStartOfDay();
         LocalDateTime endOfDay = loadDate.atTime(LocalTime.MAX);
         return repository.findByLoadDateBetween(startOfDay, endOfDay)
-            .filter(entity -> "PENDING".equals(entity.getState()))
             .map(ProductMapper::toDomain);
     }
 
@@ -59,5 +58,11 @@ public class ProductR2dbcAdapter implements ProductRepository {
                 return repository.save(entity);
             })
             .then();
+    }
+
+    @Override
+    public Mono<ProductHistory> findByProductId(String productId) {
+        return repository.findByProductId(productId)
+            .map(ProductMapper::toDomain);
     }
 }

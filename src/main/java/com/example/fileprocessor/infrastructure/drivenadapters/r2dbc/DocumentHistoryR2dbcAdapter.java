@@ -10,27 +10,56 @@ import reactor.core.publisher.Mono;
 @Component
 public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
 
-    private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository repository;
+    private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository springDataRepository;
 
-    public DocumentHistoryR2dbcAdapter(com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository repository) {
-        this.repository = repository;
+    public DocumentHistoryR2dbcAdapter(
+            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository springDataRepository) {
+        this.springDataRepository = springDataRepository;
     }
 
     @Override
-    public Mono<Void> save(DocumentHistory record) {
-        return repository.save(DocumentHistoryMapper.toEntity(record))
+    public Mono<Void> save(DocumentHistory history) {
+        return springDataRepository.save(DocumentHistoryMapper.toEntity(history)).then();
+    }
+
+    @Override
+    public Flux<DocumentHistory> findByDocumentId(String documentId) {
+        return springDataRepository.findByDocumentId(documentId)
+            .map(DocumentHistoryMapper::toDomain);
+    }
+
+    @Override
+    public Flux<DocumentHistory> findByState(String state) {
+        return springDataRepository.findByState(state)
+            .map(DocumentHistoryMapper::toDomain);
+    }
+
+    @Override
+    public Mono<Void> updateState(String documentId, String state, String errorMessage) {
+        return springDataRepository.findByDocumentId(documentId)
+            .filter(entity -> entity.getUseCase() == null)
+            .next()
+            .flatMap(entity -> {
+                entity.setState(state);
+                entity.setErrorMessage(errorMessage);
+                entity.setUpdatedAt(java.time.LocalDateTime.now());
+                return springDataRepository.save(entity);
+            })
+            .switchIfEmpty(springDataRepository.findByDocumentId(documentId)
+                .next()
+                .flatMap(entity -> {
+                    entity.setState(state);
+                    entity.setErrorMessage(errorMessage);
+                    entity.setUpdatedAt(java.time.LocalDateTime.now());
+                    return springDataRepository.save(entity);
+                }))
             .then();
     }
 
     @Override
-    public Flux<DocumentHistory> findByProductId(String productId) {
-        return repository.findByProductId(productId)
-            .map(DocumentHistoryMapper::toDomain);
-    }
-
-    @Override
-    public Flux<DocumentHistory> findByStatus(String status) {
-        return repository.findByStatus(status)
-            .map(DocumentHistoryMapper::toDomain);
+    public Mono<Integer> getRetryCount(String documentId, String useCase) {
+        return springDataRepository.findByDocumentIdAndUseCase(documentId, useCase)
+            .collectList()
+            .map(list -> list.isEmpty() ? 0 : list.get(list.size() - 1).getRetry());
     }
 }

@@ -2,8 +2,8 @@ package com.example.fileprocessor.application.service.config;
 
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
-import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
@@ -20,37 +20,42 @@ import org.springframework.context.annotation.Configuration;
 public class DomainConfig {
 
     @Bean
+    public RulesBussinesGateway syncDocumentValidator(ProcessorsProperties properties) {
+        ProcessorsProperties.ProcessorConfig syncConfig = new ProcessorsProperties.ProcessorConfig(
+            Long.MAX_VALUE,
+            properties.soap() != null ? properties.soap().filenamePattern() : ".*"
+        );
+        return new RulesBussinesService(syncConfig);
+    }
+
+    @Bean
     @ConditionalOnBean(SoapGateway.class)
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
-            ProductRepository productRepository,
+            DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
-            DocumentHistoryRepository historyRepository,
-            ProcessorsProperties properties,
-            HomologationRepository homologationRepository) {
+            HomologationRepository homologationRepository,
+            ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
-            productRepository,
+            historyRepository,
             productRestGateway,
             soapGateway,
-            historyRepository,
-            new RulesBussinesService(properties.soap()),
-            homologationRepository
+            homologationRepository,
+            new RulesBussinesService(properties.soap())
         );
     }
 
     @Bean
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
-            ProductRepository productRepository,
+            DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            DocumentHistoryRepository historyRepository,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
-            productRepository,
+            historyRepository,
             productRestGateway,
             s3Gateway,
-            historyRepository,
             new RulesBussinesService(properties.s3())
         );
     }

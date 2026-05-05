@@ -10,4 +10,8 @@ import reactor.core.publisher.Mono;
 public interface RulesBussinesGateway {
 
     Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc);
+
+    default Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc, boolean includeSizeCheck) {
+        return validate(doc);
+    }
 }

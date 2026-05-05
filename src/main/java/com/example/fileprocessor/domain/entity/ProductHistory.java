@@ -11,6 +11,5 @@ public record ProductHistory(
     String name,
     LocalDateTime loadDate,
     String state,
-    String messageError,
-    java.util.List<ProductDocumentHistory> documents
+    String messageError
 ) {}

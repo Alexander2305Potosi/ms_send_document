@@ -10,16 +10,15 @@ class ProductDocumentHistoryTest {
     void productDocument_record_createsValidDocument() {
         byte[] content = new byte[]{1, 2, 3};
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1",
-            "test.pdf",
-            content,
-            "application/pdf",
-            1024L,
-            true,
-            "origin",
-            "AR"
+            "prod-1", true, "AR",
+            null, "doc-1", null, null,
+            "test.pdf", "owner", null,
+            "PENDING", null, "SYNCED", null,
+            "test.pdf", "application/pdf", 1024L, "origin",
+            content, null
         );
 
+        assertEquals("prod-1", doc.productId());
         assertEquals("doc-1", doc.documentId());
         assertEquals("test.pdf", doc.filename());
         assertArrayEquals(content, doc.content());
@@ -33,14 +32,12 @@ class ProductDocumentHistoryTest {
     @Test
     void size_returnsCorrectValue() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1",
-            "test.pdf",
-            new byte[100],
-            "application/pdf",
-            100L,
-            false,
-            "origin",
-            "AR"
+            "prod-1", false, "AR",
+            null, "doc-1", null, null,
+            "test.pdf", "owner", null,
+            "PENDING", null, "SYNCED", null,
+            "test.pdf", "application/pdf", 100L, "origin",
+            new byte[100], null
         );
 
         assertEquals(100L, doc.size());
@@ -49,14 +46,12 @@ class ProductDocumentHistoryTest {
     @Test
     void isZip_whenFalse() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
-            "doc-1",
-            "test.pdf",
-            new byte[0],
-            "application/pdf",
-            0L,
-            false,
-            "origin",
-            "AR"
+            "prod-1", false, "AR",
+            null, "doc-1", null, null,
+            "test.pdf", "owner", null,
+            "PENDING", null, "SYNCED", null,
+            "test.pdf", "application/pdf", 0L, "origin",
+            new byte[0], null
         );
 
         assertFalse(doc.isZip());

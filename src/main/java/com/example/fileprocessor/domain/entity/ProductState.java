@@ -8,6 +8,7 @@ public final class ProductState {
     public static final String IN_PROGRESS = "IN_PROGRESS";
     public static final String PROCESSED = "PROCESSED";
     public static final String FAILED = "FAILED";
+    public static final String SYNCED = "SYNCED";
 
     private ProductState() {}
 }
