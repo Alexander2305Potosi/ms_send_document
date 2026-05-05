@@ -373,6 +373,83 @@ CREATE INDEX idx_cat_manual_categoria ON categoria_manual(categoria);
 -- pais_homologado
 CREATE INDEX idx_pais_codigo ON pais_homologado(pais);
 ```
+	
+### DDL Completo
+
+```sql
+-- ============================================================================
+-- Tabla: documento
+-- Documentos sincronizados desde la API REST externa.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS documento (
+    id              BIGSERIAL       PRIMARY KEY,
+    id_document     VARCHAR(100)    NOT NULL,
+    product_id      VARCHAR(100)    NOT NULL,
+    active          BOOLEAN         DEFAULT TRUE,
+    doc_key         VARCHAR(255),
+    name            VARCHAR(255),
+    owner           VARCHAR(255),
+    path            TEXT,
+    state           VARCHAR(50)     NOT NULL DEFAULT 'PENDING',
+    version_contract VARCHAR(50),
+    error_message   TEXT,
+    is_zip          BOOLEAN         DEFAULT FALSE,
+    parent_zip_name VARCHAR(255),
+    created_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_documento_state ON documento(state);
+CREATE INDEX IF NOT EXISTS idx_documento_product_id ON documento(product_id);
+CREATE INDEX IF NOT EXISTS idx_documento_document_id ON documento(id_document);
+
+-- ============================================================================
+-- Tabla: historico_documentos
+-- Trazabilidad de cada intento de envio a servicios externos (SOAP o S3).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS historico_documentos (
+    id              BIGSERIAL       PRIMARY KEY,
+    document_id     VARCHAR(100)    NOT NULL,
+    product_id      VARCHAR(100)    NOT NULL,
+    use_case        VARCHAR(100)    NOT NULL,
+    status          VARCHAR(50)     NOT NULL DEFAULT 'FAILURE',
+    error_code      VARCHAR(50),
+    error_message   TEXT,
+    retry           INTEGER         NOT NULL DEFAULT 0,
+    created_at      TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_historico_document_id ON historico_documentos(document_id);
+CREATE INDEX IF NOT EXISTS idx_historico_document_use_case ON historico_documentos(document_id, use_case);
+
+-- ============================================================================
+-- Tabla: categoria_manual
+-- Homologacion de categorias de manuales para resolucion de origin en SOAP.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS categoria_manual (
+    id                  BIGSERIAL       PRIMARY KEY,
+    categoria           VARCHAR(255)    NOT NULL UNIQUE,
+    descripcion_manual  VARCHAR(500)    NOT NULL,
+    fecha_vigencia      DATE,
+    fecha_creacion      TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cat_manual_categoria ON categoria_manual(categoria);
+
+-- ============================================================================
+-- Tabla: pais_homologado
+-- Homologacion de paises para resolucion de pais en SOAP.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS pais_homologado (
+    id              BIGSERIAL       PRIMARY KEY,
+    pais            VARCHAR(255)    NOT NULL UNIQUE,
+    pais_homologado VARCHAR(255)    NOT NULL,
+    fecha_creacion  TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pais_codigo ON pais_homologado(pais);
+```
+
 
 ---
 
