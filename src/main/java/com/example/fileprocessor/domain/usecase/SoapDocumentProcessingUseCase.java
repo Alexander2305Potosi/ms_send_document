@@ -4,29 +4,24 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import reactor.core.publisher.Mono;
 
-/**
- * SOAP-specific document processing use case.
- */
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private final SoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
 
     public SoapDocumentProcessingUseCase(
-            DocumentRepository documentRepository,
             DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             RulesBussinesGateway documentValidator) {
-        super(documentRepository, historyRepository, productRestGateway, documentValidator);
+        super(historyRepository, productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
     }

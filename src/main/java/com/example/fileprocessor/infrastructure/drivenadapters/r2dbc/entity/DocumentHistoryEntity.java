@@ -22,27 +22,60 @@ public class DocumentHistoryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "document_id", nullable = false)
+    @Column(name = "id_documento", nullable = false)
     private String documentId;
 
-    @Column(name = "product_id", nullable = false)
+    @Column(name = "id_producto", nullable = false)
     private String productId;
 
-    @Column(name = "use_case", nullable = false)
-    private String useCase;
+    @Builder.Default
+    @Column(name = "activo")
+    private Boolean active = true;
 
-    @Column(name = "status", nullable = false)
-    private String status;
+    @Column(name = "clave_documento")
+    private String docKey;
 
-    @Column(name = "error_code")
-    private String errorCode;
+    @Column(name = "nombre")
+    private String name;
 
-    @Column(name = "error_message")
+    @Column(name = "propietario")
+    private String owner;
+
+    @Column(name = "ruta")
+    private String path;
+
+    @Column(name = "estado", nullable = false)
+    private String state;
+
+    @Column(name = "version_contrato")
+    private String versionContract;
+
+    @Column(name = "mensaje_error")
     private String errorMessage;
 
-    @Column(name = "retry", nullable = false)
+    @Builder.Default
+    @Column(name = "es_zip")
+    private Boolean isZip = false;
+
+    @Column(name = "nombre_zip_padre")
+    private String parentZipName;
+
+    @Column(name = "caso_uso")
+    private String useCase;
+
+    @Column(name = "resultado")
+    private String status;
+
+    @Column(name = "codigo_error")
+    private String errorCode;
+
+    @Builder.Default
+    @Column(name = "reintentos")
     private Integer retry = 0;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "fecha_actualizacion", nullable = false)
+    private LocalDateTime updatedAt;
 }

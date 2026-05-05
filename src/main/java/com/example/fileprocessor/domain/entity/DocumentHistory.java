@@ -9,10 +9,20 @@ public record DocumentHistory(
     Long id,
     String documentId,
     String productId,
+    Boolean active,
+    String docKey,
+    String name,
+    String owner,
+    String path,
+    String state,
+    String versionContract,
+    String errorMessage,
+    Boolean isZip,
+    String parentZipName,
     String useCase,
     String status,
     String errorCode,
-    String errorMessage,
     Integer retry,
-    LocalDateTime createdAt
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt
 ) {}

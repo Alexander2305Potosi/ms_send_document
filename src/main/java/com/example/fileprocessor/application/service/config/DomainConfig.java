@@ -1,7 +1,6 @@
 package com.example.fileprocessor.application.service.config;
 
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
@@ -10,7 +9,6 @@ import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
-import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -33,14 +31,12 @@ public class DomainConfig {
     @Bean
     @ConditionalOnBean(SoapGateway.class)
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
-            DocumentRepository documentRepository,
             DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
-            documentRepository,
             historyRepository,
             productRestGateway,
             soapGateway,
@@ -52,13 +48,11 @@ public class DomainConfig {
     @Bean
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
-            DocumentRepository documentRepository,
             DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
-            documentRepository,
             historyRepository,
             productRestGateway,
             s3Gateway,

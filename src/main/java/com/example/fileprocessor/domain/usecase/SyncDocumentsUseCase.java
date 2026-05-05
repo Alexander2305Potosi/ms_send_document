@@ -1,10 +1,9 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import lombok.AllArgsConstructor;
@@ -20,7 +19,7 @@ import java.util.logging.Level;
 @AllArgsConstructor
 public class SyncDocumentsUseCase {
     private final ProductRepository productRepository;
-    private final DocumentRepository documentRepository;
+    private final DocumentHistoryRepository historyRepository;
     private final ProductRestGateway productRestGateway;
 
     public Mono<String> execute() {
@@ -43,7 +42,7 @@ public class SyncDocumentsUseCase {
 
     private Mono<Void> saveDocument(ProductDocumentHistory doc, String productId) {
         String zipName = doc.isZip() ? doc.filename() : null;
-        Document document = Document.builder()
+        DocumentHistory history = DocumentHistory.builder()
             .documentId(doc.documentId())
             .productId(productId)
             .name(doc.filename())
@@ -52,6 +51,6 @@ public class SyncDocumentsUseCase {
             .isZip(doc.isZip())
             .parentZipName(zipName)
             .build();
-        return documentRepository.save(document);
+        return historyRepository.save(history);
     }
 }

@@ -29,6 +29,34 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
     }
 
     @Override
+    public Flux<DocumentHistory> findByState(String state) {
+        return springDataRepository.findByState(state)
+            .map(DocumentHistoryMapper::toDomain);
+    }
+
+    @Override
+    public Mono<Void> updateState(String documentId, String state, String errorMessage) {
+        return springDataRepository.findByDocumentId(documentId)
+            .filter(entity -> entity.getUseCase() == null)
+            .next()
+            .flatMap(entity -> {
+                entity.setState(state);
+                entity.setErrorMessage(errorMessage);
+                entity.setUpdatedAt(java.time.LocalDateTime.now());
+                return springDataRepository.save(entity);
+            })
+            .switchIfEmpty(springDataRepository.findByDocumentId(documentId)
+                .next()
+                .flatMap(entity -> {
+                    entity.setState(state);
+                    entity.setErrorMessage(errorMessage);
+                    entity.setUpdatedAt(java.time.LocalDateTime.now());
+                    return springDataRepository.save(entity);
+                }))
+            .then();
+    }
+
+    @Override
     public Mono<Integer> getRetryCount(String documentId, String useCase) {
         return springDataRepository.findByDocumentIdAndUseCase(documentId, useCase)
             .collectList()

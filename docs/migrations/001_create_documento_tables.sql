@@ -1,44 +1,31 @@
--- Migration: Create documento and historico_documentos tables
--- Replaces old productos and historico_documentos tables
-
-CREATE TABLE IF NOT EXISTS documento (
-    id BIGSERIAL PRIMARY KEY,
-    id_document VARCHAR(100) NOT NULL,
-    product_id VARCHAR(100) NOT NULL,
-    active BOOLEAN DEFAULT TRUE,
-    doc_key VARCHAR(255),
-    name VARCHAR(255),
-    owner VARCHAR(255),
-    path TEXT,
-    status VARCHAR(50) NOT NULL,
-    version_contract VARCHAR(50),
-    state VARCHAR(100) NOT NULL,
-    error_message TEXT,
-    is_zip BOOLEAN DEFAULT FALSE,
-    parent_zip_name VARCHAR(255),
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_documento_status ON documento(status);
-CREATE INDEX IF NOT EXISTS idx_documento_product_id ON documento(product_id);
-CREATE INDEX IF NOT EXISTS idx_documento_document_id ON documento(id_document);
+-- Migration: Create historico_documentos table (unified)
 
 CREATE TABLE IF NOT EXISTS historico_documentos (
     id BIGSERIAL PRIMARY KEY,
-    document_id VARCHAR(100) NOT NULL,
-    product_id VARCHAR(100) NOT NULL,
-    use_case VARCHAR(100) NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    error_code VARCHAR(50),
-    error_message TEXT,
-    retry INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    id_documento VARCHAR(100) NOT NULL,
+    id_producto VARCHAR(100) NOT NULL,
+    activo BOOLEAN DEFAULT TRUE,
+    clave_documento VARCHAR(255),
+    nombre VARCHAR(255),
+    propietario VARCHAR(255),
+    ruta TEXT,
+    estado VARCHAR(100) NOT NULL,
+    version_contrato VARCHAR(50),
+    mensaje_error TEXT,
+    es_zip BOOLEAN DEFAULT FALSE,
+    nombre_zip_padre VARCHAR(255),
+    caso_uso VARCHAR(100),
+    resultado VARCHAR(50),
+    codigo_error VARCHAR(50),
+    reintentos INTEGER NOT NULL DEFAULT 0,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_historico_document_id ON historico_documentos(document_id);
-CREATE INDEX IF NOT EXISTS idx_historico_document_use_case ON historico_documentos(document_id, use_case);
+CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(id_documento);
+CREATE INDEX IF NOT EXISTS idx_historico_estado ON historico_documentos(estado);
+CREATE INDEX IF NOT EXISTS idx_historico_producto_id ON historico_documentos(id_producto);
+CREATE INDEX IF NOT EXISTS idx_historico_documento_caso_uso ON historico_documentos(id_documento, caso_uso);
 
 -- Remove old tables if they exist (run after verifying data migration)
--- DROP TABLE IF EXISTS historico_documentos_old;
--- DROP TABLE IF EXISTS productos_old;
+-- DROP TABLE IF EXISTS documento;

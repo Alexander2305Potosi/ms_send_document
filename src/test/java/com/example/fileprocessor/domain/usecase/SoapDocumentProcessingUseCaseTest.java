@@ -6,7 +6,6 @@ import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.HomologationResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
@@ -29,9 +28,6 @@ import static org.mockito.Mockito.*;
 class SoapDocumentProcessingUseCaseTest {
 
     @Mock
-    private DocumentRepository documentRepository;
-
-    @Mock
     private DocumentHistoryRepository historyRepository;
 
     @Mock
@@ -51,7 +47,6 @@ class SoapDocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new SoapDocumentProcessingUseCase(
-            documentRepository,
             historyRepository,
             productRestGateway,
             soapGateway,
@@ -59,8 +54,7 @@ class SoapDocumentProcessingUseCaseTest {
             documentValidator
         );
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
-        lenient().when(documentRepository.updateStatus(anyString(), anyString(), any())).thenReturn(Mono.empty());
-        lenient().when(documentRepository.updateState(anyString(), anyString())).thenReturn(Mono.empty());
+        lenient().when(historyRepository.updateState(anyString(), anyString(), any())).thenReturn(Mono.empty());
     }
 
     private static ProductDocumentHistory doc() {

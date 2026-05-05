@@ -1,6 +1,5 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
@@ -10,10 +9,8 @@ import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import lombok.AllArgsConstructor;
 import reactor.core.publisher.Flux;
@@ -29,7 +26,6 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger log = Logger.getLogger(getClass().getName());
 
-    protected final DocumentRepository documentRepository;
     protected final DocumentHistoryRepository historyRepository;
     protected final ProductRestGateway productRestGateway;
     protected final RulesBussinesGateway documentValidator;
@@ -37,10 +33,10 @@ public abstract class AbstractDocumentProcessingUseCase {
     private static final int MAX_RETRIES = 3;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return documentRepository.findByState(ProductState.PENDING)
+        return historyRepository.findByState(ProductState.PENDING)
             .flatMap(doc -> {
                 String documentId = doc.documentId();
-                documentRepository.updateState(documentId, ProductState.IN_PROGRESS, null);
+                historyRepository.updateState(documentId, ProductState.IN_PROGRESS, null).subscribe();
                 return productRestGateway.getDocument(doc.productId(), documentId)
                     .map(file -> toProductDocument(file))
                     .flatMapMany(file -> {
@@ -53,7 +49,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                     .flatMap(validated -> documentValidator.validate(validated, true)
                         .switchIfEmpty(Mono.defer(() -> {
                             log.log(Level.INFO, "Document {0} skipped by size validation", documentId);
-                            documentRepository.updateState(documentId, ProductState.PROCESSED, null);
+                            historyRepository.updateState(documentId, ProductState.PROCESSED, null).subscribe();
                             return Mono.empty();
                         })))
                     .flatMap(validated -> uploadDocument(validated, doc.productId()))
@@ -65,7 +61,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .doOnCancel(() -> log.log(Level.WARNING, "Pipeline {0} cancelled", new Object[]{implementationName()}));
     }
 
-    private Mono<FileUploadResult> handleUploadSuccess(Document doc, FileUploadResult result) {
+    private Mono<FileUploadResult> handleUploadSuccess(DocumentHistory doc, FileUploadResult result) {
         DocumentHistory history = DocumentHistory.builder()
             .documentId(doc.documentId())
             .productId(doc.productId())
@@ -76,11 +72,11 @@ public abstract class AbstractDocumentProcessingUseCase {
             .build();
         historyRepository.save(history).subscribe();
 
-        documentRepository.updateState(doc.documentId(), ProductState.PROCESSED, null);
+        historyRepository.updateState(doc.documentId(), ProductState.PROCESSED, null).subscribe();
         return Mono.just(result);
     }
 
-    private Mono<FileUploadResult> handleUploadError(Document doc, Throwable error) {
+    private Mono<FileUploadResult> handleUploadError(DocumentHistory doc, Throwable error) {
         String errorCode = error instanceof ProcessingException pe
             ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
         String errorMsg = error.getMessage();
@@ -101,9 +97,9 @@ public abstract class AbstractDocumentProcessingUseCase {
                 historyRepository.save(history).subscribe();
 
                 if (currentRetry + 1 >= MAX_RETRIES) {
-                    documentRepository.updateState(doc.documentId(), ProductState.FAILED, errorMsg);
+                    historyRepository.updateState(doc.documentId(), ProductState.FAILED, errorMsg).subscribe();
                 } else {
-                    documentRepository.updateState(doc.documentId(), ProductState.PENDING, errorMsg);
+                    historyRepository.updateState(doc.documentId(), ProductState.PENDING, errorMsg).subscribe();
                 }
                 return handleUploadError(error);
             });
