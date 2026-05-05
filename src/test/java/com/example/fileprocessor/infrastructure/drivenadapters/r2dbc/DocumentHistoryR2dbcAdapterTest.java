@@ -124,7 +124,7 @@ class DocumentHistoryR2dbcAdapterTest {
     void updateWithAudit_mutatesAllFieldsAndSaves() {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
         when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "S3"))
-            .thenReturn(Flux.just(existing));
+            .thenReturn(Mono.just(existing));
         when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 
         StepVerifier.create(adapter.updateWithAudit(
