@@ -99,7 +99,7 @@ class DocumentHistoryR2dbcAdapterTest {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
         when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
             .thenReturn(Mono.just(existing));
-        when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
+        lenient().when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 
         StepVerifier.create(adapter.updateStateAndUseCase("doc-1", "IN_PROGRESS", "retention"))
             .verifyComplete();
@@ -125,7 +125,7 @@ class DocumentHistoryR2dbcAdapterTest {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
         when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "S3"))
             .thenReturn(Mono.just(existing));
-        when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
+        lenient().when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 
         StepVerifier.create(adapter.updateWithAudit(
             "doc-1", "FAILED", "ERR-1", "failure msg", 3, "S3", "stacktrace\nline2", LocalDateTime.now()))
