@@ -1,6 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -9,8 +11,7 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "pais_homologado")
+@Table("pais_homologado")
 @Getter
 @Setter
 @Builder
@@ -19,15 +20,14 @@ import java.time.LocalDateTime;
 public class CountryHomologatedEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "pais", nullable = false)
+    @Column("pais")
     private String country;
 
-    @Column(name = "pais_homologado", nullable = false)
+    @Column("pais_homologado")
     private String countryHomologated;
 
-    @Column(name = "fecha_creacion", nullable = false)
+    @Column("fecha_creacion")
     private LocalDateTime createdAt;
 }

@@ -1,6 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -9,31 +11,29 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
-@Entity
+@Table("productos")
 @Getter
 @Setter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Table(name = "productos")
 public class ProductEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "id_producto")
+    @Column("id_producto")
     private String productId;
 
-    @Column(name = "nombre", nullable = false)
+    @Column("nombre")
     private String name;
 
-    @Column(name = "fecha_carga", nullable = false)
+    @Column("fecha_carga")
     private LocalDateTime loadDate;
 
-    @Column(name = "estado", nullable = false)
+    @Column("estado")
     private String state;
 
-    @Column(name = "mensaje_error")
+    @Column("mensaje_error")
     private String messageError;
 }

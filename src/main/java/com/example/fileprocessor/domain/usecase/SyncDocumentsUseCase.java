@@ -25,28 +25,23 @@ public class SyncDocumentsUseCase {
     public Mono<String> execute() {
         log.log(Level.INFO, "Starting document sync");
         return productRepository.findAll()
-            .count()
-            .flatMap(total -> {
-                log.log(Level.INFO, "Found {0} products in database", new Object[]{total});
-                return Flux.from(productRepository.findAll())
-                    .concatMap(productRestGateway::getDocumentsByProduct)
-                    .flatMap(this::processDocument)
-                    .then(Mono.just("Document sync completed"));
-            })
+                .concatMap(productRestGateway::getDocumentsByProduct)
+                .flatMap(this::processDocument)
+                .then(Mono.just("Document sync completed"))
             .doOnError(e -> log.log(Level.SEVERE, "Document sync failed: " + e.getMessage()));
     }
 
     private Mono<Void> processDocument(ProductDocumentHistory doc) {
-        return saveDocument(doc, doc.productId());
+        return saveDocument(doc);
     }
 
-    private Mono<Void> saveDocument(ProductDocumentHistory doc, String productId) {
+    private Mono<Void> saveDocument(ProductDocumentHistory doc) {
         String zipName = doc.isZip() ? doc.filename() : null;
         DocumentHistory history = DocumentHistory.builder()
             .documentId(doc.documentId())
-            .productId(productId)
+            .productId(doc.productId())
             .name(doc.filename())
-            .owner(productId)
+            .owner(doc.productId())
             .state(ProductState.SYNCED)
             .isZip(doc.isZip())
             .parentZipName(zipName)

@@ -1,6 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -10,8 +12,7 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "categoria_manual")
+@Table("categoria_manual")
 @Getter
 @Setter
 @Builder
@@ -20,18 +21,17 @@ import java.time.LocalDateTime;
 public class CategoryManualEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "categoria", nullable = false)
+    @Column("categoria")
     private String categoria;
 
-    @Column(name = "descripcion_manual", nullable = false)
+    @Column("descripcion_manual")
     private String descripcionManual;
 
-    @Column(name = "fecha_vigencia")
+    @Column("fecha_vigencia")
     private LocalDate fechaVigencia;
 
-    @Column(name = "fecha_creacion", nullable = false)
+    @Column("fecha_creacion")
     private LocalDateTime createdAt;
 }
