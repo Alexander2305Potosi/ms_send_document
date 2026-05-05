@@ -97,7 +97,7 @@ class DocumentHistoryR2dbcAdapterTest {
     @Test
     void updateStateAndUseCase_updatesEntityAndSaves() {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
-        when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
+        when(springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc("doc-1", "retention"))
             .thenReturn(Mono.just(existing));
         lenient().when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 
@@ -111,7 +111,7 @@ class DocumentHistoryR2dbcAdapterTest {
 
     @Test
     void updateStateAndUseCase_whenDocumentNotFound_emitsNothing() {
-        when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
+        when(springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc("doc-1", "retention"))
             .thenReturn(Mono.empty());
 
         StepVerifier.create(adapter.updateStateAndUseCase("doc-1", "IN_PROGRESS", "retention"))
@@ -123,7 +123,7 @@ class DocumentHistoryR2dbcAdapterTest {
     @Test
     void updateWithAudit_mutatesAllFieldsAndSaves() {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
-        when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "S3"))
+        when(springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc("doc-1", "S3"))
             .thenReturn(Mono.just(existing));
         lenient().when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 

@@ -39,8 +39,9 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
 
     @Override
     public Mono<Void> updateStateAndUseCase(String documentId, String state, String useCase) {
-        return springDataRepository.findByDocumentIdAndStateAndUseCase(documentId, state, useCase)
+        return springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(documentId, useCase)
             .flatMap(entity -> {
+                entity.setState(state);
                 entity.setUpdatedAt(LocalDateTime.now());
                 return springDataRepository.save(entity);
             })
@@ -49,7 +50,7 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
 
     @Override
     public Mono<Void> updateWithAudit(String documentId, String state, String errorCode, String errorMessage, int retry, String useCase, String stackTrace, LocalDateTime completedAt) {
-        return springDataRepository.findByDocumentIdAndStateAndUseCase(documentId, state, useCase)
+        return springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(documentId, useCase)
             .flatMap(entity -> {
                 entity.setState(state);
                 entity.setErrorCode(errorCode);
