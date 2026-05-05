@@ -83,7 +83,7 @@ class DocumentHistoryR2dbcAdapterTest {
     void findByDocumentIdAndStateAndUseCase_delegatesToRepository() {
         DocumentHistoryEntity e1 = entity("doc-1", "PENDING", 0);
         when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
-            .thenReturn(Flux.just(e1));
+            .thenReturn(Mono.just(e1));
 
         StepVerifier.create(adapter.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
             .assertNext(doc -> {
@@ -98,7 +98,7 @@ class DocumentHistoryR2dbcAdapterTest {
     void updateStateAndUseCase_updatesEntityAndSaves() {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
         when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
-            .thenReturn(Flux.just(existing));
+            .thenReturn(Mono.just(existing));
         when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 
         StepVerifier.create(adapter.updateStateAndUseCase("doc-1", "IN_PROGRESS", "retention"))
@@ -112,7 +112,7 @@ class DocumentHistoryR2dbcAdapterTest {
     @Test
     void updateStateAndUseCase_whenDocumentNotFound_emitsNothing() {
         when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
-            .thenReturn(Flux.empty());
+            .thenReturn(Mono.empty());
 
         StepVerifier.create(adapter.updateStateAndUseCase("doc-1", "IN_PROGRESS", "retention"))
             .verifyComplete();

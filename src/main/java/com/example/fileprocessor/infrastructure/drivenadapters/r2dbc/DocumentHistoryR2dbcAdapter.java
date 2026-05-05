@@ -31,6 +31,13 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
     }
 
     @Override
+    public Flux<DocumentHistory> findByDocumentIdAndStateAndUseCase(String documentId, String state, String useCase) {
+        return springDataRepository.findByDocumentIdAndStateAndUseCase(documentId, state, useCase)
+            .flux()
+            .map(DocumentHistoryMapper::toDomain);
+    }
+
+    @Override
     public Mono<Void> updateStateAndUseCase(String documentId, String state, String useCase) {
         return springDataRepository.findByDocumentIdAndStateAndUseCase(documentId, state, useCase)
             .flatMap(entity -> {
