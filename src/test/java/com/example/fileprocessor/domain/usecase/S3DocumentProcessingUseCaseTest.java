@@ -48,7 +48,7 @@ class S3DocumentProcessingUseCaseTest {
             documentValidator
         );
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
-        lenient().when(historyRepository.updateState(anyString(), anyString(), any())).thenReturn(Mono.empty());
+        lenient().when(historyRepository.updateStateAndUseCase(anyString(), anyString(), anyString())).thenReturn(Mono.empty());
     }
 
     private static ProductDocumentHistory doc() {

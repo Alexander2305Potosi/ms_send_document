@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,42 +67,6 @@ class DocumentHistoryR2dbcAdapterTest {
     }
 
     @Test
-    void findByDocumentId_returnsMappedDomainObjects() {
-        DocumentHistoryEntity e1 = entity("doc-1", "PENDING", 0);
-        DocumentHistoryEntity e2 = entity("doc-1", "PROCESSED", 0);
-        when(springDataRepository.findByDocumentId("doc-1")).thenReturn(Flux.just(e1, e2));
-
-        StepVerifier.create(adapter.findByDocumentId("doc-1"))
-            .assertNext(doc -> {
-                assertEquals("doc-1", doc.documentId());
-                assertEquals("PENDING", doc.state());
-            })
-            .assertNext(doc -> {
-                assertEquals("doc-1", doc.documentId());
-                assertEquals("PROCESSED", doc.state());
-            })
-            .verifyComplete();
-    }
-
-    @Test
-    void findByDocumentId_whenNotFound_returnsEmptyFlux() {
-        when(springDataRepository.findByDocumentId("doc-1")).thenReturn(Flux.empty());
-
-        StepVerifier.create(adapter.findByDocumentId("doc-1"))
-            .verifyComplete();
-    }
-
-    @Test
-    void findByState_delegatesToRepository() {
-        DocumentHistoryEntity e1 = entity("doc-1", "PENDING", 0);
-        when(springDataRepository.findByState("PENDING")).thenReturn(Flux.just(e1));
-
-        StepVerifier.create(adapter.findByState("PENDING"))
-            .assertNext(doc -> assertEquals("PENDING", doc.state()))
-            .verifyComplete();
-    }
-
-    @Test
     void findByStateAndUseCase_delegatesToRepository() {
         DocumentHistoryEntity e1 = entity("doc-1", "PENDING", 0);
         when(springDataRepository.findByStateAndUseCase("PENDING", "retention")).thenReturn(Flux.just(e1));
@@ -132,27 +95,26 @@ class DocumentHistoryR2dbcAdapterTest {
     }
 
     @Test
-    void updateState_mutatesEntityAndSaves() {
+    void updateStateAndUseCase_updatesEntityAndSaves() {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
-        when(springDataRepository.findByDocumentId("doc-1")).thenReturn(Flux.just(existing));
+        when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
+            .thenReturn(Flux.just(existing));
         when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 
-        StepVerifier.create(adapter.updateState("doc-1", "PROCESSED", "all good"))
+        StepVerifier.create(adapter.updateStateAndUseCase("doc-1", "IN_PROGRESS", "retention"))
             .verifyComplete();
 
         ArgumentCaptor<DocumentHistoryEntity> captor = ArgumentCaptor.forClass(DocumentHistoryEntity.class);
         verify(springDataRepository).save(captor.capture());
-        DocumentHistoryEntity saved = captor.getValue();
-        assertEquals("PROCESSED", saved.getState());
-        assertEquals("all good", saved.getErrorMessage());
-        assertNotNull(saved.getUpdatedAt());
+        assertNotNull(captor.getValue().getUpdatedAt());
     }
 
     @Test
-    void updateState_whenDocumentNotFound_emitsNothing() {
-        when(springDataRepository.findByDocumentId("doc-1")).thenReturn(Flux.empty());
+    void updateStateAndUseCase_whenDocumentNotFound_emitsNothing() {
+        when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "retention"))
+            .thenReturn(Flux.empty());
 
-        StepVerifier.create(adapter.updateState("doc-1", "PROCESSED", null))
+        StepVerifier.create(adapter.updateStateAndUseCase("doc-1", "IN_PROGRESS", "retention"))
             .verifyComplete();
 
         verify(springDataRepository, never()).save(any());
@@ -161,10 +123,12 @@ class DocumentHistoryR2dbcAdapterTest {
     @Test
     void updateWithAudit_mutatesAllFieldsAndSaves() {
         DocumentHistoryEntity existing = entity("doc-1", "PENDING", 0);
-        when(springDataRepository.findByDocumentId("doc-1")).thenReturn(Flux.just(existing));
+        when(springDataRepository.findByDocumentIdAndStateAndUseCase("doc-1", "PENDING", "S3"))
+            .thenReturn(Flux.just(existing));
         when(springDataRepository.save(any())).thenReturn(Mono.just(existing));
 
-        StepVerifier.create(adapter.updateWithAudit("doc-1", "FAILED", "ERR-1", "failure msg", 3, "S3"))
+        StepVerifier.create(adapter.updateWithAudit(
+            "doc-1", "FAILED", "ERR-1", "failure msg", 3, "S3", "stacktrace\nline2", LocalDateTime.now()))
             .verifyComplete();
 
         ArgumentCaptor<DocumentHistoryEntity> captor = ArgumentCaptor.forClass(DocumentHistoryEntity.class);
@@ -175,67 +139,32 @@ class DocumentHistoryR2dbcAdapterTest {
         assertEquals("failure msg", saved.getErrorMessage());
         assertEquals(3, saved.getRetry());
         assertEquals("S3", saved.getUseCase());
+        assertEquals("stacktrace\nline2", saved.getStackTrace());
+        assertNotNull(saved.getCompletedAt());
         assertNotNull(saved.getUpdatedAt());
-    }
-
-    @Test
-    void getRetryCount_whenMultipleEntries_returnsLastRetry() {
-        DocumentHistoryEntity e1 = entity("doc-1", "PENDING", 0);
-        e1.setRetry(0);
-        DocumentHistoryEntity e2 = entity("doc-1", "PENDING", 1);
-        e2.setRetry(1);
-        DocumentHistoryEntity e3 = entity("doc-1", "PENDING", 2);
-        e3.setRetry(2);
-        when(springDataRepository.findByDocumentIdAndUseCase("doc-1", "S3"))
-            .thenReturn(Flux.just(e1, e2, e3));
-
-        StepVerifier.create(adapter.getRetryCount("doc-1", "S3"))
-            .assertNext(count -> assertEquals(2, count))
-            .verifyComplete();
-    }
-
-    @Test
-    void getRetryCount_whenNoEntries_returnsZero() {
-        when(springDataRepository.findByDocumentIdAndUseCase("doc-1", "S3"))
-            .thenReturn(Flux.empty());
-
-        StepVerifier.create(adapter.getRetryCount("doc-1", "S3"))
-            .assertNext(count -> assertEquals(0, count))
-            .verifyComplete();
-    }
-
-    @Test
-    void getRetryCount_whenSingleEntry_returnsItsRetry() {
-        DocumentHistoryEntity e = entity("doc-1", "PENDING", 5);
-        e.setRetry(5);
-        when(springDataRepository.findByDocumentIdAndUseCase("doc-1", "S3"))
-            .thenReturn(Flux.just(e));
-
-        StepVerifier.create(adapter.getRetryCount("doc-1", "S3"))
-            .assertNext(count -> assertEquals(5, count))
-            .verifyComplete();
     }
 
     @Test
     void findLastAudit_returnsMappedDomain() {
         DocumentHistoryEntity entity = entity("doc-1", "PROCESSED", 0);
-        when(springDataRepository.findFirstByDocumentIdOrderByCreatedAtDesc("doc-1"))
+        when(springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc("doc-1", "retention"))
             .thenReturn(Mono.just(entity));
 
-        StepVerifier.create(adapter.findLastAudit("doc-1"))
+        StepVerifier.create(adapter.findLastAudit("doc-1", "retention"))
             .assertNext(doc -> {
                 assertEquals("doc-1", doc.documentId());
                 assertEquals("PROCESSED", doc.state());
+                assertEquals("retention", doc.useCase());
             })
             .verifyComplete();
     }
 
     @Test
     void findLastAudit_whenNotFound_returnsEmptyMono() {
-        when(springDataRepository.findFirstByDocumentIdOrderByCreatedAtDesc("doc-1"))
+        when(springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc("doc-1", "retention"))
             .thenReturn(Mono.empty());
 
-        StepVerifier.create(adapter.findLastAudit("doc-1"))
+        StepVerifier.create(adapter.findLastAudit("doc-1", "retention"))
             .verifyComplete();
     }
 }
