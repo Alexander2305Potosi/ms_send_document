@@ -185,7 +185,7 @@ class ProductHandlerTest {
     @Test
     void syncProducts_returnsImmediateOk() {
         ServerRequest request = mockRequestForSync("trace-1");
-        when(syncDocumentsUseCase.execute("retention")).thenReturn(Mono.just("completed"));
+        when(syncDocumentsUseCase.execute("retention", "trace-1")).thenReturn(Mono.just("completed"));
 
         Mono<ServerResponse> responseMono = handler.syncProducts(request);
 
@@ -196,13 +196,13 @@ class ProductHandlerTest {
             })
             .verifyComplete();
 
-        verify(syncDocumentsUseCase).execute("retention");
+        verify(syncDocumentsUseCase).execute("retention", "trace-1");
     }
 
     @Test
     void syncProducts_whenExecuteFails_stillReturnsOk() {
         ServerRequest request = mockRequestForSync("trace-1");
-        when(syncDocumentsUseCase.execute("retention")).thenReturn(Mono.error(new RuntimeException("fail")));
+        when(syncDocumentsUseCase.execute("retention", "trace-1")).thenReturn(Mono.error(new RuntimeException("fail")));
 
         Mono<ServerResponse> responseMono = handler.syncProducts(request);
 

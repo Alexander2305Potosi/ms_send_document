@@ -62,7 +62,7 @@ class SyncDocumentsUseCaseTest {
     void execute_whenNoProducts_returnsCompletionMessage() {
         when(productRepository.findAll()).thenReturn(Flux.empty());
 
-        StepVerifier.create(useCase.execute("retention"))
+        StepVerifier.create(useCase.execute("retention", "msg-1"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
@@ -75,7 +75,7 @@ class SyncDocumentsUseCaseTest {
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
 
-        StepVerifier.create(useCase.execute("retention"))
+        StepVerifier.create(useCase.execute("retention", "msg-1"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
@@ -97,7 +97,7 @@ class SyncDocumentsUseCaseTest {
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", true)));
 
-        StepVerifier.create(useCase.execute("retention"))
+        StepVerifier.create(useCase.execute("retention", "msg-1"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
@@ -115,7 +115,7 @@ class SyncDocumentsUseCaseTest {
             .thenReturn(Flux.just(doc("p1", "doc1", false)))
             .thenReturn(Flux.just(doc("p2", "doc2", false)));
 
-        StepVerifier.create(useCase.execute("retention"))
+        StepVerifier.create(useCase.execute("retention", "msg-1"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
@@ -126,7 +126,7 @@ class SyncDocumentsUseCaseTest {
     void execute_whenRepositoryFails_propagatesError() {
         when(productRepository.findAll()).thenReturn(Flux.error(new RuntimeException("DB error")));
 
-        StepVerifier.create(useCase.execute("retention"))
+        StepVerifier.create(useCase.execute("retention", "msg-1"))
             .expectErrorMatches(error -> error instanceof RuntimeException
                 && "DB error".equals(error.getMessage()))
             .verify();
@@ -138,7 +138,7 @@ class SyncDocumentsUseCaseTest {
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.error(new RuntimeException("Gateway error")));
 
-        StepVerifier.create(useCase.execute("retention"))
+        StepVerifier.create(useCase.execute("retention", "msg-1"))
             .expectErrorMatches(error -> error instanceof RuntimeException
                 && "Gateway error".equals(error.getMessage()))
             .verify();
@@ -150,7 +150,7 @@ class SyncDocumentsUseCaseTest {
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
 
-        StepVerifier.create(useCase.execute("extract"))
+        StepVerifier.create(useCase.execute("extract", "msg-1"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 

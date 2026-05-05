@@ -17,6 +17,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -56,10 +57,7 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     private Mono<Boolean> canResume(String documentId, String useCase) {
         return historyRepository.findLastAudit(documentId, useCase)
-            .map(lastAudit -> {
-                if (lastAudit == null) return true;
-                return !ProductState.PROCESSED.equals(lastAudit.state());
-            })
+            .map(lastAudit -> !ProductState.PROCESSED.equals(lastAudit.state()))
             .defaultIfEmpty(true);
     }
 
@@ -86,7 +84,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResult> handleUploadSuccess(DocumentHistory doc, FileUploadResult result) {
-        historyRepository.updateWithAudit(doc.documentId(), ProductState.PROCESSED, null, null, 0, implementationName()).subscribe();
+        historyRepository.updateWithAudit(doc.documentId(), ProductState.PROCESSED, null, null, 0, implementationName(), null, LocalDateTime.now()).subscribe();
         return Mono.just(result);
     }
 
@@ -94,14 +92,15 @@ public abstract class AbstractDocumentProcessingUseCase {
         String errorCode = error instanceof ProcessingException pe
             ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
         String errorMsg = error.getMessage();
+        String stackTrace = getStackTrace(error);
 
-        return historyRepository.findLastAudit(doc.documentId())
+        return historyRepository.findLastAudit(doc.documentId(), doc.useCase())
             .defaultIfEmpty(DocumentHistory.builder().retry(0).build())
             .flatMap(current -> {
                 int retry = current.retry() != null ? current.retry() + 1 : 1;
                 String newState = retry >= MAX_RETRIES ? ProductState.FAILED : ProductState.PENDING;
 
-                historyRepository.updateWithAudit(doc.documentId(), newState, errorCode, errorMsg, retry, implementationName()).subscribe();
+                historyRepository.updateWithAudit(doc.documentId(), newState, errorCode, errorMsg, retry, implementationName(), stackTrace, LocalDateTime.now()).subscribe();
 
                 return Mono.just(FileUploadResult.builder()
                     .status(DocumentStatus.FAILURE.name())
@@ -112,6 +111,14 @@ public abstract class AbstractDocumentProcessingUseCase {
                     .attemptCount(retry)
                     .build());
             });
+    }
+
+    private static String getStackTrace(Throwable error) {
+        StringBuilder sb = new StringBuilder();
+        for (StackTraceElement element : error.getStackTrace()) {
+            sb.append(element.toString()).append("\n");
+        }
+        return sb.toString();
     }
 
     protected ProductDocumentHistory toProductDocument(ProductDocumentFile file) {

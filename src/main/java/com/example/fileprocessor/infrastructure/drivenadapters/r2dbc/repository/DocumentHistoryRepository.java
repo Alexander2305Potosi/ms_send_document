@@ -8,12 +8,7 @@ import reactor.core.publisher.Mono;
 
 @Repository
 public interface DocumentHistoryRepository extends R2dbcRepository<DocumentHistoryEntity, Long> {
-    Flux<DocumentHistoryEntity> findByDocumentId(String documentId);
-    Flux<DocumentHistoryEntity> findByDocumentIdAndUseCase(String documentId, String useCase);
-    Flux<DocumentHistoryEntity> findByState(String state);
     Flux<DocumentHistoryEntity> findByStateAndUseCase(String state, String useCase);
-    Flux<DocumentHistoryEntity> findByDocumentIdAndStateAndUseCase(String documentId, String state, String useCase);
-    Mono<DocumentHistoryEntity> findByDocumentIdAndState(String documentId, String state);
-    Mono<DocumentHistoryEntity> findFirstByDocumentIdOrderByCreatedAtDesc(String documentId);
+    Mono<DocumentHistoryEntity> findByDocumentIdAndStateAndUseCase(String documentId, String state, String useCase);
     Mono<DocumentHistoryEntity> findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(String documentId, String useCase);
 }

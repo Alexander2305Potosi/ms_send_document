@@ -25,20 +25,20 @@ public class SyncDocumentsUseCase {
     private final DocumentHistoryRepository historyRepository;
     private final ProductRestGateway productRestGateway;
 
-    public Mono<String> execute(String useCase) {
-        log.log(Level.INFO, "Starting document sync with useCase: {0}", new Object[]{useCase});
+    public Mono<String> execute(String useCase, String messageId) {
+        log.log(Level.INFO, "Starting document sync with useCase: {0}, messageId: {1}", new Object[]{useCase, messageId});
         return productRepository.findAll()
                 .concatMap(productRestGateway::getDocumentsByProduct)
-                .flatMap(doc -> saveDocument(doc, useCase))
+                .flatMap(doc -> saveDocument(doc, useCase, messageId))
                 .then(Mono.just("Document sync completed"))
             .doOnError(e -> log.log(Level.SEVERE, "Document sync failed: " + e.getMessage()));
     }
 
     private Mono<Void> processDocument(ProductDocumentHistory doc) {
-        return saveDocument(doc, USE_CASE);
+        return saveDocument(doc, USE_CASE, null);
     }
 
-    private Mono<Void> saveDocument(ProductDocumentHistory doc, String useCase) {
+    private Mono<Void> saveDocument(ProductDocumentHistory doc, String useCase, String messageId) {
         String zipName = doc.isZip() ? doc.filename() : null;
         DocumentHistory history = DocumentHistory.builder()
             .documentId(doc.documentId())
@@ -49,6 +49,7 @@ public class SyncDocumentsUseCase {
             .state(ProductState.PENDING)
             .isZip(doc.isZip())
             .parentZipName(zipName)
+            .messageId(messageId)
             .retry(0)
             .createdAt(LocalDateTime.now())
             .build();
