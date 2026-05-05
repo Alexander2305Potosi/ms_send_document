@@ -23,6 +23,7 @@ Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos co
 15. [Ejemplos de curl](#ejemplos-de-curl)
 16. [Excepciones](#excepciones)
 17. [Testing](#testing)
+18. [Reglas de Negocio (Business Rules)](#reglas-de-negocio-business-rules)
 
 ---
 
@@ -1040,6 +1041,181 @@ Los tests siguen la misma estructura de paquetes que `src/main`, bajo `src/test/
 # Coverage report
 ./gradlew jacocoTestReport
 ```
+
+---
+
+## Reglas de Negocio (Business Rules)
+
+Esta seccion documenta todas las reglas de negocio del microservicio para servir como referencia en futuras validaciones. Cualquier modificacion que altere estos comportamientos debe considerarse un cambio funcional que requiere revision.
+
+---
+
+### 1. Ciclo de Vida de Documentos (ProductState)
+
+El estado de cada documento se rige por la maquina de estados definida en `ProductState.java`:
+
+| Estado | Significado | Disparador |
+|--------|-------------|------------|
+| `PENDING` | Esperando ser procesado | Estado inicial de documentos listos para procesar |
+| `IN_PROGRESS` | En procesamiento actual | Se asigna justo antes de iniciar `processDocument()` |
+| `PROCESSED` | Enviado exitosamente o skip por validacion | Upload exitoso O documento no pasa validacion de tamaño/patron |
+| `FAILED` | Agoto reintentos o fallo permanente | Error de envio con `retry >= MAX_RETRIES` (3) |
+| `SYNCED` | Sincronizado desde REST API | Se asigna durante `POST /api/v1/products/sync` |
+
+**Transiciones validas:**
+
+```
+SYNCED --> PENDING --> IN_PROGRESS --> PROCESSED
+                            |
+                            +--> PENDING (si retry < 3)
+                            +--> FAILED  (si retry >= 3)
+```
+
+**Reglas:**
+
+- **RB-01:** Un documento en estado `PROCESSED` no puede ser reprocesado. `canResume()` consulta el ultimo audit y retorna `false` si el estado es `PROCESSED`.
+- **RB-02:** La transicion a `IN_PROGRESS` se ejecuta en fire-and-forget (`.subscribe()` sin esperar) antes de iniciar el procesamiento.
+- **RB-03:** Si un documento no pasa la validacion (tamaño o patron de nombre), se marca como `PROCESSED` sin enviarse al gateway. Esto es un skip intencional, no un error.
+
+---
+
+### 2. Reintentos (Retry Logic)
+
+La logica de reintentos opera en dos niveles independientes:
+
+#### 2.1 Reintentos a Nivel de Dominio
+
+Definidos en `AbstractDocumentProcessingUseCase`:
+
+- **RB-04:** `MAX_RETRIES = 3`. Un documento puede fallar hasta 3 veces antes de marcarse como `FAILED`.
+- **RB-05:** El contador de reintentos (`retry`) incrementa en +1 por cada intento fallido.
+- **RB-06:** Si `retry < 3` → el documento vuelve a `PENDING` y sera reintentado en la siguiente ejecucion de `executePendingDocuments()`.
+- **RB-07:** Si `retry >= 3` → el documento pasa a `FAILED` y no se vuelve a intentar automaticamente.
+- **RB-08:** `handleUploadError()` guarda la trazabilidad con `updateWithAudit()` (nuevo estado, errorCode, mensaje, retry) y emite un `FileUploadResult` con `success=false`.
+
+#### 2.2 Reintentos a Nivel de Gateway
+
+**SOAP Gateway** (`SoapGatewayAdapter`):
+- **RB-09:** Reintentos configurados via `app.soap.retry-attempts` (default: 3).
+- **RB-10:** Backoff fijo de 500ms entre reintentos.
+- **RB-11:** Condiciones reintentables: HTTP 503, 502, 504, 429, `TimeoutException`, `ConnectException`.
+- **RB-12:** Errores no reintentables (ej: HTTP 400, 500) fallan inmediatamente.
+
+**S3 Gateway** (`S3GatewayAdapter`):
+- **RB-13:** Reintentos configurados via `app.aws.s3.retry-attempts` (default: 3) con backoff exponencial (`retry-backoff-millis`, default: 500ms).
+- **RB-14:** Condiciones reintentables: `TimeoutException`, `SdkException` con nombres que contengan `ServiceException`, `SocketTimeoutException`, o `ConnectTimeoutException`.
+- **RB-15:** Contenido null o vacio (length=0) no se reintenta → falla inmediatamente con `EMPTY_CONTENT`.
+
+---
+
+### 3. Validacion de Documentos
+
+`RulesBussinesService` aplica dos tipos de validacion. Su comportamiento difiere segun el flujo.
+
+#### 3.1 Durante Sync (`POST /api/v1/products/sync`)
+
+- **RB-16:** No se aplica validacion de tamaño ni de patron de nombre. Todos los documentos se guardan tal cual llegan de la API REST externa.
+
+#### 3.2 Durante Procesamiento (`GET /api/v1/products`)
+
+- **RB-17:** Se valida **tamaño maximo** (`maxFileSizeBytes`): si `doc.size() > maxFileSizeBytes`, el documento se omite y se marca `PROCESSED` sin enviar al gateway.
+- **RB-18:** Se valida **patron de nombre** (`filenamePattern`): si el nombre no coincide con la expresion regular, el documento se omite y se marca `PROCESSED` sin enviar al gateway.
+- **RB-19:** El orden de validacion es: primero tamaño, luego patron. Si falla cualquiera, se retorna `Mono.empty()` (señal de skip).
+- **RB-20:** Si `maxFileSizeBytes` es null o ≤0, no se aplica validacion de tamaño. Si `filenamePattern` es null o blank, no se aplica validacion de nombre.
+
+**Configuracion por defecto:**
+
+| Procesador | Tamaño maximo | Patron de nombre |
+|-----------|---------------|------------------|
+| SOAP | 10 MB (`10485760`) | `.*\.(pdf|docx|txt)$` |
+| S3 | 50 MB (`52428800`) | `.*\.(pdf|csv)$` |
+
+---
+
+### 4. Descompresion de Archivos ZIP
+
+Gestionada por `ZipDecompressor`:
+
+- **RB-21:** `isZip` se infiere de la extension del archivo en el dominio (`ProductDocumentHistory.isZip()`).
+- **RB-22:** Solo se descomprime si `isZip=true` y el filename no es null/blank.
+- **RB-23:** Cada entrada del ZIP se expande como un documento independiente con:
+  - `documentId = documentIdOriginal + "/" + nombreEntrada` (ej: `doc-1/test.pdf`)
+  - `parentZipName = filename del ZIP original` (ej: `documents.zip`)
+  - `isZip = false`
+  - `contentType` inferido por extension (`.pdf`→`application/pdf`, `.csv`→`text/csv`, `.txt`→`text/plain`, `.docx`→`application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `.xlsx`→`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, otro→`application/octet-stream`)
+- **RB-24:** Los directorios dentro del ZIP se ignoran (solo se procesan archivos).
+- **RB-25:** Si el ZIP esta corrupto o es invalido → `ProcessingException` con codigo `INVALID_ZIP`.
+- **RB-26:** Si el ZIP esta vacio (sin entradas validas) → retorna `Flux.empty()`.
+
+---
+
+### 5. Decodificacion Base64
+
+Gestionada por `Base64Utils`:
+
+- **RB-27:** Si el contenido Base64 es null o blank → `InvalidBase64Exception` con codigo `EMPTY_CONTENT`.
+- **RB-28:** Si el contenido Base64 no es valido (caracteres invalidos, padding incorrecto) → `InvalidBase64Exception` con codigo `INVALID_BASE64`.
+- **RB-29:** En `ProductRestGatewayAdapter.mapToProductDocument()`, el tamaño se calcula como `json.size()` si esta presente, o se infiere de `content.length` tras decodificar. Si ambos son null → tamaño = 0.
+
+---
+
+### 6. Homologacion de Origin y Pais (SOAP)
+
+Gestionada por `HomologationR2dbcAdapter`:
+
+- **RB-30:** La homologacion solo se aplica en el caso de uso **SOAP** (`SoapDocumentProcessingUseCase`). El caso de uso S3 no homologa.
+- **RB-31:** La cache de categorias y paises se carga **una sola vez** (lazy, en el primer acceso) desde base de datos y se almacena en `ConcurrentHashMap`.
+- **RB-32:** `resolveOrigin()` usa busqueda **contains** con normalizacion de tildes:
+  - Se eliminan tildes y se convierte a minusculas tanto el input como las claves de cache
+  - Si la clave normalizada **contiene** el origin normalizado → se usa la descripcion asociada
+  - Sin match → se retorna el valor original sin modificar
+  - Si origin es null/blank → se retorna sin cambios
+  - Si la descripcion asociada es null → se retorna el valor original
+- **RB-33:** `resolveCountry()` usa busqueda **exacta** en el mapa de paises:
+  - Si el codigo de pais existe en cache → retorna el nombre homologado
+  - Sin match → retorna el codigo original
+  - Si country es null/blank → retorna sin cambios
+  - Si el nombre homologado es null → retorna el codigo original
+
+---
+
+### 7. Seleccion de Procesador (Processor)
+
+Gestionada por `ProductHandler.getProcessor()`:
+
+- **RB-34:** El query param `processor` es opcional. Si no se especifica, se usa `soap` por defecto.
+- **RB-35:** `processor=soap` → siempre disponible. Usa `SoapDocumentProcessingUseCase`.
+- **RB-36:** `processor=s3` → requiere que el perfil `s3` este activo. Si no lo esta → `503 Service Unavailable`.
+- **RB-37:** Cualquier otro valor de `processor` → `400 Bad Request` con mensaje descriptivo.
+
+---
+
+### 8. Trace ID y Trazabilidad
+
+- **RB-38:** El header HTTP `message-id` es opcional. Si el cliente lo envia, se usa como `traceId`.
+- **RB-39:** Si `message-id` no se envia o esta blank → se genera un UUID v4 aleatorio.
+- **RB-40:** El `traceId` se propaga a traves de todo el flujo reactivo via `Context` de Reactor (`ctx.put(HEADER_TRACE_ID, traceId)`).
+- **RB-41:** Cada intento de envio a gateway queda registrado en `historico_documentos` con `caso_uso` asignado (SOAP o S3), permitiendo auditoria completa por caso de uso.
+
+---
+
+### 9. Flujo Sync (Fire-and-Forget)
+
+- **RB-42:** `POST /api/v1/products/sync` retorna HTTP 200 inmediatamente con `{"status":"OK","message":"Document sync initiated"}`.
+- **RB-43:** La ejecucion real de `SyncDocumentsUseCase.execute()` se dispara con `.subscribe()` sin esperar su resultado (fire-and-forget).
+- **RB-44:** Los documentos sincronizados se guardan con `estado=SYNCED` y `caso_uso='SYNC'`.
+- **RB-45:** Si un documento es ZIP, se guarda con `parentZipName = doc.filename()` (el nombre del ZIP) e `isZip=true`.
+
+---
+
+### 10. Trazabilidad en Tabla Unificada
+
+- **RB-46:** La tabla `historico_documentos` contiene dos tipos de filas semanticamente distintas:
+  - **Metadatos** (`caso_uso IS NULL`): representan el estado actual del documento
+  - **Trazabilidad** (`caso_uso IS NOT NULL`): registran cada intento de envio (append-only)
+- **RB-47:** `updateWithAudit()` actualiza la fila de metadatos con el nuevo estado y a la vez inserta una nueva fila de trazabilidad.
+- **RB-48:** `getRetryCount()` consulta el maximo `reintentos` entre las filas de trazabilidad para un `id_documento` dado. Retorna 0 si no hay registros previos.
+- **RB-49:** `findLastAudit()` retorna el registro de trazabilidad mas reciente para un `id_documento` y `caso_uso` especificos.
 
 ---
 
