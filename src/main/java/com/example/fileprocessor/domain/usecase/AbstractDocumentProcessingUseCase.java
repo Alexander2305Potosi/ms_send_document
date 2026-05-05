@@ -32,7 +32,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     private static final int MAX_RETRIES = 3;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return historyRepository.findByState(ProductState.PENDING)
+        return historyRepository.findByStateAndUseCase(ProductState.PENDING, implementationName())
             .groupBy(DocumentHistory::documentId)
             .flatMap(group -> group.reduce((latest, current) ->
                 latest.createdAt() != null && current.createdAt() != null
@@ -45,7 +45,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                             log.log(Level.INFO, "Document {0} already processed, skipping", documentId);
                             return Flux.empty();
                         }
-                        historyRepository.updateState(documentId, ProductState.IN_PROGRESS, null).subscribe();
+                        historyRepository.updateStateAndUseCase(documentId, ProductState.IN_PROGRESS, implementationName()).subscribe();
                         return processDocument(doc);
                     });
             })
@@ -77,7 +77,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .flatMap(validated -> documentValidator.validate(validated, true)
                 .switchIfEmpty(Mono.defer(() -> {
                     log.log(Level.INFO, "Document {0} skipped by size validation", documentId);
-                    historyRepository.updateState(documentId, ProductState.PROCESSED, null).subscribe();
+                    historyRepository.updateStateAndUseCase(documentId, ProductState.PROCESSED, implementationName()).subscribe();
                     return Mono.empty();
                 })))
             .flatMap(validated -> uploadDocument(validated, doc.productId()))

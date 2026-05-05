@@ -19,6 +19,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_TRACE_ID;
+import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_USE_CASE;
 
 @Component
 public class ProductHandler {
@@ -58,10 +59,11 @@ public class ProductHandler {
 
     public Mono<ServerResponse> syncProducts(ServerRequest request) {
         String traceId = resolveTraceId(request);
+        String useCase = request.headers().firstHeader(HEADER_USE_CASE);
 
         return Mono.deferContextual(ctx -> {
-            log.log(Level.INFO, "Starting document sync, traceId: {0}", new Object[]{traceId});
-            syncDocumentsUseCase.execute()
+            log.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}", new Object[]{traceId, useCase});
+            syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> log.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
                 .doOnSuccess(v -> log.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
                 .subscribe();
@@ -71,7 +73,7 @@ public class ProductHandler {
         }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 
-    private AbstractDocumentProcessingUseCase getProcessor(String processorType) {
+    AbstractDocumentProcessingUseCase getProcessor(String processorType) {
         return switch (processorType) {
             case ApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
             case ApiConstants.PROCESSOR_S3 -> {
@@ -87,7 +89,7 @@ public class ProductHandler {
         };
     }
 
-    private static String resolveTraceId(ServerRequest request) {
+    static String resolveTraceId(ServerRequest request) {
         String header = request.headers().firstHeader(ApiConstants.HEADER_TRACE_ID);
         return (header != null && !header.isBlank()) ? header : UUID.randomUUID().toString();
     }

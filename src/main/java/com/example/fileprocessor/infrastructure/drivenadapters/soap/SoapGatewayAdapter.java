@@ -112,7 +112,7 @@ public class SoapGatewayAdapter implements SoapGateway {
         });
     }
 
-    private boolean isRetryable(Throwable throwable) {
+    boolean isRetryable(Throwable throwable) {
         if (throwable instanceof WebClientResponseException wce) {
             int statusCode = wce.getStatusCode().value();
             return statusCode == 503 || statusCode == 502 || statusCode == 504 || statusCode == 429;
@@ -123,7 +123,7 @@ public class SoapGatewayAdapter implements SoapGateway {
         return false;
     }
 
-    private FileUploadResult buildErrorResult(String traceId, String errorCode, String message, int attemptCount) {
+    FileUploadResult buildErrorResult(String traceId, String errorCode, String message, int attemptCount) {
         return FileUploadResult.builder()
                 .status(DocumentStatus.FAILURE.name())
                 .errorCode(errorCode)
@@ -135,7 +135,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .build();
     }
 
-    private FileUploadResult toFileUploadResult(ExternalServiceResponse response, int attemptCount) {
+    FileUploadResult toFileUploadResult(ExternalServiceResponse response, int attemptCount) {
         return FileUploadResult.builder()
                 .status(response.getStatus())
                 .message(response.getMessage())

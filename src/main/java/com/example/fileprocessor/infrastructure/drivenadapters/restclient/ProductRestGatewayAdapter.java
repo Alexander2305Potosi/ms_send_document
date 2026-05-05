@@ -117,7 +117,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         });
     }
 
-    private Flux<ProductDocumentHistory> mapToProductDocumentHistory(ProductResponse json) {
+    Flux<ProductDocumentHistory> mapToProductDocumentHistory(ProductResponse json) {
         if (json.documents() == null || json.documents().isEmpty()) {
             return Flux.empty();
         }
@@ -125,7 +125,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .map(doc -> mapToProductDocument(json.productId(), doc));
     }
 
-    private ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
+    ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
         String contentBase64 = json.content();
         String filename = json.filename();
         String documentId = json.documentId();

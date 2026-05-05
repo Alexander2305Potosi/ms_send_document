@@ -123,7 +123,7 @@ public class S3GatewayAdapter implements S3Gateway {
             .build());
     }
 
-    private String categorizeS3Error(Throwable error) {
+    String categorizeS3Error(Throwable error) {
         if (error instanceof software.amazon.awssdk.services.s3.model.S3Exception e) {
             Integer statusCode = e.statusCode();
             if (statusCode != null) {
@@ -155,7 +155,7 @@ public class S3GatewayAdapter implements S3Gateway {
         return S3ErrorCodes.UNKNOWN_ERROR;
     }
 
-    private boolean isRetryableException(Throwable throwable) {
+    boolean isRetryableException(Throwable throwable) {
         if (throwable instanceof TimeoutException) return true;
         if (throwable instanceof software.amazon.awssdk.core.exception.SdkException e) {
             String name = e.getClass().getSimpleName();
@@ -165,12 +165,12 @@ public class S3GatewayAdapter implements S3Gateway {
         return false;
     }
 
-    private String buildKey(String traceId, String filename) {
+    String buildKey(String traceId, String filename) {
         String sanitizedFilename = sanitizeFilename(filename);
         return String.format(s3Properties.keyPrefix() + "%s/%s", traceId, sanitizedFilename);
     }
 
-    private String sanitizeFilename(String filename) {
+    String sanitizeFilename(String filename) {
         if (filename == null || filename.isBlank()) return "unnamed";
         String sanitized = filename.replaceAll("[\\x00-\\x1F\\x7F]", "");
         sanitized = sanitized.replace("..", "").replace("/", "").replace("\\", "");

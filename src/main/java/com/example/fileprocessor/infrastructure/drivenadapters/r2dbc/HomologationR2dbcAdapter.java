@@ -52,7 +52,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         return Mono.just(new HomologationResult(resolvedOrigin, resolvedCountry));
     }
 
-    private String resolveOrigin(String origin) {
+    String resolveOrigin(String origin) {
         if (origin == null || origin.isBlank()) {
             return origin;
         }
@@ -70,7 +70,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         return origin;
     }
 
-    private String resolveCountry(String country) {
+    String resolveCountry(String country) {
         if (country == null || country.isBlank()) {
             return country;
         }
@@ -85,7 +85,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
 
     private static final Pattern DIACRITICS_PATTERN = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
 
-    private String removeDiacritics(String text) {
+    static String removeDiacritics(String text) {
         if (text == null) return null;
         String normalized = Normalizer.normalize(text, Normalizer.Form.NFD);
         return DIACRITICS_PATTERN.matcher(normalized).replaceAll("");
