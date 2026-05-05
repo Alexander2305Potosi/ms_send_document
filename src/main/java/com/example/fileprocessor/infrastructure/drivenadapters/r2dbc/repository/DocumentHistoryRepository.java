@@ -12,4 +12,6 @@ public interface DocumentHistoryRepository extends R2dbcRepository<DocumentHisto
     Flux<DocumentHistoryEntity> findByDocumentIdAndUseCase(String documentId, String useCase);
     Flux<DocumentHistoryEntity> findByState(String state);
     Mono<DocumentHistoryEntity> findByDocumentIdAndState(String documentId, String state);
+    Mono<DocumentHistoryEntity> findFirstByDocumentIdOrderByCreatedAtDesc(String documentId);
+    Mono<DocumentHistoryEntity> findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(String documentId, String useCase);
 }

@@ -20,9 +20,13 @@ public record DocumentHistory(
     Boolean isZip,
     String parentZipName,
     String useCase,
-    String status,
     String errorCode,
     Integer retry,
+    String operation,
+    String messageId,
+    String stackTrace,
+    LocalDateTime startedAt,
+    LocalDateTime completedAt,
     LocalDateTime createdAt,
     LocalDateTime updatedAt
 ) {}

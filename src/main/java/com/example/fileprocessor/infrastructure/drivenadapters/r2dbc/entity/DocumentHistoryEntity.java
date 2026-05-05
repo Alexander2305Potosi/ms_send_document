@@ -61,14 +61,26 @@ public class DocumentHistoryEntity {
     @Column("caso_uso")
     private String useCase;
 
-    @Column("resultado")
-    private String status;
-
     @Column("codigo_error")
     private String errorCode;
 
     @Column("reintentos")
     private Integer retry;
+
+    @Column("operacion")
+    private String operation;
+
+    @Column("message_id")
+    private String messageId;
+
+    @Column("stack_trace")
+    private String stackTrace;
+
+    @Column("fecha_inicio")
+    private LocalDateTime startedAt;
+
+    @Column("fecha_fin")
+    private LocalDateTime completedAt;
 
     @Column("fecha_creacion")
     private LocalDateTime createdAt;

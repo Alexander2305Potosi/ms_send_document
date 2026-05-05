@@ -37,7 +37,6 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
     @Override
     public Mono<Void> updateState(String documentId, String state, String errorMessage) {
         return springDataRepository.findByDocumentId(documentId)
-            .filter(entity -> entity.getUseCase() == null)
             .next()
             .flatMap(entity -> {
                 entity.setState(state);
@@ -45,15 +44,35 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
                 entity.setUpdatedAt(java.time.LocalDateTime.now());
                 return springDataRepository.save(entity);
             })
-            .switchIfEmpty(springDataRepository.findByDocumentId(documentId)
-                .next()
-                .flatMap(entity -> {
-                    entity.setState(state);
-                    entity.setErrorMessage(errorMessage);
-                    entity.setUpdatedAt(java.time.LocalDateTime.now());
-                    return springDataRepository.save(entity);
-                }))
             .then();
+    }
+
+    @Override
+    public Mono<Void> updateWithAudit(String documentId, String state, String errorCode, String errorMessage, int retry, String useCase) {
+        return springDataRepository.findByDocumentId(documentId)
+            .next()
+            .flatMap(entity -> {
+                entity.setState(state);
+                entity.setErrorCode(errorCode);
+                entity.setErrorMessage(errorMessage);
+                entity.setRetry(retry);
+                entity.setUseCase(useCase);
+                entity.setUpdatedAt(java.time.LocalDateTime.now());
+                return springDataRepository.save(entity);
+            })
+            .then();
+    }
+
+    @Override
+    public Mono<DocumentHistory> findLastAudit(String documentId) {
+        return springDataRepository.findFirstByDocumentIdOrderByCreatedAtDesc(documentId)
+            .map(DocumentHistoryMapper::toDomain);
+    }
+
+    @Override
+    public Mono<DocumentHistory> findLastAudit(String documentId, String useCase) {
+        return springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(documentId, useCase)
+            .map(DocumentHistoryMapper::toDomain);
     }
 
     @Override

@@ -17,7 +17,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -34,45 +33,60 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     public Flux<FileUploadResult> executePendingDocuments() {
         return historyRepository.findByState(ProductState.PENDING)
+            .groupBy(DocumentHistory::documentId)
+            .flatMap(group -> group.reduce((latest, current) ->
+                latest.createdAt() != null && current.createdAt() != null
+                && latest.createdAt().isAfter(current.createdAt()) ? latest : current))
             .flatMap(doc -> {
                 String documentId = doc.documentId();
-                historyRepository.updateState(documentId, ProductState.IN_PROGRESS, null).subscribe();
-                return productRestGateway.getDocument(doc.productId(), documentId)
-                    .map(file -> toProductDocument(file))
-                    .flatMapMany(file -> {
-                        String filename = file.filename();
-                        if (!file.isZip() || filename == null || filename.isBlank()) {
-                            return Flux.just(file);
+                return canResume(documentId, doc.useCase())
+                    .flatMapMany(resumeable -> {
+                        if (!resumeable) {
+                            log.log(Level.INFO, "Document {0} already processed, skipping", documentId);
+                            return Flux.empty();
                         }
-                        return ZipDecompressor.decompress(file);
-                    })
-                    .flatMap(validated -> documentValidator.validate(validated, true)
-                        .switchIfEmpty(Mono.defer(() -> {
-                            log.log(Level.INFO, "Document {0} skipped by size validation", documentId);
-                            historyRepository.updateState(documentId, ProductState.PROCESSED, null).subscribe();
-                            return Mono.empty();
-                        })))
-                    .flatMap(validated -> uploadDocument(validated, doc.productId()))
-                    .flatMap(result -> handleUploadSuccess(doc, result))
-                    .onErrorResume(error -> handleUploadError(doc, error));
+                        historyRepository.updateState(documentId, ProductState.IN_PROGRESS, null).subscribe();
+                        return processDocument(doc);
+                    });
             })
             .doOnTerminate(() -> log.log(Level.INFO, "Pipeline {0} completed", new Object[]{implementationName()}))
             .doOnError(e -> log.log(Level.SEVERE, "Pipeline error: {0}", new Object[]{e.getMessage()}))
             .doOnCancel(() -> log.log(Level.WARNING, "Pipeline {0} cancelled", new Object[]{implementationName()}));
     }
 
-    private Mono<FileUploadResult> handleUploadSuccess(DocumentHistory doc, FileUploadResult result) {
-        DocumentHistory history = DocumentHistory.builder()
-            .documentId(doc.documentId())
-            .productId(doc.productId())
-            .useCase(implementationName())
-            .status(DocumentStatus.SUCCESS.name())
-            .retry(0)
-            .createdAt(LocalDateTime.now())
-            .build();
-        historyRepository.save(history).subscribe();
+    private Mono<Boolean> canResume(String documentId, String useCase) {
+        return historyRepository.findLastAudit(documentId, useCase)
+            .map(lastAudit -> {
+                if (lastAudit == null) return true;
+                return !ProductState.PROCESSED.equals(lastAudit.state());
+            })
+            .defaultIfEmpty(true);
+    }
 
-        historyRepository.updateState(doc.documentId(), ProductState.PROCESSED, null).subscribe();
+    private Flux<FileUploadResult> processDocument(DocumentHistory doc) {
+        String documentId = doc.documentId();
+        return productRestGateway.getDocument(doc.productId(), documentId)
+            .map(file -> toProductDocument(file))
+            .flatMapMany(file -> {
+                String filename = file.filename();
+                if (!file.isZip() || filename == null || filename.isBlank()) {
+                    return Flux.just(file);
+                }
+                return ZipDecompressor.decompress(file);
+            })
+            .flatMap(validated -> documentValidator.validate(validated, true)
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.log(Level.INFO, "Document {0} skipped by size validation", documentId);
+                    historyRepository.updateState(documentId, ProductState.PROCESSED, null).subscribe();
+                    return Mono.empty();
+                })))
+            .flatMap(validated -> uploadDocument(validated, doc.productId()))
+            .flatMap(result -> handleUploadSuccess(doc, result))
+            .onErrorResume(error -> handleUploadError(doc, error));
+    }
+
+    private Mono<FileUploadResult> handleUploadSuccess(DocumentHistory doc, FileUploadResult result) {
+        historyRepository.updateWithAudit(doc.documentId(), ProductState.PROCESSED, null, null, 0, implementationName()).subscribe();
         return Mono.just(result);
     }
 
@@ -81,27 +95,22 @@ public abstract class AbstractDocumentProcessingUseCase {
             ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
         String errorMsg = error.getMessage();
 
-        return historyRepository.getRetryCount(doc.documentId(), implementationName())
-            .defaultIfEmpty(0)
-            .flatMap(currentRetry -> {
-                DocumentHistory history = DocumentHistory.builder()
-                    .documentId(doc.documentId())
-                    .productId(doc.productId())
-                    .useCase(implementationName())
+        return historyRepository.findLastAudit(doc.documentId())
+            .defaultIfEmpty(DocumentHistory.builder().retry(0).build())
+            .flatMap(current -> {
+                int retry = current.retry() != null ? current.retry() + 1 : 1;
+                String newState = retry >= MAX_RETRIES ? ProductState.FAILED : ProductState.PENDING;
+
+                historyRepository.updateWithAudit(doc.documentId(), newState, errorCode, errorMsg, retry, implementationName()).subscribe();
+
+                return Mono.just(FileUploadResult.builder()
                     .status(DocumentStatus.FAILURE.name())
                     .errorCode(errorCode)
-                    .errorMessage(errorMsg)
-                    .retry(currentRetry + 1)
-                    .createdAt(LocalDateTime.now())
-                    .build();
-                historyRepository.save(history).subscribe();
-
-                if (currentRetry + 1 >= MAX_RETRIES) {
-                    historyRepository.updateState(doc.documentId(), ProductState.FAILED, errorMsg).subscribe();
-                } else {
-                    historyRepository.updateState(doc.documentId(), ProductState.PENDING, errorMsg).subscribe();
-                }
-                return handleUploadError(error);
+                    .message(errorMsg)
+                    .processedAt(Instant.now())
+                    .success(false)
+                    .attemptCount(retry)
+                    .build());
             });
     }
 

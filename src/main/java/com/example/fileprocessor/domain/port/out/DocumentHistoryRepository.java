@@ -9,5 +9,8 @@ public interface DocumentHistoryRepository {
     Flux<DocumentHistory> findByDocumentId(String documentId);
     Flux<DocumentHistory> findByState(String state);
     Mono<Void> updateState(String documentId, String state, String errorMessage);
+    Mono<Void> updateWithAudit(String documentId, String state, String errorCode, String errorMessage, int retry, String useCase);
     Mono<Integer> getRetryCount(String documentId, String useCase);
+    Mono<DocumentHistory> findLastAudit(String documentId);
+    Mono<DocumentHistory> findLastAudit(String documentId, String useCase);
 }
