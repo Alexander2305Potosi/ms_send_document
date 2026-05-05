@@ -154,14 +154,9 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .filename(filename)
             .contentType(json.contentType())
             .size(size)
-            .isZip(isZip(filename))
             .origin(json.origin())
             .pais(json.pais())
             .content(content)
             .build();
-    }
-
-    private boolean isZip(String filename) {
-        return filename != null && filename.toLowerCase().endsWith(".zip");
     }
 }

@@ -36,21 +36,21 @@ com.example.fileprocessor/
 │
 ├── domain/                                       # Capa de dominio
 │   ├── entity/
-│   │   ├── Document.java                         # Record: documento con metadatos completos
+│   │   ├── Document.java                         # Record: documento con state (PENDING/IN_PROGRESS/PROCESSED/FAILED/SYNCED)
 │   │   ├── DocumentHistory.java                  # Record: trazabilidad de envio a servicio externo
 │   │   ├── DocumentStatus.java                   # Enum: SUCCESS, FAILURE
 │   │   ├── ProductDocumentFile.java              # Record: documento obtenido de REST API
-│   │   ├── ProductDocumentHistory.java           # Record: documento (21 campos, inclui productId, isZip, pais)
-│   │   ├── ProductState.java                     # Constantes: PENDING, IN_PROGRESS, PROCESSED, FAILED, SYNCED
+│   │   ├── ProductDocumentHistory.java           # Record: documento (21 campos, incluye productId, isZip, pais)
+│   │   ├── ProductState.java                     # Constantes de state: PENDING, IN_PROGRESS, PROCESSED, FAILED, SYNCED
 │   │   ├── FileUploadRequest.java                # Request para upload a gateway (SOAP/S3)
 │   │   ├── FileUploadResult.java                 # Resultado de upload con status, errorCode, correlationId
 │   │   ├── HomologationResult.java               # Resultado de homologacion origin/pais
 │   │   └── ExternalServiceResponse.java          # Respuesta generica de servicio externo
 │   ├── usecase/
-│   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base (procesa desde documento)
+│   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base (procesa y descomprime ZIP en runtime)
 │   │   ├── SoapDocumentProcessingUseCase.java       # Implementacion SOAP
 │   │   ├── S3DocumentProcessingUseCase.java         # Implementacion S3
-│   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y documentos desde REST API
+│   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y documentos (sin validacion)
 │   │   └── ProcessingResultCodes.java               # Constantes de codigos de error
 │   ├── service/
 │   │   └── RulesBussinesService.java              # Validacion: tamano maximo, patron filename
@@ -58,7 +58,7 @@ com.example.fileprocessor/
 │   │   ├── ZipDecompressor.java                   # Descompresion de ZIP con inferencia de contentType
 │   │   └── Base64Utils.java                       # Encoding/decoding seguro de Base64
 │   ├── port/out/
-│   │   ├── DocumentRepository.java               # Puerto: persistencia y consulta de documentos
+│   │   ├── DocumentRepository.java               # Puerto: CRUD de documentos, consulta por state
 │   │   ├── DocumentHistoryRepository.java        # Puerto: trazabilidad de envios (historico)
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
 │   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
@@ -84,7 +84,7 @@ com.example.fileprocessor/
     │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository
     │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (cache en memoria)
     │   │   ├── entity/
-    │   │   │   ├── DocumentEntity.java             # @Entity @Table("documento")
+    │   │   │   ├── DocumentEntity.java             # @Entity @Table("documento") — solo state, sin status
     │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos")
     │   │   │   ├── CategoryManualEntity.java       # @Entity @Table("categoria_manual")
     │   │   │   └── CountryHomologatedEntity.java  # @Entity @Table("pais_homologado")
@@ -97,7 +97,7 @@ com.example.fileprocessor/
     │   │       ├── CategoryManualRepository.java  # R2dbcRepository<CategoryManualEntity, Long>
     │   │       └── CountryHomologatedRepository.java # R2dbcRepository<CountryHomologatedEntity, Long>
     │   ├── restclient/
-    │   │   ├── ProductRestGatewayAdapter.java     # WebClient a API REST externa
+    │   │   ├── ProductRestGatewayAdapter.java     # WebClient a API REST externa (isZip inferido en dominio)
     │   │   └── dto/
     │   │       ├── ProductResponse.java            # DTO JSON de producto
     │   │       └── ProductDocumentResponse.java    # DTO JSON de documento (Base64)
@@ -152,7 +152,7 @@ docs/migrations/
 
 ### GET /api/v1/products
 
-Procesa documentos pendientes desde la tabla `documento` en estado PENDING. Cada documento se obtiene de la API REST externa, se envia directamente al gateway (SOAP o S3) sin descompresion ni validacion adicionales, y se registra en `historico_documentos`.
+Procesa documentos pendientes desde la tabla `documento` en estado PENDING. Cada documento se obtiene de la API REST externa, se descomprime si es ZIP, se valida (nombre + tamano), y se envia al gateway (SOAP o S3).
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion. Si no se envia, se genera un UUID automatico.
@@ -172,7 +172,7 @@ Procesa documentos pendientes desde la tabla `documento` en estado PENDING. Cada
 
 ### POST /api/v1/products/sync
 
-Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Por cada producto se listan sus documentos, se obtiene el contenido de cada uno desde la API REST, se descomprime si es ZIP, se valida con `RulesBussinesGateway`, y se persiste en la tabla `documento` con `state=SYNCED` y `status=PENDING`.
+Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Por cada producto se listan sus documentos, se obtiene el contenido de cada uno desde la API REST, y se persiste en la tabla `documento` con `state=SYNCED`.
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion.
@@ -207,13 +207,9 @@ Health check. Expone health, info, metrics, loggers y prometheus.
        ├── productRestGateway.getDocument(productId, documentId)
        │     └── GET {productDocumentsPath}/{documentId}
        │     └── Decodifica Base64 via Base64Utils.decodeSafe()
-       ├── isZip = isZip(filename)  [inferencia por extension]
-       ├── ZipDecompressor.decompress()  [si isZip=true]
-       │     └── Primero guarda el ZIP (parent=null)
-       │     └── Luego guarda cada archivo expandido (parent=filename_del_zip)
-       ├── RulesBussinesGateway.validate(doc, false)  [solo patron nombre, sin check de tamano]
-       └── documentRepository.save()
-           └── INSERT en tabla documento (state=SYNCED, status=PENDING)
+       ├── isZip se infiere de la extension del filename en el dominio
+       ├── documentRepository.save()
+           └── INSERT en tabla documento (state=SYNCED)
 ```
 
 ### Flujo de Procesamiento (GET /api/v1/products)
@@ -233,16 +229,17 @@ Health check. Expone health, info, metrics, loggers y prometheus.
         │
         ▼
 4. documentRepository.findByStatus("PENDING")
-   └── Filtra: status=PENDING en tabla documento
+   └── Filtra: state=PENDING en tabla documento
         ▼
 5. BD → Flux<Document>
         │
         ▼
 6. Por cada documento: processDocument(doc)
-   ├── documentRepository.updateState(docId, "IN_PROGRESS")
+   ├── documentRepository.updateState(docId, "IN_PROGRESS", null)
    ├── productRestGateway.getDocument(doc.productId(), doc.documentId())
    │     └── GET {productDocumentsPath}/{docId}
    │     └── Decodifica Base64 via Base64Utils.decodeSafe()
+   ├── Si isZip=true → ZipDecompressor.decompress() expande cada entrada
    ├── RulesBussinesGateway.validate(doc, true)  [patron nombre + tamano]
    │     └── Si no pasa → updateState(PROCESSED), skip (no se envia)
    ├── uploadDocument() → SoapGateway.send() o S3Gateway.send()
@@ -250,13 +247,13 @@ Health check. Expone health, info, metrics, loggers y prometheus.
    ├── saveHistory(doc, result) → INSERT en historico_documentos
    │     └── useCase = "SOAP" o "S3"
    │     └── retry = numero de intento actual
-   └── documentRepository.updateStatus(docId, result.isSuccess ? "PROCESSED" : "FAILED")
+   └── documentRepository.updateState(docId, result.isSuccess ? "PROCESSED" : "FAILED", errorMessage)
         │
         ▼
 7. Flux<FileUploadResult> → NDJSON stream al cliente
 ```
 
-**Nota:** durante el procesamiento NO se aplica `ZipDecompressor` (ZIP ya fue descomprimido durante sync). La validacion de nombre y tamano si se aplica en procesamiento.
+**Nota:** la descompresion ZIP se aplica tanto en procesamiento como en el dominio. La validacion de nombre y tamano solo se aplica en procesamiento.
 
 ---
 
@@ -312,9 +309,8 @@ Almacena los documentos sincronizados desde la API REST externa. Es la tabla cen
 | `name` | VARCHAR(255) | Nombre del archivo |
 | `owner` | VARCHAR(255) | Propietario del documento |
 | `path` | TEXT | Ruta del documento (nullable) |
-| `status` | VARCHAR(50) | Estado de procesamiento: PENDING / IN_PROGRESS / PROCESSED / FAILED |
+| `state` | VARCHAR(50) | Estado del documento: PENDING / IN_PROGRESS / PROCESSED / FAILED / SYNCED |
 | `version_contract` | VARCHAR(50) | Version de contrato (nullable) |
-| `state` | VARCHAR(100) | Estado de sincronizacion: SYNCED / PENDING |
 | `error_message` | TEXT | Mensaje de error si hubo fallo |
 | `is_zip` | BOOLEAN | Si es un archivo ZIP comprimido |
 | `parent_zip_name` | VARCHAR(255) | Si viene de un ZIP, nombre del ZIP padre (nullable) |
@@ -363,7 +359,7 @@ Almacena la homologacion de paises. Se usa para resolver el `pais` de los docume
 
 ```sql
 -- documento
-CREATE INDEX idx_documento_status ON documento(status);
+CREATE INDEX idx_documento_state ON documento(state);
 CREATE INDEX idx_documento_product_id ON documento(product_id);
 CREATE INDEX idx_documento_document_id ON documento(id_document);
 
@@ -465,10 +461,10 @@ SELECT * FROM historico_documentos WHERE use_case = 'SOAP';
 SELECT * FROM historico_documentos WHERE retry > 0 ORDER BY created_at DESC;
 
 -- Ver documentos pendientes de procesamiento
-SELECT * FROM documento WHERE status = 'PENDING';
+SELECT * FROM documento WHERE state = 'PENDING';
 
 -- Ver documentos fallidos
-SELECT * FROM documento WHERE status = 'FAILED';
+SELECT * FROM documento WHERE state = 'FAILED';
 
 -- Ver documentos descomprimidos de un ZIP
 SELECT * FROM documento WHERE parent_zip_name = 'documents.zip';
@@ -490,17 +486,11 @@ JOIN (
 
 ## Descompresion de archivos ZIP
 
-`ZipDecompressor.decompress()` expande documentos ZIP. Se aplica **unicamente** durante la sincronizacion (sync), no durante el procesamiento.
+`ZipDecompressor.decompress()` expande documentos ZIP. Se aplica durante la sincronizacion (sync) y el procesamiento.
 
 ### Inferencia de isZip
 
-`isZip` se infiere de la extension del archivo en `ProductRestGatewayAdapter`:
-
-```java
-private boolean isZip(String filename) {
-    return filename != null && filename.toLowerCase().endsWith(".zip");
-}
-```
+`isZip` se infiere de la extension del archivo en la capa de dominio (`ProductDocumentHistory.isZip()`).
 
 ### Comportamiento durante Sync
 
@@ -537,15 +527,15 @@ ZIP: doc-1/documents.zip (isZip=true)
 
 ```java
 public final class ProductState {
-    public static final String PENDING    = "PENDING";     // Esperando procesamiento
+    public static final String PENDING     = "PENDING";     // Esperando procesamiento
     public static final String IN_PROGRESS = "IN_PROGRESS"; // En procesamiento actual
-    public static final String PROCESSED = "PROCESSED"; // Enviado exitosamente
-    public static final String FAILED    = "FAILED";     // Agoto reintentos o fallo permanente
-    public static final String SYNCED    = "SYNCED";     // Sincronizado desde REST API, listo para procesar
+    public static final String PROCESSED   = "PROCESSED";   // Enviado exitosamente
+    public static final String FAILED      = "FAILED";      // Agoto reintentos o fallo permanente
+    public static final String SYNCED      = "SYNCED";      // Sincronizado desde REST API, listo para procesar
 }
 ```
 
-### Transiciones de Estado
+### Transiciones de State
 
 ```
                sync
@@ -553,7 +543,7 @@ public final class ProductState {
                  ▼
               [SYNCED]          ← sincronizado, en tabla documento
                  │
-                 │  (luego status=PENDING)
+                 │  (luego state=PENDING)
                  ▼
              [PENDING]
                  │
@@ -571,29 +561,16 @@ public final class ProductState {
 
 ## Validacion de Documentos (RulesBussinesService)
 
-`RulesBussinesService` implementa validacion en **dos fases**:
+`RulesBussinesService` implementa validacion **solo durante el procesamiento**:
 
-### Fase 1 — Sincronizacion (Sync)
-
-Se aplica durante `POST /api/v1/products/sync`. Solo valida el **patron de nombre de archivo**. El tamano maximo no se verifica (configurado a `Long.MAX_VALUE` internamente). Los documentos que no pasan la validacion se omiten silenciosamente.
-
-### Fase 2 — Procesamiento (Processing)
+### Procesamiento (Processing)
 
 Se aplica durante `GET /api/v1/products`. Valida tanto el **tamano maximo** como el **patron de nombre de archivo**. Si un documento no pasa la validacion, se marca como `PROCESSED` (skip) sin enviarse al gateway.
 
-### Interface dual
-
-`RulesBussinesGateway` expone dos metodos:
-
-```java
-Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc);
-Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc, boolean includeSizeCheck);
-```
-
-| Regla | Sync | Processing |
-|-------|------|------------|
-| **Tamano maximo** | Ignorado | Omite si `doc.size() > max` |
-| **Patron filename** | Omite si no coincide | Omite si no coincide |
+| Regla | Processing |
+|-------|------------|
+| **Tamano maximo** | Omite si `doc.size() > max` |
+| **Patron filename** | Omite si no coincide |
 
 ### Configuracion por defecto
 
@@ -631,48 +608,39 @@ Ambos gateways (SOAP y S3) implementan reintentos automaticos con backoff.
 Documento PENDING → IN_PROGRESS
 uploadDocument() → SUCCESS
 saveHistory() → historico_documentos (status=SUCCESS, retry=0, use_case=SOAP/S3)
-Documento status → PROCESSED
+Documento state → PROCESSED
 Stream: {"success":true, "status":"SUCCESS"}
 ```
 
-### 2. Validacion Fallida en Sync (documento ignorado)
-```
-Sync: RulesBussinesGateway.validate() → tamano excede limite o filename no coincide
-Sync: documento no se guarda en tabla documento (se omite silenciosamente)
-```
-
-### 3. Error en Gateway (con reintentos)
+### 2. Error en Gateway (con reintentos)
 ```
 uploadDocument() → exception
 handleUploadError() → getRetryCount() desde historico_documentos
 saveHistory() → historico_documentos (status=FAILURE, retry=N, use_case=SOAP/S3)
-  - Si retry < 3: status=PENDING (se reintentara)
-  - Si retry >= 3: status=FAILED, documento.status=FAILED
+  - Si retry < 3: state=PENDING (se reintentara)
+  - Si retry >= 3: state=FAILED
 Stream: {"success":false, "status":"FAILURE", "errorCode":"GATEWAY_TIMEOUT", "retry":3}
 ```
 
-### 4. Documento ZIP en Sync
+### 3. Documento ZIP
 ```
-Sync: isZip=true → ZipDecompressor.decompress()
-           → Primero guarda el ZIP (parent=null)
-           → Luego cada archivo expandido se guarda con parent=zipFilename
-           → Cada archivo pasa por RulesBussinesGateway.validate()
-           → Se guardan en tabla documento con status=PENDING
-Procesamiento: cada entrada de la tabla documento se procesa independientemente
+Sync/Processing: isZip=true → ZipDecompressor.decompress()
+           → Cada archivo expandido se procesa independientemente
+           → Se guardan en tabla documento con state=PENDING o se envian al gateway
 ```
 
-### 5. Error en Descompresion ZIP en Sync
+### 4. Error en Descompresion ZIP
 ```
-Sync: ZipDecompressor.decompress() → ProcessingException(INVALID_ZIP)
-Sync: saveHistory() → historico_documentos (errorCode=INVALID_ZIP)
-Sync: documento no se guarda
+ZipDecompressor.decompress() → ProcessingException(INVALID_ZIP)
+saveHistory() → historico_documentos (errorCode=INVALID_ZIP)
+documento no se guarda / no se procesa
 ```
 
-### 6. Error de Base64 en Sync
+### 5. Error de Base64
 ```
-Sync: Base64Utils.decodeSafe() → InvalidBase64Exception(INVALID_BASE64)
-Sync: saveHistory() → historico_documentos (errorCode=INVALID_BASE64)
-Sync: documento no se guarda
+Base64Utils.decodeSafe() → InvalidBase64Exception(INVALID_BASE64)
+saveHistory() → historico_documentos (errorCode=INVALID_BASE64)
+documento no se guarda / no se procesa
 ```
 
 ---
@@ -763,14 +731,16 @@ El patron se implementa en `AbstractDocumentProcessingUseCase`:
 AbstractDocumentProcessingUseCase
 │
 ├── executePendingDocuments()           ← FINAL (template method)
-│   ├── documentRepository.findByStatus("PENDING")  → BD (tabla documento)
-│   ├── updateState(docId, "IN_PROGRESS")
+│   ├── documentRepository.findByState("PENDING")  → BD (tabla documento)
+│   ├── updateState(docId, "IN_PROGRESS", null)
 │   ├── Por cada documento:
 │   │   ├── productRestGateway.getDocument(productId, docId) → REST externa
 │   │   ├── toProductDocument(file) → ProductDocumentHistory
+│   │   ├── Si isZip=true → ZipDecompressor.decompress() expande entradas
+│   │   ├── documentValidator.validate(doc, true) → validacion nombre + tamano
 │   │   ├── uploadDocument()       → ABSTRACT (SOAP o S3)
 │   │   ├── handleUploadSuccess() o handleUploadError() → historico_documentos
-│   │   └── updateStatus(docId, status, message)
+│   │   └── updateState(docId, state, errorMessage)
 │   │
 │
 ├── uploadDocument()                     ← ABSTRACT

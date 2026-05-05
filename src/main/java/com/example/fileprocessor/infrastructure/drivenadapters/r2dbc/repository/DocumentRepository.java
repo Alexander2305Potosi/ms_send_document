@@ -8,6 +8,6 @@ import reactor.core.publisher.Mono;
 
 @Repository
 public interface DocumentRepository extends R2dbcRepository<DocumentEntity, Long> {
-    Flux<DocumentEntity> findByStatus(String status);
+    Flux<DocumentEntity> findByState(String state);
     Mono<DocumentEntity> findByDocumentId(String documentId);
 }

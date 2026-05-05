@@ -7,7 +7,6 @@ import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import lombok.AllArgsConstructor;
 import lombok.extern.java.Log;
 import org.springframework.stereotype.Component;
@@ -23,7 +22,6 @@ public class SyncDocumentsUseCase {
     private final ProductRepository productRepository;
     private final DocumentRepository documentRepository;
     private final ProductRestGateway productRestGateway;
-    private final RulesBussinesGateway documentValidator;
 
     public Mono<String> execute() {
         log.log(Level.INFO, "Starting document sync");
@@ -40,21 +38,19 @@ public class SyncDocumentsUseCase {
     }
 
     private Mono<Void> processDocument(ProductDocumentHistory doc) {
-        String productId = doc.productId();
-        return documentValidator.validate(doc)
-            .flatMap(validated -> saveDocument(validated, productId, null));
+        return saveDocument(doc, doc.productId());
     }
 
-    private Mono<Void> saveDocument(ProductDocumentHistory doc, String productId, String parentZipName) {
+    private Mono<Void> saveDocument(ProductDocumentHistory doc, String productId) {
+        String zipName = doc.isZip() ? doc.filename() : null;
         Document document = Document.builder()
             .documentId(doc.documentId())
             .productId(productId)
             .name(doc.filename())
             .owner(productId)
-            .status(ProductState.PENDING)
             .state(ProductState.SYNCED)
             .isZip(doc.isZip())
-            .parentZipName(parentZipName)
+            .parentZipName(zipName)
             .build();
         return documentRepository.save(document);
     }

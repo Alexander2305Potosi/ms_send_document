@@ -44,14 +44,11 @@ public class DocumentEntity {
     @Column(name = "path")
     private String path;
 
-    @Column(name = "status", nullable = false)
-    private String status;
+    @Column(name = "state", nullable = false)
+    private String state;
 
     @Column(name = "version_contract")
     private String versionContract;
-
-    @Column(name = "state", nullable = false)
-    private String state;
 
     @Column(name = "error_message")
     private String errorMessage;

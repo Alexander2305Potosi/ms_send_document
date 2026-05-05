@@ -14,6 +14,7 @@ import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import com.example.fileprocessor.domain.util.ZipDecompressor;
 import lombok.AllArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -36,16 +37,23 @@ public abstract class AbstractDocumentProcessingUseCase {
     private static final int MAX_RETRIES = 3;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return documentRepository.findByStatus(ProductState.PENDING)
+        return documentRepository.findByState(ProductState.PENDING)
             .flatMap(doc -> {
-                documentRepository.updateState(doc.documentId(), ProductState.IN_PROGRESS);
-                return productRestGateway.getDocument(doc.productId(), doc.documentId())
+                String documentId = doc.documentId();
+                documentRepository.updateState(documentId, ProductState.IN_PROGRESS, null);
+                return productRestGateway.getDocument(doc.productId(), documentId)
                     .map(file -> toProductDocument(file))
+                    .flatMapMany(file -> {
+                        String filename = file.filename();
+                        if (!file.isZip() || filename == null || filename.isBlank()) {
+                            return Flux.just(file);
+                        }
+                        return ZipDecompressor.decompress(file);
+                    })
                     .flatMap(validated -> documentValidator.validate(validated, true)
                         .switchIfEmpty(Mono.defer(() -> {
-                            log.log(Level.INFO, "Document {0} skipped by size validation", doc.documentId());
-                            documentRepository.updateStatus(doc.documentId(), ProductState.PROCESSED, null);
-                            documentRepository.updateState(doc.documentId(), ProductState.PROCESSED);
+                            log.log(Level.INFO, "Document {0} skipped by size validation", documentId);
+                            documentRepository.updateState(documentId, ProductState.PROCESSED, null);
                             return Mono.empty();
                         })))
                     .flatMap(validated -> uploadDocument(validated, doc.productId()))
@@ -68,8 +76,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .build();
         historyRepository.save(history).subscribe();
 
-        documentRepository.updateStatus(doc.documentId(), ProductState.PROCESSED, null);
-        documentRepository.updateState(doc.documentId(), ProductState.PROCESSED);
+        documentRepository.updateState(doc.documentId(), ProductState.PROCESSED, null);
         return Mono.just(result);
     }
 
@@ -94,10 +101,9 @@ public abstract class AbstractDocumentProcessingUseCase {
                 historyRepository.save(history).subscribe();
 
                 if (currentRetry + 1 >= MAX_RETRIES) {
-                    documentRepository.updateStatus(doc.documentId(), ProductState.FAILED, errorMsg);
-                    documentRepository.updateState(doc.documentId(), ProductState.FAILED);
+                    documentRepository.updateState(doc.documentId(), ProductState.FAILED, errorMsg);
                 } else {
-                    documentRepository.updateStatus(doc.documentId(), ProductState.PENDING, errorMsg);
+                    documentRepository.updateState(doc.documentId(), ProductState.PENDING, errorMsg);
                 }
                 return handleUploadError(error);
             });

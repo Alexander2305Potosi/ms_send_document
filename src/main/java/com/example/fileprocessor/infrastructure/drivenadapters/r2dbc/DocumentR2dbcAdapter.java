@@ -23,10 +23,10 @@ public class DocumentR2dbcAdapter implements DocumentRepository {
     }
 
     @Override
-    public Mono<Void> updateStatus(String documentId, String status, String errorMessage) {
+    public Mono<Void> updateState(String documentId, String state, String errorMessage) {
         return springDataRepository.findByDocumentId(documentId)
             .flatMap(entity -> {
-                entity.setStatus(status);
+                entity.setState(state);
                 entity.setErrorMessage(errorMessage);
                 entity.setUpdatedAt(java.time.LocalDateTime.now());
                 return springDataRepository.save(entity);
@@ -35,19 +35,8 @@ public class DocumentR2dbcAdapter implements DocumentRepository {
     }
 
     @Override
-    public Mono<Void> updateState(String documentId, String state) {
-        return springDataRepository.findByDocumentId(documentId)
-            .flatMap(entity -> {
-                entity.setState(state);
-                entity.setUpdatedAt(java.time.LocalDateTime.now());
-                return springDataRepository.save(entity);
-            })
-            .then();
-    }
-
-    @Override
-    public Flux<Document> findByStatus(String status) {
-        return springDataRepository.findByStatus(status)
+    public Flux<Document> findByState(String state) {
+        return springDataRepository.findByState(state)
             .map(DocumentMapper::toDomain);
     }
 }

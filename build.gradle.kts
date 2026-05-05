@@ -43,8 +43,8 @@ dependencies {
     implementation("io.projectreactor:reactor-core")
 
     // Lombok
-    compileOnly("org.projectlombok:lombok:1.18.30")
-    annotationProcessor("org.projectlombok:lombok:1.18.30")
+    compileOnly("org.projectlombok:lombok:1.18.32")
+    annotationProcessor("org.projectlombok:lombok:1.18.32")
 
     // FIX #6: MapStruct removed - not used in current implementation
     // If needed in future, add: implementation("org.mapstruct:mapstruct:1.5.5.Final")
