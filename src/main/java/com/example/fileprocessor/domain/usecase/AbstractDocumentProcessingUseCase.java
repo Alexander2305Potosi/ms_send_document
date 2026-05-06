@@ -35,7 +35,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     public Flux<FileUploadResult> executePendingDocuments() {
         return findLatestPendingDocuments()
             .filterWhen(this::canResumeProcessing)
-            .flatMap(this::startProcessing)
+            .concatMap(this::startProcessing)
             .doOnTerminate(() -> log.log(Level.INFO, "Pipeline {0} completed", new Object[]{implementationName()}))
             .doOnError(e -> log.log(Level.SEVERE, "Pipeline error: {0}", new Object[]{e.getMessage()}))
             .doOnCancel(() -> log.log(Level.WARNING, "Pipeline {0} cancelled", new Object[]{implementationName()}));
