@@ -8,15 +8,12 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
+
 @Repository
 public interface DocumentHistoryRepository extends R2dbcRepository<DocumentHistoryEntity, Long> {
 
-    @Query("SELECT * FROM historico_documentos WHERE estado = :state AND caso_uso = :useCase ORDER BY fecha_creacion DESC")
-    Flux<DocumentHistoryEntity> findByStateAndUseCase(String state, String useCase);
-
-    @Query("SELECT * FROM historico_documentos WHERE id_documento = :documentId AND caso_uso = :useCase ORDER BY fecha_creacion DESC LIMIT 1")
-    Mono<DocumentHistoryEntity> findLastAudit(String documentId, String useCase);
-
+    // Updates with @Query for direct SQL
     @Modifying
     @Query("UPDATE historico_documentos SET estado = :state, fecha_actualizacion = :updatedAt WHERE id = :id")
     Mono<Void> updateStateById(Long id, String state, LocalDateTime updatedAt);
@@ -27,4 +24,9 @@ public interface DocumentHistoryRepository extends R2dbcRepository<DocumentHisto
            "WHERE id = :id")
     Mono<Void> updateWithAuditById(Long id, String state, String errorCode, String errorMessage, int retry,
                                    String stackTrace, LocalDateTime completedAt, LocalDateTime updatedAt);
+
+    // Selects with Spring Data derived query method names
+    Flux<DocumentHistoryEntity> findByEstadoAndCasoUsoOrderByFechaCreacionDesc(String estado, String casoUso);
+
+    Mono<DocumentHistoryEntity> findLastByDocumentIdAndCasoUsoOrderByFechaCreacionDesc(String documentId, String casoUso);
 }

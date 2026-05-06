@@ -26,13 +26,13 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
 
     @Override
     public Flux<DocumentHistory> findByStateAndUseCase(String state, String useCase) {
-        return springDataRepository.findByStateAndUseCase(state, useCase)
+        return springDataRepository.findByEstadoAndCasoUsoOrderByFechaCreacionDesc(state, useCase)
             .map(DocumentHistoryMapper::toDomain);
     }
 
     @Override
     public Mono<DocumentHistory> findLastAudit(String documentId, String useCase) {
-        return springDataRepository.findLastAudit(documentId, useCase)
+        return springDataRepository.findLastByDocumentIdAndCasoUsoOrderByFechaCreacionDesc(documentId, useCase)
             .map(DocumentHistoryMapper::toDomain);
     }
 
