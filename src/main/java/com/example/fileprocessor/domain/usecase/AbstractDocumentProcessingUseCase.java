@@ -72,7 +72,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     private Flux<FileUploadResult> processDocument(DocumentHistory doc) {
         String documentId = doc.documentId();
         return productRestGateway.getDocument(doc.productId(), documentId)
-            .map(file -> toProductDocument(file))
+            .map(this::toProductDocument)
             .flatMapMany(file -> {
                 String filename = file.filename();
                 if (!file.isZip() || filename == null || filename.isBlank()) {
