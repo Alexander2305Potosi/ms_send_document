@@ -38,12 +38,30 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
 
     @Override
     public Mono<Void> updateStateById(Long id, String state, LocalDateTime updatedAt) {
-        return springDataRepository.updateStateById(id, state, updatedAt);
+        return springDataRepository.findById(id)
+            .filterWhen(entity -> Mono.just(entity != null))
+            .flatMap(entity -> {
+                entity.setState(state);
+                entity.setUpdatedAt(updatedAt);
+                return springDataRepository.save(entity).then();
+            })
+            .then();
     }
 
     @Override
     public Mono<Void> updateWithAuditById(Long id, String state, String errorCode, String errorMessage,
-                                         int retry, String stackTrace, LocalDateTime completedAt, LocalDateTime updatedAt) {
-        return springDataRepository.updateWithAuditById(id, state, errorCode, errorMessage, retry, stackTrace, completedAt, updatedAt);
+                                         int retry, String stackTrace, LocalDateTime completedAt) {
+        return springDataRepository.findById(id)
+            .filterWhen(entity -> Mono.just(entity != null))
+            .flatMap(entity -> {
+                entity.setState(state);
+                entity.setErrorCode(errorCode);
+                entity.setErrorMessage(errorMessage);
+                entity.setRetry(retry);
+                entity.setStackTrace(stackTrace);
+                entity.setCompletedAt(completedAt);
+                return springDataRepository.save(entity).then();
+            })
+            .then();
     }
 }

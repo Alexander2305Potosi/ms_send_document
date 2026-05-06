@@ -54,7 +54,7 @@ class SoapDocumentProcessingUseCaseTest {
             documentValidator
         );
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
-        lenient().when(historyRepository.updateStateAndUseCase(anyString(), anyString(), anyString())).thenReturn(Mono.empty());
+        lenient().when(historyRepository.findLastAudit(anyString(), anyString())).thenReturn(Mono.empty());
     }
 
     private static ProductDocumentHistory doc() {
