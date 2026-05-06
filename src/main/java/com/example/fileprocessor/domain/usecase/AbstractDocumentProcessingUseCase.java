@@ -33,32 +33,40 @@ public abstract class AbstractDocumentProcessingUseCase {
     private static final int MAX_RETRIES = 3;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return historyRepository.findByStateAndUseCase(ProductState.PENDING, implementationName())
-            .groupBy(DocumentHistory::documentId)
-            .flatMap(group -> group.reduce((latest, current) ->
-                latest.createdAt() != null && current.createdAt() != null
-                && latest.createdAt().isAfter(current.createdAt()) ? latest : current))
-            .flatMap(doc -> {
-                String documentId = doc.documentId();
-                return canResume(documentId, doc.useCase())
-                    .flatMapMany(resumeable -> {
-                        if (!resumeable) {
-                            log.log(Level.INFO, "Document {0} already processed, skipping", documentId);
-                            return Flux.empty();
-                        }
-                        historyRepository.updateStateAndUseCase(documentId, ProductState.IN_PROGRESS, implementationName()).subscribe();
-                        return processDocument(doc);
-                    });
-            })
+        return findLatestPendingDocuments()
+            .filterWhen(this::canResumeProcessing)
+            .flatMap(this::startProcessing)
             .doOnTerminate(() -> log.log(Level.INFO, "Pipeline {0} completed", new Object[]{implementationName()}))
             .doOnError(e -> log.log(Level.SEVERE, "Pipeline error: {0}", new Object[]{e.getMessage()}))
             .doOnCancel(() -> log.log(Level.WARNING, "Pipeline {0} cancelled", new Object[]{implementationName()}));
+    }
+
+    private Flux<DocumentHistory> findLatestPendingDocuments() {
+        return historyRepository.findByStateAndUseCase(ProductState.PENDING, implementationName())
+            .groupBy(DocumentHistory::documentId)
+            .flatMap(this::pickLatestByCreatedAt);
+    }
+
+    private Mono<DocumentHistory> pickLatestByCreatedAt(Flux<DocumentHistory> group) {
+        return group.reduce((latest, current) ->
+            latest.createdAt() != null && current.createdAt() != null
+            && latest.createdAt().isAfter(current.createdAt()) ? latest : current);
+    }
+
+    private Mono<Boolean> canResumeProcessing(DocumentHistory doc) {
+        return canResume(doc.documentId(), doc.useCase());
     }
 
     private Mono<Boolean> canResume(String documentId, String useCase) {
         return historyRepository.findLastAudit(documentId, useCase)
             .map(lastAudit -> !ProductState.PROCESSED.equals(lastAudit.state()))
             .defaultIfEmpty(true);
+    }
+
+    private Flux<FileUploadResult> startProcessing(DocumentHistory doc) {
+        String documentId = doc.documentId();
+        historyRepository.updateStateAndUseCase(documentId, ProductState.IN_PROGRESS, implementationName()).subscribe();
+        return processDocument(doc);
     }
 
     private Flux<FileUploadResult> processDocument(DocumentHistory doc) {
