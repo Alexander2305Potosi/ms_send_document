@@ -138,7 +138,10 @@ src/main/resources/
 └── schema-postgresql.sql         # DDL para PostgreSQL (produccion)
 
 docs/migrations/
-└── 001_create_documento_tables.sql  # DDL para la tabla unificada historico_documentos
+├── 001_create_documento_tables.sql  # Tabla historico_documentos
+├── 002_alter_historico_documentos.sql
+├── 003_audit_fields.sql
+└── 004_add_sequences.sql             # Sequences para productos, categoria_manual, pais_homologado
 ```
 
 ---
@@ -296,7 +299,7 @@ Almacena tanto los metadatos del documento como la trazabilidad completa de cada
 
 | Columna | Tipo | Descripcion |
 |---------|------|-------------|
-| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id_historico_documentos` | SERIAL (PK) | Identificador unico auto-generado via secuencia `historico_documentos_id_seq` (INT4) |
 | `id_documento` | VARCHAR(100) | ID del documento en el sistema externo |
 | `id_producto` | VARCHAR(100) | ID del producto padre |
 | `activo` | BOOLEAN | Si el documento esta activo (default: TRUE) |
@@ -316,15 +319,27 @@ Almacena tanto los metadatos del documento como la trazabilidad completa de cada
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 | `fecha_actualizacion` | TIMESTAMP | Fecha de ultima actualizacion |
 
+### Tabla: productos
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | SERIAL (PK) | Identificador unico auto-generado via secuencia `productos_id_seq` (INT4) |
+| `id_producto` | VARCHAR(100) | ID del producto |
+| `nombre` | VARCHAR(255) | Nombre del producto |
+| `fecha_carga` | TIMESTAMP | Fecha de carga |
+| `estado` | VARCHAR(100) | Estado del producto |
+| `mensaje_error` | TEXT | Mensaje de error si hubo fallo |
+
 ### Tabla: categoria_manual
 
 Almacena la homologacion de categorias de manuales. Se usa para resolver el `origin` de los documentos en el caso de uso SOAP usando busqueda contains.
 
 | Columna | Tipo | Descripcion |
 |---------|------|-------------|
-| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id` | SERIAL (PK) | Identificador unico auto-generado via secuencia `categoria_manual_id_seq` (INT4) |
 | `categoria` | VARCHAR(255) | Codigo de categoria (ej: "manual_tecnico") |
 | `descripcion_manual` | VARCHAR(500) | Descripcion legible (ej: "Manual Tecnico del Producto") |
+| `fecha_vigencia` | DATE | Fecha de vigencia |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 
 ### Tabla: pais_homologado
@@ -333,7 +348,7 @@ Almacena la homologacion de paises. Se usa para resolver el `pais` de los docume
 
 | Columna | Tipo | Descripcion |
 |---------|------|-------------|
-| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id` | SERIAL (PK) | Identificador unico auto-generado via secuencia `pais_homologado_id_seq` (INT4) |
 | `pais` | VARCHAR(255) | Codigo de pais (ej: "AR", "CL") |
 | `pais_homologado` | VARCHAR(255) | Nombre homologado del pais (ej: "Argentina", "Chile") |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
@@ -364,7 +379,7 @@ CREATE INDEX idx_pais_codigo ON pais_homologado(pais);
 -- Filas de trazabilidad: caso_uso IS NOT NULL (registran cada intento de envio).
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS historico_documentos (
-    id                  BIGSERIAL       PRIMARY KEY,
+    id_historico_documentos INTEGER          PRIMARY KEY,
     id_documento        VARCHAR(100)    NOT NULL,
     id_producto         VARCHAR(100)    NOT NULL,
     activo              BOOLEAN         DEFAULT TRUE,
@@ -391,11 +406,23 @@ CREATE INDEX IF NOT EXISTS idx_historico_producto_id ON historico_documentos(id_
 CREATE INDEX IF NOT EXISTS idx_historico_documento_caso_uso ON historico_documentos(id_documento, caso_uso);
 
 -- ============================================================================
+-- Tabla: productos
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS productos (
+    id              SERIAL       PRIMARY KEY,
+    id_producto     VARCHAR(100) NOT NULL,
+    nombre          VARCHAR(255),
+    fecha_carga    TIMESTAMP,
+    estado          VARCHAR(100),
+    mensaje_error   TEXT
+);
+
+-- ============================================================================
 -- Tabla: categoria_manual
 -- Homologacion de categorias de manuales para resolucion de origin en SOAP.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS categoria_manual (
-    id                  BIGSERIAL       PRIMARY KEY,
+    id                  SERIAL          PRIMARY KEY,
     categoria           VARCHAR(255)    NOT NULL UNIQUE,
     descripcion_manual  VARCHAR(500)    NOT NULL,
     fecha_vigencia      DATE,
@@ -409,13 +436,21 @@ CREATE INDEX IF NOT EXISTS idx_cat_manual_categoria ON categoria_manual(categori
 -- Homologacion de paises para resolucion de pais en SOAP.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS pais_homologado (
-    id              BIGSERIAL       PRIMARY KEY,
+    id              SERIAL       PRIMARY KEY,
     pais            VARCHAR(255)    NOT NULL UNIQUE,
     pais_homologado VARCHAR(255)    NOT NULL,
     fecha_creacion  TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_pais_codigo ON pais_homologado(pais);
+
+-- ============================================================================
+-- Sequences (para PostgreSQL)
+-- ============================================================================
+CREATE SEQUENCE IF NOT EXISTS historico_documentos_id_seq AS integer;
+CREATE SEQUENCE IF NOT EXISTS productos_id_seq AS integer;
+CREATE SEQUENCE IF NOT EXISTS categoria_manual_id_seq AS integer;
+CREATE SEQUENCE IF NOT EXISTS pais_homologado_id_seq AS integer;
 ```
 
 

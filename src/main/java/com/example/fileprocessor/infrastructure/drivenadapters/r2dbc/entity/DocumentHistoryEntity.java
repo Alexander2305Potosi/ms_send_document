@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 public class DocumentHistoryEntity {
 
     @Id
+    @Column("id_historico_documentos")
     private Long id;
 
     @Column("id_documento")

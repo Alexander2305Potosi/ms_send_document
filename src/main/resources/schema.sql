@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS historico_documentos (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id_historico_documentos BIGINT AUTO_INCREMENT PRIMARY KEY,
     id_documento VARCHAR(100) NOT NULL,
     id_producto VARCHAR(100) NOT NULL,
     activo BOOLEAN DEFAULT TRUE,
