@@ -33,24 +33,12 @@ public abstract class AbstractDocumentProcessingUseCase {
     private static final int MAX_RETRIES = 3;
 
     public Flux<FileUploadResult> executePendingDocuments() {
-        return findLatestPendingDocuments()
+        return historyRepository.findByStateAndUseCase(ProductState.PENDING, implementationName())
             .filterWhen(this::canResumeProcessing)
             .concatMap(this::startProcessing)
             .doOnTerminate(() -> log.log(Level.INFO, "Pipeline {0} completed", new Object[]{implementationName()}))
             .doOnError(e -> log.log(Level.SEVERE, "Pipeline error: {0}", new Object[]{e.getMessage()}))
             .doOnCancel(() -> log.log(Level.WARNING, "Pipeline {0} cancelled", new Object[]{implementationName()}));
-    }
-
-    private Flux<DocumentHistory> findLatestPendingDocuments() {
-        return historyRepository.findByStateAndUseCase(ProductState.PENDING, implementationName())
-            .groupBy(DocumentHistory::documentId)
-            .flatMap(this::pickLatestByCreatedAt);
-    }
-
-    private Mono<DocumentHistory> pickLatestByCreatedAt(Flux<DocumentHistory> group) {
-        return group.reduce((latest, current) ->
-            latest.createdAt() != null && current.createdAt() != null
-            && latest.createdAt().isAfter(current.createdAt()) ? latest : current);
     }
 
     private Mono<Boolean> canResumeProcessing(DocumentHistory doc) {
