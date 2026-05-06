@@ -52,13 +52,14 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Flux<FileUploadResult> startProcessing(DocumentHistory doc) {
-        String documentId = doc.documentId();
-        historyRepository.updateStateAndUseCase(documentId, ProductState.IN_PROGRESS, implementationName()).subscribe();
+        Long docId = doc.id();
+        historyRepository.updateStateById(docId, ProductState.IN_PROGRESS, LocalDateTime.now()).subscribe();
         return processDocument(doc);
     }
 
     private Flux<FileUploadResult> processDocument(DocumentHistory doc) {
         String documentId = doc.documentId();
+        Long docId = doc.id();
         return productRestGateway.getDocument(doc.productId(), documentId)
             .map(this::toProductDocument)
             .flatMapMany(file -> {
@@ -71,7 +72,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .flatMap(validated -> documentValidator.validate(validated, true)
                 .switchIfEmpty(Mono.defer(() -> {
                     log.log(Level.INFO, "Document {0} skipped by size validation", documentId);
-                    historyRepository.updateStateAndUseCase(documentId, ProductState.PROCESSED, implementationName()).subscribe();
+                    historyRepository.updateStateById(docId, ProductState.PROCESSED, LocalDateTime.now()).subscribe();
                     return Mono.empty();
                 })))
             .flatMap(validated -> uploadDocument(validated, doc.productId()))
@@ -80,7 +81,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResult> handleUploadSuccess(DocumentHistory doc, FileUploadResult result) {
-        historyRepository.updateWithAudit(doc.documentId(), ProductState.PROCESSED, null, null, 0, implementationName(), null, LocalDateTime.now()).subscribe();
+        historyRepository.updateWithAuditById(doc.id(), ProductState.PROCESSED, null, null, 0, null, LocalDateTime.now()).subscribe();
         return Mono.just(result);
     }
 
@@ -96,7 +97,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 int retry = current.retry() != null ? current.retry() + 1 : 1;
                 String newState = retry >= MAX_RETRIES ? ProductState.FAILED : ProductState.PENDING;
 
-                historyRepository.updateWithAudit(doc.documentId(), newState, errorCode, errorMsg, retry, implementationName(), stackTrace, LocalDateTime.now()).subscribe();
+                historyRepository.updateWithAuditById(doc.id(), newState, errorCode, errorMsg, retry, stackTrace, LocalDateTime.now()).subscribe();
 
                 return Mono.just(FileUploadResult.builder()
                     .status(DocumentStatus.FAILURE.name())

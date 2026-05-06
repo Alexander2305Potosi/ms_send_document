@@ -31,43 +31,19 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
     }
 
     @Override
-    public Flux<DocumentHistory> findByDocumentIdAndStateAndUseCase(String documentId, String state, String useCase) {
-        return springDataRepository.findByDocumentIdAndStateAndUseCase(documentId, state, useCase)
-            .flux()
-            .map(DocumentHistoryMapper::toDomain);
-    }
-
-    @Override
-    public Mono<Void> updateStateAndUseCase(String documentId, String state, String useCase) {
-        return springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(documentId, useCase)
-            .flatMap(entity -> {
-                entity.setState(state);
-                entity.setUpdatedAt(LocalDateTime.now());
-                return springDataRepository.save(entity);
-            })
-            .then();
-    }
-
-    @Override
-    public Mono<Void> updateWithAudit(String documentId, String state, String errorCode, String errorMessage, int retry, String useCase, String stackTrace, LocalDateTime completedAt) {
-        return springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(documentId, useCase)
-            .flatMap(entity -> {
-                entity.setState(state);
-                entity.setErrorCode(errorCode);
-                entity.setErrorMessage(errorMessage);
-                entity.setRetry(retry);
-                entity.setUseCase(useCase);
-                entity.setStackTrace(stackTrace);
-                entity.setCompletedAt(completedAt);
-                entity.setUpdatedAt(LocalDateTime.now());
-                return springDataRepository.save(entity);
-            })
-            .then();
-    }
-
-    @Override
     public Mono<DocumentHistory> findLastAudit(String documentId, String useCase) {
-        return springDataRepository.findFirstByDocumentIdAndUseCaseOrderByCreatedAtDesc(documentId, useCase)
+        return springDataRepository.findLastAudit(documentId, useCase)
             .map(DocumentHistoryMapper::toDomain);
+    }
+
+    @Override
+    public Mono<Void> updateStateById(Long id, String state, LocalDateTime updatedAt) {
+        return springDataRepository.updateStateById(id, state, updatedAt);
+    }
+
+    @Override
+    public Mono<Void> updateWithAuditById(Long id, String state, String errorCode, String errorMessage,
+                                         int retry, String stackTrace, LocalDateTime completedAt, LocalDateTime updatedAt) {
+        return springDataRepository.updateWithAuditById(id, state, errorCode, errorMessage, retry, stackTrace, completedAt, updatedAt);
     }
 }
