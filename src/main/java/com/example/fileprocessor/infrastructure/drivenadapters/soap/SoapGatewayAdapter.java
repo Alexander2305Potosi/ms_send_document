@@ -64,7 +64,8 @@ public class SoapGatewayAdapter implements SoapGateway {
 
             String soapEnvelope = soapMapper.toFullSoapMessage(request);
 
-            Mono<ExternalServiceResponse> retryableMono = webClient.post()
+            Mono<ExternalServiceResponse> retryableMono = Mono.delay(Duration.ofSeconds(20))
+                    .then(webClient.post()
                     .contentType(MediaType.TEXT_XML)
                     .header("SOAPAction", SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD)
                     .bodyValue(soapEnvelope)
@@ -78,7 +79,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                         int currentAttempt = attemptCount.incrementAndGet();
                         log.log(Level.WARNING, "SOAP request attempt {0}/{1} failed for traceId={2}: {3}",
                                 new Object[]{currentAttempt, maxRetries + 1, traceId, e.getMessage()});
-                    });
+                    }));
 
             return retryableMono
                     .retryWhen(reactor.util.retry.Retry.backoff(maxRetries, Duration.ofMillis(500))
