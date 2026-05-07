@@ -28,7 +28,6 @@ public record SoapV2Properties(
     Map<String, String> messageContext,
     Map<String, String> metaData,
 
-    @Min(0) int delayMillis,
     @Min(1) int timeoutSeconds,
     @Min(1) int retryAttempts
 ) {
@@ -36,7 +35,6 @@ public record SoapV2Properties(
         if (classifications == null) classifications = List.of();
         if (messageContext == null) messageContext = Map.of();
         if (metaData == null) metaData = Map.of();
-        if (delayMillis < 0) delayMillis = 0;
         if (timeoutSeconds <= 0) timeoutSeconds = 30;
         if (retryAttempts <= 0) retryAttempts = 1;
     }

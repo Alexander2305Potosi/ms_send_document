@@ -66,7 +66,7 @@ class SoapGatewayAdapterTest {
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
             "Facturas", null, null, null, null, null, null, null, null,
-            0, 30, 0
+            30, 0
         );
 
         when(webClientBuilder.baseUrl(anyString())).thenReturn(webClientBuilder);
@@ -297,7 +297,7 @@ class SoapGatewayAdapterTest {
     @Test
     void transmitirDocumento_whenSuccessful_returnsSuccessResult() {
         when(soapV2Mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soapenv:Envelope>...</soapenv:Envelope>");
-        when(soapV2Mapper.parseResponse("<response>ok</response>")).thenReturn(successResponse());
+        when(soapV2Mapper.parseResponse("<response>ok</response>", "trace-v2-1")).thenReturn(successResponse());
         mockWebClientSuccessV2("<response>ok</response>");
 
         StepVerifier.create(adapter.transmitirDocumento(request())
@@ -343,7 +343,7 @@ class SoapGatewayAdapterTest {
     @Test
     void transmitirDocumento_whenNoTraceIdInContext_usesDefault() {
         when(soapV2Mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soapenv:Envelope>...</soapenv:Envelope>");
-        when(soapV2Mapper.parseResponse(any())).thenReturn(successResponse());
+        when(soapV2Mapper.parseResponse(any(), anyString())).thenReturn(successResponse());
         mockWebClientSuccessV2("<response>ok</response>");
 
         StepVerifier.create(adapter.transmitirDocumento(request()))

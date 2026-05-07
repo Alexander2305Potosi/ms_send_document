@@ -21,13 +21,7 @@ import org.w3c.dom.Node;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import java.io.StringReader;
-import java.io.StringWriter;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -70,38 +64,42 @@ public class SoapEnvelopeWrapper {
             DocumentBuilder builder = documentBuilderFactory.newDocumentBuilder();
             Document doc = builder.parse(new org.xml.sax.InputSource(new StringReader(soapXml)));
 
+            Node fault = doc.getElementsByTagNameNS(SoapConstants.SOAP_ENVELOPE, "Fault").item(0);
+            if (fault != null) {
+                Node currentNode = fault.getFirstChild();
+                while (currentNode != null) {
+                    if ("faultstring".equals(currentNode.getLocalName())) {
+                        throw ProcessingException.withTraceId(
+                            "SOAP Fault received: " + currentNode.getTextContent(),
+                            ProcessingResultCodes.INVALID_RESPONSE, null);
+                    }
+                    currentNode = currentNode.getNextSibling();
+                }
+                throw ProcessingException.withTraceId(
+                    "SOAP Fault received", ProcessingResultCodes.INVALID_RESPONSE, null);
+            }
+
             Node body = doc.getElementsByTagNameNS(SoapConstants.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
-            throw ProcessingException.withTraceId(SoapConstants.MSG_SOAP_BODY_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
+                throw ProcessingException.withTraceId(SoapConstants.MSG_SOAP_BODY_NOT_FOUND,
+                    ProcessingResultCodes.INVALID_RESPONSE, null);
             }
 
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
-                throw ProcessingException.withTraceId(SoapConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND, ProcessingResultCodes.INVALID_RESPONSE, null);
+                throw ProcessingException.withTraceId(SoapConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND,
+                    ProcessingResultCodes.INVALID_RESPONSE, null);
             }
-
-            TransformerFactory transformerFactory = TransformerFactory.newInstance();
-            try {
-                transformerFactory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
-                transformerFactory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
-                transformerFactory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
-            } catch (Exception e) {
-                log.log(Level.WARNING, "Failed to configure secure TransformerFactory: {0}", new Object[]{e.getMessage()});
-            }
-            Transformer transformer = transformerFactory.newTransformer();
-            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-            StringWriter writer = new StringWriter();
-            transformer.transform(new DOMSource(responseNode), new StreamResult(writer));
-            String responseXml = writer.toString();
 
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
-            return responseClass.cast(unmarshaller.unmarshal(new StringReader(responseXml)));
+            return responseClass.cast(unmarshaller.unmarshal(responseNode));
 
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
-            log.log(Level.SEVERE, "Error unmarshalling SOAP response: {0}", new Object[]{e.getMessage()});
-            throw ProcessingException.withTraceId(SoapConstants.MSG_PARSE_ERROR, ProcessingResultCodes.INVALID_RESPONSE, null, e);
+            log.log(Level.SEVERE, "Error unmarshalling SOAP response", e);
+            throw ProcessingException.withTraceId(SoapConstants.MSG_PARSE_ERROR,
+                ProcessingResultCodes.INVALID_RESPONSE, null, e);
         }
     }
 

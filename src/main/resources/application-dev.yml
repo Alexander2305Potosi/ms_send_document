@@ -19,7 +19,6 @@ app:
       sub-tipo-documental: "Facturas"
       timeout-seconds: 5
       retry-attempts: 1
-      delay-millis: 0
   document-rest:
     endpoint: http://localhost:3001
     products-path: /api/products

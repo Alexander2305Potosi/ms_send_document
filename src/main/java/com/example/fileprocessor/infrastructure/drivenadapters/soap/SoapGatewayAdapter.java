@@ -136,7 +136,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                     v2Properties.timeoutSeconds(), maxRetries,
                     v2Properties.soapAction(),
                     attemptCount)
-                .map(soapV2Mapper::parseResponse)
+                .map(xml -> soapV2Mapper.parseResponse(xml, traceId))
                 .doOnNext(response -> log.log(Level.INFO,
                     "SOAP V2 response received for traceId={0}: correlationId={1}",
                     new Object[]{traceId, response.getCorrelationId()}))
@@ -184,9 +184,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
         WebClient.RequestBodySpec bodySpec = client.post()
             .contentType(MediaType.TEXT_XML);
 
-        if (soapAction != null && !soapAction.isBlank()) {
-            bodySpec.header("SOAPAction", soapAction);
-        }
+        bodySpec.header("SOAPAction", soapAction != null ? soapAction : "");
 
         Mono<String> httpCall = bodySpec
             .bodyValue(soapEnvelope)
@@ -194,7 +192,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
             .bodyToMono(String.class)
             .timeout(Duration.ofSeconds(timeoutSeconds))
             .doOnError(e -> {
-                int currentAttempt = attemptCount.incrementAndGet();
+                int currentAttempt = attemptCount.get();
                 log.log(Level.WARNING, "SOAP attempt {0}/{1} failed for traceId={2}: {3}",
                         new Object[]{currentAttempt, maxRetries + 1, traceId, e.getMessage()});
             });

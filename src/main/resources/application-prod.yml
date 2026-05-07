@@ -16,4 +16,3 @@ app:
       endpoint: ${SOAP_V2_ENDPOINT:http://localhost:9000/soap/adminDocs}
       timeout-seconds: 15
       retry-attempts: 2
-      delay-millis: 0

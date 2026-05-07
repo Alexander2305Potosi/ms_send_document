@@ -59,7 +59,6 @@ app:
       meta-data:
         xIdentificadorFisico: "65464904"
         xFilial: "prueba"
-      delay-millis: 0
       timeout-seconds: 30
       retry-attempts: 3
   document-rest:

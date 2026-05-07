@@ -40,28 +40,46 @@ public class SoapV2Mapper {
     private static final Logger log = Logger.getLogger(SoapV2Mapper.class.getName());
 
     private final SoapEnvelopeWrapper envelopeWrapper;
-    private final JAXBContext jaxbContext;
+    private final JAXBContext marshallingJaxbContext;
     private final XMLOutputFactory xmlOutputFactory;
 
     public SoapV2Mapper(SoapEnvelopeWrapper envelopeWrapper) {
         this.envelopeWrapper = envelopeWrapper;
-        this.jaxbContext = envelopeWrapper.getJaxbContext();
+        try {
+            this.marshallingJaxbContext = JAXBContext.newInstance(
+                TransmitirDocumentoRequest.class, TransmitirDocumentoResponse.class,
+                SoapV2RequestHeader.class, SoapV2MessageContext.class,
+                SoapV2MessageProperty.class, SoapV2UserId.class,
+                SoapV2Destination.class, SoapV2Classifications.class);
+        } catch (JAXBException e) {
+            throw new IllegalStateException("Failed to initialize JAXB context for V2", e);
+        }
         this.xmlOutputFactory = XMLOutputFactory.newInstance();
     }
 
     public String buildEnvelope(FileUploadRequest request, SoapV2Properties props, String traceId) {
+        StringWriter stringWriter = new StringWriter();
+        XMLStreamWriter writer = null;
         try {
-            StringWriter stringWriter = new StringWriter();
-            XMLStreamWriter writer = xmlOutputFactory.createXMLStreamWriter(stringWriter);
+            writer = xmlOutputFactory.createXMLStreamWriter(stringWriter);
             startEnvelope(writer, props);
             writeHeader(writer, props, traceId);
             writeBody(writer, request, props);
-            endEnvelope(writer);
+            writer.writeEndElement(); // Envelope
             return stringWriter.toString();
         } catch (XMLStreamException | JAXBException e) {
-            log.log(Level.SEVERE, "Error building SOAP V2 envelope: {0}", e.getMessage());
+            log.log(Level.SEVERE, "Error building SOAP V2 envelope for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
                 "Failed to build SOAP V2 envelope", ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
+        } catch (RuntimeException e) {
+            log.log(Level.SEVERE, "Unexpected error building SOAP V2 envelope for traceId=" + traceId, e);
+            throw ProcessingException.withTraceId(
+                "Unexpected error building SOAP V2 envelope: " + e.getMessage(),
+                ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
+        } finally {
+            if (writer != null) {
+                try { writer.close(); } catch (XMLStreamException ignored) { }
+            }
         }
     }
 
@@ -70,29 +88,22 @@ public class SoapV2Mapper {
         writer.writeStartDocument("UTF-8", "1.0");
 
         writer.setPrefix(SoapV2Constants.PREFIX_SOAPENV, SoapV2Constants.SOAP_ENVELOPE_NS);
-        writer.setPrefix(SoapV2Constants.PREFIX_V2, props.headerNamespace());
-        writer.setPrefix(SoapV2Constants.PREFIX_V1, props.bodyNamespace());
+        writer.setPrefix(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
+        writer.setPrefix(SoapV2Constants.PREFIX_BODY_NS, props.bodyNamespace());
 
         writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_ENVELOPE);
         writer.writeNamespace(SoapV2Constants.PREFIX_SOAPENV, SoapV2Constants.SOAP_ENVELOPE_NS);
-        writer.writeNamespace(SoapV2Constants.PREFIX_V2, props.headerNamespace());
-        writer.writeNamespace(SoapV2Constants.PREFIX_V1, props.bodyNamespace());
-    }
-
-    private void endEnvelope(XMLStreamWriter writer) throws XMLStreamException {
-        writer.writeEndElement(); // Envelope
-        writer.writeEndDocument();
-        writer.close();
+        writer.writeNamespace(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
+        writer.writeNamespace(SoapV2Constants.PREFIX_BODY_NS, props.bodyNamespace());
     }
 
     private void writeHeader(XMLStreamWriter writer, SoapV2Properties props, String traceId)
             throws XMLStreamException, JAXBException {
         writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_HEADER);
-        writer.writeStartElement(props.headerNamespace(), SoapV2Constants.EL_REQUEST_HEADER);
 
         SoapV2RequestHeader header = buildHeader(props, traceId);
 
-        Marshaller marshaller = jaxbContext.createMarshaller();
+        Marshaller marshaller = marshallingJaxbContext.createMarshaller();
         marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, false);
 
@@ -100,7 +111,6 @@ public class SoapV2Mapper {
             writer, props.headerNamespace());
         marshaller.marshal(header, injectingWriter);
 
-        writer.writeEndElement(); // requestHeader
         writer.writeEndElement(); // Header
     }
 
@@ -147,7 +157,7 @@ public class SoapV2Mapper {
 
         TransmitirDocumentoRequest bodyRequest = buildBodyRequest(request, props);
 
-        Marshaller marshaller = jaxbContext.createMarshaller();
+        Marshaller marshaller = marshallingJaxbContext.createMarshaller();
         marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, false);
 
@@ -181,8 +191,7 @@ public class SoapV2Mapper {
         return new MetaDataWrapper(entries);
     }
 
-
-    public ExternalServiceResponse parseResponse(String xml) {
+    public ExternalServiceResponse parseResponse(String xml, String traceId) {
         try {
             TransmitirDocumentoResponse response = envelopeWrapper.unwrapResponse(
                 xml, TransmitirDocumentoResponse.class);
@@ -201,10 +210,10 @@ public class SoapV2Mapper {
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
-            log.log(Level.SEVERE, "Error parsing SOAP V2 response: {0}", e.getMessage());
+            log.log(Level.SEVERE, "Error parsing SOAP V2 response for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
                 "Failed to parse SOAP V2 response: " + e.getMessage(),
-                ProcessingResultCodes.INVALID_RESPONSE, "", e);
+                ProcessingResultCodes.INVALID_RESPONSE, traceId, e);
         }
     }
 }
