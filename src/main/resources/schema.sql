@@ -1,5 +1,5 @@
-CREATE TABLE IF NOT EXISTS historico_documentos (
-    id_historico_documentos BIGINT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS documentos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
     id_documento VARCHAR(100) NOT NULL,
     id_producto VARCHAR(100) NOT NULL,
     activo BOOLEAN DEFAULT TRUE,
@@ -13,15 +13,34 @@ CREATE TABLE IF NOT EXISTS historico_documentos (
     es_zip BOOLEAN DEFAULT FALSE,
     nombre_zip_padre VARCHAR(255),
     caso_uso VARCHAR(100),
-    resultado VARCHAR(50),
-    codigo_error VARCHAR(50),
-    reintentos INT NOT NULL DEFAULT 0,
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(id_documento);
-CREATE INDEX IF NOT EXISTS idx_historico_estado ON historico_documentos(estado);
+CREATE INDEX IF NOT EXISTS idx_documentos_estado ON documentos(estado);
+CREATE INDEX IF NOT EXISTS idx_documentos_documento_id ON documentos(id_documento);
+CREATE INDEX IF NOT EXISTS idx_documentos_producto_id ON documentos(id_producto);
+CREATE INDEX IF NOT EXISTS idx_documentos_caso_uso ON documentos(caso_uso);
+
+CREATE TABLE IF NOT EXISTS historico_documentos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    documento_id BIGINT NOT NULL,
+    nombre_archivo VARCHAR(255),
+    operacion VARCHAR(50),
+    message_id VARCHAR(100),
+    resultado VARCHAR(50),
+    codigo_error VARCHAR(50),
+    mensaje_error TEXT,
+    stack_trace TEXT,
+    reintentos INT NOT NULL DEFAULT 0,
+    fecha_inicio TIMESTAMP,
+    fecha_fin TIMESTAMP,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (documento_id) REFERENCES documentos(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(documento_id);
+CREATE INDEX IF NOT EXISTS idx_historico_doc_operacion ON historico_documentos(documento_id, operacion, fecha_creacion);
 
 CREATE TABLE IF NOT EXISTS productos (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

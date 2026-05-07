@@ -13,7 +13,5 @@ public interface ProductRepository {
     Flux<ProductHistory> findByLoadDate(LocalDate loadDate);
     Flux<ProductHistory> findAll();
     Mono<Void> save(ProductHistory product);
-    Mono<Void> updateEstado(String productId, String estado);
     Mono<Void> updateEstadoById(Long id, String estado);
-    Mono<ProductHistory> findByProductId(String productId);
 }

@@ -1,10 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentHistory;
+import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +28,7 @@ class SyncDocumentsUseCaseTest {
     private ProductRepository productRepository;
 
     @Mock
-    private DocumentHistoryRepository historyRepository;
+    private DocumentRepository documentRepository;
 
     @Mock
     private ProductRestGateway productRestGateway;
@@ -37,8 +37,7 @@ class SyncDocumentsUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new SyncDocumentsUseCase(productRepository, historyRepository, productRestGateway);
-        lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
+        useCase = new SyncDocumentsUseCase(productRepository, documentRepository, productRestGateway);
     }
 
     private static ProductHistory product(String id) {
@@ -58,15 +57,30 @@ class SyncDocumentsUseCaseTest {
             .build();
     }
 
+    private static Document savedDocument(Long id, String docId, String useCase) {
+        return Document.builder()
+            .id(id)
+            .documentId(docId)
+            .productId("p1")
+            .name("file.pdf")
+            .owner("p1")
+            .useCase(useCase)
+            .state(ProductState.PENDING)
+            .isZip(false)
+            .createdAt(java.time.LocalDateTime.now())
+            .updatedAt(java.time.LocalDateTime.now())
+            .build();
+    }
+
     @Test
     void execute_whenNoProducts_returnsCompletionMessage() {
         when(productRepository.findAll()).thenReturn(Flux.empty());
 
-        StepVerifier.create(useCase.execute("retention", "msg-1"))
+        StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
-        verify(historyRepository, never()).save(any());
+        verify(documentRepository, never()).save(any());
     }
 
     @Test
@@ -74,38 +88,39 @@ class SyncDocumentsUseCaseTest {
         when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
+        when(documentRepository.save(any(Document.class)))
+            .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")));
 
-        StepVerifier.create(useCase.execute("retention", "msg-1"))
+        StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
-        ArgumentCaptor<DocumentHistory> captor = ArgumentCaptor.forClass(DocumentHistory.class);
-        verify(historyRepository).save(captor.capture());
-        DocumentHistory saved = captor.getValue();
-        assertEquals("doc1", saved.documentId());
-        assertEquals("p1", saved.productId());
-        assertEquals(ProductState.PENDING, saved.state());
-        assertEquals("retention", saved.useCase());
-        assertEquals(0, saved.retry());
-        assertFalse(saved.isZip());
-        assertNull(saved.parentZipName());
+        ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(docCaptor.capture());
+        Document savedDoc = docCaptor.getValue();
+        assertEquals("doc1", savedDoc.documentId());
+        assertEquals("p1", savedDoc.productId());
+        assertEquals(ProductState.PENDING, savedDoc.state());
+        assertEquals("retention", savedDoc.useCase());
     }
 
     @Test
-    void execute_withZipDocument_setsParentZipName() {
+    void execute_withZipDocument_parentZipNameIsNull() {
         when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", true)));
+        when(documentRepository.save(any(Document.class)))
+            .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")));
 
-        StepVerifier.create(useCase.execute("retention", "msg-1"))
+        StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
-        ArgumentCaptor<DocumentHistory> captor = ArgumentCaptor.forClass(DocumentHistory.class);
-        verify(historyRepository).save(captor.capture());
-        DocumentHistory saved = captor.getValue();
+        ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(docCaptor.capture());
+        Document saved = docCaptor.getValue();
         assertTrue(saved.isZip());
-        assertEquals("bundle.zip", saved.parentZipName());
+        assertNull(saved.parentZipName());
     }
 
     @Test
@@ -114,19 +129,22 @@ class SyncDocumentsUseCaseTest {
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)))
             .thenReturn(Flux.just(doc("p2", "doc2", false)));
+        when(documentRepository.save(any(Document.class)))
+            .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")))
+            .thenReturn(Mono.just(savedDocument(11L, "doc2", "retention")));
 
-        StepVerifier.create(useCase.execute("retention", "msg-1"))
+        StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
-        verify(historyRepository, times(2)).save(any());
+        verify(documentRepository, times(2)).save(any());
     }
 
     @Test
     void execute_whenRepositoryFails_propagatesError() {
         when(productRepository.findAll()).thenReturn(Flux.error(new RuntimeException("DB error")));
 
-        StepVerifier.create(useCase.execute("retention", "msg-1"))
+        StepVerifier.create(useCase.execute("retention"))
             .expectErrorMatches(error -> error instanceof RuntimeException
                 && "DB error".equals(error.getMessage()))
             .verify();
@@ -138,7 +156,7 @@ class SyncDocumentsUseCaseTest {
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.error(new RuntimeException("Gateway error")));
 
-        StepVerifier.create(useCase.execute("retention", "msg-1"))
+        StepVerifier.create(useCase.execute("retention"))
             .expectErrorMatches(error -> error instanceof RuntimeException
                 && "Gateway error".equals(error.getMessage()))
             .verify();
@@ -149,13 +167,15 @@ class SyncDocumentsUseCaseTest {
         when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
+        when(documentRepository.save(any(Document.class)))
+            .thenReturn(Mono.just(savedDocument(10L, "doc1", "extract")));
 
-        StepVerifier.create(useCase.execute("extract", "msg-1"))
+        StepVerifier.create(useCase.execute("extract"))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .verifyComplete();
 
-        ArgumentCaptor<DocumentHistory> captor = ArgumentCaptor.forClass(DocumentHistory.class);
-        verify(historyRepository).save(captor.capture());
+        ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(captor.capture());
         assertEquals("extract", captor.getValue().useCase());
     }
 }

@@ -16,7 +16,7 @@ app:
       user-name: "test-user"
       header-namespace: "http://prueba.com/ents/SOI/MessageFormat/V2.1"
       body-namespace: "http://prueba.com/intf/factory/adminDocs/V1.0"
-      sub-tipo-documental: "Facturas"
+
       timeout-seconds: 5
       retry-attempts: 1
   document-rest:

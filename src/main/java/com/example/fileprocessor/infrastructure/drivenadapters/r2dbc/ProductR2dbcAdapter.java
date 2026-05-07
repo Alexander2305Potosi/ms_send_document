@@ -41,16 +41,6 @@ public class ProductR2dbcAdapter implements ProductRepository {
     }
 
     @Override
-    public Mono<Void> updateEstado(String productId, String estado) {
-        return repository.findByProductId(productId)
-            .flatMap(entity -> {
-                entity.setState(estado);
-                return repository.save(entity);
-            })
-            .then();
-    }
-
-    @Override
     public Mono<Void> updateEstadoById(Long id, String estado) {
         return repository.findById(id)
             .flatMap(entity -> {
@@ -60,9 +50,4 @@ public class ProductR2dbcAdapter implements ProductRepository {
             .then();
     }
 
-    @Override
-    public Mono<ProductHistory> findByProductId(String productId) {
-        return repository.findByProductId(productId)
-            .map(ProductMapper::toDomain);
-    }
 }

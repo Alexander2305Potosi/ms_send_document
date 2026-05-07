@@ -101,20 +101,6 @@ class ProductR2dbcAdapterTest {
     }
 
     @Test
-    void updateEstado_mutatesAndSaves() {
-        ProductEntity existing = entity(1L, "prod-1", "PENDING");
-        when(repository.findByProductId("prod-1")).thenReturn(Mono.just(existing));
-        when(repository.save(any())).thenReturn(Mono.just(existing));
-
-        StepVerifier.create(adapter.updateEstado("prod-1", "COMPLETED"))
-            .verifyComplete();
-
-        ArgumentCaptor<ProductEntity> captor = ArgumentCaptor.forClass(ProductEntity.class);
-        verify(repository).save(captor.capture());
-        assertEquals("COMPLETED", captor.getValue().getState());
-    }
-
-    @Test
     void updateEstadoById_mutatesAndSaves() {
         ProductEntity existing = entity(1L, "prod-1", "PENDING");
         when(repository.findById(1L)).thenReturn(Mono.just(existing));
@@ -128,16 +114,4 @@ class ProductR2dbcAdapterTest {
         assertEquals("COMPLETED", captor.getValue().getState());
     }
 
-    @Test
-    void findByProductId_returnsMappedProduct() {
-        ProductEntity entity = entity(1L, "prod-1", "ACTIVE");
-        when(repository.findByProductId("prod-1")).thenReturn(Mono.just(entity));
-
-        StepVerifier.create(adapter.findByProductId("prod-1"))
-            .assertNext(product -> {
-                assertEquals("prod-1", product.productId());
-                assertEquals("ACTIVE", product.state());
-            })
-            .verifyComplete();
-    }
 }

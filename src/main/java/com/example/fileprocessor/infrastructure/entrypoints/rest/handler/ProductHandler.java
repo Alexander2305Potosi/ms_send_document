@@ -63,7 +63,7 @@ public class ProductHandler {
 
         return Mono.deferContextual(ctx -> {
             log.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}", new Object[]{traceId, useCase});
-            syncDocumentsUseCase.execute(useCase, traceId)
+            syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> log.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
                 .doOnSuccess(v -> log.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
                 .subscribe();

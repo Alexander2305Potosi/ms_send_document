@@ -39,11 +39,12 @@ com.example.fileprocessor/
 │
 ├── domain/                                       # Capa de dominio
 │   ├── entity/
-│   │   ├── DocumentHistory.java                  # Record unificado: metadatos del documento + trazabilidad de envio
+│   │   ├── Document.java                       # Record: metadatos del documento + estado actual (16 campos)
+│   │   ├── DocumentHistory.java                  # Record: trazabilidad de operaciones (13 campos, append-only)
 │   │   ├── DocumentStatus.java                   # Enum: SUCCESS, FAILURE
 │   │   ├── ProductDocumentFile.java              # Record: documento obtenido de REST API
 │   │   ├── ProductDocumentHistory.java           # Record: documento (21 campos, incluye productId, isZip, pais)
-│   │   ├── ProductState.java                     # Constantes de state: PENDING, IN_PROGRESS, PROCESSED, FAILED, SYNCED
+│   │   ├── ProductState.java                     # Constantes de state: PENDING, IN_PROGRESS, PROCESSED, FAILED
 │   │   ├── FileUploadRequest.java                # Request para upload a gateway (SOAP/S3)
 │   │   ├── FileUploadResult.java                 # Resultado de upload con status, errorCode, correlationId
 │   │   ├── HomologationResult.java               # Resultado de homologacion origin/pais
@@ -60,7 +61,8 @@ com.example.fileprocessor/
 │   │   ├── ZipDecompressor.java                   # Descompresion de ZIP con inferencia de contentType
 │   │   └── Base64Utils.java                       # Encoding/decoding seguro de Base64
 │   ├── port/out/
-│   │   ├── DocumentHistoryRepository.java        # Puerto unificado: CRUD de documentos, consulta por state, trazabilidad
+│   │   ├── DocumentRepository.java               # Puerto: metadata de documentos (save, findByStateAndUseCase, updateStateById)
+│   │   ├── DocumentHistoryRepository.java        # Puerto: trazabilidad (save, findLastAudit)
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
 │   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
 │   │   ├── S3Gateway.java                         # Puerto: envio a S3
@@ -81,16 +83,20 @@ com.example.fileprocessor/
     │   └── ProcessorsProperties.java              # @ConfigurationProperties("app.processors")
     ├── drivenadapters/
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
-    │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository (tabla unificada)
+    │   │   ├── DocumentR2dbcAdapter.java          # Implementa DocumentRepository (tabla documentos)
+    │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentHistoryRepository (tabla historico_documentos)
     │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (cache en memoria)
     │   │   ├── entity/
-    │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos") — tabla unificada
+    │   │   │   ├── DocumentEntity.java              # @Entity @Table("documentos") — metadata + estado
+    │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos") — trazabilidad
     │   │   │   ├── CategoryManualEntity.java       # @Entity @Table("categoria_manual")
     │   │   │   └── CountryHomologatedEntity.java  # @Entity @Table("pais_homologado")
     │   │   ├── mapper/
-    │   │   │   └── DocumentHistoryMapper.java     # DocumentHistory <-> DocumentHistoryEntity
+    │   │   │   ├── DocumentMapper.java              # Document <-> DocumentEntity
+    │   │   │   └── DocumentHistoryMapper.java      # DocumentHistory <-> DocumentHistoryEntity
     │   │   └── repository/
-    │   │       ├── DocumentHistoryRepository.java # R2dbcRepository<DocumentHistoryEntity, Long>
+    │   │       ├── DocumentRepository.java          # R2dbcRepository<DocumentEntity, Long> + @Query
+    │   │       ├── DocumentHistoryRepository.java  # R2dbcRepository<DocumentHistoryEntity, Long> + @Query
     │   │       ├── CategoryManualRepository.java  # R2dbcRepository<CategoryManualEntity, Long>
     │   │       └── CountryHomologatedRepository.java # R2dbcRepository<CountryHomologatedEntity, Long>
     │   ├── restclient/
@@ -149,10 +155,11 @@ src/main/resources/
 └── schema-postgresql.sql         # DDL para PostgreSQL (produccion)
 
 docs/migrations/
-├── 001_create_documento_tables.sql  # Tabla historico_documentos
+├── 001_create_documento_tables.sql  # Tabla historico_documentos (legacy, reemplazada en 005)
 ├── 002_alter_historico_documentos.sql
 ├── 003_audit_fields.sql
-└── 004_add_sequences.sql             # Sequences para productos, categoria_manual, pais_homologado
+├── 004_add_sequences.sql             # Sequences para productos, categoria_manual, pais_homologado
+└── 005_split_documentos_tables.sql  # Split en documentos + historico_documentos
 ```
 
 ---
@@ -161,7 +168,7 @@ docs/migrations/
 
 ### GET /api/v1/products
 
-Procesa documentos pendientes desde la tabla `historico_documentos` en estado PENDING. Cada documento se obtiene de la API REST externa, se descomprime si es ZIP, se valida (nombre + tamano), y se envia al gateway (SOAP o S3).
+Procesa documentos pendientes desde la tabla `documentos` en estado PENDING. Cada documento se obtiene de la API REST externa, se descomprime si es ZIP, se valida (nombre + tamano), y se envia al gateway (SOAP o S3).
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion. Si no se envia, se genera un UUID automatico.
@@ -181,7 +188,7 @@ Procesa documentos pendientes desde la tabla `historico_documentos` en estado PE
 
 ### POST /api/v1/products/sync
 
-Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Por cada producto se listan sus documentos, se obtiene el contenido de cada uno desde la API REST, y se persiste en la tabla `historico_documentos` con `estado=SYNCED`.
+Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Por cada producto se listan sus documentos, se obtiene el contenido de cada uno desde la API REST, y se persiste en **dos tablas**: `documentos` (metadata con `estado=PENDING`) + `historico_documentos` (traza `operacion=SYNC`).
 
 **Headers:**
 - `message-id`: (opcional) Trace ID para correlacion.
@@ -217,8 +224,10 @@ Health check. Expone health, info, metrics, loggers y prometheus.
        │     └── GET {productDocumentsPath}/{documentId}
        │     └── Decodifica Base64 via Base64Utils.decodeSafe()
        ├── isZip se infiere de la extension del filename en el dominio
-       ├── historyRepository.save()
-           └── INSERT en tabla historico_documentos (estado=SYNCED)
+       ├── documentRepository.save()
+           │     └── INSERT en tabla documentos (estado=PENDING)
+           └── historyRepository.save()
+                 └── INSERT en tabla historico_documentos (operacion=SYNC, resultado=SUCCESS, nombre_archivo=NULL)
 ```
 
 ### Flujo de Procesamiento (GET /api/v1/products)
@@ -237,26 +246,26 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 3. AbstractDocumentProcessingUseCase.executePendingDocuments()
         │
         ▼
-4. historyRepository.findByState("PENDING")
-   └── Filtra: estado=PENDING en tabla historico_documentos
+4. documentRepository.findByStateAndUseCase("PENDING", processor)
+   └── Filtra: estado=PENDING AND caso_uso=SOAP/S3 en tabla documentos
         ▼
-5. BD → Flux<DocumentHistory>
+5. BD → Flux<Document>
         │
         ▼
 6. Por cada documento: processDocument(doc)
-   ├── historyRepository.updateState(docId, "IN_PROGRESS", null)
+   ├── documentRepository.updateStateById(docId, "IN_PROGRESS")
    ├── productRestGateway.getDocument(doc.productId(), doc.documentId())
    │     └── GET {productDocumentsPath}/{docId}
    │     └── Decodifica Base64 via Base64Utils.decodeSafe()
    ├── Si isZip=true → ZipDecompressor.decompress() expande cada entrada
    ├── RulesBussinesGateway.validate(doc, true)  [patron nombre + tamano]
-   │     └── Si no pasa → updateState(PROCESSED), skip (no se envia)
+   │     └── Si no pasa → documentRepository.updateStateById(PROCESSED), historyRepository.save(trace: BUSINESS_RULE_SKIP)
    ├── uploadDocument() → SoapGateway.send() o S3Gateway.send()
    │     └── Con reintentos automaticos + backoff
-   ├── saveHistory(doc, result) → INSERT en historico_documentos (fila de trazabilidad)
-   │     └── useCase = "SOAP" o "S3"
-   │     └── retry = numero de intento actual
-   └── historyRepository.updateState(docId, result.isSuccess ? "PROCESSED" : "FAILED", errorMessage)
+   ├── Exito → documentRepository.updateStateById(PROCESSED)
+   │            historyRepository.save(trace: resultado=SUCCESS, nombre_archivo, operacion=SOAP/S3, retry)
+   └── Error → documentRepository.updateStateById(PENDING o FAILED)
+                historyRepository.save(trace: resultado=FAILURE, codigo_error, retry)
         │
         ▼
 7. Flux<FileUploadResult> → NDJSON stream al cliente
@@ -304,13 +313,13 @@ spring:
     password: ${DB_PASSWORD:postgres}
 ```
 
-### Tabla: historico_documentos (unificada)
+### Tabla: documentos
 
-Almacena tanto los metadatos del documento como la trazabilidad completa de cada intento de envio a los servicios externos (SOAP o S3). Las filas de metadatos tienen `caso_uso = NULL` y representan el estado actual del documento. Las filas de trazabilidad tienen `caso_uso` asignado y registran cada intento de procesamiento.
+Almacena los metadatos de cada documento y su estado actual de procesamiento. Una fila por documento unico (identificado por `id_documento`). El estado se actualiza conforme avanza el procesamiento.
 
 | Columna | Tipo | Descripcion |
 |---------|------|-------------|
-| `id_historico_documentos` | SERIAL (PK) | Identificador unico auto-generado via secuencia `historico_documentos_id_seq` (INT4) |
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `id_documento` | VARCHAR(100) | ID del documento en el sistema externo |
 | `id_producto` | VARCHAR(100) | ID del producto padre |
 | `activo` | BOOLEAN | Si el documento esta activo (default: TRUE) |
@@ -318,17 +327,34 @@ Almacena tanto los metadatos del documento como la trazabilidad completa de cada
 | `nombre` | VARCHAR(255) | Nombre del archivo |
 | `propietario` | VARCHAR(255) | Propietario del documento |
 | `ruta` | TEXT | Ruta del documento (nullable) |
-| `estado` | VARCHAR(100) | Estado del documento: PENDING / IN_PROGRESS / PROCESSED / FAILED / SYNCED |
+| `estado` | VARCHAR(100) | Estado: PENDING / IN_PROGRESS / PROCESSED / FAILED |
 | `version_contrato` | VARCHAR(50) | Version de contrato (nullable) |
 | `mensaje_error` | TEXT | Mensaje de error si hubo fallo |
 | `es_zip` | BOOLEAN | Si es un archivo ZIP comprimido |
 | `nombre_zip_padre` | VARCHAR(255) | Si viene de un ZIP, nombre del ZIP padre (nullable) |
-| `caso_uso` | VARCHAR(100) | Caso de uso del envio: SOAP, S3, o NULL para fila de metadatos |
-| `resultado` | VARCHAR(50) | SUCCESS / FAILURE (NULL en fila de metadatos) |
-| `codigo_error` | VARCHAR(50) | Codigo de error categorizado |
-| `reintentos` | INTEGER | Numero de intento actual (default: 0) |
+| `caso_uso` | VARCHAR(100) | Caso de uso: SOAP o S3 |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 | `fecha_actualizacion` | TIMESTAMP | Fecha de ultima actualizacion |
+
+### Tabla: historico_documentos
+
+Tabla **append-only** de trazabilidad/auditoria. Cada fila registra una operacion (SYNC, SOAP, S3) con su resultado. Nunca se actualiza — solo INSERT. La relacion con `documentos` es via FK numerica `documento_id`.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `documento_id` | BIGINT (FK) | FK a `documentos.id` |
+| `nombre_archivo` | VARCHAR(255) | Nombre del archivo descomprimido (solo para entradas de ZIP; null para archivos no comprimidos) |
+| `operacion` | VARCHAR(50) | Tipo de operacion: SYNC, SOAP, S3 |
+| `message_id` | VARCHAR(100) | Trace ID del request HTTP |
+| `resultado` | VARCHAR(50) | SUCCESS / FAILURE |
+| `codigo_error` | VARCHAR(50) | Codigo de error (GATEWAY_TIMEOUT, BAD_GATEWAY, BUSINESS_RULE_SKIP, INVALID_ZIP, etc.) |
+| `mensaje_error` | TEXT | Mensaje de error |
+| `stack_trace` | TEXT | Stack trace del error |
+| `reintentos` | INTEGER | Numero de reintento (default: 0) |
+| `fecha_inicio` | TIMESTAMP | Inicio de la operacion |
+| `fecha_fin` | TIMESTAMP | Fin de la operacion |
+| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 
 ### Tabla: productos
 
@@ -367,11 +393,15 @@ Almacena la homologacion de paises. Se usa para resolver el `pais` de los docume
 ### Indices
 
 ```sql
+-- documentos
+CREATE INDEX idx_documentos_estado ON documentos(estado);
+CREATE INDEX idx_documentos_documento_id ON documentos(id_documento);
+CREATE INDEX idx_documentos_producto_id ON documentos(id_producto);
+CREATE INDEX idx_documentos_caso_uso ON documentos(caso_uso);
+
 -- historico_documentos
-CREATE INDEX idx_historico_documento_id ON historico_documentos(id_documento);
-CREATE INDEX idx_historico_estado ON historico_documentos(estado);
-CREATE INDEX idx_historico_producto_id ON historico_documentos(id_producto);
-CREATE INDEX idx_historico_documento_caso_uso ON historico_documentos(id_documento, caso_uso);
+CREATE INDEX idx_historico_documento_id ON historico_documentos(documento_id);
+CREATE INDEX idx_historico_doc_operacion ON historico_documentos(documento_id, operacion, fecha_creacion DESC);
 
 -- categoria_manual
 CREATE INDEX idx_cat_manual_categoria ON categoria_manual(categoria);
@@ -384,13 +414,11 @@ CREATE INDEX idx_pais_codigo ON pais_homologado(pais);
 
 ```sql
 -- ============================================================================
--- Tabla: historico_documentos (unificada)
--- Almacena metadatos de documentos y trazabilidad de envios en una sola tabla.
--- Filas de metadatos: caso_uso IS NULL (representan el estado actual del documento).
--- Filas de trazabilidad: caso_uso IS NOT NULL (registran cada intento de envio).
+-- Tabla: documentos
+-- Almacena los metadatos de cada documento y su estado actual de procesamiento.
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS historico_documentos (
-    id_historico_documentos INTEGER          PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS documentos (
+    id                  BIGSERIAL       PRIMARY KEY,
     id_documento        VARCHAR(100)    NOT NULL,
     id_producto         VARCHAR(100)    NOT NULL,
     activo              BOOLEAN         DEFAULT TRUE,
@@ -404,17 +432,38 @@ CREATE TABLE IF NOT EXISTS historico_documentos (
     es_zip              BOOLEAN         DEFAULT FALSE,
     nombre_zip_padre    VARCHAR(255),
     caso_uso            VARCHAR(100),
-    resultado           VARCHAR(50),
-    codigo_error        VARCHAR(50),
-    reintentos          INTEGER         NOT NULL DEFAULT 0,
     fecha_creacion      TIMESTAMP       NOT NULL DEFAULT NOW(),
     fecha_actualizacion TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(id_documento);
-CREATE INDEX IF NOT EXISTS idx_historico_estado ON historico_documentos(estado);
-CREATE INDEX IF NOT EXISTS idx_historico_producto_id ON historico_documentos(id_producto);
-CREATE INDEX IF NOT EXISTS idx_historico_documento_caso_uso ON historico_documentos(id_documento, caso_uso);
+-- ============================================================================
+-- Tabla: historico_documentos
+-- Tabla append-only de trazabilidad/auditoria.
+-- Cada fila registra una operacion (SYNC, SOAP, S3) con su resultado.
+-- Nunca se actualiza — solo INSERT.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS historico_documentos (
+    id                  BIGSERIAL       PRIMARY KEY,
+    documento_id        BIGINT          NOT NULL REFERENCES documentos(id),
+    nombre_archivo      VARCHAR(255),
+    operacion           VARCHAR(50),
+    message_id          VARCHAR(100),
+    resultado           VARCHAR(50),
+    codigo_error        VARCHAR(50),
+    mensaje_error       TEXT,
+    stack_trace         TEXT,
+    reintentos          INTEGER         NOT NULL DEFAULT 0,
+    fecha_inicio        TIMESTAMP,
+    fecha_fin           TIMESTAMP,
+    fecha_creacion      TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_documentos_estado ON documentos(estado);
+CREATE INDEX IF NOT EXISTS idx_documentos_documento_id ON documentos(id_documento);
+CREATE INDEX IF NOT EXISTS idx_documentos_producto_id ON documentos(id_producto);
+CREATE INDEX IF NOT EXISTS idx_documentos_caso_uso ON documentos(caso_uso);
+CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(documento_id);
+CREATE INDEX IF NOT EXISTS idx_historico_doc_operacion ON historico_documentos(documento_id, operacion, fecha_creacion DESC);
 
 -- ============================================================================
 -- Tabla: productos
@@ -539,49 +588,48 @@ INSERT INTO pais_homologado (pais, pais_homologado) VALUES
 ### Consultas SQL utiles
 
 ```sql
--- Ver todos los registros (metadatos y trazabilidad)
+-- Ver estado actual de todos los documentos
+SELECT * FROM documentos ORDER BY fecha_creacion DESC;
+
+-- Ver trazabilidad completa
 SELECT * FROM historico_documentos ORDER BY fecha_creacion DESC;
 
--- Ver solo metadatos de documentos (estado actual)
-SELECT * FROM historico_documentos WHERE caso_uso IS NULL;
+-- Ver trazabilidad de un documento especifico (por documento_id FK)
+SELECT * FROM historico_documentos WHERE documento_id = 12 ORDER BY fecha_creacion;
 
--- Ver trazabilidad de un documento especifico
-SELECT * FROM historico_documentos WHERE id_documento = 'doc-123' AND caso_uso IS NOT NULL;
-
--- Ver solo envios por SOAP
-SELECT * FROM historico_documentos WHERE caso_uso = 'SOAP';
+-- Ver solo envios SOAP
+SELECT * FROM historico_documentos WHERE operacion = 'SOAP';
 
 -- Ver envios con reintentos > 0
 SELECT * FROM historico_documentos WHERE reintentos > 0 ORDER BY fecha_creacion DESC;
 
 -- Ver documentos pendientes de procesamiento
-SELECT * FROM historico_documentos WHERE estado = 'PENDING' AND caso_uso IS NULL;
+SELECT * FROM documentos WHERE estado = 'PENDING';
 
 -- Ver documentos fallidos
-SELECT * FROM historico_documentos WHERE estado = 'FAILED' AND caso_uso IS NULL;
+SELECT * FROM documentos WHERE estado = 'FAILED';
 
 -- Ver documentos descomprimidos de un ZIP
-SELECT * FROM historico_documentos WHERE nombre_zip_padre = 'documents.zip';
+SELECT * FROM documentos WHERE nombre_zip_padre = 'documents.zip';
 
--- Contar envios por caso de uso y resultado
-SELECT caso_uso, resultado, COUNT(*) FROM historico_documentos WHERE caso_uso IS NOT NULL GROUP BY caso_uso, resultado;
+-- Contar envios por operacion y resultado
+SELECT operacion, resultado, COUNT(*) FROM historico_documentos GROUP BY operacion, resultado;
 
--- Ver ultimo reintento de cada documento por caso de uso
-SELECT h.*
+-- Ver ultimo evento de cada documento (con JOIN a documentos)
+SELECT d.id_documento, d.nombre, h.nombre_archivo, h.operacion, h.resultado, h.codigo_error, h.reintentos, h.fecha_creacion
 FROM historico_documentos h
-JOIN (
-  SELECT id_documento, caso_uso, MAX(fecha_creacion) as max_fecha
-  FROM historico_documentos
-  WHERE caso_uso IS NOT NULL
-  GROUP BY id_documento, caso_uso
-) latest ON h.id_documento = latest.id_documento AND h.caso_uso = latest.caso_uso AND h.fecha_creacion = latest.max_fecha;
+JOIN documentos d ON d.id = h.documento_id
+WHERE h.fecha_creacion = (
+    SELECT MAX(fecha_creacion) FROM historico_documentos WHERE documento_id = h.documento_id
+)
+ORDER BY h.fecha_creacion DESC;
 ```
 
 ---
 
 ## Descompresion de archivos ZIP
 
-`ZipDecompressor.decompress()` expande documentos ZIP. Se aplica durante la sincronizacion (sync) y el procesamiento.
+`ZipDecompressor.decompress()` expande documentos ZIP. Se aplica **solo durante el procesamiento** (no durante sync), cuando un documento con `isZip=true` se descomprime para enviar cada entrada individualmente al gateway.
 
 ### Inferencia de isZip
 
@@ -591,8 +639,15 @@ JOIN (
 
 | Escenario | Resultado |
 |-----------|-----------|
-| Documento normal (`isZip=false`) | Se guarda tal cual en `historico_documentos` |
-| Documento ZIP (`isZip=true`) | Primero se guarda el ZIP con `nombre_zip_padre=NULL`, luego cada archivo expandido se guarda con `nombre_zip_padre=filename_del_zip` |
+| Documento normal (`isZip=false`) | Se guarda en `documentos` (estado=PENDING) y se registra en `historico_documentos` con `nombre_archivo=NULL` |
+| Documento ZIP (`isZip=true`) | Se guarda en `documentos` (estado=PENDING, `nombre_zip_padre=NULL`, `isZip=true`). Traza SYNC con `nombre_archivo=NULL`. **No se expande durante sync** |
+
+### Comportamiento durante Procesamiento
+
+| Escenario | Resultado |
+|-----------|-----------|
+| Documento normal (`isZip=false`) | Se procesa directamente. Traza con `nombre_archivo=NULL` (el nombre ya esta en `documentos.nombre`) |
+| Documento ZIP (`isZip=true`) | `ZipDecompressor.decompress()` expande cada entrada. Cada una se procesa con traza `nombre_archivo=entry_filename` y `documento_id=PK_del_ZIP` |
 
 ### Inferencia de contentType
 
@@ -607,14 +662,19 @@ JOIN (
 
 ### Ejemplo
 
-Un documento ZIP con `id_documento=doc-1` y `nombre=documents.zip` que contiene `test.pdf` y `data.csv`:
+Un documento ZIP con `id_documento=PROD-001/documents.zip` y `nombre=documents.zip` en `documentos` (id=12, isZip=true). Durante el procesamiento, `ZipDecompressor.decompress()` expande su contenido:
 
 ```
-ZIP: doc-1/documents.zip (isZip=true)
-  ├── documents.zip  → id_documento="doc-1", nombre_zip_padre=null, isZip=true
-  ├── test.pdf       → id_documento="doc-1/test.pdf", nombre_zip_padre="documents.zip", isZip=false
-  └── data.csv       → id_documento="doc-1/data.csv", nombre_zip_padre="documents.zip", isZip=false
+documentos:
+  id=12  → id_documento="PROD-001/documents.zip", isZip=true, nombre_zip_padre=NULL
+
+Procesamiento (runtime):
+  documents.zip (id=12) se descomprime:
+    ├── data.csv  → traza: documento_id=12, nombre_archivo="data.csv"
+    └── guide.pdf → traza: documento_id=12, nombre_archivo="guide.pdf"
 ```
+
+> Las entradas expandidas **no** tienen su propia fila en `documentos`. Solo existen durante el procesamiento. Todas las trazas en `historico_documentos` referencian `documento_id=12` (PK del ZIP padre). `nombre_archivo` es lo que permite distinguir que entrada se proceso en cada traza.
 
 ---
 
@@ -626,21 +686,16 @@ public final class ProductState {
     public static final String IN_PROGRESS = "IN_PROGRESS"; // En procesamiento actual
     public static final String PROCESSED   = "PROCESSED";   // Enviado exitosamente
     public static final String FAILED      = "FAILED";      // Agoto reintentos o fallo permanente
-    public static final String SYNCED      = "SYNCED";      // Sincronizado desde REST API, listo para procesar
 }
 ```
 
 ### Transiciones de State
 
 ```
-               sync
+               sync (POST /api/v1/products/sync)
                  │
                  ▼
-              [SYNCED]          ← sincronizado, en tabla historico_documentos
-                 │
-                 │  (luego estado=PENDING)
-                 ▼
-             [PENDING]
+             [PENDING]          ← guardado en tabla documentos
                  │
                  │  executePendingDocuments()
                  ▼
@@ -650,6 +705,7 @@ public final class ProductState {
         ▼                 ▼
     [PROCESSED]        [FAILED]
     (envio OK)     (reintentos agotados)
+    (o skip)
 ```
 
 ---
@@ -702,40 +758,46 @@ Ambos gateways (SOAP y S3) implementan reintentos automaticos con backoff.
 ```
 Documento PENDING → IN_PROGRESS
 uploadDocument() → SUCCESS
-saveHistory() → INSERT en historico_documentos (resultado=SUCCESS, reintentos=0, caso_uso=SOAP/S3)
-updateState()  → Actualiza fila de metadatos: estado=PROCESSED
+documentRepository.updateStateById() → estado=PROCESSED en documentos
+historyRepository.save() → INSERT en historico_documentos (resultado=SUCCESS, operacion=SOAP/S3, nombre_archivo=NULL si no es entrada ZIP, retry=0)
 Stream: {"success":true, "status":"SUCCESS"}
 ```
 
 ### 2. Error en Gateway (con reintentos)
 ```
 uploadDocument() → exception
-handleUploadError() → getRetryCount() desde historico_documentos
-saveHistory() → INSERT en historico_documentos (resultado=FAILURE, reintentos=N, caso_uso=SOAP/S3)
-updateState():
-  - Si reintentos < 3: estado=PENDING (se reintentara)
-  - Si reintentos >= 3: estado=FAILED
+historyRepository.findLastAudit(docId, useCase) → obtiene retry count (filtrado por operacion)
+documentRepository.updateStateById() → estado=PENDING o FAILED en documentos
+historyRepository.save() → INSERT en historico_documentos (resultado=FAILURE, codigo_error, reintentos=N, operacion=SOAP/S3, nombre_archivo=NULL si no es entrada ZIP)
 Stream: {"success":false, "status":"FAILURE", "errorCode":"GATEWAY_TIMEOUT", "retry":3}
 ```
 
 ### 3. Documento ZIP
 ```
-Sync/Processing: isZip=true → ZipDecompressor.decompress()
-           → Cada archivo expandido se procesa independientemente
-           → Se guardan en tabla historico_documentos con estado=PENDING o se envian al gateway
+Processing: isZip=true → ZipDecompressor.decompress() expande cada entrada en runtime
+           → Cada entrada se procesa independientemente
+           → Todas las trazas comparten documento_id=PK_del_ZIP
+           → Cada traza tiene nombre_archivo=entry_filename (diferencia cada entrada)
 ```
 
 ### 4. Error en Descompresion ZIP
 ```
 ZipDecompressor.decompress() → ProcessingException(INVALID_ZIP)
-saveHistory() → INSERT en historico_documentos (errorCode=INVALID_ZIP)
-documento no se guarda / no se procesa
+historyRepository.save() → INSERT en historico_documentos (errorCode=INVALID_ZIP, nombre_archivo=NULL, documento_id=PK_del_ZIP)
+documentRepository.updateStateById() → estado=FAILED
 ```
 
-### 5. Error de Base64
+### 5. Skip por Regla de Negocio
+```
+RulesBussinesService.validate() → no pasa (extension o tamano)
+documentRepository.updateStateById() → estado=PROCESSED en documentos
+historyRepository.save() → INSERT en historico_documentos (resultado=FAILURE, codigo_error=BUSINESS_RULE_SKIP, nombre_archivo=NULL si no es entrada ZIP)
+```
+
+### 6. Error de Base64
 ```
 Base64Utils.decodeSafe() → InvalidBase64Exception(INVALID_BASE64)
-saveHistory() → INSERT en historico_documentos (errorCode=INVALID_BASE64)
+historyRepository.save() → INSERT en historico_documentos (errorCode=INVALID_BASE64)
 documento no se guarda / no se procesa
 ```
 
@@ -753,6 +815,8 @@ Definidos en `domain/usecase/ProcessingResultCodes.java`:
 | `INVALID_BASE64` | Fallo al decodificar Base64 |
 | `INVALID_RESPONSE` | Respuesta SOAP invalida o malformada |
 | `INVALID_ZIP` | Archivo ZIP corrupto o invalido |
+| `BUSINESS_RULE_SKIP` | Documento omitido por regla de negocio (extension o tamano) |
+| `REST_CLIENT_ERROR` | Fallo al obtener documento desde REST API |
 | `UNKNOWN_ERROR` | Error no categorizado |
 
 ### Errores de Gateway SOAP (SoapErrorCodes)
@@ -784,22 +848,20 @@ Definidos en `infrastructure/drivenadapters/aws/S3ErrorCodes.java`:
 
 ## Trazabilidad de Envios
 
-Cada documento procesado deja un registro en `historico_documentos` con el `caso_uso` que lo envio (SOAP o S3), lo que permite tracking por caso de uso y analisis de reintentos.
+La trazabilidad se divide en dos tablas con relacion FK:
 
-### Estructura de la tabla unificada
-
-La tabla `historico_documentos` contiene dos tipos de filas:
-
-- **Filas de metadatos** (`caso_uso IS NULL`): Representan el estado actual del documento. Se crean durante la sincronizacion y se actualizan durante el procesamiento.
-- **Filas de trazabilidad** (`caso_uso IS NOT NULL`): Registran cada intento de envio a un gateway. Son append-only para auditoria.
+- **`documentos`**: Una fila por documento. Contiene metadata y estado actual. Se actualiza conforme avanza el procesamiento.
+- **`historico_documentos`**: Append-only. Cada operacion (SYNC, SOAP, S3) inserta una nueva fila con `documento_id` (FK), `nombre_archivo`, `operacion`, `resultado`, `codigo_error`, `reintentos`, y timestamps.
 
 ### Campos clave
 
-- **`caso_uso`**: Identifica el gateway usado ("SOAP" o "S3"). NULL en filas de metadatos.
-- **`reintentos`**: Numero de intento actual (0 = primer intento, 1 = primer reintento, etc.). Se consulta `getRetryCount()` desde `historico_documentos` antes de cada intento.
-- **`id_documento`**: Incluye la ruta cuando el documento viene de un ZIP (ej: `doc-1/test.pdf`).
+- **`documento_id`** (FK a `documentos.id`): Relacion numerica con la tabla de metadata.
+- **`nombre_archivo`**: Nombre del archivo descomprimido. Solo se popula para entradas extraidas de un ZIP (`parentZipName != null`). Para archivos normales es `NULL` (el nombre ya esta en `documentos.nombre`).
+- **`operacion`**: Tipo de operacion — SYNC (sync inicial), SOAP (envio SOAP), S3 (envio S3).
+- **`resultado`**: SUCCESS o FAILURE.
+- **`reintentos`**: Numero de intento (0 = primer intento, 1 = primer reintento, etc.).
 
-### Flujo de Persistencia
+### Flujo de Persistencia (dos tablas)
 
 ```
 uploadDocument() → FileUploadResult
@@ -807,25 +869,82 @@ uploadDocument() → FileUploadResult
         ▼
 handleUploadSuccess() o handleUploadError()
         │
-        ▼
-DocumentHistory (
-    null,                          // id (auto-generado)
-    document.documentId(),        // id_documento
-    document.productId(),         // id_producto
-    ...metadata fields...,        // nombre, propietario, ruta, etc.
-    implementationName(),         // caso_uso = "SOAP" o "S3"
-    isSuccess ? "SUCCESS" : "FAILURE", // resultado
-    errorCode,                    // codigo_error
-    errorMessage,                // mensaje_error
-    retryCount,                  // reintentos = numero de intento
-    now,                         // fecha_creacion
-    now                          // fecha_actualizacion
-)
+        ├── documentRepository.updateStateById(doc.id(), newState)
+        │     └── UPDATE documentos SET estado = ?, fecha_actualizacion = ?
         │
-        ▼
-historyRepository.save(record)  → INSERT en historico_documentos
-historyRepository.updateState() → UPDATE en fila de metadatos (caso_uso IS NULL)
+        └── historyRepository.save(trace)
+              └── INSERT INTO historico_documentos (documento_id, nombre_archivo, operacion, resultado, codigo_error, reintentos, ...)
 ```
+
+### Ejemplo de Trazabilidad Completa
+
+Supongamos un producto `PROD-001` con los siguientes documentos obtenidos desde la API REST:
+
+- `manual.pdf` (PDF independiente, 1 MB, **no** proviene de un ZIP)
+- `documents.zip` (ZIP, contiene `data.csv` + `guide.pdf`)
+
+Y el procesamiento via SOAP (`processor=soap`).
+
+#### Paso 1 — Sync (POST /api/v1/products/sync)
+
+Se guardan en `documentos` (**solo los documentos originales**, sin expandir el ZIP):
+
+| id | id_documento | nombre | estado | es_zip | nombre_zip_padre | caso_uso |
+|----|-------------|--------|--------|--------|------------------|----------|
+| 11 | PROD-001/manual.pdf | manual.pdf | PENDING | false | NULL | SOAP |
+| 12 | PROD-001/documents.zip | documents.zip | PENDING | true | NULL | SOAP |
+
+Y en `historico_documentos` las trazas SYNC:
+
+| id | documento_id | nombre_archivo | operacion | resultado | reintentos | fecha_inicio | fecha_fin |
+|----|-------------|----------------|-----------|-----------|------------|--------------|-----------|
+| 101 | 11 | NULL | SYNC | SUCCESS | 0 | 10:00:00 | 10:00:00 |
+| 102 | 12 | NULL | SYNC | SUCCESS | 0 | 10:00:00 | 10:00:01 |
+
+> `manual.pdf` (id=11) **no es un archivo comprimido**: `nombre_archivo=NULL`. El nombre ya esta en `documentos.nombre`.
+> `documents.zip` (id=12) es un ZIP contenedor: `nombre_archivo=NULL`. Durante el sync no hay descompresion — los documentos se guardan tal cual llegan de la API REST.
+
+#### Paso 2 — Procesamiento (GET /api/v1/products?processor=soap)
+
+**Intento 1:** `manual.pdf` (id=11) se procesa exitosamente. `documents.zip` (id=12) se descomprime en runtime → `data.csv` se envia con exito, `guide.pdf` falla con timeout.
+
+| id | documento_id | nombre_archivo | operacion | resultado | codigo_error | reintentos | fecha_inicio | fecha_fin |
+|----|-------------|----------------|-----------|-----------|-------------|------------|--------------|-----------|
+| 103 | 11 | NULL | SOAP | SUCCESS | NULL | 0 | 10:05:00 | 10:05:02 |
+| 104 | 12 | data.csv | SOAP | SUCCESS | NULL | 0 | 10:05:02 | 10:05:03 |
+| 105 | 12 | guide.pdf | SOAP | FAILURE | GATEWAY_TIMEOUT | 1 | 10:05:03 | 10:05:33 |
+
+Estados en `documentos` tras Intento 1:
+
+| id | estado |
+|----|--------|
+| 11 | PROCESSED |
+| 12 | PENDING |
+
+> `manual.pdf` (id=11): `nombre_archivo=NULL`. Es un archivo independiente, no proviene de un ZIP. El nombre ya esta en `documentos.nombre`.
+> `data.csv` (documento_id=12): `nombre_archivo=data.csv` porque `parentZipName=documents.zip`. Identifica que entrada del ZIP se proceso.
+> `guide.pdf` (documento_id=12): `nombre_archivo=guide.pdf` porque `parentZipName=documents.zip`. Fallo con `retry=1`. Como `retry < 3`, el estado del documento id=12 vuelve a `PENDING`.
+
+**Intento 2** (siguiente ejecucion del pipeline): `documents.zip` (id=12, estado PENDING) se retoma. La descompresion en runtime genera `guide.pdf`, que esta vez se procesa exitosamente.
+
+| id | documento_id | nombre_archivo | operacion | resultado | reintentos | fecha_inicio | fecha_fin |
+|----|-------------|----------------|-----------|-----------|------------|--------------|-----------|
+| 106 | 12 | guide.pdf | SOAP | SUCCESS | 0 | 10:10:00 | 10:10:01 |
+
+Estado final en `documentos`:
+
+| id | id_documento | nombre | estado | es_zip | nombre_zip_padre |
+|----|-------------|--------|--------|--------|------------------|
+| 11 | PROD-001/manual.pdf | manual.pdf | PROCESSED | false | NULL |
+| 12 | PROD-001/documents.zip | documents.zip | PROCESSED | true | NULL |
+
+#### Resumen: ¿cuándo se guarda `nombre_archivo`?
+
+| Caso | documento_id | `nombre_archivo` | Motivo |
+|------|-------------|------------------|--------|
+| Archivo independiente (`manual.pdf`) | 11 | `NULL` | No es entrada de ZIP. El nombre esta en `documentos.nombre` |
+| Entrada de ZIP (`data.csv`) | 12 | `"data.csv"` | Proviene de `ZipDecompressor`. Identifica que archivo del ZIP se proceso |
+| Entrada de ZIP (`guide.pdf`) | 12 | `"guide.pdf"` | Mismo `documento_id=12` que `data.csv`. `nombre_archivo` diferencia cada entrada |
 
 ---
 
@@ -837,16 +956,16 @@ El patron se implementa en `AbstractDocumentProcessingUseCase`:
 AbstractDocumentProcessingUseCase
 │
 ├── executePendingDocuments()           ← FINAL (template method)
-│   ├── historyRepository.findByState("PENDING")  → BD (tabla historico_documentos)
-│   ├── historyRepository.updateState(docId, "IN_PROGRESS", null)
+│   ├── documentRepository.findByStateAndUseCase("PENDING", processor)  → BD (tabla documentos)
+│   ├── documentRepository.updateStateById(docId, "IN_PROGRESS")
 │   ├── Por cada documento:
 │   │   ├── productRestGateway.getDocument(productId, docId) → REST externa
 │   │   ├── toProductDocument(file) → ProductDocumentHistory
 │   │   ├── Si isZip=true → ZipDecompressor.decompress() expande entradas
 │   │   ├── documentValidator.validate(doc, true) → validacion nombre + tamano
 │   │   ├── uploadDocument()       → ABSTRACT (SOAP o S3)
-│   │   ├── handleUploadSuccess() o handleUploadError() → INSERT trazabilidad + UPDATE metadatos
-│   │   └── historyRepository.updateState(docId, estado, mensaje_error)
+│   │   ├── handleUploadSuccess() o handleUploadError()
+│   │   │     └── documentRepository.updateStateById() + historyRepository.save()
 │   │
 │
 ├── uploadDocument()                     ← ABSTRACT
@@ -1106,12 +1225,11 @@ El estado de cada documento se rige por la maquina de estados definida en `Produ
 | `IN_PROGRESS` | En procesamiento actual | Se asigna justo antes de iniciar `processDocument()` |
 | `PROCESSED` | Enviado exitosamente o skip por validacion | Upload exitoso O documento no pasa validacion de tamaño/patron |
 | `FAILED` | Agoto reintentos o fallo permanente | Error de envio con `retry >= MAX_RETRIES` (3) |
-| `SYNCED` | Sincronizado desde REST API | Se asigna durante `POST /api/v1/products/sync` |
 
 **Transiciones validas:**
 
 ```
-SYNCED --> PENDING --> IN_PROGRESS --> PROCESSED
+PENDING --> IN_PROGRESS --> PROCESSED
                             |
                             +--> PENDING (si retry < 3)
                             +--> FAILED  (si retry >= 3)
@@ -1137,7 +1255,7 @@ Definidos en `AbstractDocumentProcessingUseCase`:
 - **RB-05:** El contador de reintentos (`retry`) incrementa en +1 por cada intento fallido.
 - **RB-06:** Si `retry < 3` → el documento vuelve a `PENDING` y sera reintentado en la siguiente ejecucion de `executePendingDocuments()`.
 - **RB-07:** Si `retry >= 3` → el documento pasa a `FAILED` y no se vuelve a intentar automaticamente.
-- **RB-08:** `handleUploadError()` guarda la trazabilidad con `updateWithAudit()` (nuevo estado, errorCode, mensaje, retry) y emite un `FileUploadResult` con `success=false`.
+- **RB-08:** `handleUploadError()` consulta el ultimo intento via `findLastAudit(docId, useCase)` (filtrado por `operacion`), calcula `retry + 1`, actualiza el estado en `documentos` (PENDING si retry<3, FAILED si >=3), guarda la traza en `historico_documentos`, y emite un `FileUploadResult` con `success=false`.
 
 #### 2.2 Reintentos a Nivel de Gateway
 
@@ -1183,9 +1301,9 @@ Definidos en `AbstractDocumentProcessingUseCase`:
 Gestionada por `ZipDecompressor`:
 
 - **RB-21:** `isZip` se infiere de la extension del archivo en el dominio (`ProductDocumentHistory.isZip()`).
-- **RB-22:** Solo se descomprime si `isZip=true` y el filename no es null/blank.
-- **RB-23:** Cada entrada del ZIP se expande como un documento independiente con:
-  - `documentId = documentIdOriginal + "/" + nombreEntrada` (ej: `doc-1/test.pdf`)
+- **RB-22:** Solo se descomprime si `isZip=true` y el filename no es null/blank. La descompresion ocurre en **runtime durante el procesamiento** — las entradas expandidas no se persisten en `documentos`.
+- **RB-23:** Cada entrada del ZIP se expande como un objeto `ProductDocumentHistory` en memoria con:
+  - `documentId = documentIdOriginal + "/" + nombreEntrada` (ej: `PROD-001/documents.zip/data.csv`)
   - `parentZipName = filename del ZIP original` (ej: `documents.zip`)
   - `isZip = false`
   - `contentType` inferido por extension (`.pdf`→`application/pdf`, `.csv`→`text/csv`, `.txt`→`text/plain`, `.docx`→`application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `.xlsx`→`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, otro→`application/octet-stream`)
@@ -1241,7 +1359,7 @@ Gestionada por `ProductHandler.getProcessor()`:
 - **RB-38:** El header HTTP `message-id` es opcional. Si el cliente lo envia, se usa como `traceId`.
 - **RB-39:** Si `message-id` no se envia o esta blank → se genera un UUID v4 aleatorio.
 - **RB-40:** El `traceId` se propaga a traves de todo el flujo reactivo via `Context` de Reactor (`ctx.put(HEADER_TRACE_ID, traceId)`).
-- **RB-41:** Cada intento de envio a gateway queda registrado en `historico_documentos` con `caso_uso` asignado (SOAP o S3), permitiendo auditoria completa por caso de uso.
+- **RB-41:** Cada intento de envio a gateway queda registrado en `historico_documentos` con `operacion` (SOAP o S3) y `documento_id` (FK a `documentos.id`), permitiendo auditoria completa por tipo de operacion.
 
 ---
 
@@ -1249,19 +1367,19 @@ Gestionada por `ProductHandler.getProcessor()`:
 
 - **RB-42:** `POST /api/v1/products/sync` retorna HTTP 200 inmediatamente con `{"status":"OK","message":"Document sync initiated"}`.
 - **RB-43:** La ejecucion real de `SyncDocumentsUseCase.execute()` se dispara con `.subscribe()` sin esperar su resultado (fire-and-forget).
-- **RB-44:** Los documentos sincronizados se guardan con `estado=SYNCED` y `caso_uso='SYNC'`.
-- **RB-45:** Si un documento es ZIP, se guarda con `parentZipName = doc.filename()` (el nombre del ZIP) e `isZip=true`.
+- **RB-44:** Los documentos sincronizados se guardan en dos tablas: `documentos` (metadata con `estado=PENDING`) + `historico_documentos` (traza con `operacion=SYNC`, `resultado=SUCCESS`, `nombre_archivo=NULL`).
+- **RB-45:** Si un documento es ZIP, se guarda con `isZip=true` y `nombre_zip_padre=NULL` en `documentos`. `parentZipName` solo se asigna a entradas extraidas de un ZIP durante el procesamiento, nunca durante sync.
 
 ---
 
-### 10. Trazabilidad en Tabla Unificada
+### 10. Trazabilidad en Dos Tablas
 
-- **RB-46:** La tabla `historico_documentos` contiene dos tipos de filas semanticamente distintas:
-  - **Metadatos** (`caso_uso IS NULL`): representan el estado actual del documento
-  - **Trazabilidad** (`caso_uso IS NOT NULL`): registran cada intento de envio (append-only)
-- **RB-47:** `updateWithAudit()` actualiza la fila de metadatos con el nuevo estado y a la vez inserta una nueva fila de trazabilidad.
-- **RB-48:** `getRetryCount()` consulta el maximo `reintentos` entre las filas de trazabilidad para un `id_documento` dado. Retorna 0 si no hay registros previos.
-- **RB-49:** `findLastAudit()` retorna el registro de trazabilidad mas reciente para un `id_documento` y `caso_uso` especificos.
+- **RB-46:** La metadata y la trazabilidad se almacenan en tablas separadas con FK numerica:
+  - **`documentos`**: metadata + estado actual (una fila por documento, se actualiza)
+  - **`historico_documentos`**: trazabilidad append-only (cada operacion inserta una nueva fila con `documento_id` FK)
+- **RB-47:** Cada operacion escribe en ambas tablas: `documentRepository.updateStateById()` actualiza el estado en `documentos`, y `historyRepository.save()` inserta una traza en `historico_documentos`.
+- **RB-48:** `findLastAudit(documentoId, useCase)` consulta el registro de trazabilidad mas reciente para un `documento_id` y `operacion` especifica (ej: SOAP). Filtra por `documento_id` + `operacion` para no mezclar trazas SYNC con SOAP/S3. Retorna empty si no hay registros previos.
+- **RB-49:** `nombre_archivo` en `historico_documentos` solo se popula para entradas extraidas de un ZIP (`parentZipName != null`). Para archivos no comprimidos es `NULL`, ya que el nombre del archivo ya esta disponible en `documentos.nombre`. Esto evita redundancia y permite identificar inequivocamente que archivos provienen de descompresion ZIP.
 
 ---
 

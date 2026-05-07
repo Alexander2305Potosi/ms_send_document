@@ -7,26 +7,16 @@ import java.time.LocalDateTime;
 @Builder
 public record DocumentHistory(
     Long id,
-    String documentId,
-    String productId,
-    Boolean active,
-    String docKey,
-    String name,
-    String owner,
-    String path,
-    String state,
-    String versionContract,
-    String errorMessage,
-    Boolean isZip,
-    String parentZipName,
-    String useCase,
-    String errorCode,
-    Integer retry,
+    Long documentId,
+    String filename,
     String operation,
     String messageId,
+    String result,
+    String errorCode,
+    String errorMessage,
     String stackTrace,
+    Integer retry,
     LocalDateTime startedAt,
     LocalDateTime completedAt,
-    LocalDateTime createdAt,
-    LocalDateTime updatedAt
+    LocalDateTime createdAt
 ) {}

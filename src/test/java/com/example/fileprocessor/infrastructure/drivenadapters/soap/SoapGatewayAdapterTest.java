@@ -65,7 +65,7 @@ class SoapGatewayAdapterTest {
             "http://localhost:8080/soap/v2", "123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null,
             30, 0
         );
 

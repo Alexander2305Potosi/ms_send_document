@@ -20,53 +20,14 @@ import java.time.LocalDateTime;
 public class DocumentHistoryEntity {
 
     @Id
-    @Column("id_historico_documentos")
+    @Column("id")
     private Long id;
 
-    @Column("id_documento")
-    private String documentId;
+    @Column("documento_id")
+    private Long documentId;
 
-    @Column("id_producto")
-    private String productId;
-
-    @Column("activo")
-    private Boolean active;
-
-    @Column("clave_documento")
-    private String docKey;
-
-    @Column("nombre")
-    private String name;
-
-    @Column("propietario")
-    private String owner;
-
-    @Column("ruta")
-    private String path;
-
-    @Column("estado")
-    private String state;
-
-    @Column("version_contrato")
-    private String versionContract;
-
-    @Column("mensaje_error")
-    private String errorMessage;
-
-    @Column("es_zip")
-    private Boolean isZip;
-
-    @Column("nombre_zip_padre")
-    private String parentZipName;
-
-    @Column("caso_uso")
-    private String useCase;
-
-    @Column("codigo_error")
-    private String errorCode;
-
-    @Column("reintentos")
-    private Integer retry;
+    @Column("nombre_archivo")
+    private String filename;
 
     @Column("operacion")
     private String operation;
@@ -74,8 +35,20 @@ public class DocumentHistoryEntity {
     @Column("message_id")
     private String messageId;
 
+    @Column("resultado")
+    private String result;
+
+    @Column("codigo_error")
+    private String errorCode;
+
+    @Column("mensaje_error")
+    private String errorMessage;
+
     @Column("stack_trace")
     private String stackTrace;
+
+    @Column("reintentos")
+    private Integer retry;
 
     @Column("fecha_inicio")
     private LocalDateTime startedAt;
@@ -85,7 +58,4 @@ public class DocumentHistoryEntity {
 
     @Column("fecha_creacion")
     private LocalDateTime createdAt;
-
-    @Column("fecha_actualizacion")
-    private LocalDateTime updatedAt;
 }

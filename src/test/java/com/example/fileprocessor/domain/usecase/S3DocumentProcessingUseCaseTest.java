@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -26,6 +27,9 @@ import static org.mockito.Mockito.*;
 class S3DocumentProcessingUseCaseTest {
 
     @Mock
+    private DocumentRepository documentRepository;
+
+    @Mock
     private DocumentHistoryRepository historyRepository;
 
     @Mock
@@ -42,13 +46,15 @@ class S3DocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new S3DocumentProcessingUseCase(
+            documentRepository,
             historyRepository,
             productRestGateway,
             s3Gateway,
             documentValidator
         );
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
-        lenient().when(historyRepository.findLastAudit(anyString(), anyString())).thenReturn(Mono.empty());
+        lenient().when(historyRepository.findLastAudit(anyLong(), anyString())).thenReturn(Mono.empty());
+        lenient().when(documentRepository.updateStateById(anyLong(), anyString(), any())).thenReturn(Mono.empty());
     }
 
     private static ProductDocumentHistory doc() {

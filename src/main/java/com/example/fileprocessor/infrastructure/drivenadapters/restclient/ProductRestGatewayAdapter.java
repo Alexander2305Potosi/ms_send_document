@@ -147,6 +147,9 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
 
         long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
 
+        // Validate isZip based on filename extension
+        boolean isZip = filename != null && filename.toLowerCase().endsWith(".zip");
+
         return ProductDocumentHistory.builder()
             .productId(productId)
             .documentId(documentId)
@@ -154,6 +157,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .filename(filename)
             .contentType(json.contentType())
             .size(size)
+            .isZip(isZip)
             .origin(json.origin())
             .pais(json.pais())
             .content(content)

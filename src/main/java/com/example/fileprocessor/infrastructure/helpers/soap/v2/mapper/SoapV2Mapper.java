@@ -176,7 +176,7 @@ public class SoapV2Mapper {
             : "unknown";
 
         return new TransmitirDocumentoRequest(
-            props.subTipoDocumental(),
+            request.getSubTipoDocumental(),
             safeFilename,
             base64Content,
             buildMetaDataWrapper(props)

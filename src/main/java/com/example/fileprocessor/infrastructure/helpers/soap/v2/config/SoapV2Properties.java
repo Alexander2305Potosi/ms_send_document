@@ -16,7 +16,6 @@ public record SoapV2Properties(
     @NotBlank String userName,
     @NotBlank String headerNamespace,
     @NotBlank String bodyNamespace,
-    @NotBlank String subTipoDocumental,
 
     String userToken,
     String destinationName,

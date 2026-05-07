@@ -45,7 +45,7 @@ app:
       user-name: ${SOAP_V2_USER_NAME:775757775}
       header-namespace: ${SOAP_V2_HEADER_NS:http://prueba.com/ents/SOI/MessageFormat/V2.1}
       body-namespace: ${SOAP_V2_BODY_NS:http://prueba.com/intf/factory/adminDocs/V1.0}
-      sub-tipo-documental: ${SOAP_V2_SUB_TIPO:Facturas}
+
       user-token: ${SOAP_V2_USER_TOKEN:}
       destination-name: ${SOAP_V2_DEST_NAME:bussinesdocs}
       destination-namespace: ${SOAP_V2_DEST_NS:http://prueba.com/intf/factory/adminDocs/Enlace/V1.0}

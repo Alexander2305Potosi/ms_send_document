@@ -27,7 +27,7 @@ class SoapV2MapperTest {
             "http://localhost:8080/soap/v2", "sys-123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", null, null, null, null, null,
+            null, null, null, null, null,
             null, null, null, 30, 0
         );
     }
@@ -39,6 +39,7 @@ class SoapV2MapperTest {
             .contentType("application/pdf")
             .content(content)
             .origin("test-origin")
+            .subTipoDocumental("Facturas")
             .build();
     }
 
@@ -95,7 +96,7 @@ class SoapV2MapperTest {
             "http://localhost:8080/soap/v2", "sys-123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", "token-abc", null, null, null, null,
+            "token-abc", null, null, null, null,
             null, null, null, 30, 0
         );
 
@@ -110,7 +111,7 @@ class SoapV2MapperTest {
             "http://localhost:8080/soap/v2", "sys-123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", null, null, null, null, null,
+            null, null, null, null, null,
             null, Map.of("key1", "val1", "key2", "val2"), null, 30, 0
         );
 
@@ -130,7 +131,7 @@ class SoapV2MapperTest {
             "http://localhost:8080/soap/v2", "sys-123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", null, "bussinesdocs",
+            null, "bussinesdocs",
             "http://prueba.com/dest/ns", "sendOperation", null,
             null, null, null, 30, 0
         );
@@ -149,7 +150,7 @@ class SoapV2MapperTest {
             "http://localhost:8080/soap/v2", "sys-123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", null, null, null, null, null,
+            null, null, null, null, null,
             List.of("classA", "classB"), null, null, 30, 0
         );
 
@@ -166,7 +167,7 @@ class SoapV2MapperTest {
             "http://localhost:8080/soap/v2", "sys-123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", null, null, null, null, null,
+            null, null, null, null, null,
             null, null, Map.of("idField", "00123"), 30, 0
         );
 
@@ -201,7 +202,7 @@ class SoapV2MapperTest {
             "http://localhost:8080/soap/v2", "sys-123", "test-user",
             "http://prueba.com/ents/SOI/MessageFormat/V2.1",
             "http://prueba.com/intf/factory/adminDocs/V1.0",
-            "Facturas", "   ", null, null, null, null,
+            "   ", null, null, null, null,
             null, null, null, 30, 0
         );
 
