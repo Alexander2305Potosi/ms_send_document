@@ -24,6 +24,8 @@ Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos co
 16. [Excepciones](#excepciones)
 17. [Testing](#testing)
 18. [Reglas de Negocio (Business Rules)](#reglas-de-negocio-business-rules)
+19. [SOAP V2 — Generacion de Requests (SoapV2Mapper)](#soap-v2--generacion-de-requests-soapv2mapper)
+20. [Stack Tecnologico](#stack-tecnologico)
 
 ---
 
@@ -119,12 +121,21 @@ com.example.fileprocessor/
     └── helpers/soap/
         ├── SoapConstants.java                   # Namespaces SOAP, templates XML
         ├── mapper/
-        │   └── SoapMapper.java                   # JAXB marshalling/unmarshalling + Base64
-        └── xml/
-            ├── SoapEnvelopeWrapper.java         # Envoltorio SOAP con parseo DOM seguro
-            └── model/
-                ├── UploadFileRequest.java       # @XmlRootElement para request SOAP
-                └── UploadFileResponse.java      # @XmlRootElement para response SOAP
+        │   └── SoapMapper.java                   # JAXB V1 marshalling/unmarshalling + Base64
+        ├── xml/
+        │   ├── SoapEnvelopeWrapper.java         # Envoltorio SOAP con parseo DOM seguro
+        │   └── model/
+        │       ├── UploadFileRequest.java       # @XmlRootElement V1 request
+        │       └── UploadFileResponse.java      # @XmlRootElement V1 response
+        └── v2/
+            ├── config/SoapV2Properties.java     # @ConfigurationProperties("app.soap.v2")
+            ├── constants/SoapV2Constants.java   # W3C namespaces + prefijos estructurales
+            ├── mapper/SoapV2Mapper.java         # buildEnvelope() StAX+JAXB + parseResponse()
+            └── xml/
+                ├── NamespaceInjectingStreamWriter.java  # Inyecta namespace en runtime
+                └── model/
+                    ├── body/                     # TransmitirDocumento, MetaDataWrapper, MetaDataEntry
+                    └── header/                   # RequestHeader, UserId, Destination, etc.
 ```
 
 ### Recursos
@@ -1254,6 +1265,223 @@ Gestionada por `ProductHandler.getProcessor()`:
 
 ---
 
+## SOAP V2 — Generacion de Requests (SoapV2Mapper)
+
+`SoapV2Mapper` es el componente encargado de construir el envelope SOAP 1.1 para el protocolo V2 (`transmitirDocumento`) y de parsear las respuestas. La generacion del XML combina **StAX** (`XMLStreamWriter`) para la estructura del envelope y **JAXB** para marshalling de header y body con anotaciones `@XmlElement`.
+
+### Paquete `v2/`
+
+```
+infrastructure/helpers/soap/v2/
+├── config/
+│   └── SoapV2Properties.java              ← @ConfigurationProperties("app.soap.v2")
+├── constants/
+│   └── SoapV2Constants.java               ← Namespaces W3C + prefijos + elementos estructurales
+├── mapper/
+│   └── SoapV2Mapper.java                  ← Logica principal: buildEnvelope() + parseResponse()
+├── xml/
+│   ├── NamespaceInjectingStreamWriter.java ← Decorador XMLStreamWriter (inyecta namespace dinamico)
+│   └── model/
+│       ├── body/
+│       │   ├── TransmitirDocumentoRequest.java   ← @XmlRootElement del body
+│       │   ├── TransmitirDocumentoResponse.java  ← @XmlRootElement del response
+│       │   ├── MetaDataWrapper.java              ← Wrapper de <metaData>
+│       │   └── MetaDataEntry.java                ← Entry individual <nombre>/<valor>
+│       └── header/
+│           ├── SoapV2RequestHeader.java          ← @XmlRootElement del header (requestHeader)
+│           ├── SoapV2UserId.java                 ← <userName> + <userToken>
+│           ├── SoapV2Destination.java            ← <name> + <namespace> + <operation>
+│           ├── SoapV2Classifications.java        ← Lista de <classification>
+│           ├── SoapV2MessageContext.java         ← Lista de <property>
+│           └── SoapV2MessageProperty.java        ← <key> + <value>
+```
+
+Los modelos JAXB no especifican `namespace` en sus anotaciones — el namespace se inyecta dinamicamente en tiempo de escritura via `NamespaceInjectingStreamWriter`. Esto permite que los namespaces de header y body sean configurables desde `application.yml` sin modificar las clases Java.
+
+### Flujo de Construccion del Envelope
+
+`buildEnvelope(request, props, traceId)` construye el envelope en 4 fases:
+
+```
+1. startEnvelope()     → Declaracion XML + prefijos + <soapenv:Envelope>
+2. writeHeader()       → <soapenv:Header> + marshalling JAXB de SoapV2RequestHeader
+3. writeBody()         → <soapenv:Body> + marshalling JAXB de TransmitirDocumentoRequest
+4. writer.writeEndElement() → Cierre de </soapenv:Envelope>
+```
+
+#### Fase 1 — `startEnvelope()`
+
+Registra los tres prefijos XML en el `XMLStreamWriter` y escribe el elemento raiz con sus namespace declarations:
+
+```java
+writer.setPrefix("soapenv", "http://schemas.xmlsoap.org/soap/envelope/");
+writer.setPrefix("v2",      props.headerNamespace());   // ej: http://prueba.com/.../MessageFormat/V2.1
+writer.setPrefix("v1",      props.bodyNamespace());     // ej: http://prueba.com/.../factory/adminDocs/V1.0
+
+writer.writeStartElement(SOAP_ENVELOPE_NS, "Envelope");
+writer.writeNamespace("soapenv", SOAP_ENVELOPE_NS);
+writer.writeNamespace("v2",      props.headerNamespace());
+writer.writeNamespace("v1",      props.bodyNamespace());
+```
+
+#### Fase 2 — `writeHeader()` y `NamespaceInjectingStreamWriter`
+
+El header se escribe en dos pasos:
+
+1. El `XMLStreamWriter` escribe `<soapenv:Header>` manualmente (elemento estructural del envelope SOAP).
+2. El contenido del header (`<v2:requestHeader>...</v2:requestHeader>`) se genera via JAXB marshalling del objeto `SoapV2RequestHeader`.
+
+`NamespaceInjectingStreamWriter` es un decorador de `XMLStreamWriter` que **sobrescribe el namespace** de cada `writeStartElement`/`writeEmptyElement` con un namespace configurable (en este caso, `props.headerNamespace()`). Como el writer ya tiene el prefijo `v2` registrado, los elementos se escriben como `<v2:systemId>`, `<v2:messageId>`, etc.
+
+**Por que existe `NamespaceInjectingStreamWriter`:**
+
+Los modelos JAXB (`SoapV2RequestHeader`, `SoapV2UserId`, etc.) no definen `namespace` en `@XmlRootElement` ni en `@XmlElement`. Si JAXB marshalleara directamente sobre el writer, los elementos se escribiran sin namespace (`<requestHeader>` en lugar de `<v2:requestHeader>`). El decorador intercepta cada `writeStartElement` y reescribe la llamada con el namespace correcto:
+
+```java
+// NamespaceInjectingStreamWriter.writeStartElement(String localName)
+@Override
+public void writeStartElement(String localName) throws XMLStreamException {
+    delegate.writeStartElement(namespace, localName);  // namespace = props.headerNamespace()
+}
+
+// Si alguien intenta escribir un namespace distinto → XMLStreamException
+private void assertNamespace(String namespaceURI) throws XMLStreamException {
+    if (namespaceURI != null && !namespaceURI.isEmpty() && !namespaceURI.equals(this.namespace)) {
+        throw new XMLStreamException("NamespaceInjectingStreamWriter: unexpected namespace '"
+            + namespaceURI + "'. Expected '" + this.namespace + "'.");
+    }
+}
+```
+
+El `JAXB_FRAGMENT = true` evita que JAXB escriba `<?xml version="1.0"?>` dentro del envelope.
+
+**Campos del header:**
+
+| Elemento | Origen | Obligatorio |
+|----------|--------|-------------|
+| `<v2:systemId>` | `props.systemId()` | Si |
+| `<v2:messageId>` | `traceId` | Si |
+| `<v2:timestamp>` | `Instant.now().toString()` | Si |
+| `<v2:userId>` | `props.userName()` + `props.userToken()` | Si |
+| `<v2:userToken>` | `props.userToken()` | Solo si no es null/blank |
+| `<v2:destination>` | `props.destinationName()` + `ns` + `operation` | Solo si destinationName no es null/blank |
+| `<v2:classifications>` | `props.classifications()` | Solo si la lista no esta vacia |
+| `<v2:messageContext>` | `props.messageContext()` | Solo si el mapa no esta vacio |
+
+#### Fase 3 — `writeBody()`
+
+Escribe `<soapenv:Body>` manualmente y luego marshallea `TransmitirDocumentoRequest` con JAXB. El body **no** usa `NamespaceInjectingStreamWriter` — los elementos del body se escriben sin namespace explicito, heredando el comportamiento por defecto del servicio SOAP destino.
+
+**Campos del body:**
+
+| Elemento | Origen |
+|----------|--------|
+| `<subTipoDocumental>` | `props.subTipoDocumental()` (ej: "Facturas") |
+| `<nombreArchivo>` | `request.getFilename()` (default: "unknown") |
+| `<archivo>` | `Base64.encode(request.getContent())` |
+| `<metaData>` | `props.metaData()` — lista de `<tiposMetaData>` con `<nombre>`/`<valor>` |
+
+### JAXBContext Dedicado
+
+`SoapV2Mapper` mantiene su propio `JAXBContext` con **solo las clases V2**. Esto evita que los namespaces de los modelos V1 (`UploadFileRequest`, `UploadFileResponse` con namespace `http://example.com/fileservice`) se filtren en los elementos del body V2.
+
+El contexto compartido en `SoapEnvelopeWrapper` se sigue usando para **unmarshalling de respuestas** (donde el namespace leak no ocurre por trabajar con DOM node-level).
+
+### Ejemplo de XML Generado
+
+Con la configuracion `application-dev.yml` y un archivo `doc.pdf` con contenido `{1,2,3}`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:v2="http://prueba.com/ents/SOI/MessageFormat/V2.1"
+                  xmlns:v1="http://prueba.com/intf/factory/adminDocs/V1.0">
+  <soapenv:Header>
+    <v2:requestHeader>
+      <v2:systemId>123</v2:systemId>
+      <v2:messageId>trace-1</v2:messageId>
+      <v2:timestamp>2026-05-06T10:15:30.123Z</v2:timestamp>
+      <v2:userId>
+        <v2:userName>test-user</v2:userName>
+      </v2:userId>
+    </v2:requestHeader>
+  </soapenv:Header>
+  <soapenv:Body>
+    <transmitirDocumento>
+      <subTipoDocumental>Facturas</subTipoDocumental>
+      <nombreArchivo>doc.pdf</nombreArchivo>
+      <archivo>AQID</archivo>
+    </transmitirDocumento>
+  </soapenv:Body>
+</soapenv:Envelope>
+```
+
+### Parseo de Respuestas (`parseResponse`)
+
+`parseResponse(String xml, String traceId)` delega en `SoapEnvelopeWrapper.unwrapResponse()` para:
+
+1. Parsear el XML con `DocumentBuilderFactory` seguro (DOCTYPE deshabilitado, entidades externas bloqueadas — previene XXE).
+2. Detectar **SOAP Faults**: si existe `<soapenv:Fault>`, lanza `ProcessingException` con el texto del fault.
+3. Extraer el primer elemento hijo de `<soapenv:Body>` (que debe ser `<transmitirDocumentoResponse>`).
+4. Unmarshallear ese nodo DOM directamente a `TransmitirDocumentoResponse` via `unmarshaller.unmarshal(Node)` — sin pasar por serializacion intermedia.
+5. Mapear a `ExternalServiceResponse` con defaults seguros para campos nulos.
+
+### Manejo de Errores y Recursos
+
+- **try-finally**: `XMLStreamWriter` se cierra en bloque `finally` incluso si ocurre `XMLStreamException`, `JAXBException` o `RuntimeException`.
+- **Dos capas de catch**: `XMLStreamException | JAXBException` para errores de marshalling conocidos, y `RuntimeException` para fallos inesperados (ej: `NullPointerException`).
+- **traceId en logs y excepciones**: Cada error registra el `traceId` para correlacion con el request HTTP original.
+
+### Integracion con SoapGatewayAdapter
+
+```
+SoapGatewayAdapter.transmitirDocumento(request)
+  │
+  ├── soapV2Mapper.buildEnvelope(request, v2Properties, traceId)
+  │     └── String (XML completo listo para enviar por HTTP)
+  │
+  ├── executeSoapCall(webClientV2, soapEnvelope, ...)
+  │     └── POST con Content-Type: text/xml + SOAPAction header
+  │     └── Retry con backoff 500ms para errores reintentables
+  │
+  ├── soapV2Mapper.parseResponse(xml, traceId)
+  │     └── ExternalServiceResponse
+  │
+  └── toFileUploadResult(response, attemptCount)
+        └── FileUploadResult
+```
+
+### Configuracion (`application.yml`)
+
+```yaml
+app:
+  soap:
+    v2:
+      endpoint: ${SOAP_V2_ENDPOINT:http://localhost:9000/soap/adminDocs}
+      system-id: ${SOAP_V2_SYSTEM_ID:123}
+      user-name: ${SOAP_V2_USER_NAME:775757775}
+      header-namespace: ${SOAP_V2_HEADER_NS:http://prueba.com/ents/SOI/MessageFormat/V2.1}
+      body-namespace: ${SOAP_V2_BODY_NS:http://prueba.com/intf/factory/adminDocs/V1.0}
+      sub-tipo-documental: ${SOAP_V2_SUB_TIPO:Facturas}
+      user-token: ${SOAP_V2_USER_TOKEN:}
+      destination-name: ${SOAP_V2_DEST_NAME:bussinesdocs}
+      destination-namespace: ${SOAP_V2_DEST_NS:http://prueba.com/.../Enlace/V1.0}
+      destination-operation: ${SOAP_V2_DEST_OP:senddocs}
+      soap-action: ${SOAP_V2_SOAP_ACTION:}
+      classifications:
+        - "http://prueba.com/clas/AppsUpdated"
+      message-context:
+        key01: "value01"
+        key02: "value02"
+      meta-data:
+        xIdentificadorFisico: "65464904"
+        xFilial: "prueba"
+      timeout-seconds: 30
+      retry-attempts: 3
+```
+
+---
+
 ## Stack Tecnologico
 
 | Componente | Tecnologia |
@@ -1265,9 +1493,9 @@ Gestionada por `ProductHandler.getProcessor()`:
 | **Base de datos (prod)** | PostgreSQL |
 | **Acceso a datos** | R2DBC + Spring Data R2DBC |
 | **API REST externa** | WebClient (no bloqueante) |
-| **Gateway SOAP** | WebClient + JAXB + DOM |
+| **Gateway SOAP** | WebClient + JAXB + DOM + StAX |
 | **Gateway S3** | AWS SDK S3 Async (Netty) |
 | **Observabilidad** | Micrometer Tracing (Brave) + Prometheus |
-| **Validacion SOAP** | JAXB (jakarta.xml.bind) + DOM Parser seguro |
+| **Validacion SOAP** | JAXB (jakarta.xml.bind) + DOM Parser seguro + StAX |
 | **Testing** | JUnit 5, Mockito, Reactor Test, MockWebServer |
 | **Calidad** | JaCoCo, PiTest (mutation testing) |
