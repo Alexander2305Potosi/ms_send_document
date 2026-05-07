@@ -10,6 +10,16 @@ app:
     timeout-seconds: 5
     retry-attempts: 1
     retry-backoff-millis: 500
+    v2:
+      endpoint: ${SOAP_V2_ENDPOINT:http://localhost:9000/soap/adminDocs}
+      system-id: "123"
+      user-name: "test-user"
+      header-namespace: "http://prueba.com/ents/SOI/MessageFormat/V2.1"
+      body-namespace: "http://prueba.com/intf/factory/adminDocs/V1.0"
+      sub-tipo-documental: "Facturas"
+      timeout-seconds: 5
+      retry-attempts: 1
+      delay-millis: 0
   document-rest:
     endpoint: http://localhost:3001
     products-path: /api/products

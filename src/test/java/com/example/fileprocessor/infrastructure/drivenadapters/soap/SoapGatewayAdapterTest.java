@@ -5,8 +5,10 @@ import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.helpers.soap.v2.config.SoapV2Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
+import com.example.fileprocessor.infrastructure.helpers.soap.v2.mapper.SoapV2Mapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +42,9 @@ class SoapGatewayAdapterTest {
     private SoapMapper soapMapper;
 
     @Mock
+    private SoapV2Mapper soapV2Mapper;
+
+    @Mock
     private WebClient.RequestBodyUriSpec bodyUriSpec;
 
     @Mock
@@ -49,20 +54,30 @@ class SoapGatewayAdapterTest {
     private WebClient.ResponseSpec responseSpec;
 
     private SoapProperties soapProperties;
+    private SoapV2Properties soapV2Properties;
     private SoapGatewayAdapter adapter;
 
     @BeforeEach
     void setUp() {
         soapProperties = new SoapProperties("http://localhost:8080/soap", 30, 0);
 
+        soapV2Properties = new SoapV2Properties(
+            "http://localhost:8080/soap/v2", "123", "test-user",
+            "http://prueba.com/ents/SOI/MessageFormat/V2.1",
+            "http://prueba.com/intf/factory/adminDocs/V1.0",
+            "Facturas", null, null, null, null, null, null, null, null,
+            0, 30, 0
+        );
+
         when(webClientBuilder.baseUrl(anyString())).thenReturn(webClientBuilder);
         when(webClientBuilder.clientConnector(any())).thenReturn(webClientBuilder);
         when(webClientBuilder.build()).thenReturn(webClient);
 
-        adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapMapper);
+        adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
+                soapMapper, soapV2Mapper);
     }
 
-    private void mockWebClientSuccess(String responseBody) {
+    private void mockWebClientSuccessV1(String responseBody) {
         when(webClient.post()).thenReturn(bodyUriSpec);
         when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
         when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
@@ -71,10 +86,26 @@ class SoapGatewayAdapterTest {
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just(responseBody));
     }
 
-    private void mockWebClientError(Throwable error) {
+    private void mockWebClientErrorV1(Throwable error) {
         when(webClient.post()).thenReturn(bodyUriSpec);
         when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
         when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.bodyValue(any())).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.error(error));
+    }
+
+    private void mockWebClientSuccessV2(String responseBody) {
+        when(webClient.post()).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.bodyValue(any())).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just(responseBody));
+    }
+
+    private void mockWebClientErrorV2(Throwable error) {
+        when(webClient.post()).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
         when(bodyUriSpec.bodyValue(any())).thenReturn(headersSpec);
         when(headersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.error(error));
@@ -185,13 +216,13 @@ class SoapGatewayAdapterTest {
         assertEquals("ERROR", result.getStatus());
     }
 
-    // send tests
+    // send (V1) tests
 
     @Test
     void send_whenSuccessful_returnsSuccessResult() {
         when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
         when(soapMapper.fromSoapXml("<response>ok</response>")).thenReturn(successResponse());
-        mockWebClientSuccess("<response>ok</response>");
+        mockWebClientSuccessV1("<response>ok</response>");
 
         StepVerifier.create(adapter.send(request())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
@@ -208,7 +239,7 @@ class SoapGatewayAdapterTest {
         WebClientResponseException ex = mock(WebClientResponseException.class);
         when(ex.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR);
         when(ex.getMessage()).thenReturn("Server error");
-        mockWebClientError(ex);
+        mockWebClientErrorV1(ex);
 
         StepVerifier.create(adapter.send(request())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
@@ -223,7 +254,7 @@ class SoapGatewayAdapterTest {
     @Test
     void send_whenIOException_returnsUnknownError() {
         when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
-        mockWebClientError(new IOException("IO error"));
+        mockWebClientErrorV1(new IOException("IO error"));
 
         StepVerifier.create(adapter.send(request())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
@@ -237,7 +268,7 @@ class SoapGatewayAdapterTest {
     @Test
     void send_whenUnexpectedThrowable_returnsUnknownError() {
         when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
-        mockWebClientError(new RuntimeException("unexpected"));
+        mockWebClientErrorV1(new RuntimeException("unexpected"));
 
         StepVerifier.create(adapter.send(request())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
@@ -245,6 +276,78 @@ class SoapGatewayAdapterTest {
                 assertFalse(result.isSuccess());
                 assertEquals(SoapErrorCodes.UNKNOWN_ERROR, result.getErrorCode());
             })
+            .verifyComplete();
+    }
+
+    // send_withoutTraceIdContext uses "unknown" default
+
+    @Test
+    void send_whenNoTraceIdInContext_usesDefault() {
+        when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
+        when(soapMapper.fromSoapXml(any())).thenReturn(successResponse());
+        mockWebClientSuccessV1("<response>ok</response>");
+
+        StepVerifier.create(adapter.send(request()))
+            .assertNext(result -> assertTrue(result.isSuccess()))
+            .verifyComplete();
+    }
+
+    // transmitirDocumento (V2) tests
+
+    @Test
+    void transmitirDocumento_whenSuccessful_returnsSuccessResult() {
+        when(soapV2Mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soapenv:Envelope>...</soapenv:Envelope>");
+        when(soapV2Mapper.parseResponse("<response>ok</response>")).thenReturn(successResponse());
+        mockWebClientSuccessV2("<response>ok</response>");
+
+        StepVerifier.create(adapter.transmitirDocumento(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-v2-1")))
+            .assertNext(result -> {
+                assertTrue(result.isSuccess());
+                assertEquals("corr-123", result.getCorrelationId());
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void transmitirDocumento_whenHttp500_returnsBadGateway() {
+        when(soapV2Mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soapenv:Envelope>...</soapenv:Envelope>");
+        WebClientResponseException ex = mock(WebClientResponseException.class);
+        when(ex.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR);
+        when(ex.getMessage()).thenReturn("Server error");
+        mockWebClientErrorV2(ex);
+
+        StepVerifier.create(adapter.transmitirDocumento(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-v2-1")))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SoapErrorCodes.BAD_GATEWAY, result.getErrorCode());
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void transmitirDocumento_whenIOException_returnsUnknownError() {
+        when(soapV2Mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soapenv:Envelope>...</soapenv:Envelope>");
+        mockWebClientErrorV2(new IOException("IO error"));
+
+        StepVerifier.create(adapter.transmitirDocumento(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-v2-1")))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SoapErrorCodes.UNKNOWN_ERROR, result.getErrorCode());
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void transmitirDocumento_whenNoTraceIdInContext_usesDefault() {
+        when(soapV2Mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soapenv:Envelope>...</soapenv:Envelope>");
+        when(soapV2Mapper.parseResponse(any())).thenReturn(successResponse());
+        mockWebClientSuccessV2("<response>ok</response>");
+
+        StepVerifier.create(adapter.transmitirDocumento(request()))
+            .assertNext(result -> assertTrue(result.isSuccess()))
             .verifyComplete();
     }
 }

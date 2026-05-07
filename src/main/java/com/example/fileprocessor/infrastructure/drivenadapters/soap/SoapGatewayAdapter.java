@@ -5,10 +5,14 @@ import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.SoapGatewayV2;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.helpers.soap.v2.config.SoapV2Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
+import com.example.fileprocessor.infrastructure.helpers.soap.v2.mapper.SoapV2Mapper;
+import jakarta.annotation.Nullable;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
@@ -28,89 +32,184 @@ import java.util.logging.Logger;
 
 /**
  * SOAP gateway adapter for file upload operations.
+ * Implements both V1 (UploadFile) and V2 (transmitirDocumento) SOAP protocols.
  */
 @Component
-public class SoapGatewayAdapter implements SoapGateway {
+public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
 
     private static final Logger log = Logger.getLogger(SoapGatewayAdapter.class.getName());
 
     private final WebClient webClient;
+    private final WebClient webClientV2;
     private final SoapProperties properties;
+    private final SoapV2Properties v2Properties;
     private final SoapMapper soapMapper;
+    private final SoapV2Mapper soapV2Mapper;
 
     public SoapGatewayAdapter(WebClient.Builder webClientBuilder,
                               SoapProperties properties,
-                              SoapMapper soapMapper) {
+                              SoapV2Properties v2Properties,
+                              SoapMapper soapMapper,
+                              SoapV2Mapper soapV2Mapper) {
         this.properties = properties;
+        this.v2Properties = v2Properties;
         this.soapMapper = soapMapper;
-
-        HttpClient httpClient = HttpClient.create();
+        this.soapV2Mapper = soapV2Mapper;
 
         this.webClient = webClientBuilder
             .baseUrl(properties.endpoint())
-            .clientConnector(new ReactorClientHttpConnector(httpClient))
+            .clientConnector(new ReactorClientHttpConnector(HttpClient.create()))
+            .build();
+
+        this.webClientV2 = webClientBuilder
+            .baseUrl(v2Properties.endpoint())
+            .clientConnector(new ReactorClientHttpConnector(HttpClient.create()))
             .build();
     }
 
     @Override
     public Mono<FileUploadResult> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
-            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
             int maxRetries = properties.retryAttempts();
             AtomicInteger attemptCount = new AtomicInteger(1);
 
-            log.log(Level.INFO, "Sending SOAP request for traceId: {0}, endpoint: {1}, retryAttempts: {2}",
+            log.log(Level.INFO, "Sending SOAP V1 request for traceId: {0}, endpoint: {1}, retryAttempts: {2}",
                     new Object[]{traceId, properties.endpoint(), maxRetries});
 
             String soapEnvelope = soapMapper.toFullSoapMessage(request);
 
-            Mono<ExternalServiceResponse> retryableMono = Mono.delay(Duration.ofSeconds(20))
-                    .then(webClient.post()
-                    .contentType(MediaType.TEXT_XML)
-                    .header("SOAPAction", SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD)
-                    .bodyValue(soapEnvelope)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                    .map(soapMapper::fromSoapXml)
-                    .doOnNext(response -> log.log(Level.INFO, "SOAP response received for traceId={0}: correlationId={1}",
-                            new Object[]{traceId, response.getCorrelationId()}))
-                    .doOnError(e -> {
-                        int currentAttempt = attemptCount.incrementAndGet();
-                        log.log(Level.WARNING, "SOAP request attempt {0}/{1} failed for traceId={2}: {3}",
-                                new Object[]{currentAttempt, maxRetries + 1, traceId, e.getMessage()});
-                    }));
-
-            return retryableMono
-                    .retryWhen(reactor.util.retry.Retry.backoff(maxRetries, Duration.ofMillis(500))
-                            .filter(this::isRetryable)
-                            .doBeforeRetry(signal -> {
-                                int currentAttempt = attemptCount.incrementAndGet();
-                                log.log(Level.INFO, "Retrying SOAP request for traceId={0}, attempt {1}/{2}",
-                                        new Object[]{traceId, currentAttempt, maxRetries + 1});
-                            }))
-                    .map(response -> toFileUploadResult(response, attemptCount.get()))
-                    .onErrorResume(WebClientResponseException.class, ex -> {
-                        log.log(Level.SEVERE, "SOAP HTTP error for traceId={0}: {1} {2}", new Object[]{traceId, ex.getStatusCode(), ex.getMessage()});
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.BAD_GATEWAY, ex.getMessage(), attemptCount.get()));
-                    })
-                    .onErrorResume(TimeoutException.class, ex -> {
-                        log.log(Level.SEVERE, "SOAP timeout for traceId={0}", new Object[]{traceId});
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.GATEWAY_TIMEOUT, "Timeout after " + properties.timeoutSeconds() + "s", attemptCount.get()));
-                    })
-                    .onErrorResume(IOException.class, ex -> {
-                        log.log(Level.SEVERE, "SOAP IO error for traceId={0}: {1}", new Object[]{traceId, ex.getMessage()});
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR, ex.getMessage(), attemptCount.get()));
-                    })
-                    .onErrorResume(ConnectException.class, ex -> {
-                        log.log(Level.SEVERE, "SOAP connection error for traceId={0}: {1}", new Object[]{traceId, ex.getMessage()});
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.SERVICE_UNAVAILABLE, ex.getMessage(), attemptCount.get()));
-                    })
-                    .onErrorResume(Throwable.class, ex -> {
-                        log.log(Level.SEVERE, "SOAP unexpected error for traceId={0}: {1}", new Object[]{traceId, ex.getMessage()});
-                        return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR, ex.getMessage(), attemptCount.get()));
-                    });
+            return executeSoapCall(webClient, soapEnvelope, traceId,
+                    properties.timeoutSeconds(), maxRetries,
+                    SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD,
+                    attemptCount)
+                .map(soapMapper::fromSoapXml)
+                .doOnNext(response -> log.log(Level.INFO,
+                    "SOAP V1 response received for traceId={0}: correlationId={1}",
+                    new Object[]{traceId, response.getCorrelationId()}))
+                .map(response -> toFileUploadResult(response, attemptCount.get()))
+                .onErrorResume(WebClientResponseException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V1 HTTP error for traceId={0}: {1} {2}",
+                            new Object[]{traceId, ex.getStatusCode(), ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.BAD_GATEWAY,
+                            ex.getMessage(), attemptCount.get()));
+                })
+                .onErrorResume(TimeoutException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V1 timeout for traceId={0}", traceId);
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.GATEWAY_TIMEOUT,
+                            "Timeout after " + properties.timeoutSeconds() + "s", attemptCount.get()));
+                })
+                .onErrorResume(IOException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V1 IO error for traceId={0}: {1}",
+                            new Object[]{traceId, ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR,
+                            ex.getMessage(), attemptCount.get()));
+                })
+                .onErrorResume(ConnectException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V1 connection error for traceId={0}: {1}",
+                            new Object[]{traceId, ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.SERVICE_UNAVAILABLE,
+                            ex.getMessage(), attemptCount.get()));
+                })
+                .onErrorResume(Throwable.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V1 unexpected error for traceId={0}: {1}",
+                            new Object[]{traceId, ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR,
+                            ex.getMessage(), attemptCount.get()));
+                });
         });
+    }
+
+    @Override
+    public Mono<FileUploadResult> transmitirDocumento(FileUploadRequest request) {
+        return Mono.deferContextual(ctx -> {
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
+            int maxRetries = v2Properties.retryAttempts();
+            AtomicInteger attemptCount = new AtomicInteger(1);
+
+            log.log(Level.INFO, "Sending SOAP V2 request for traceId: {0}, endpoint: {1}, retryAttempts: {2}",
+                    new Object[]{traceId, v2Properties.endpoint(), maxRetries});
+
+            String soapEnvelope = soapV2Mapper.buildEnvelope(request, v2Properties, traceId);
+
+            return executeSoapCall(webClientV2, soapEnvelope, traceId,
+                    v2Properties.timeoutSeconds(), maxRetries,
+                    v2Properties.soapAction(),
+                    attemptCount)
+                .map(soapV2Mapper::parseResponse)
+                .doOnNext(response -> log.log(Level.INFO,
+                    "SOAP V2 response received for traceId={0}: correlationId={1}",
+                    new Object[]{traceId, response.getCorrelationId()}))
+                .map(response -> toFileUploadResult(response, attemptCount.get()))
+                .onErrorResume(WebClientResponseException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V2 HTTP error for traceId={0}: {1} {2}",
+                            new Object[]{traceId, ex.getStatusCode(), ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.BAD_GATEWAY,
+                            ex.getMessage(), attemptCount.get()));
+                })
+                .onErrorResume(TimeoutException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V2 timeout for traceId={0}", traceId);
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.GATEWAY_TIMEOUT,
+                            "Timeout after " + v2Properties.timeoutSeconds() + "s", attemptCount.get()));
+                })
+                .onErrorResume(IOException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V2 IO error for traceId={0}: {1}",
+                            new Object[]{traceId, ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR,
+                            ex.getMessage(), attemptCount.get()));
+                })
+                .onErrorResume(ConnectException.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V2 connection error for traceId={0}: {1}",
+                            new Object[]{traceId, ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.SERVICE_UNAVAILABLE,
+                            ex.getMessage(), attemptCount.get()));
+                })
+                .onErrorResume(Throwable.class, ex -> {
+                    log.log(Level.SEVERE, "SOAP V2 unexpected error for traceId={0}: {1}",
+                            new Object[]{traceId, ex.getMessage()});
+                    return Mono.just(buildErrorResult(traceId, SoapErrorCodes.UNKNOWN_ERROR,
+                            ex.getMessage(), attemptCount.get()));
+                });
+        });
+    }
+
+    private Mono<String> executeSoapCall(WebClient client,
+                                         String soapEnvelope,
+                                         String traceId,
+                                         int timeoutSeconds,
+                                         int maxRetries,
+                                         @Nullable String soapAction,
+                                         AtomicInteger attemptCount) {
+
+        WebClient.RequestBodySpec bodySpec = client.post()
+            .contentType(MediaType.TEXT_XML);
+
+        if (soapAction != null && !soapAction.isBlank()) {
+            bodySpec.header("SOAPAction", soapAction);
+        }
+
+        Mono<String> httpCall = bodySpec
+            .bodyValue(soapEnvelope)
+            .retrieve()
+            .bodyToMono(String.class)
+            .timeout(Duration.ofSeconds(timeoutSeconds))
+            .doOnError(e -> {
+                int currentAttempt = attemptCount.incrementAndGet();
+                log.log(Level.WARNING, "SOAP attempt {0}/{1} failed for traceId={2}: {3}",
+                        new Object[]{currentAttempt, maxRetries + 1, traceId, e.getMessage()});
+            });
+
+        if (maxRetries > 0) {
+            return httpCall.retryWhen(reactor.util.retry.Retry.backoff(maxRetries, Duration.ofMillis(500))
+                .filter(this::isRetryable)
+                .doBeforeRetry(signal -> {
+                    int currentAttempt = attemptCount.incrementAndGet();
+                    log.log(Level.INFO, "Retrying SOAP for traceId={0}, attempt {1}/{2}",
+                            new Object[]{traceId, currentAttempt, maxRetries + 1});
+                }));
+        }
+
+        return httpCall;
     }
 
     boolean isRetryable(Throwable throwable) {
