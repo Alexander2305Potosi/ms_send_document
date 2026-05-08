@@ -16,12 +16,11 @@ public final class ProcessingResultCodes {
     public static final String INVALID_RESPONSE = "INVALID_RESPONSE";
 
     // ZIP decompression error codes
-    public static final String INVALID_ZIP = "INVALID_ZIP";
+    public static final String DECOMPRESSION_ERROR = "DECOMPRESSION_ERROR";
 
     // Generic error codes (business level)
     public static final String UNKNOWN_ERROR = "UNKNOWN_ERROR";
     public static final String REST_CLIENT_ERROR = "REST_CLIENT_ERROR";
     public static final String SIZE_EXCEEDED = "SIZE_EXCEEDED";
     public static final String PATTERN_MISMATCH = "PATTERN_MISMATCH";
-    public static final String DECOMPRESSION_ERROR = "DECOMPRESSION_ERROR";
 }

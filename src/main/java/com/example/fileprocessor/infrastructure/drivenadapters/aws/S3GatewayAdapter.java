@@ -11,6 +11,7 @@ import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.stereotype.Component;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
@@ -77,9 +78,10 @@ public class S3GatewayAdapter implements S3Gateway {
                 ))
                 .build();
 
-            CompletableFuture<PutObjectResponse> future = s3Client.putObject(putRequest, AsyncRequestBody.fromBytes(content));
-
-            return Mono.fromFuture(future)
+            return Mono.defer(() -> {
+                    CompletableFuture<PutObjectResponse> future = s3Client.putObject(putRequest, AsyncRequestBody.fromBytes(content));
+                    return Mono.fromFuture(future);
+                })
                 .timeout(Duration.ofSeconds(s3Properties.timeoutSeconds()))
                 .retryWhen(Retry.backoff(s3Properties.retryAttempts(), Duration.ofMillis(s3Properties.retryBackoffMillis()))
                     .filter(this::isRetryableException)
@@ -107,6 +109,7 @@ public class S3GatewayAdapter implements S3Gateway {
     }
 
     private Mono<FileUploadResult> handleS3Error(Throwable error, String documentId, String traceId) {
+        error = Exceptions.unwrap(error);
         log.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, error.getMessage()});
 
         if (error instanceof TimeoutException) {

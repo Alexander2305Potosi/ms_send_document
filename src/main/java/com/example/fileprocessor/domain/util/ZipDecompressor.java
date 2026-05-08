@@ -44,9 +44,10 @@ public final class ZipDecompressor {
                 }
             }
         } catch (IOException e) {
-            throw ProcessingException.withTraceId(
-                "Failed to decompress ZIP: " + zipDoc.documentId(),
-                ProcessingResultCodes.INVALID_ZIP, zipDoc.documentId());
+            throw new ProcessingException(
+                ProcessingResultCodes.DECOMPRESSION_ERROR,
+                "Failed to decompress ZIP '" + zipDoc.filename() + "': " + e.getMessage(),
+                e);
         }
         return entries;
     }

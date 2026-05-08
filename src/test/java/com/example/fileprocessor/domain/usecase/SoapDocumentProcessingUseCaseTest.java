@@ -11,6 +11,7 @@ import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.infrastructure.drivenadapters.soap.SoapErrorCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,6 +62,7 @@ class SoapDocumentProcessingUseCaseTest {
         lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
         lenient().when(historyRepository.findLastAudit(anyLong(), anyString())).thenReturn(Mono.empty());
         lenient().when(documentRepository.updateStateById(anyLong(), anyString(), any())).thenReturn(Mono.empty());
+        lenient().when(documentRepository.updateStateById(anyLong(), anyString(), anyString(), any())).thenReturn(Mono.just(1L));
     }
 
     private static ProductDocumentHistory doc() {
@@ -117,6 +119,44 @@ class SoapDocumentProcessingUseCaseTest {
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void uploadDocument_homologationFails_propagatesError() {
+        when(homologationRepository.resolve("origin", "AR"))
+            .thenReturn(Mono.error(new RuntimeException("Origin not found")));
+
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+            })
+            .verifyComplete();
+
+        verify(soapGateway, never()).send(any());
+    }
+
+    @Test
+    void uploadDocument_whenGatewayReturnsFailureStatus_propagatesFailure() {
+        HomologationResult homologationResult = new HomologationResult("Manual de Origin", "Argentina");
+        when(homologationRepository.resolve("origin", "AR")).thenReturn(Mono.just(homologationResult));
+
+        FileUploadResult failureResult = FileUploadResult.builder()
+            .status(DocumentStatus.FAILURE.name())
+            .success(false)
+            .errorCode(SoapErrorCodes.BAD_GATEWAY)
+            .message("SOAP gateway error")
+            .build();
+
+        when(soapGateway.send(any(FileUploadRequest.class)))
+            .thenReturn(Mono.just(failureResult));
+
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SoapErrorCodes.BAD_GATEWAY, result.getErrorCode());
             })
             .verifyComplete();
     }

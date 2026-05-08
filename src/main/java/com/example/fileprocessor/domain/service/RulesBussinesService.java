@@ -43,11 +43,11 @@ public class RulesBussinesService implements RulesBussinesGateway {
                     String.format("Size %,d bytes exceeds max %,d bytes for file '%s'",
                         doc.size(), maxFileSizeBytes, doc.filename())));
             }
-            if (filenamePattern != null && !filenamePattern.matcher(doc.name()).matches()) {
+            if (filenamePattern != null && !filenamePattern.matcher(doc.filename()).matches()) {
                 return Mono.error(new ProcessingException(
                     ProcessingResultCodes.PATTERN_MISMATCH,
                     String.format("Filename '%s' does not match pattern '%s'",
-                        doc.name(), filenamePattern.pattern())));
+                        doc.filename(), filenamePattern.pattern())));
             }
             return Mono.just(doc);
         });

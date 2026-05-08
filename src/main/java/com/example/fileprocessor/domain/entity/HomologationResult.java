@@ -5,5 +5,10 @@ package com.example.fileprocessor.domain.entity;
  */
 public record HomologationResult(
     String origin,
-    String paisHomologado
-) {}
+    String paisHomologado,
+    boolean useV2
+) {
+    public HomologationResult(String origin, String paisHomologado) {
+        this(origin, paisHomologado, false);
+    }
+}

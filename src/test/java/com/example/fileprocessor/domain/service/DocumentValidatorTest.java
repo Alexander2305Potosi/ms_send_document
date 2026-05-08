@@ -70,6 +70,16 @@ class DocumentValidatorTest {
     }
 
     @Test
+    void validate_sizeExceeded_throwsProcessingException() {
+        RulesBussinesService validator = new RulesBussinesService(
+            config(100L, null)
+        );
+
+        StepVerifier.create(validator.validate(doc("doc-1", "test.pdf", "application/pdf", 500), true))
+            .verifyError(ProcessingException.class);
+    }
+
+    @Test
     void validate_noPattern_passes() {
         RulesBussinesService validator = new RulesBussinesService(
             config(null, null)

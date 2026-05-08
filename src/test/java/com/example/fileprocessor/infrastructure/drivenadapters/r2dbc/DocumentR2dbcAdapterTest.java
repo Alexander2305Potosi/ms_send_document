@@ -8,6 +8,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.r2dbc.core.FetchSpec;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -24,11 +26,14 @@ class DocumentR2dbcAdapterTest {
     @Mock
     private com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository springDataRepository;
 
+    @Mock
+    private DatabaseClient databaseClient;
+
     private DocumentR2dbcAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        adapter = new DocumentR2dbcAdapter(springDataRepository);
+        adapter = new DocumentR2dbcAdapter(springDataRepository, databaseClient);
     }
 
     private static DocumentEntity entity(String docId, String state) {
@@ -118,5 +123,35 @@ class DocumentR2dbcAdapterTest {
             .verifyComplete();
 
         verify(springDataRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStateById_atomic_whenMatches_returnsRowsAffected() {
+        DatabaseClient.GenericExecuteSpec execSpec = mock(DatabaseClient.GenericExecuteSpec.class);
+        FetchSpec fetchSpec = mock(FetchSpec.class);
+
+        when(databaseClient.sql(anyString())).thenReturn(execSpec);
+        when(execSpec.bind(anyString(), any())).thenReturn(execSpec);
+        when(execSpec.fetch()).thenReturn(fetchSpec);
+        when(fetchSpec.rowsUpdated()).thenReturn(Mono.just(1L));
+
+        StepVerifier.create(adapter.updateStateById(1L, "PENDING", "IN_PROGRESS", LocalDateTime.now()))
+            .expectNext(1L)
+            .verifyComplete();
+    }
+
+    @Test
+    void updateStateById_atomic_whenNoMatch_returnsZero() {
+        DatabaseClient.GenericExecuteSpec execSpec = mock(DatabaseClient.GenericExecuteSpec.class);
+        FetchSpec fetchSpec = mock(FetchSpec.class);
+
+        when(databaseClient.sql(anyString())).thenReturn(execSpec);
+        when(execSpec.bind(anyString(), any())).thenReturn(execSpec);
+        when(execSpec.fetch()).thenReturn(fetchSpec);
+        when(fetchSpec.rowsUpdated()).thenReturn(Mono.just(0L));
+
+        StepVerifier.create(adapter.updateStateById(1L, "PENDING", "IN_PROGRESS", LocalDateTime.now()))
+            .expectNext(0L)
+            .verifyComplete();
     }
 }

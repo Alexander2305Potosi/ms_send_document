@@ -51,14 +51,23 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Flux<FileUploadResult> startProcessing(Document doc) {
-        documentRepository.updateStateById(doc.id(), ProductState.IN_PROGRESS, LocalDateTime.now()).subscribe();
-        return processDocument(doc)
-            .onErrorResume(error -> {
-                traceFailure(doc.id(), doc.name(), implementationName(), error);
-                documentRepository.updateStateById(doc.id(), ProductState.PENDING, LocalDateTime.now()).subscribe();
-                log.log(Level.SEVERE, "Document {0} failed unexpectedly, re-queued for next execution: {1}",
-                    new Object[]{doc.documentId(), error.getMessage()});
-                return Flux.empty();
+        return documentRepository.updateStateById(doc.id(), ProductState.PENDING, ProductState.IN_PROGRESS, LocalDateTime.now())
+            .flatMapMany(rowsAffected -> {
+                if (rowsAffected == 0) {
+                    log.log(Level.INFO, "Document {0} already claimed by another instance, skipping", doc.id());
+                    return Flux.empty();
+                }
+                return processDocument(doc)
+                    .onErrorResume(error -> {
+                        traceFailure(doc.id(), doc.name(), implementationName(), error);
+                        documentRepository.updateStateById(doc.id(), ProductState.PENDING, LocalDateTime.now())
+                            .doOnError(e -> log.log(Level.SEVERE, "Failed to reset PENDING for doc {0}: {1}",
+                                new Object[]{doc.id(), e.getMessage()}))
+                            .subscribe();
+                        log.log(Level.SEVERE, "Document {0} failed unexpectedly, re-queued for next execution: {1}",
+                            new Object[]{doc.documentId(), error.getMessage()});
+                        return Flux.empty();
+                    });
             });
     }
 
@@ -91,13 +100,24 @@ public abstract class AbstractDocumentProcessingUseCase {
     private Mono<ProductDocumentHistory> skipDocByBussines(Document doc, ProcessingException error, String filename) {
         log.log(Level.INFO, "Document {0} skipped: {1}", new Object[]{doc.documentId(), error.getMessage()});
         traceSkip(doc, filename, error);
-        documentRepository.updateStateById(doc.id(), ProductState.PROCESSED, LocalDateTime.now()).subscribe();
+        documentRepository.updateStateById(doc.id(), ProductState.PROCESSED, LocalDateTime.now())
+            .doOnError(e -> log.log(Level.SEVERE, "Failed to set PROCESSED (skip) for doc {0}: {1}",
+                new Object[]{doc.id(), e.getMessage()}))
+            .subscribe();
         return Mono.empty();
     }
 
     private Mono<FileUploadResult> handleSuccess(Document doc, FileUploadResult result, String filename) {
+        if (!result.isSuccess()) {
+            String errorCode = result.getErrorCode() != null ? result.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
+            return handleError(doc, new ProcessingException(errorCode,
+                result.getMessage() != null ? result.getMessage() : "Upload returned failure status"), filename);
+        }
         traceSuccess(doc.id(), filename, implementationName());
-        documentRepository.updateStateById(doc.id(), ProductState.PROCESSED, LocalDateTime.now()).subscribe();
+        documentRepository.updateStateById(doc.id(), ProductState.PROCESSED, LocalDateTime.now())
+            .doOnError(e -> log.log(Level.SEVERE, "Failed to set PROCESSED for doc {0}: {1}",
+                new Object[]{doc.id(), e.getMessage()}))
+            .subscribe();
         return Mono.just(result);
     }
 
@@ -105,7 +125,10 @@ public abstract class AbstractDocumentProcessingUseCase {
         traceFailure(doc.id(), filename, implementationName(), error);
         String errorCode = error instanceof ProcessingException pe
             ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
-        documentRepository.updateStateById(doc.id(), ProductState.FAILED, LocalDateTime.now()).subscribe();
+        documentRepository.updateStateById(doc.id(), ProductState.FAILED, LocalDateTime.now())
+            .doOnError(e -> log.log(Level.SEVERE, "Failed to set FAILED for doc {0}: {1}",
+                new Object[]{doc.id(), e.getMessage()}))
+            .subscribe();
         log.log(Level.SEVERE, "Processing failed for doc {0}: {1}", new Object[]{doc.id(), errorCode});
         return Mono.just(FileUploadResult.builder()
             .status(DocumentStatus.FAILURE.name())

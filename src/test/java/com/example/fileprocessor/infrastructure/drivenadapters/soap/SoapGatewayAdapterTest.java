@@ -297,6 +297,114 @@ class SoapGatewayAdapterTest {
             .verifyComplete();
     }
 
+    // ── Retry + trace tests (V1) ──────────────────────────────────────
+
+    @Test
+    void send_withRetries_eventualSuccess_createsRetryTraces() {
+        soapProperties = new SoapProperties("http://localhost:8080/soap", 30, 3);
+        adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
+                soapMapper, soapV2Mapper, historyRepository);
+
+        when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
+        when(soapMapper.fromSoapXml(any())).thenReturn(successResponse());
+        when(webClient.post()).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.bodyValue(any())).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+
+        WebClientResponseException e503 = mock(WebClientResponseException.class);
+        when(e503.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
+        when(responseSpec.bodyToMono(String.class))
+            .thenReturn(Mono.error(e503))
+            .thenReturn(Mono.error(new TimeoutException()))
+            .thenReturn(Mono.just("<response>ok</response>"));
+
+        StepVerifier.create(adapter.send(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .assertNext(result -> assertTrue(result.isSuccess()))
+            .verifyComplete();
+
+        verify(historyRepository, times(2)).save(any());
+    }
+
+    @Test
+    void send_withRetries_allExhausted_returnsErrorWithTraces() {
+        when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
+        when(webClient.post()).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.bodyValue(any())).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+
+        WebClientResponseException e503 = mock(WebClientResponseException.class);
+        when(e503.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
+        when(responseSpec.bodyToMono(String.class))
+            .thenReturn(Mono.error(e503))
+            .thenReturn(Mono.error(e503))
+            .thenReturn(Mono.error(e503));
+
+        StepVerifier.create(adapter.send(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SoapErrorCodes.BAD_GATEWAY, result.getErrorCode());
+            })
+            .verifyComplete();
+
+        verify(historyRepository, times(3)).save(any());
+    }
+
+    @Test
+    void send_http500_noRetryAttempted_noTraceCreated() {
+        when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
+        WebClientResponseException ex = mock(WebClientResponseException.class);
+        when(ex.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR);
+        when(ex.getMessage()).thenReturn("Server error");
+        mockWebClientErrorV1(ex);
+
+        StepVerifier.create(adapter.send(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SoapErrorCodes.BAD_GATEWAY, result.getErrorCode());
+            })
+            .verifyComplete();
+
+        verify(historyRepository, never()).save(any());
+    }
+
+    @Test
+    void send_ioException_noRetryAttempted_noTraceCreated() {
+        when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
+        mockWebClientErrorV1(new IOException("IO error"));
+
+        StepVerifier.create(adapter.send(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SoapErrorCodes.UNKNOWN_ERROR, result.getErrorCode());
+            })
+            .verifyComplete();
+
+        verify(historyRepository, never()).save(any());
+    }
+
+    @Test
+    void send_mapperThrowsException_handledGracefully() {
+        when(soapMapper.toFullSoapMessage(any())).thenThrow(new RuntimeException("Mapping failed"));
+
+        StepVerifier.create(adapter.send(request())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SoapErrorCodes.UNKNOWN_ERROR, result.getErrorCode());
+            })
+            .verifyComplete();
+
+        verify(historyRepository, never()).save(any());
+    }
+
     // transmitirDocumento (V2) tests
 
     @Test

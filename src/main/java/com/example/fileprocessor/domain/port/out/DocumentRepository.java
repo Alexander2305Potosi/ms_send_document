@@ -10,4 +10,5 @@ public interface DocumentRepository {
     Mono<Document> save(Document document);
     Flux<Document> findByStateAndUseCase(String state, String useCase);
     Mono<Void> updateStateById(Long id, String state, LocalDateTime updatedAt);
+    Mono<Long> updateStateById(Long id, String expectedState, String newState, LocalDateTime updatedAt);
 }
