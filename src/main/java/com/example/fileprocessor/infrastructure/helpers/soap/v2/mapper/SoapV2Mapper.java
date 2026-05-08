@@ -101,16 +101,18 @@ public class SoapV2Mapper {
             throws XMLStreamException, JAXBException {
         writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_HEADER);
 
+        writer.setPrefix(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
+        writer.writeStartElement(props.headerNamespace(), "requestHeader");
+
         SoapV2RequestHeader header = buildHeader(props, traceId);
 
         Marshaller marshaller = marshallingJaxbContext.createMarshaller();
         marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, false);
 
-        XMLStreamWriter injectingWriter = new NamespaceInjectingStreamWriter(
-            writer, props.headerNamespace());
-        marshaller.marshal(header, injectingWriter);
+        marshaller.marshal(header, writer);
 
+        writer.writeEndElement(); // requestHeader
         writer.writeEndElement(); // Header
     }
 
@@ -157,12 +159,16 @@ public class SoapV2Mapper {
 
         TransmitirDocumentoRequest bodyRequest = buildBodyRequest(request, props);
 
+        writer.setPrefix(SoapV2Constants.PREFIX_BODY_NS, props.bodyNamespace());
+        writer.writeStartElement(props.bodyNamespace(), "transmitirDocumento");
+
         Marshaller marshaller = marshallingJaxbContext.createMarshaller();
         marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, false);
 
         marshaller.marshal(bodyRequest, writer);
 
+        writer.writeEndElement(); // transmitirDocumento
         writer.writeEndElement(); // Body
     }
 

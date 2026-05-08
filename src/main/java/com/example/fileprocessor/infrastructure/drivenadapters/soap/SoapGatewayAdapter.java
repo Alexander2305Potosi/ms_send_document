@@ -1,13 +1,11 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
-import com.example.fileprocessor.domain.entity.DocumentHistory;
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.SoapGatewayV2;
 import com.example.fileprocessor.domain.port.out.SoapGatewayV2;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
@@ -29,10 +27,8 @@ import java.io.IOException;
 import java.net.ConnectException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -51,19 +47,16 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
     private final SoapV2Properties v2Properties;
     private final SoapMapper soapMapper;
     private final SoapV2Mapper soapV2Mapper;
-    private final DocumentHistoryRepository historyRepository;
 
     public SoapGatewayAdapter(WebClient.Builder webClientBuilder,
                               SoapProperties properties,
                               SoapV2Properties v2Properties,
                               SoapMapper soapMapper,
-                              SoapV2Mapper soapV2Mapper,
-                              DocumentHistoryRepository historyRepository) {
+                              SoapV2Mapper soapV2Mapper) {
         this.properties = properties;
         this.v2Properties = v2Properties;
         this.soapMapper = soapMapper;
         this.soapV2Mapper = soapV2Mapper;
-        this.historyRepository = historyRepository;
 
         this.webClient = webClientBuilder
             .baseUrl(properties.endpoint())
@@ -92,7 +85,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                     properties.timeoutSeconds(), maxRetries,
                     SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD,
                     attemptCount,
-                    signal -> traceRetry(request, signal))
+                    // traceRetry removed - traceability handled by use case
                 .onErrorMap(e -> {
                     Throwable unwrapped = e;
                     while (unwrapped instanceof RuntimeException && unwrapped.getCause() != null && unwrapped.getCause() != unwrapped) {
@@ -153,7 +146,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                     v2Properties.timeoutSeconds(), maxRetries,
                     v2Properties.soapAction(),
                     attemptCount,
-                    signal -> traceRetry(request, signal))
+                    // traceRetry removed - traceability handled by use case
                 .onErrorMap(e -> {
                     Throwable unwrapped = e;
                     while (unwrapped instanceof RuntimeException && unwrapped.getCause() != null && unwrapped.getCause() != unwrapped) {
@@ -250,25 +243,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
         return false;
     }
 
-    private void traceRetry(FileUploadRequest request, reactor.util.retry.Retry.RetrySignal signal) {
-        int attempt = (int) signal.totalRetries() + 1;
-        String errorCode = signal.failure() instanceof ProcessingException pe
-            ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
-        historyRepository.save(DocumentHistory.builder()
-            .documentId(request.getDocId())
-            .filename(request.getFilename())
-            .operation("SOAP")
-            .result(DocumentStatus.FAILURE.name())
-            .errorCode(errorCode)
-            .errorMessage(signal.failure().getMessage())
-            .retry(attempt)
-            .startedAt(LocalDateTime.now())
-            .completedAt(LocalDateTime.now())
-            .createdAt(LocalDateTime.now())
-            .build())
-            .doOnError(e -> log.log(Level.WARNING, "Failed to record SOAP retry trace: {0}", e.getMessage()))
-            .subscribe();
-    }
+    // Traceability handled by use case
 
     FileUploadResult buildErrorResult(String traceId, String errorCode, String message, int attemptCount) {
         return FileUploadResult.builder()

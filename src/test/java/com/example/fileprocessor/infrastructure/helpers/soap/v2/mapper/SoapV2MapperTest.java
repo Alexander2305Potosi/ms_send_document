@@ -62,18 +62,18 @@ class SoapV2MapperTest {
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1, 2, 3}), minimalProps, "trace-1");
 
         assertThat(xml).contains("<v2:requestHeader>");
-        assertThat(xml).contains("<v2:systemId>sys-123</v2:systemId>");
-        assertThat(xml).contains("<v2:messageId>trace-1</v2:messageId>");
-        assertThat(xml).contains("<v2:timestamp>");
-        assertThat(xml).contains("<v2:userId>");
-        assertThat(xml).contains("<v2:userName>test-user</v2:userName>");
+        assertThat(xml).contains("<systemId>sys-123</systemId>");
+        assertThat(xml).contains("<messageId>trace-1</messageId>");
+        assertThat(xml).contains("<timestamp>");
+        assertThat(xml).contains("<userId>");
+        assertThat(xml).contains("<userName>test-user</userName>");
     }
 
     @Test
     void buildEnvelope_minimalProperties_containsBodyFields() {
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1, 2, 3}), minimalProps, "trace-1");
 
-        assertThat(xml).contains("<transmitirDocumento>");
+        assertThat(xml).contains("<v1:transmitirDocumento>");
         assertThat(xml).contains("<subTipoDocumental>Facturas</subTipoDocumental>");
         assertThat(xml).contains("<nombreArchivo>doc.pdf</nombreArchivo>");
         assertThat(xml).contains("<archivo>AQID</archivo>"); // Base64 of {1,2,3}
@@ -83,10 +83,10 @@ class SoapV2MapperTest {
     void buildEnvelope_minimalProperties_omitsOptionalFields() {
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1, 2, 3}), minimalProps, "trace-1");
 
-        assertThat(xml).doesNotContain("<v2:userToken>");
-        assertThat(xml).doesNotContain("<v2:messageContext>");
-        assertThat(xml).doesNotContain("<v2:destination>");
-        assertThat(xml).doesNotContain("<v2:classifications>");
+        assertThat(xml).doesNotContain("<userToken>");
+        assertThat(xml).doesNotContain("<messageContext>");
+        assertThat(xml).doesNotContain("<destination>");
+        assertThat(xml).doesNotContain("<classifications>");
         assertThat(xml).doesNotContain("<metaData>");
     }
 
@@ -102,7 +102,7 @@ class SoapV2MapperTest {
 
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1, 2, 3}), props, "trace-2");
 
-        assertThat(xml).contains("<v2:userToken>token-abc</v2:userToken>");
+        assertThat(xml).contains("<userToken>token-abc</userToken>");
     }
 
     @Test
@@ -117,12 +117,12 @@ class SoapV2MapperTest {
 
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1, 2, 3}), props, "trace-3");
 
-        assertThat(xml).contains("<v2:messageContext>");
-        assertThat(xml).contains("<v2:property>");
-        assertThat(xml).contains("<v2:key>key1</v2:key>");
-        assertThat(xml).contains("<v2:value>val1</v2:value>");
-        assertThat(xml).contains("<v2:key>key2</v2:key>");
-        assertThat(xml).contains("<v2:value>val2</v2:value>");
+        assertThat(xml).contains("<messageContext>");
+        assertThat(xml).contains("<property>");
+        assertThat(xml).contains("<key>key1</key>");
+        assertThat(xml).contains("<value>val1</value>");
+        assertThat(xml).contains("<key>key2</key>");
+        assertThat(xml).contains("<value>val2</value>");
     }
 
     @Test
@@ -138,10 +138,10 @@ class SoapV2MapperTest {
 
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1, 2, 3}), props, "trace-4");
 
-        assertThat(xml).contains("<v2:destination>");
-        assertThat(xml).contains("<v2:name>bussinesdocs</v2:name>");
-        assertThat(xml).contains("<v2:namespace>http://prueba.com/dest/ns</v2:namespace>");
-        assertThat(xml).contains("<v2:operation>sendOperation</v2:operation>");
+        assertThat(xml).contains("<destination>");
+        assertThat(xml).contains("<name>bussinesdocs</name>");
+        assertThat(xml).contains("<namespace>http://prueba.com/dest/ns</namespace>");
+        assertThat(xml).contains("<operation>sendOperation</operation>");
     }
 
     @Test
@@ -156,9 +156,9 @@ class SoapV2MapperTest {
 
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1, 2, 3}), props, "trace-5");
 
-        assertThat(xml).contains("<v2:classifications>");
-        assertThat(xml).contains("<v2:classification>classA</v2:classification>");
-        assertThat(xml).contains("<v2:classification>classB</v2:classification>");
+        assertThat(xml).contains("<classifications>");
+        assertThat(xml).contains("<classification>classA</classification>");
+        assertThat(xml).contains("<classification>classB</classification>");
     }
 
     @Test
@@ -208,7 +208,7 @@ class SoapV2MapperTest {
 
         String xml = mapper.buildEnvelope(request("doc.pdf", new byte[]{1}), props, "trace-9");
 
-        assertThat(xml).doesNotContain("<v2:userToken>");
+        assertThat(xml).doesNotContain("<userToken>");
     }
 
     @Test
