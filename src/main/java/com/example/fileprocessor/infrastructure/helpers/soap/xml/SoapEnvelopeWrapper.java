@@ -3,16 +3,6 @@ package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2Classifications;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2Destination;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2MessageContext;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2MessageProperty;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2RequestHeader;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2UserId;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.body.TransmitirDocumentoRequest;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.body.TransmitirDocumentoResponse;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
 import org.springframework.stereotype.Component;
@@ -33,17 +23,11 @@ public class SoapEnvelopeWrapper {
     private final JAXBContext jaxbContext;
     private final DocumentBuilderFactory documentBuilderFactory;
 
-    public SoapEnvelopeWrapper() {
-        try {
-            this.jaxbContext = JAXBContext.newInstance(
-                    UploadFileRequest.class, UploadFileResponse.class,
-                    TransmitirDocumentoRequest.class, TransmitirDocumentoResponse.class,
-                    SoapV2RequestHeader.class, SoapV2MessageContext.class,
-                    SoapV2MessageProperty.class, SoapV2UserId.class,
-                    SoapV2Destination.class, SoapV2Classifications.class);
-        } catch (jakarta.xml.bind.JAXBException e) {
-            throw new IllegalStateException("Failed to initialize JAXB context", e);
-        }
+    /**
+     * @param jaxbContext shared JAXB context declared in {@code JaxbConfig}
+     */
+    public SoapEnvelopeWrapper(JAXBContext jaxbContext) {
+        this.jaxbContext = jaxbContext;
         this.documentBuilderFactory = DocumentBuilderFactory.newInstance();
         this.documentBuilderFactory.setNamespaceAware(true);
         try {

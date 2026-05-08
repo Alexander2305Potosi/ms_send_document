@@ -6,30 +6,27 @@ import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.config.SoapV2Properties;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.constants.SoapV2Constants;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.NamespaceInjectingStreamWriter;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.body.MetaDataEntry;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.body.MetaDataWrapper;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2Classifications;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2Destination;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2MessageContext;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2MessageProperty;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2RequestHeader;
-import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2UserId;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.body.TransmitirDocumentoRequest;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.body.TransmitirDocumentoResponse;
+import com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2RequestHeader;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
 import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
 import org.springframework.stereotype.Component;
 
+import javax.xml.namespace.QName;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
-import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,36 +35,64 @@ import java.util.logging.Logger;
 public class SoapV2Mapper {
 
     private static final Logger log = Logger.getLogger(SoapV2Mapper.class.getName());
+    
+    // Shared thread-safe factory to improve performance
+    private static final XMLOutputFactory XML_FACTORY = XMLOutputFactory.newInstance();
 
     private final SoapEnvelopeWrapper envelopeWrapper;
-    private final JAXBContext marshallingJaxbContext;
-    private final XMLOutputFactory xmlOutputFactory;
+    private final JAXBContext jaxbContext;
 
-    public SoapV2Mapper(SoapEnvelopeWrapper envelopeWrapper) {
+    public SoapV2Mapper(SoapEnvelopeWrapper envelopeWrapper, JAXBContext jaxbContext) {
         this.envelopeWrapper = envelopeWrapper;
-        try {
-            this.marshallingJaxbContext = JAXBContext.newInstance(
-                TransmitirDocumentoRequest.class, TransmitirDocumentoResponse.class,
-                SoapV2RequestHeader.class, SoapV2MessageContext.class,
-                SoapV2MessageProperty.class, SoapV2UserId.class,
-                SoapV2Destination.class, SoapV2Classifications.class);
-        } catch (JAXBException e) {
-            throw new IllegalStateException("Failed to initialize JAXB context for V2", e);
-        }
-        this.xmlOutputFactory = XMLOutputFactory.newInstance();
+        this.jaxbContext = jaxbContext;
     }
 
     public String buildEnvelope(FileUploadRequest request, SoapV2Properties props, String traceId) {
-        StringWriter stringWriter = new StringWriter();
-        XMLStreamWriter writer = null;
         try {
-            writer = xmlOutputFactory.createXMLStreamWriter(stringWriter);
-            startEnvelope(writer, props);
-            writeHeader(writer, props, traceId);
-            writeBody(writer, request, props);
-            writer.writeEndElement(); // Envelope
-            return stringWriter.toString();
-        } catch (XMLStreamException | JAXBException e) {
+            StringWriter sw = new StringWriter();
+            XMLStreamWriter writer = XML_FACTORY.createXMLStreamWriter(sw);
+
+            Marshaller marshaller = jaxbContext.createMarshaller();
+            marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.TRUE);
+            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.FALSE);
+
+            // ── Envelope ─────────────────────────────────────────────────────
+            writer.writeStartDocument(StandardCharsets.UTF_8.name(), "1.0");
+            writer.setPrefix(SoapV2Constants.PREFIX_SOAPENV, SoapV2Constants.SOAP_ENVELOPE_NS);
+            writer.setPrefix(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
+            writer.setPrefix(SoapV2Constants.PREFIX_BODY_NS,   props.bodyNamespace());
+            writer.writeStartElement(SoapV2Constants.PREFIX_SOAPENV,
+                    SoapV2Constants.EL_ENVELOPE, SoapV2Constants.SOAP_ENVELOPE_NS);
+            writer.writeNamespace(SoapV2Constants.PREFIX_SOAPENV, SoapV2Constants.SOAP_ENVELOPE_NS);
+            writer.writeNamespace(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
+            writer.writeNamespace(SoapV2Constants.PREFIX_BODY_NS,   props.bodyNamespace());
+
+            // ── Header ───────────────────────────────────────────────────────
+            writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_HEADER);
+            JAXBElement<SoapV2RequestHeader> headerEl = new JAXBElement<>(
+                    new QName(props.headerNamespace(), SoapV2Constants.EL_REQUEST_HEADER,
+                              SoapV2Constants.PREFIX_HEADER_NS),
+                    SoapV2RequestHeader.class,
+                    buildHeader(props, traceId));
+            marshaller.marshal(headerEl, writer);
+            writer.writeEndElement();
+
+            // ── Body ─────────────────────────────────────────────────────────
+            writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_BODY);
+            JAXBElement<TransmitirDocumentoRequest> bodyEl = new JAXBElement<>(
+                    new QName(props.bodyNamespace(), SoapV2Constants.EL_TRANSMITIR_DOCUMENTO,
+                              SoapV2Constants.PREFIX_BODY_NS),
+                    TransmitirDocumentoRequest.class,
+                    buildBodyRequest(request, props));
+            marshaller.marshal(bodyEl, writer);
+            writer.writeEndElement();
+
+            writer.writeEndElement();
+            writer.writeEndDocument();
+            writer.flush();
+            return sw.toString();
+
+        } catch (JAXBException | XMLStreamException e) {
             log.log(Level.SEVERE, "Error building SOAP V2 envelope for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
                 "Failed to build SOAP V2 envelope", ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
@@ -76,44 +101,7 @@ public class SoapV2Mapper {
             throw ProcessingException.withTraceId(
                 "Unexpected error building SOAP V2 envelope: " + e.getMessage(),
                 ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
-        } finally {
-            if (writer != null) {
-                try { writer.close(); } catch (XMLStreamException ignored) { }
-            }
         }
-    }
-
-    private void startEnvelope(XMLStreamWriter writer, SoapV2Properties props)
-            throws XMLStreamException {
-        writer.writeStartDocument("UTF-8", "1.0");
-
-        writer.setPrefix(SoapV2Constants.PREFIX_SOAPENV, SoapV2Constants.SOAP_ENVELOPE_NS);
-        writer.setPrefix(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
-        writer.setPrefix(SoapV2Constants.PREFIX_BODY_NS, props.bodyNamespace());
-
-        writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_ENVELOPE);
-        writer.writeNamespace(SoapV2Constants.PREFIX_SOAPENV, SoapV2Constants.SOAP_ENVELOPE_NS);
-        writer.writeNamespace(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
-        writer.writeNamespace(SoapV2Constants.PREFIX_BODY_NS, props.bodyNamespace());
-    }
-
-    private void writeHeader(XMLStreamWriter writer, SoapV2Properties props, String traceId)
-            throws XMLStreamException, JAXBException {
-        writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_HEADER);
-
-        writer.setPrefix(SoapV2Constants.PREFIX_HEADER_NS, props.headerNamespace());
-        writer.writeStartElement(props.headerNamespace(), "requestHeader");
-
-        SoapV2RequestHeader header = buildHeader(props, traceId);
-
-        Marshaller marshaller = marshallingJaxbContext.createMarshaller();
-        marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
-        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, false);
-
-        marshaller.marshal(header, writer);
-
-        writer.writeEndElement(); // requestHeader
-        writer.writeEndElement(); // Header
     }
 
     private SoapV2RequestHeader buildHeader(SoapV2Properties props, String traceId) {
@@ -123,63 +111,34 @@ public class SoapV2Mapper {
         header.setTimestamp(Instant.now().toString());
 
         if (!props.messageContext().isEmpty()) {
-            List<SoapV2MessageProperty> properties = props.messageContext().entrySet().stream()
-                .map(e -> new SoapV2MessageProperty(e.getKey(), e.getValue()))
-                .toList();
-            header.setMessageContext(new SoapV2MessageContext(properties));
+            header.setMessageContext(new com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2MessageContext(
+                props.messageContext().entrySet().stream()
+                    .map(e -> new com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2MessageProperty(e.getKey(), e.getValue()))
+                    .toList()
+            ));
         }
 
-        SoapV2UserId userId = new SoapV2UserId();
-        userId.setUserName(props.userName());
-        String token = props.userToken();
-        userId.setUserToken(token != null && !token.isBlank() ? token : null);
-        header.setUserId(userId);
+        header.setUserId(new com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2UserId(
+            props.userName(), props.userToken()));
 
-        String destName = props.destinationName();
-        if (destName != null && !destName.isBlank()) {
-            SoapV2Destination dest = new SoapV2Destination();
-            dest.setName(destName);
-            String destNs = props.destinationNamespace();
-            String destOp = props.destinationOperation();
-            dest.setNamespace(destNs != null && !destNs.isBlank() ? destNs : null);
-            dest.setOperation(destOp != null && !destOp.isBlank() ? destOp : null);
-            header.setDestination(dest);
+        if (props.destinationName() != null && !props.destinationName().isBlank()) {
+            header.setDestination(new com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2Destination(
+                props.destinationName(), props.destinationNamespace(), props.destinationOperation()));
         }
 
         if (!props.classifications().isEmpty()) {
-            header.setClassifications(new SoapV2Classifications(props.classifications()));
+            header.setClassifications(new com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header.SoapV2Classifications(
+                props.classifications()));
         }
 
         return header;
-    }
-
-    private void writeBody(XMLStreamWriter writer, FileUploadRequest request, SoapV2Properties props)
-            throws XMLStreamException, JAXBException {
-        writer.writeStartElement(SoapV2Constants.SOAP_ENVELOPE_NS, SoapV2Constants.EL_BODY);
-
-        TransmitirDocumentoRequest bodyRequest = buildBodyRequest(request, props);
-
-        writer.setPrefix(SoapV2Constants.PREFIX_BODY_NS, props.bodyNamespace());
-        writer.writeStartElement(props.bodyNamespace(), "transmitirDocumento");
-
-        Marshaller marshaller = marshallingJaxbContext.createMarshaller();
-        marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
-        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, false);
-
-        marshaller.marshal(bodyRequest, writer);
-
-        writer.writeEndElement(); // transmitirDocumento
-        writer.writeEndElement(); // Body
     }
 
     private TransmitirDocumentoRequest buildBodyRequest(FileUploadRequest request, SoapV2Properties props) {
         String base64Content = request.getContent() != null
             ? Base64.getEncoder().encodeToString(request.getContent())
             : "";
-
-        String safeFilename = request.getFilename() != null
-            ? request.getFilename()
-            : "unknown";
+        String safeFilename = request.getFilename() != null ? request.getFilename() : "unknown";
 
         return new TransmitirDocumentoRequest(
             request.getSubTipoDocumental(),
@@ -191,10 +150,9 @@ public class SoapV2Mapper {
 
     private MetaDataWrapper buildMetaDataWrapper(SoapV2Properties props) {
         if (props.metaData().isEmpty()) return null;
-        List<MetaDataEntry> entries = props.metaData().entrySet().stream()
+        return new MetaDataWrapper(props.metaData().entrySet().stream()
             .map(e -> new MetaDataEntry(e.getKey(), e.getValue()))
-            .toList();
-        return new MetaDataWrapper(entries);
+            .toList());
     }
 
     public ExternalServiceResponse parseResponse(String xml, String traceId) {
@@ -202,9 +160,16 @@ public class SoapV2Mapper {
             TransmitirDocumentoResponse response = envelopeWrapper.unwrapResponse(
                 xml, TransmitirDocumentoResponse.class);
 
-            Instant processedAt = response.getProcessedAt() != null
-                ? Instant.parse(response.getProcessedAt())
-                : Instant.now();
+            Instant processedAt;
+            try {
+                processedAt = response.getProcessedAt() != null
+                    ? Instant.parse(response.getProcessedAt())
+                    : Instant.now();
+            } catch (DateTimeParseException e) {
+                log.log(Level.WARNING, "TraceId {0}: Failed to parse processedAt date [{1}]. Using current time.",
+                    new Object[]{traceId, response.getProcessedAt()});
+                processedAt = Instant.now();
+            }
 
             return ExternalServiceResponse.builder()
                 .status(Objects.requireNonNullElse(response.getStatus(), "UNKNOWN"))

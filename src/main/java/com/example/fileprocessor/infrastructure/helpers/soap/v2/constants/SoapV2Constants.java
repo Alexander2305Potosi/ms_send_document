@@ -19,8 +19,9 @@ public final class SoapV2Constants {
     public static final String PREFIX_HEADER_NS = "v2";
     public static final String PREFIX_BODY_NS = "v1";
 
-    public static final String EL_ENVELOPE = "Envelope";
-    public static final String EL_HEADER = "Header";
-    public static final String EL_BODY = "Body";
-    public static final String EL_REQUEST_HEADER = "requestHeader";
+    public static final String EL_ENVELOPE          = "Envelope";
+    public static final String EL_HEADER            = "Header";
+    public static final String EL_BODY              = "Body";
+    public static final String EL_REQUEST_HEADER    = "requestHeader";
+    public static final String EL_TRANSMITIR_DOCUMENTO = "transmitirDocumento";
 }

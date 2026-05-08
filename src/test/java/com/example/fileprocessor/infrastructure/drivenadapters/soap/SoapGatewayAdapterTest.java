@@ -79,7 +79,7 @@ class SoapGatewayAdapterTest {
         when(webClientBuilder.build()).thenReturn(webClient);
 
         adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
-                soapMapper, soapV2Mapper, historyRepository);
+                soapMapper, soapV2Mapper);
     }
 
     private void mockWebClientSuccessV1(String responseBody) {
@@ -303,7 +303,7 @@ class SoapGatewayAdapterTest {
     void send_withRetries_eventualSuccess_createsRetryTraces() {
         soapProperties = new SoapProperties("http://localhost:8080/soap", 30, 2);
         adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
-                soapMapper, soapV2Mapper, historyRepository);
+                soapMapper, soapV2Mapper);
 
         when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
         when(soapMapper.fromSoapXml(any())).thenReturn(successResponse());
@@ -336,7 +336,7 @@ class SoapGatewayAdapterTest {
     void send_withRetries_allExhausted_returnsErrorWithTraces() {
         soapProperties = new SoapProperties("http://localhost:8080/soap", 30, 3);
         adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
-                soapMapper, soapV2Mapper, historyRepository);
+                soapMapper, soapV2Mapper);
 
         when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
         when(webClient.post()).thenReturn(bodyUriSpec);
