@@ -6,7 +6,7 @@ import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.port.out.SoapGatewayV2;
-import com.example.fileprocessor.domain.port.out.SoapGatewayV2;
+import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.config.SoapV2Properties;
@@ -84,8 +84,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
             return executeSoapCall(webClient, soapEnvelope, traceId,
                     properties.timeoutSeconds(), maxRetries,
                     SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD,
-                    attemptCount,
-                    // traceRetry removed - traceability handled by use case
+                    attemptCount)
                 .onErrorMap(e -> {
                     Throwable unwrapped = e;
                     while (unwrapped instanceof RuntimeException && unwrapped.getCause() != null && unwrapped.getCause() != unwrapped) {
@@ -145,8 +144,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
             return executeSoapCall(webClientV2, soapEnvelope, traceId,
                     v2Properties.timeoutSeconds(), maxRetries,
                     v2Properties.soapAction(),
-                    attemptCount,
-                    // traceRetry removed - traceability handled by use case
+                    attemptCount)
                 .onErrorMap(e -> {
                     Throwable unwrapped = e;
                     while (unwrapped instanceof RuntimeException && unwrapped.getCause() != null && unwrapped.getCause() != unwrapped) {
@@ -197,8 +195,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                                          int timeoutSeconds,
                                          int maxRetries,
                                          @Nullable String soapAction,
-                                         AtomicInteger attemptCount,
-                                         @Nullable Consumer<reactor.util.retry.Retry.RetrySignal> onRetry) {
+                                         AtomicInteger attemptCount) {
 
         WebClient.RequestBodySpec bodySpec = client.post()
             .contentType(MediaType.TEXT_XML);
@@ -223,9 +220,6 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                     int currentAttempt = attemptCount.incrementAndGet();
                     log.log(Level.INFO, "Retrying SOAP for traceId={0}, attempt {1}/{2}",
                             new Object[]{traceId, currentAttempt, maxRetries + 1});
-                    if (onRetry != null) {
-                        onRetry.accept(signal);
-                    }
                 }));
         }
 
