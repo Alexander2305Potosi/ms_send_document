@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.config.SoapV2Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -53,6 +54,9 @@ class SoapGatewayAdapterTest {
     @Mock
     private WebClient.ResponseSpec responseSpec;
 
+    @Mock
+    private DocumentHistoryRepository historyRepository;
+
     private SoapProperties soapProperties;
     private SoapV2Properties soapV2Properties;
     private SoapGatewayAdapter adapter;
@@ -69,12 +73,13 @@ class SoapGatewayAdapterTest {
             30, 0
         );
 
+        lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
         when(webClientBuilder.baseUrl(anyString())).thenReturn(webClientBuilder);
         when(webClientBuilder.clientConnector(any())).thenReturn(webClientBuilder);
         when(webClientBuilder.build()).thenReturn(webClient);
 
         adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
-                soapMapper, soapV2Mapper);
+                soapMapper, soapV2Mapper, historyRepository);
     }
 
     private void mockWebClientSuccessV1(String responseBody) {

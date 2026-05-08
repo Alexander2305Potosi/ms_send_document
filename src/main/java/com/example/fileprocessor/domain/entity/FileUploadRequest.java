@@ -17,4 +17,5 @@ public class FileUploadRequest {
     private String origin;
     private String paisHomologado;
     private String subTipoDocumental;
+    private Long docId;
 }

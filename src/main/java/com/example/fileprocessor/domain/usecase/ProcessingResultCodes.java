@@ -20,6 +20,8 @@ public final class ProcessingResultCodes {
 
     // Generic error codes (business level)
     public static final String UNKNOWN_ERROR = "UNKNOWN_ERROR";
-    public static final String BUSINESS_RULE_SKIP = "BUSINESS_RULE_SKIP";
     public static final String REST_CLIENT_ERROR = "REST_CLIENT_ERROR";
+    public static final String SIZE_EXCEEDED = "SIZE_EXCEEDED";
+    public static final String PATTERN_MISMATCH = "PATTERN_MISMATCH";
+    public static final String DECOMPRESSION_ERROR = "DECOMPRESSION_ERROR";
 }

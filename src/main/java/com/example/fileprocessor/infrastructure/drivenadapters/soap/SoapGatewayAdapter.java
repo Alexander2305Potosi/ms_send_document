@@ -1,11 +1,15 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
+import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.exception.ProcessingException;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.port.out.SoapGatewayV2;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.v2.config.SoapV2Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -25,8 +29,10 @@ import java.io.IOException;
 import java.net.ConnectException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,16 +51,19 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
     private final SoapV2Properties v2Properties;
     private final SoapMapper soapMapper;
     private final SoapV2Mapper soapV2Mapper;
+    private final DocumentHistoryRepository historyRepository;
 
     public SoapGatewayAdapter(WebClient.Builder webClientBuilder,
                               SoapProperties properties,
                               SoapV2Properties v2Properties,
                               SoapMapper soapMapper,
-                              SoapV2Mapper soapV2Mapper) {
+                              SoapV2Mapper soapV2Mapper,
+                              DocumentHistoryRepository historyRepository) {
         this.properties = properties;
         this.v2Properties = v2Properties;
         this.soapMapper = soapMapper;
         this.soapV2Mapper = soapV2Mapper;
+        this.historyRepository = historyRepository;
 
         this.webClient = webClientBuilder
             .baseUrl(properties.endpoint())
@@ -82,7 +91,8 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
             return executeSoapCall(webClient, soapEnvelope, traceId,
                     properties.timeoutSeconds(), maxRetries,
                     SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD,
-                    attemptCount)
+                    attemptCount,
+                    signal -> traceRetry(request, signal))
                 .map(soapMapper::fromSoapXml)
                 .doOnNext(response -> log.log(Level.INFO,
                     "SOAP V1 response received for traceId={0}: correlationId={1}",
@@ -135,7 +145,8 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
             return executeSoapCall(webClientV2, soapEnvelope, traceId,
                     v2Properties.timeoutSeconds(), maxRetries,
                     v2Properties.soapAction(),
-                    attemptCount)
+                    attemptCount,
+                    signal -> traceRetry(request, signal))
                 .map(xml -> soapV2Mapper.parseResponse(xml, traceId))
                 .doOnNext(response -> log.log(Level.INFO,
                     "SOAP V2 response received for traceId={0}: correlationId={1}",
@@ -179,7 +190,8 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                                          int timeoutSeconds,
                                          int maxRetries,
                                          @Nullable String soapAction,
-                                         AtomicInteger attemptCount) {
+                                         AtomicInteger attemptCount,
+                                         @Nullable Consumer<reactor.util.retry.Retry.RetrySignal> onRetry) {
 
         WebClient.RequestBodySpec bodySpec = client.post()
             .contentType(MediaType.TEXT_XML);
@@ -204,6 +216,9 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                     int currentAttempt = attemptCount.incrementAndGet();
                     log.log(Level.INFO, "Retrying SOAP for traceId={0}, attempt {1}/{2}",
                             new Object[]{traceId, currentAttempt, maxRetries + 1});
+                    if (onRetry != null) {
+                        onRetry.accept(signal);
+                    }
                 }));
         }
 
@@ -219,6 +234,26 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
             return true;
         }
         return false;
+    }
+
+    private void traceRetry(FileUploadRequest request, reactor.util.retry.Retry.RetrySignal signal) {
+        int attempt = (int) signal.totalRetries() + 1;
+        String errorCode = signal.failure() instanceof ProcessingException pe
+            ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
+        historyRepository.save(DocumentHistory.builder()
+            .documentId(request.getDocId())
+            .filename(request.getFilename())
+            .operation("SOAP")
+            .result(DocumentStatus.FAILURE.name())
+            .errorCode(errorCode)
+            .errorMessage(signal.failure().getMessage())
+            .retry(attempt)
+            .startedAt(LocalDateTime.now())
+            .completedAt(LocalDateTime.now())
+            .createdAt(LocalDateTime.now())
+            .build())
+            .doOnError(e -> log.log(Level.WARNING, "Failed to record SOAP retry trace: {0}", e.getMessage()))
+            .subscribe();
     }
 
     FileUploadResult buildErrorResult(String traceId, String errorCode, String message, int attemptCount) {

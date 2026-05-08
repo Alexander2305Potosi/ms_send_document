@@ -1,8 +1,11 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.aws;
 
+import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.exception.ProcessingException;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
@@ -17,6 +20,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
@@ -31,10 +35,13 @@ public class S3GatewayAdapter implements S3Gateway {
 
     private final S3AsyncClient s3Client;
     private final S3Properties s3Properties;
+    private final DocumentHistoryRepository historyRepository;
 
-    public S3GatewayAdapter(S3AsyncClient s3Client, S3Properties s3Properties) {
+    public S3GatewayAdapter(S3AsyncClient s3Client, S3Properties s3Properties,
+                            DocumentHistoryRepository historyRepository) {
         this.s3Client = s3Client;
         this.s3Properties = s3Properties;
+        this.historyRepository = historyRepository;
     }
 
     @Override
@@ -77,6 +84,7 @@ public class S3GatewayAdapter implements S3Gateway {
                 .retryWhen(Retry.backoff(s3Properties.retryAttempts(), Duration.ofMillis(s3Properties.retryBackoffMillis()))
                     .filter(this::isRetryableException)
                     .doBeforeRetry(retrySignal -> {
+                        traceRetry(request, retrySignal);
                         long attempt = retrySignal.totalRetries() + 1;
                         log.log(Level.WARNING, "Retrying S3 upload for documentId={0}, attempt {1}/{2} (backoff={3}ms)",
                             new Object[]{request.getDocumentId(), attempt, s3Properties.retryAttempts(),
@@ -121,6 +129,26 @@ public class S3GatewayAdapter implements S3Gateway {
             .processedAt(Instant.now())
             .success(false)
             .build());
+    }
+
+    private void traceRetry(FileUploadRequest request, Retry.RetrySignal signal) {
+        int attempt = (int) signal.totalRetries() + 1;
+        String errorCode = signal.failure() instanceof ProcessingException pe
+            ? pe.getErrorCode() : S3ErrorCodes.UNKNOWN_ERROR;
+        historyRepository.save(DocumentHistory.builder()
+            .documentId(request.getDocId())
+            .filename(request.getFilename())
+            .operation("S3")
+            .result(DocumentStatus.FAILURE.name())
+            .errorCode(errorCode)
+            .errorMessage(signal.failure().getMessage())
+            .retry(attempt)
+            .startedAt(LocalDateTime.now())
+            .completedAt(LocalDateTime.now())
+            .createdAt(LocalDateTime.now())
+            .build())
+            .doOnError(e -> log.log(Level.WARNING, "Failed to record S3 retry trace: {0}", e.getMessage()))
+            .subscribe();
     }
 
     String categorizeS3Error(Throwable error) {

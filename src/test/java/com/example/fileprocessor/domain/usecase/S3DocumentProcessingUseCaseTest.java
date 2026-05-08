@@ -89,7 +89,7 @@ class S3DocumentProcessingUseCaseTest {
         when(s3Gateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.just(successResult));
 
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1"))
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertTrue(result.isSuccess());
                 assertEquals("corr-123", result.getCorrelationId());
@@ -102,7 +102,7 @@ class S3DocumentProcessingUseCaseTest {
         when(s3Gateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.error(new RuntimeException("S3 error")));
 
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1"))
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());

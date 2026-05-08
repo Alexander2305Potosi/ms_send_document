@@ -98,7 +98,7 @@ class SoapDocumentProcessingUseCaseTest {
         when(soapGateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.just(successResult));
 
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1"))
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertTrue(result.isSuccess());
                 assertEquals("corr-456", result.getCorrelationId());
@@ -113,7 +113,7 @@ class SoapDocumentProcessingUseCaseTest {
         when(soapGateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.error(new RuntimeException("SOAP error")));
 
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1"))
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());

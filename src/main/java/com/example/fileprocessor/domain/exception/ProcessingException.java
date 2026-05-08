@@ -33,6 +33,18 @@ public class ProcessingException extends DomainException {
         this.documentId = null;
     }
 
+    public ProcessingException(String errorCode, String message) {
+        super(message, errorCode);
+        this.traceId = DEFAULT_TRACE_ID;
+        this.documentId = null;
+    }
+
+    public ProcessingException(String errorCode, String message, Throwable cause) {
+        super(message, errorCode, cause);
+        this.traceId = DEFAULT_TRACE_ID;
+        this.documentId = null;
+    }
+
     public String getTraceId() {
         return traceId;
     }

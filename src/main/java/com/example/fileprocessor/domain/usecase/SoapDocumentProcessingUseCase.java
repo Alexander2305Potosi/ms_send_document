@@ -3,6 +3,7 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -17,20 +18,21 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     public SoapDocumentProcessingUseCase(
             DocumentRepository documentRepository,
+            DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             RulesBussinesGateway documentValidator) {
-        super(documentRepository, productRestGateway, documentValidator);
+        super(documentRepository, historyRepository, productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId) {
+    protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
         return homologationRepository.resolve(doc.origin(), doc.pais())
             .flatMap(result ->
-                soapGateway.send(buildFileUploadRequest(doc, result.origin(), result.paisHomologado()))
+                soapGateway.send(buildFileUploadRequest(doc, result.origin(), result.paisHomologado(), docId))
                     .onErrorResume(this::handleUploadError)
             );
     }
@@ -40,7 +42,8 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
         return "SOAP";
     }
 
-    private FileUploadRequest buildFileUploadRequest(ProductDocumentHistory doc, String origin, String paisHomologado) {
+    private FileUploadRequest buildFileUploadRequest(ProductDocumentHistory doc, String origin,
+                                                      String paisHomologado, Long docId) {
         return FileUploadRequest.builder()
             .documentId(doc.documentId())
             .content(doc.content() != null ? doc.content() : new byte[0])
@@ -49,6 +52,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
             .fileSize(doc.size())
             .origin(origin)
             .paisHomologado(paisHomologado)
+            .docId(docId)
             .build();
     }
 }

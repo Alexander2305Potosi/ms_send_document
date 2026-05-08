@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class DocumentHistoryEntity {
+public class    DocumentHistoryEntity {
 
     @Id
     @Column("id")

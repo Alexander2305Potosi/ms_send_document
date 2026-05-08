@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.service;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
@@ -44,7 +45,7 @@ class DocumentValidatorTest {
         );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.csv", "application/pdf", 500)))
-            .verifyComplete();
+            .verifyError(ProcessingException.class);
     }
 
     @Test
@@ -65,7 +66,7 @@ class DocumentValidatorTest {
         );
 
         StepVerifier.create(validator.validate(doc("doc-1", "test.csv", "application/pdf", 500)))
-            .verifyComplete();
+            .verifyError(ProcessingException.class);
     }
 
     @Test

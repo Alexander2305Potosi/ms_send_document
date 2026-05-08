@@ -1,5 +1,6 @@
 package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -32,12 +33,14 @@ public class DomainConfig {
     @ConditionalOnBean(SoapGateway.class)
     public SoapDocumentProcessingUseCase soapDocumentUseCase(
             DocumentRepository documentRepository,
+            DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
             documentRepository,
+            historyRepository,
             productRestGateway,
             soapGateway,
             homologationRepository,
@@ -49,11 +52,13 @@ public class DomainConfig {
     @ConditionalOnBean(S3Gateway.class)
     public S3DocumentProcessingUseCase s3DocumentUseCase(
             DocumentRepository documentRepository,
+            DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
             documentRepository,
+            historyRepository,
             productRestGateway,
             s3Gateway,
             new RulesBussinesService(properties.s3())

@@ -1,12 +1,12 @@
 package com.example.fileprocessor.domain.service;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import reactor.core.publisher.Mono;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
@@ -17,8 +17,6 @@ import java.util.regex.Pattern;
  * During processing (API_V1_PRODUCTS): size and name validations are both applied.
  */
 public class RulesBussinesService implements RulesBussinesGateway {
-
-    private static final Logger log = Logger.getLogger(RulesBussinesService.class.getName());
 
     private final Long maxFileSizeBytes;
     private final Pattern filenamePattern;
@@ -40,14 +38,16 @@ public class RulesBussinesService implements RulesBussinesGateway {
     public Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc, boolean includeSizeCheck) {
         return Mono.defer(() -> {
             if (includeSizeCheck && maxFileSizeBytes != null && doc.size() != null && doc.size() > maxFileSizeBytes) {
-                log.log(Level.FINE, "Document {0} skipped: size {1} exceeds max {2}",
-                    new Object[]{doc.documentId(), doc.size(), maxFileSizeBytes});
-                return Mono.empty();
+                return Mono.error(new ProcessingException(
+                    ProcessingResultCodes.SIZE_EXCEEDED,
+                    String.format("Size %,d bytes exceeds max %,d bytes for file '%s'",
+                        doc.size(), maxFileSizeBytes, doc.filename())));
             }
             if (filenamePattern != null && !filenamePattern.matcher(doc.name()).matches()) {
-                log.log(Level.FINE, "Document {0} skipped: name {1} does not match pattern {2}",
-                    new Object[]{doc.documentId(), doc.name(), filenamePattern.pattern()});
-                return Mono.empty();
+                return Mono.error(new ProcessingException(
+                    ProcessingResultCodes.PATTERN_MISMATCH,
+                    String.format("Filename '%s' does not match pattern '%s'",
+                        doc.name(), filenamePattern.pattern())));
             }
             return Mono.just(doc);
         });
