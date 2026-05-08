@@ -39,21 +39,24 @@ com.example.fileprocessor/
 │
 ├── domain/                                       # Capa de dominio
 │   ├── entity/
-│   │   ├── Document.java                       # Record: metadatos del documento + estado actual (16 campos)
-│   │   ├── DocumentHistory.java                  # Record: trazabilidad de operaciones (13 campos, append-only)
-│   │   ├── DocumentStatus.java                   # Enum: SUCCESS, FAILURE
-│   │   ├── ProductDocumentFile.java              # Record: documento obtenido de REST API
-│   │   ├── ProductDocumentHistory.java           # Record: documento (21 campos, incluye productId, isZip, pais)
-│   │   ├── ProductState.java                     # Constantes de state: PENDING, IN_PROGRESS, PROCESSED, FAILED
-│   │   ├── FileUploadRequest.java                # Request para upload a gateway (SOAP/S3)
-│   │   ├── FileUploadResult.java                 # Resultado de upload con status, errorCode, correlationId
-│   │   ├── HomologationResult.java               # Resultado de homologacion origin/pais
-│   │   └── ExternalServiceResponse.java          # Respuesta generica de servicio externo
+│   │   ├── Document.java                       # Record: metadatos del documento + estado actual (17 campos)
+│   │   ├── DocumentHistory.java                # Record: trazabilidad de operaciones (13 campos, append-only)
+│   │   ├── DocumentStatus.java                 # Enum: SUCCESS, FAILURE
+│   │   ├── ProductDocumentFile.java            # Record: documento obtenido de REST API
+│   │   ├── ProductDocumentHistory.java          # Record: documento (26 campos, incluye productId, isZip, pais, parentZipName)
+│   │   ├── ProductState.java                   # Constantes de estado: PENDING, IN_PROGRESS, PROCESSED, FAILED
+│   │   ├── FileUploadRequest.java              # Request para upload a gateway (SOAP/S3), incluye subTipoDocumental
+│   │   ├── FileUploadResult.java               # Resultado de upload con status, errorCode, correlationId, traceId, attemptCount
+│   │   ├── HomologationResult.java             # Resultado de homologacion (origin, paisHomologado, useV2)
+│   │   ├── ExternalServiceResponse.java        # Respuesta generica de servicio externo
+│   │   ├── ProductHistory.java                 # Record: producto con id, productId, name, loadDate, state, messageError
+│   │   ├── CategoryManual.java                 # Record: homologacion de categoria (categoria, descripcionManual)
+│   │   └── CountryHomologated.java             # Record: homologacion de pais (country, countryHomologated)
 │   ├── usecase/
 │   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base (procesa y descomprime ZIP en runtime)
-│   │   ├── SoapDocumentProcessingUseCase.java       # Implementacion SOAP
+│   │   ├── SoapDocumentProcessingUseCase.java       # Implementacion SOAP (soporta V1 y V2, selecciona por HomologationResult.useV2)
 │   │   ├── S3DocumentProcessingUseCase.java         # Implementacion S3
-│   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y documentos (sin validacion)
+│   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y documentos desde API REST (sin validacion)
 │   │   └── ProcessingResultCodes.java               # Constantes de codigos de error
 │   ├── service/
 │   │   └── RulesBussinesService.java              # Validacion: tamano maximo, patron filename
@@ -63,10 +66,12 @@ com.example.fileprocessor/
 │   ├── port/out/
 │   │   ├── DocumentRepository.java               # Puerto: metadata de documentos (save, findByStateAndUseCase, updateStateById)
 │   │   ├── DocumentHistoryRepository.java        # Puerto: trazabilidad (save, findLastAudit)
+│   │   ├── ProductRepository.java               # Puerto: productos (findByLoadDate, findAll, save, updateEstadoById)
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
 │   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
 │   │   ├── S3Gateway.java                         # Puerto: envio a S3
-│   │   ├── SoapGateway.java                       # Puerto: envio a SOAP
+│   │   ├── SoapGateway.java                       # Puerto: envio a SOAP V1 (UploadFile)
+│   │   ├── SoapGatewayV2.java                   # Puerto: envio a SOAP V2 (transmitirDocumento)
 │   │   └── HomologationRepository.java           # Puerto: homologacion de origin y pais (SOAP)
 │   └── exception/
 │       ├── DomainException.java                   # Base abstracta (RuntimeException + errorCode)
@@ -188,10 +193,11 @@ Procesa documentos pendientes desde la tabla `documentos` en estado PENDING. Cad
 
 ### POST /api/v1/products/sync
 
-Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Por cada producto se listan sus documentos, se obtiene el contenido de cada uno desde la API REST, y se persiste en **dos tablas**: `documentos` (metadata con `estado=PENDING`) + `historico_documentos` (traza `operacion=SYNC`).
+Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Utiliza `productRepository.findAll()` para obtener todos los productos y luego `productRestGateway.getDocumentsByProduct()` para obtener los documentos de cada uno. Se persisten en la tabla `documentos` (metadata con `estado=PENDING`).
 
 **Headers:**
-- `message-id`: (opcional) Trace ID para correlacion.
+- `message-id`: (opcional) Trace ID para correlacion. Si no se envia, se genera un UUID automatico.
+- `USE_CASE`: (opcional) Caso de uso para los documentos sincronizados (`soap` o `s3`). Default: `soap`.
 
 **Response:** HTTP 200 (fire-and-forget — la operacion se ejecuta asincronamente)
 ```json
@@ -210,24 +216,22 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 
 ```
 1. Cliente                           2. REST API Externa
-   POST /api/v1/products/sync  ──►   GET {productsPath}  (/api/products)
+   POST /api/v1/products/sync  ──►   GET {productDocumentsPath}/{productId}
+   + Header: USE_CASE: soap/s3         Por cada producto
    ◄─────────────────────────────────
-         [ProductResponse, ...]
+         [ProductDocumentHistory, ...]
                │
                ▼
-3. SyncDocumentsUseCase.execute()
-   ├── productRestGateway.getAllProducts()
-   │     └── Flux<ProductDocumentHistory> (doc plano con productId, sin ProductHistory)
-   │
-   └── Por cada documento:
-       ├── productRestGateway.getDocument(productId, documentId)
-       │     └── GET {productDocumentsPath}/{documentId}
-       │     └── Decodifica Base64 via Base64Utils.decodeSafe()
-       ├── isZip se infiere de la extension del filename en el dominio
-       ├── documentRepository.save()
-           │     └── INSERT en tabla documentos (estado=PENDING)
-           └── historyRepository.save()
-                 └── INSERT en tabla historico_documentos (operacion=SYNC, resultado=SUCCESS, nombre_archivo=NULL)
+3. SyncDocumentsUseCase.execute(useCase)
+   ├── productRepository.findAll()
+   │     └── SELECT * FROM productos
+   ├── Por cada producto: productRestGateway.getDocumentsByProduct(product)
+   │     └── GET {productDocumentsPath}/{productId} → Flux<ProductDocumentHistory>
+   │     └── Decodifica Base64 via Base64Utils.decodeSafe()
+   │     └── isZip se infiere de la extension del filename en el dominio
+   ├── Por cada documento: documentRepository.save()
+   │     └── INSERT en tabla documentos (estado=PENDING)
+   │     └── No se guarda traza en historico_documentos durante sync
 ```
 
 ### Flujo de Procesamiento (GET /api/v1/products)
@@ -249,29 +253,34 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 4. documentRepository.findByStateAndUseCase("PENDING", processor)
    └── Filtra: estado=PENDING AND caso_uso=SOAP/S3 en tabla documentos
         ▼
-5. BD → Flux<Document>
-        │
-        ▼
-6. Por cada documento: processDocument(doc)
-   ├── documentRepository.updateStateById(docId, "IN_PROGRESS")
+5. Por cada documento: startProcessing(doc)
+   ├── documentRepository.updateStateById(docId, "PENDING", "IN_PROGRESS")
+   │     └── Compare-and-set atomico: solo si estado actual=PENDING
+   │     └── Si rowsAffected=0 → otro proceso ya lo claimo, se descarta
+   │
+   ▼
+6. processDocument(doc)
    ├── productRestGateway.getDocument(doc.productId(), doc.documentId())
-   │     └── GET {productDocumentsPath}/{docId}
+   │     └── GET {productDocumentsPath}/{documentId}
    │     └── Decodifica Base64 via Base64Utils.decodeSafe()
-   ├── Si isZip=true → ZipDecompressor.decompress() expande cada entrada
+   ├── Si isZip=true → ZipDecompressor.decompress() expande entradas
    ├── RulesBussinesGateway.validate(doc, true)  [patron nombre + tamano]
-   │     └── Si no pasa → documentRepository.updateStateById(PROCESSED), historyRepository.save(trace: BUSINESS_RULE_SKIP)
-   ├── uploadDocument() → SoapGateway.send() o S3Gateway.send()
-   │     └── Con reintentos automaticos + backoff
+   │     └── Si no pasa → documentRepository.updateStateById(PROCESSED), no se envia al gateway
+   ├── uploadDocument()
+   │     ├── SoapDocumentProcessingUseCase:
+   │     │   ├── homologationRepository.resolve(origin, pais) → HomologationResult
+   │     │   ├── Si useV2=true → SoapGatewayV2.transmitirDocumento() (SOAP V2)
+   │     │   └── Si useV2=false → SoapGateway.send() (SOAP V1)
+   │     └── S3DocumentProcessingUseCase:
+   │           └── S3Gateway.send()
    ├── Exito → documentRepository.updateStateById(PROCESSED)
-   │            historyRepository.save(trace: resultado=SUCCESS, nombre_archivo, operacion=SOAP/S3, retry)
+   │            historyRepository.save(trace: resultado=SUCCESS, operacion=SOAP/S3, retry)
    └── Error → documentRepository.updateStateById(PENDING o FAILED)
                 historyRepository.save(trace: resultado=FAILURE, codigo_error, retry)
         │
         ▼
 7. Flux<FileUploadResult> → NDJSON stream al cliente
 ```
-
-**Nota:** la descompresion ZIP se aplica tanto en procesamiento como en el dominio. La validacion de nombre y tamano solo se aplica en procesamiento.
 
 ---
 
@@ -957,15 +966,18 @@ AbstractDocumentProcessingUseCase
 │
 ├── executePendingDocuments()           ← FINAL (template method)
 │   ├── documentRepository.findByStateAndUseCase("PENDING", processor)  → BD (tabla documentos)
-│   ├── documentRepository.updateStateById(docId, "IN_PROGRESS")
-│   ├── Por cada documento:
-│   │   ├── productRestGateway.getDocument(productId, docId) → REST externa
-│   │   ├── toProductDocument(file) → ProductDocumentHistory
-│   │   ├── Si isZip=true → ZipDecompressor.decompress() expande entradas
-│   │   ├── documentValidator.validate(doc, true) → validacion nombre + tamano
-│   │   ├── uploadDocument()       → ABSTRACT (SOAP o S3)
-│   │   ├── handleUploadSuccess() o handleUploadError()
-│   │   │     └── documentRepository.updateStateById() + historyRepository.save()
+│   ├── Por cada documento: startProcessing(doc)
+│   │   ├── documentRepository.updateStateById(docId, "PENDING", "IN_PROGRESS")
+│   │   │     └── Compare-and-set atomico: solo si estado=PENDING
+│   │   │     └── Si rowsAffected=0 → otro proceso ya lo claimo, se descarta
+│   │   └── processDocument(doc)
+│   │       ├── productRestGateway.getDocument(productId, docId) → REST externa
+│   │       ├── toProductDocument(file) → ProductDocumentHistory
+│   │       ├── Si isZip=true → ZipDecompressor.decompress() expande entradas
+│   │       ├── documentValidator.validate(doc, true) → validacion nombre + tamano
+│   │       ├── uploadDocument()       → ABSTRACT (SOAP o S3)
+│   │       └── handleSuccess() o handleError()
+│   │             └── documentRepository.updateStateById() + historyRepository.save()
 │   │
 │
 ├── uploadDocument()                     ← ABSTRACT
@@ -974,7 +986,10 @@ AbstractDocumentProcessingUseCase
 ├── handleUploadError(Throwable)          ← helper protegido (reusable por subclases)
 │
 ├── SoapDocumentProcessingUseCase
-│   └── uploadDocument() → HomologationRepository.resolve() → SoapGateway.send()
+│   └── uploadDocument()
+│       ├── homologationRepository.resolve(origin, pais) → HomologationResult
+│       ├── Si useV2=true → SoapGatewayV2.transmitirDocumento() (SOAP V2)
+│       └── Si useV2=false → SoapGateway.send() (SOAP V1)
 │
 └── S3DocumentProcessingUseCase
     └── uploadDocument() → S3Gateway.send()
@@ -1367,7 +1382,7 @@ Gestionada por `ProductHandler.getProcessor()`:
 
 - **RB-42:** `POST /api/v1/products/sync` retorna HTTP 200 inmediatamente con `{"status":"OK","message":"Document sync initiated"}`.
 - **RB-43:** La ejecucion real de `SyncDocumentsUseCase.execute()` se dispara con `.subscribe()` sin esperar su resultado (fire-and-forget).
-- **RB-44:** Los documentos sincronizados se guardan en dos tablas: `documentos` (metadata con `estado=PENDING`) + `historico_documentos` (traza con `operacion=SYNC`, `resultado=SUCCESS`, `nombre_archivo=NULL`).
+- **RB-44:** Los documentos sincronizados se guardan en la tabla `documentos` (metadata con `estado=PENDING`). No se escribe en `historico_documentos` durante sync — la traza se registra unicamente durante el procesamiento efectivo (SOAP o S3).
 - **RB-45:** Si un documento es ZIP, se guarda con `isZip=true` y `nombre_zip_padre=NULL` en `documentos`. `parentZipName` solo se asigna a entradas extraidas de un ZIP durante el procesamiento, nunca durante sync.
 
 ---

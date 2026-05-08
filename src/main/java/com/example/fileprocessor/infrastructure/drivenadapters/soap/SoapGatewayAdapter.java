@@ -93,6 +93,13 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                     SoapConstants.FILE_SERVICE + SoapConstants.SOAP_ACTION_UPLOAD,
                     attemptCount,
                     signal -> traceRetry(request, signal))
+                .onErrorMap(e -> {
+                    Throwable unwrapped = e;
+                    while (unwrapped instanceof RuntimeException && unwrapped.getCause() != null && unwrapped.getCause() != unwrapped) {
+                        unwrapped = unwrapped.getCause();
+                    }
+                    return unwrapped;
+                })
                 .map(soapMapper::fromSoapXml)
                 .doOnNext(response -> log.log(Level.INFO,
                     "SOAP V1 response received for traceId={0}: correlationId={1}",
@@ -147,6 +154,13 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                     v2Properties.soapAction(),
                     attemptCount,
                     signal -> traceRetry(request, signal))
+                .onErrorMap(e -> {
+                    Throwable unwrapped = e;
+                    while (unwrapped instanceof RuntimeException && unwrapped.getCause() != null && unwrapped.getCause() != unwrapped) {
+                        unwrapped = unwrapped.getCause();
+                    }
+                    return unwrapped;
+                })
                 .map(xml -> soapV2Mapper.parseResponse(xml, traceId))
                 .doOnNext(response -> log.log(Level.INFO,
                     "SOAP V2 response received for traceId={0}: correlationId={1}",
@@ -198,7 +212,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
 
         bodySpec.header("SOAPAction", soapAction != null ? soapAction : "");
 
-        Mono<String> httpCall = bodySpec
+        Mono<String> httpCall = Mono.defer(() -> bodySpec
             .bodyValue(soapEnvelope)
             .retrieve()
             .bodyToMono(String.class)
@@ -207,7 +221,7 @@ public class SoapGatewayAdapter implements SoapGateway, SoapGatewayV2 {
                 int currentAttempt = attemptCount.get();
                 log.log(Level.WARNING, "SOAP attempt {0}/{1} failed for traceId={2}: {3}",
                         new Object[]{currentAttempt, maxRetries + 1, traceId, e.getMessage()});
-            });
+            }));
 
         if (maxRetries > 0) {
             return httpCall.retryWhen(reactor.util.retry.Retry.backoff(maxRetries, Duration.ofMillis(500))

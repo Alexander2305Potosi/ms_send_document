@@ -11,7 +11,6 @@ import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.stereotype.Component;
-import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
@@ -109,7 +108,9 @@ public class S3GatewayAdapter implements S3Gateway {
     }
 
     private Mono<FileUploadResult> handleS3Error(Throwable error, String documentId, String traceId) {
-        error = Exceptions.unwrap(error);
+        while (error instanceof RuntimeException && error.getCause() != null && error.getCause() != error) {
+            error = error.getCause();
+        }
         log.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, error.getMessage()});
 
         if (error instanceof TimeoutException) {

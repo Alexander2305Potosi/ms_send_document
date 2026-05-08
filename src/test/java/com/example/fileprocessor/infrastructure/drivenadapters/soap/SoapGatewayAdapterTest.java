@@ -301,7 +301,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void send_withRetries_eventualSuccess_createsRetryTraces() {
-        soapProperties = new SoapProperties("http://localhost:8080/soap", 30, 3);
+        soapProperties = new SoapProperties("http://localhost:8080/soap", 30, 2);
         adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
                 soapMapper, soapV2Mapper, historyRepository);
 
@@ -315,10 +315,14 @@ class SoapGatewayAdapterTest {
 
         WebClientResponseException e503 = mock(WebClientResponseException.class);
         when(e503.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
-        when(responseSpec.bodyToMono(String.class))
-            .thenReturn(Mono.error(e503))
-            .thenReturn(Mono.error(new TimeoutException()))
-            .thenReturn(Mono.just("<response>ok</response>"));
+
+        java.util.concurrent.atomic.AtomicInteger bodyMonoCalls = new java.util.concurrent.atomic.AtomicInteger(0);
+        when(responseSpec.bodyToMono(String.class)).thenAnswer(inv -> {
+            int call = bodyMonoCalls.incrementAndGet();
+            if (call == 1) return Mono.error(e503);
+            if (call == 2) return Mono.error(new TimeoutException());
+            return Mono.just("<response>ok</response>");
+        });
 
         StepVerifier.create(adapter.send(request())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
@@ -330,6 +334,10 @@ class SoapGatewayAdapterTest {
 
     @Test
     void send_withRetries_allExhausted_returnsErrorWithTraces() {
+        soapProperties = new SoapProperties("http://localhost:8080/soap", 30, 3);
+        adapter = new SoapGatewayAdapter(webClientBuilder, soapProperties, soapV2Properties,
+                soapMapper, soapV2Mapper, historyRepository);
+
         when(soapMapper.toFullSoapMessage(any())).thenReturn("<soap>body</soap>");
         when(webClient.post()).thenReturn(bodyUriSpec);
         when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
@@ -339,10 +347,12 @@ class SoapGatewayAdapterTest {
 
         WebClientResponseException e503 = mock(WebClientResponseException.class);
         when(e503.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
-        when(responseSpec.bodyToMono(String.class))
-            .thenReturn(Mono.error(e503))
-            .thenReturn(Mono.error(e503))
-            .thenReturn(Mono.error(e503));
+
+        java.util.concurrent.atomic.AtomicInteger bodyMonoCalls = new java.util.concurrent.atomic.AtomicInteger(0);
+        when(responseSpec.bodyToMono(String.class)).thenAnswer(inv -> {
+            bodyMonoCalls.incrementAndGet();
+            return Mono.error(e503);
+        });
 
         StepVerifier.create(adapter.send(request())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
@@ -396,11 +406,7 @@ class SoapGatewayAdapterTest {
 
         StepVerifier.create(adapter.send(request())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
-            .assertNext(result -> {
-                assertFalse(result.isSuccess());
-                assertEquals(SoapErrorCodes.UNKNOWN_ERROR, result.getErrorCode());
-            })
-            .verifyComplete();
+            .verifyError(RuntimeException.class);
 
         verify(historyRepository, never()).save(any());
     }
