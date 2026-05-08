@@ -1,11 +1,11 @@
-package com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header;
+package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.header;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 
 @XmlAccessorType(XmlAccessType.FIELD)
-public class SoapV2Destination {
+public class SoapDestination {
 
     @XmlElement(name = "name")
     private String name;
@@ -16,9 +16,9 @@ public class SoapV2Destination {
     @XmlElement(name = "operation")
     private String operation;
 
-    public SoapV2Destination() {}
+    public SoapDestination() {}
 
-    public SoapV2Destination(String name, String namespace, String operation) {
+    public SoapDestination(String name, String namespace, String operation) {
         this.name = name;
         this.namespace = namespace;
         this.operation = operation;

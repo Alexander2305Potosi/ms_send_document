@@ -1,4 +1,4 @@
-package com.example.fileprocessor.infrastructure.helpers.soap.v2.config;
+package com.example.fileprocessor.infrastructure.helpers.soap.config;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -10,7 +10,7 @@ import java.util.Map;
 
 @Validated
 @ConfigurationProperties(prefix = "app.soap.v2")
-public record SoapV2Properties(
+public record SoapProperties(
     @NotBlank String endpoint,
     @NotBlank String systemId,
     @NotBlank String userName,
@@ -30,7 +30,7 @@ public record SoapV2Properties(
     @Min(1) int timeoutSeconds,
     @Min(1) int retryAttempts
 ) {
-    public SoapV2Properties {
+    public SoapProperties {
         if (classifications == null) classifications = List.of();
         if (messageContext == null) messageContext = Map.of();
         if (metaData == null) metaData = Map.of();

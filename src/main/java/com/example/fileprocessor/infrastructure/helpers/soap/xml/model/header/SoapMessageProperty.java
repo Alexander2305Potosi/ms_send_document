@@ -1,11 +1,11 @@
-package com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header;
+package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.header;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 
 @XmlAccessorType(XmlAccessType.FIELD)
-public class SoapV2MessageProperty {
+public class SoapMessageProperty {
 
     @XmlElement(name = "key")
     private String key;
@@ -13,9 +13,9 @@ public class SoapV2MessageProperty {
     @XmlElement(name = "value")
     private String value;
 
-    public SoapV2MessageProperty() {}
+    public SoapMessageProperty() {}
 
-    public SoapV2MessageProperty(String key, String value) {
+    public SoapMessageProperty(String key, String value) {
         this.key = key;
         this.value = value;
     }

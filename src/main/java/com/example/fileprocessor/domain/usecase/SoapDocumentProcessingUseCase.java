@@ -3,15 +3,17 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.port.out.SoapGatewayV2;
 import reactor.core.publisher.Mono;
 
+/**
+ * Use case for processing documents via SOAP.
+ * Standardized on V2 protocol (transmitirDocumento).
+ */
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private final SoapGateway soapGateway;
@@ -19,12 +21,11 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     public SoapDocumentProcessingUseCase(
             DocumentRepository documentRepository,
-            DocumentHistoryRepository historyRepository,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             RulesBussinesGateway documentValidator) {
-        super(documentRepository, historyRepository, productRestGateway, documentValidator);
+        super(documentRepository, productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
     }
@@ -34,10 +35,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
         return homologationRepository.resolve(doc.origin(), doc.pais())
             .flatMap(result -> {
                 FileUploadRequest request = buildFileUploadRequest(doc, result.origin(), result.paisHomologado(), docId);
-                if (result.useV2()) {
-                    SoapGatewayV2 v2Gateway = (SoapGatewayV2) soapGateway;
-                    return v2Gateway.transmitirDocumento(request);
-                }
+                // All SOAP requests now use the unified V2 implementation via SoapGateway.send()
                 return soapGateway.send(request);
             })
             .onErrorResume(this::handleUploadError);

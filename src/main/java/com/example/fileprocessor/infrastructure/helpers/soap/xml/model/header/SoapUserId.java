@@ -1,11 +1,11 @@
-package com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header;
+package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.header;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 
 @XmlAccessorType(XmlAccessType.FIELD)
-public class SoapV2UserId {
+public class SoapUserId {
 
     @XmlElement(name = "userName")
     private String userName;
@@ -13,9 +13,9 @@ public class SoapV2UserId {
     @XmlElement(name = "userToken")
     private String userToken;
 
-    public SoapV2UserId() {}
+    public SoapUserId() {}
 
-    public SoapV2UserId(String userName, String userToken) {
+    public SoapUserId(String userName, String userToken) {
         this.userName = userName;
         this.userToken = userToken;
     }

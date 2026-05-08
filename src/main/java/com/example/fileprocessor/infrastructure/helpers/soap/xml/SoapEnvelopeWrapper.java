@@ -2,7 +2,7 @@ package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
+import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
 import org.springframework.stereotype.Component;

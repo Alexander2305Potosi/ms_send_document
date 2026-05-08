@@ -1,4 +1,4 @@
-package com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.body;
+package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;

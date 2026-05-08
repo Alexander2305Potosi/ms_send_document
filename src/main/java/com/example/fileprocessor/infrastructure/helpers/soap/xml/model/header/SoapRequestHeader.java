@@ -1,4 +1,4 @@
-package com.example.fileprocessor.infrastructure.helpers.soap.v2.xml.model.header;
+package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.header;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
@@ -7,7 +7,7 @@ import jakarta.xml.bind.annotation.XmlRootElement;
 
 @XmlRootElement(name = "requestHeader")
 @XmlAccessorType(XmlAccessType.FIELD)
-public class SoapV2RequestHeader {
+public class SoapRequestHeader {
 
     @XmlElement(name = "systemId")
     private String systemId;
@@ -19,32 +19,32 @@ public class SoapV2RequestHeader {
     private String timestamp;
 
     @XmlElement(name = "messageContext")
-    private SoapV2MessageContext messageContext;
+    private SoapMessageContext messageContext;
 
     @XmlElement(name = "userId")
-    private SoapV2UserId userId;
+    private SoapUserId userId;
 
     @XmlElement(name = "destination")
-    private SoapV2Destination destination;
+    private SoapDestination destination;
 
     @XmlElement(name = "classifications")
-    private SoapV2Classifications classifications;
+    private SoapClassifications classifications;
 
-    public SoapV2RequestHeader() {}
+    public SoapRequestHeader() {}
 
     public void setSystemId(String systemId) { this.systemId = systemId; }
     public void setMessageId(String messageId) { this.messageId = messageId; }
     public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
-    public void setMessageContext(SoapV2MessageContext messageContext) { this.messageContext = messageContext; }
-    public void setUserId(SoapV2UserId userId) { this.userId = userId; }
-    public void setDestination(SoapV2Destination destination) { this.destination = destination; }
-    public void setClassifications(SoapV2Classifications classifications) { this.classifications = classifications; }
+    public void setMessageContext(SoapMessageContext messageContext) { this.messageContext = messageContext; }
+    public void setUserId(SoapUserId userId) { this.userId = userId; }
+    public void setDestination(SoapDestination destination) { this.destination = destination; }
+    public void setClassifications(SoapClassifications classifications) { this.classifications = classifications; }
 
     public String getSystemId() { return systemId; }
     public String getMessageId() { return messageId; }
     public String getTimestamp() { return timestamp; }
-    public SoapV2MessageContext getMessageContext() { return messageContext; }
-    public SoapV2UserId getUserId() { return userId; }
-    public SoapV2Destination getDestination() { return destination; }
-    public SoapV2Classifications getClassifications() { return classifications; }
+    public SoapMessageContext getMessageContext() { return messageContext; }
+    public SoapUserId getUserId() { return userId; }
+    public SoapDestination getDestination() { return destination; }
+    public SoapClassifications getClassifications() { return classifications; }
 }
