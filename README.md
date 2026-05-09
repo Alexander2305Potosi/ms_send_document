@@ -48,6 +48,7 @@ com.example.fileprocessor/
 │   │   ├── ProductState.java                   # Constantes de estado: PENDING, IN_PROGRESS, PROCESSED, FAILED
 │   │   ├── FileUploadRequest.java              # Request para upload a gateway (SOAP/S3)
 │   │   ├── FileUploadResponse.java               # Resultado de upload con status, errorCode
+│   │   ├── FinalizeProcessingCommand.java      # Parameter Object: encapsula datos para finalización atómica
 │   │   ├── HomologationResult.java             # Resultado de homologacion (origin, paisHomologado)
 │   │   ├── ExternalServiceResponse.java        # Respuesta genérica de servicio externo
 │   │   ├── ProductHistory.java                 # Record: producto (metadata)
@@ -63,12 +64,10 @@ com.example.fileprocessor/
 │   │   └── RulesBussinesService.java              # Validación de documentos (tamaño, patrón de nombre)
 │   ├── util/
 │   │   ├── ZipDecompressor.java                   # Descompresión de ZIP con inferencia de contentType
-│   │   └── Base64Utils.java                       # Encoding/decoding seguro de Base64
+│   │   ├── Base64Utils.java                       # Encoding/decoding seguro de Base64
+│   │   └── MimeTypeUtil.java                      # Utilidad Java pura para resolver tipos MIME
 │   ├── port/out/
-│   │   ├── DocumentRepository.java               # Puerto: persistencia de estado atómica
-│   │   ├── DocumentHistoryRepository.java        # Puerto: trazabilidad (append-only)
-│   │   ├── TransactionHandler.java               # Puerto: Abstracción de transacciones reactivas (Pura)
-│   │   ├── MimeTypeResolver.java                 # Puerto: Inferencia de MIME types sin Spring
+│   │   ├── DocumentPersistencePort.java          # Puerto: Facade unificado para persistencia transaccional
 │   │   ├── ProductRepository.java                # Puerto: productos (lectura/escritura)
 │   │   ├── ProductRestGateway.java               # Puerto: consumo API REST externa de productos
 │   │   ├── RulesBussinesGateway.java             # Puerto: validación de documentos
@@ -89,10 +88,12 @@ com.example.fileprocessor/
     │   ├── ProcessorsProperties.java              # Propiedades unificadas (límites, reintentos)
     │   └── JaxbConfig.java                        # Contexto compartido JAXB para SOAP
     ├── drivenadapters/
+    │   ├── DocumentPersistenceAdapter.java        # Adaptador Facade que agrupa repositorios y TransactionalOperator
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
-    │   │   ├── DocumentR2dbcAdapter.java          # Implementa DocumentRepository vía Spring Data R2DBC (@Query)
+    │   │   ├── common/AbstractReactiveAdapterOperation.java # Clase base genérica para adaptadores R2DBC
+    │   │   ├── DocumentR2dbcAdapter.java          # Hereda de AbstractReactiveAdapterOperation
     │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository
-    │   │   ├── ProductR2dbcAdapter.java           # Implementa ProductRepository
+    │   │   ├── ProductR2dbcAdapter.java           # Hereda de AbstractReactiveAdapterOperation
     │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (caché en memoria)
     │   │   ├── entity/                            # Entidades mapeadas a tablas SQL
     │   │   ├── mapper/                            # Mapeadores Entidad-Dominio (DocumentMapper, ProductMapper)
