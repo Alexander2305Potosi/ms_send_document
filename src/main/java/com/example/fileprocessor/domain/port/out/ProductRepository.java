@@ -12,6 +12,6 @@ import java.time.LocalDate;
 public interface ProductRepository {
     Flux<ProductHistory> findByLoadDate(LocalDate loadDate);
     Flux<ProductHistory> findAll();
-    Mono<Void> save(ProductHistory product);
+    Mono<ProductHistory> save(ProductHistory product);
     Mono<Void> updateEstadoById(Long id, String estado);
 }

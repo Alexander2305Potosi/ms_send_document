@@ -95,6 +95,7 @@ class ProductR2dbcAdapterTest {
         when(repository.save(any())).thenReturn(Mono.just(entity(1L, "prod-1", "ACTIVE")));
 
         StepVerifier.create(adapter.save(history("prod-1")))
+            .expectNextCount(1)
             .verifyComplete();
 
         verify(repository).save(any(ProductEntity.class));

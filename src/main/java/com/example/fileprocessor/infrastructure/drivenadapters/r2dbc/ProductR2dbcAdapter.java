@@ -2,6 +2,8 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.common.AbstractReactiveAdapterOperation;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.ProductEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.mapper.ProductMapper;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -12,33 +14,23 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Component
-public class ProductR2dbcAdapter implements ProductRepository {
-
-    private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository repository;
+public class ProductR2dbcAdapter 
+    extends AbstractReactiveAdapterOperation<ProductEntity, ProductHistory, Long, com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository> 
+    implements ProductRepository {
 
     public ProductR2dbcAdapter(com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository repository) {
-        this.repository = repository;
+        super(repository, ProductMapper::toEntity, ProductMapper::toDomain);
     }
 
     @Override
     public Flux<ProductHistory> findByLoadDate(LocalDate loadDate) {
         LocalDateTime startOfDay = loadDate.atStartOfDay();
         LocalDateTime endOfDay = loadDate.atTime(LocalTime.MAX);
-        return repository.findByLoadDateBetween(startOfDay, endOfDay)
-            .map(ProductMapper::toDomain);
+        return doQueryMany(() -> repository.findByLoadDateBetween(startOfDay, endOfDay));
     }
 
-    @Override
-    public Flux<ProductHistory> findAll() {
-        return repository.findAll()
-            .map(ProductMapper::toDomain);
-    }
+    // findAll() is inherited automatically!
 
-    @Override
-    public Mono<Void> save(ProductHistory product) {
-        return repository.save(ProductMapper.toEntity(product))
-            .then();
-    }
 
     @Override
     public Mono<Void> updateEstadoById(Long id, String estado) {
