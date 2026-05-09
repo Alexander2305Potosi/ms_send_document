@@ -93,13 +93,13 @@ public class SoapMapper {
             return sw.toString();
 
         } catch (JAXBException | XMLStreamException e) {
-            log.log(Level.SEVERE, "Error building SOAP V2 envelope for traceId=" + traceId, e);
+            log.log(Level.SEVERE, "Error building SOAP envelope for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
-                "Failed to build SOAP V2 envelope", ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
+                "Failed to build SOAP envelope", ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
         } catch (RuntimeException e) {
-            log.log(Level.SEVERE, "Unexpected error building SOAP V2 envelope for traceId=" + traceId, e);
+            log.log(Level.SEVERE, "Unexpected error building SOAP envelope for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
-                "Unexpected error building SOAP V2 envelope: " + e.getMessage(),
+                "Unexpected error building SOAP envelope: " + e.getMessage(),
                 ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
         }
     }

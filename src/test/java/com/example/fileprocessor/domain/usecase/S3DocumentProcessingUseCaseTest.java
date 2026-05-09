@@ -68,7 +68,7 @@ class S3DocumentProcessingUseCaseTest {
         lenient().when(transactionalOperator.transactional(any(Mono.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
-        lenient().when(historyRepository.saveHistory(anyLong(), anyString(), anyString(), any(), any()))
+        lenient().when(historyRepository.saveHistory(anyLong(), any(), anyString(), any(), any()))
             .thenReturn(Mono.empty());
 
         lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))

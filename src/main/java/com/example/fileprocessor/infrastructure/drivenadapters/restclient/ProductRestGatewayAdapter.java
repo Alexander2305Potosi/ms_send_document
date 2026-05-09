@@ -42,25 +42,6 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    public Flux<ProductDocumentHistory> getAllProducts() {
-        return Flux.deferContextual(ctx -> {
-            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.log(Level.INFO, "Fetching all products from REST API, traceId: {0}", new Object[]{traceId});
-
-            return webClient.get()
-                .uri(properties.productsPath())
-                .accept(MediaType.APPLICATION_JSON)
-                .header(ApiConstants.HEADER_TRACE_ID, traceId)
-                .retrieve()
-                .bodyToFlux(ProductResponse.class)
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .flatMap(this::mapToProductDocumentHistory)
-                .doOnNext(doc -> log.log(Level.INFO, "Product document retrieved: productId={0}, documentId={1}",
-                    new Object[]{doc.productId(), doc.documentId()}));
-        });
-    }
-
-    @Override
     public Flux<ProductDocumentHistory> getDocumentsByProduct(ProductHistory product) {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);

@@ -19,6 +19,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -66,7 +67,7 @@ class AbstractDocumentProcessingUseCaseTest {
         lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))
             .thenReturn(Mono.just(1L));
 
-        lenient().when(historyRepository.saveHistory(anyLong(), anyString(), anyString(), any(), any()))
+        lenient().when(historyRepository.saveHistory(eq(1L), any(), eq("TEST"), any(FileUploadResponse.class), any(Instant.class)))
             .thenReturn(Mono.empty());
     }
 

@@ -227,37 +227,4 @@ class ProductRestGatewayAdapterTest {
             .verifyComplete();
     }
 
-    // getAllProducts tests (using MockWebServer)
-
-    @Test
-    void getAllProducts_returnsMappedDocuments() {
-        String responseJson = """
-            [{"productId":"prod-1","name":"Test Product","documents":[{"documentId":"doc-1","filename":"test.pdf","content":"VGVzdENvbnRlbnQ=","contentType":"application/pdf","size":12,"isZip":false,"origin":"origin","pais":"AR"}]}]""";
-
-        mockWebServer.enqueue(new MockResponse()
-            .setBody(responseJson)
-            .addHeader("Content-Type", "application/json"));
-
-        StepVerifier.create(adapter.getAllProducts()
-                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
-            .assertNext(doc -> {
-                assertEquals("doc-1", doc.documentId());
-                assertEquals("test.pdf", doc.filename());
-            })
-            .verifyComplete();
-    }
-
-    @Test
-    void getAllProducts_withEmptyDocumentsList_skipsEmpty() {
-        String responseJson = """
-            [{"productId":"prod-1","name":"Test Product","documents":[]}]""";
-
-        mockWebServer.enqueue(new MockResponse()
-            .setBody(responseJson)
-            .addHeader("Content-Type", "application/json"));
-
-        StepVerifier.create(adapter.getAllProducts()
-                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
-            .verifyComplete();
-    }
 }

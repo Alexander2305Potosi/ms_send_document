@@ -98,7 +98,8 @@ public abstract class AbstractDocumentProcessingUseCase {
         }
 
         final int finalRetryCount = nextRetryCount;
-        return historyRepository.saveHistory(doc.id(), doc.name(), implementationName(), response, startTime)
+        String historyFileName = Boolean.TRUE.equals(doc.isZip()) ? doc.name() : null;
+        return historyRepository.saveHistory(doc.id(), historyFileName, implementationName(), response, startTime)
             .then(documentRepository.updateStateAndRetry(doc.id(), ProductState.IN_PROGRESS, finalState, 
                                                        finalRetryCount, LocalDateTime.now()))
             .as(transactionalOperator::transactional) // TODO O NADA
