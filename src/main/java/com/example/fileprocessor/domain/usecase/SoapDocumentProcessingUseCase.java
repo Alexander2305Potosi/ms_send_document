@@ -35,7 +35,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     @Override
     protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
-        return homologationRepository.resolve(doc.origin(), doc.pais())
+        return homologationRepository.resolve(doc.getOrigin(), doc.getPais())
             .map(h -> FileUploadRequest.from(doc, docId))
             .flatMap(soapGateway::send)
             .onErrorResume(e -> {

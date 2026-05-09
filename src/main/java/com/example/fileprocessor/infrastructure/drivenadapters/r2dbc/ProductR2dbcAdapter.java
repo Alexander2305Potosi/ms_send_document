@@ -4,7 +4,7 @@ import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.common.AbstractReactiveAdapterOperation;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.ProductEntity;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.mapper.ProductMapper;
+import org.reactivecommons.utils.ObjectMapper;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -14,12 +14,15 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Component
-public class ProductR2dbcAdapter 
-    extends AbstractReactiveAdapterOperation<ProductEntity, ProductHistory, Long, com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository> 
+public class ProductR2dbcAdapter
+    extends AbstractReactiveAdapterOperation<ProductEntity, ProductHistory, Long,
+        com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository>
     implements ProductRepository {
 
-    public ProductR2dbcAdapter(com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository repository) {
-        super(repository, ProductMapper::toEntity, ProductMapper::toDomain);
+    public ProductR2dbcAdapter(
+            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository repository,
+            ObjectMapper mapper) {
+        super(repository, mapper, d -> mapper.map(d, ProductHistory.class), ProductEntity.class);
     }
 
     @Override
@@ -28,9 +31,6 @@ public class ProductR2dbcAdapter
         LocalDateTime endOfDay = loadDate.atTime(LocalTime.MAX);
         return doQueryMany(() -> repository.findByLoadDateBetween(startOfDay, endOfDay));
     }
-
-    // findAll() is inherited automatically!
-
 
     @Override
     public Mono<Void> updateEstadoById(Long id, String estado) {
@@ -41,5 +41,4 @@ public class ProductR2dbcAdapter
             })
             .then();
     }
-
 }

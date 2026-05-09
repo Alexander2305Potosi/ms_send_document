@@ -25,12 +25,12 @@ public final class ZipDecompressor {
      * @return A Flux of decompressed documents.
      */
     public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc) {
-        if (!zipDoc.isZip() || zipDoc.content() == null) {
+        if (!zipDoc.isZip() || zipDoc.getContent() == null) {
             return Flux.just(zipDoc);
         }
 
         return Flux.generate(
-            () -> new ZipInputStream(new ByteArrayInputStream(zipDoc.content())),
+            () -> new ZipInputStream(new ByteArrayInputStream(zipDoc.getContent())),
             (zis, sink) -> {
                 try {
                     ZipEntry entry;
@@ -45,7 +45,7 @@ public final class ZipDecompressor {
                 } catch (IOException e) {
                     sink.error(new ProcessingException(
                         ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
-                        "Failed to decompress ZIP '" + zipDoc.filename() + "': " + e.getMessage(),
+                        "Failed to decompress ZIP '" + zipDoc.getFilename() + "': " + e.getMessage(),
                         e));
                 }
                 return zis;
@@ -63,14 +63,14 @@ public final class ZipDecompressor {
     private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, 
                                                              ProductDocumentHistory original) {
         return ProductDocumentHistory.builder()
-            .productId(original.productId())
-            .documentId(original.documentId() + "/" + filename)
+            .productId(original.getProductId())
+            .documentId(original.getDocumentId() + "/" + filename)
             .filename(filename)
             .contentType(MimeTypeUtil.getMimeType(filename))
             .size((long) content.length)
             .isZip(false)
-            .pais(original.pais())
-            .parentZipName(original.filename())
+            .pais(original.getPais())
+            .parentZipName(original.getFilename())
             .content(content)
             .build();
     }

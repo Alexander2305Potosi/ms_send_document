@@ -27,8 +27,8 @@ class ZipDecompressorTest {
 
         StepVerifier.create(ZipDecompressor.decompress(doc))
             .expectNextMatches(result ->
-                result.documentId().equals("doc-1") &&
-                result.filename().equals("test.pdf") &&
+                result.getDocumentId().equals("doc-1") &&
+                result.getFilename().equals("test.pdf") &&
                 !result.isZip())
             .verifyComplete();
     }
@@ -50,18 +50,18 @@ class ZipDecompressorTest {
 
         StepVerifier.create(result)
             .assertNext(doc -> {
-                assertTrue(doc.filename().endsWith("test.pdf"));
-                assertEquals("doc-1/test.pdf", doc.documentId());
+                assertTrue(doc.getFilename().endsWith("test.pdf"));
+                assertEquals("doc-1/test.pdf", doc.getDocumentId());
                 assertFalse(doc.isZip());
-                assertEquals("AR", doc.pais());
-                assertEquals("docs.zip", doc.parentZipName());
+                assertEquals("AR", doc.getPais());
+                assertEquals("docs.zip", doc.getParentZipName());
             })
             .assertNext(doc -> {
-                assertTrue(doc.filename().endsWith("data.csv"));
-                assertEquals("doc-1/data.csv", doc.documentId());
+                assertTrue(doc.getFilename().endsWith("data.csv"));
+                assertEquals("doc-1/data.csv", doc.getDocumentId());
                 assertFalse(doc.isZip());
-                assertEquals("AR", doc.pais());
-                assertEquals("docs.zip", doc.parentZipName());
+                assertEquals("AR", doc.getPais());
+                assertEquals("docs.zip", doc.getParentZipName());
             })
             .verifyComplete();
     }

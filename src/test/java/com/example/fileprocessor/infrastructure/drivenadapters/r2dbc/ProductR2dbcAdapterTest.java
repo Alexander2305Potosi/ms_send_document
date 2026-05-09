@@ -2,6 +2,8 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.ProductEntity;
+import org.reactivecommons.utils.ObjectMapper;
+import org.reactivecommons.utils.ObjectMapperImp;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,11 +27,12 @@ class ProductR2dbcAdapterTest {
     @Mock
     private com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.ProductRepository repository;
 
+    private final ObjectMapper objectMapper = new ObjectMapperImp();
     private ProductR2dbcAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        adapter = new ProductR2dbcAdapter(repository);
+        adapter = new ProductR2dbcAdapter(repository, objectMapper);
     }
 
     private static ProductEntity entity(Long id, String productId, String state) {
@@ -59,8 +62,8 @@ class ProductR2dbcAdapterTest {
 
         StepVerifier.create(adapter.findByLoadDate(date))
             .assertNext(product -> {
-                assertEquals("prod-1", product.productId());
-                assertEquals("ACTIVE", product.state());
+                assertEquals("prod-1", product.getProductId());
+                assertEquals("ACTIVE", product.getState());
             })
             .verifyComplete();
 
@@ -77,8 +80,8 @@ class ProductR2dbcAdapterTest {
         when(repository.findAll()).thenReturn(Flux.just(e1, e2));
 
         StepVerifier.create(adapter.findAll())
-            .assertNext(p -> assertEquals("p1", p.productId()))
-            .assertNext(p -> assertEquals("p2", p.productId()))
+            .assertNext(p -> assertEquals("p1", p.getProductId()))
+            .assertNext(p -> assertEquals("p2", p.getProductId()))
             .verifyComplete();
     }
 

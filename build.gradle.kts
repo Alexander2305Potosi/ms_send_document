@@ -82,6 +82,10 @@ dependencies {
 
     // JPA for entities
     implementation("jakarta.persistence:jakarta.persistence-api:3.1.0")
+
+    // Reactive Commons - ObjectMapper utility for domain/entity mapping
+    implementation("org.reactivecommons.utils:object-mapper-api:0.1.0")
+    implementation("org.reactivecommons.utils:object-mapper:0.1.0")
 }
 
 tasks.withType<Test> {

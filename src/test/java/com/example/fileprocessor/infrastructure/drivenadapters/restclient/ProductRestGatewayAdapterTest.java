@@ -58,15 +58,15 @@ class ProductRestGatewayAdapterTest {
 
         ProductDocumentHistory doc = adapter.mapToProductDocument(PROD_ID, docResponse);
 
-        assertEquals(PROD_ID, doc.productId());
-        assertEquals("doc-1", doc.documentId());
-        assertEquals("test.pdf", doc.filename());
-        assertEquals("application/pdf", doc.contentType());
-        assertEquals(12L, doc.size());
+        assertEquals(PROD_ID, doc.getProductId());
+        assertEquals("doc-1", doc.getDocumentId());
+        assertEquals("test.pdf", doc.getFilename());
+        assertEquals("application/pdf", doc.getContentType());
+        assertEquals(12L, doc.getSize());
         assertFalse(doc.isZip());
-        assertEquals("origin", doc.origin());
-        assertEquals("AR", doc.pais());
-        assertNotNull(doc.content());
+        assertEquals("origin", doc.getOrigin());
+        assertEquals("AR", doc.getPais());
+        assertNotNull(doc.getContent());
     }
 
     @Test
@@ -77,8 +77,8 @@ class ProductRestGatewayAdapterTest {
 
         ProductDocumentHistory doc = adapter.mapToProductDocument(PROD_ID, response);
 
-        assertNull(doc.content());
-        assertEquals(12L, doc.size());
+        assertNull(doc.getContent());
+        assertEquals(12L, doc.getSize());
     }
 
     @Test
@@ -89,7 +89,7 @@ class ProductRestGatewayAdapterTest {
 
         ProductDocumentHistory doc = adapter.mapToProductDocument(PROD_ID, response);
 
-        assertEquals(0L, doc.size());
+        assertEquals(0L, doc.getSize());
     }
 
     @Test
@@ -100,7 +100,7 @@ class ProductRestGatewayAdapterTest {
 
         ProductDocumentHistory doc = adapter.mapToProductDocument(PROD_ID, response);
 
-        assertNull(doc.content());
+        assertNull(doc.getContent());
     }
 
     @Test
@@ -112,8 +112,8 @@ class ProductRestGatewayAdapterTest {
 
         ProductDocumentHistory doc = adapter.mapToProductDocument(PROD_ID, response);
 
-        assertEquals("application/zip", doc.contentType());
-        assertEquals("test.zip", doc.filename());
+        assertEquals("application/zip", doc.getContentType());
+        assertEquals("test.zip", doc.getFilename());
     }
 
     @Test
@@ -124,8 +124,8 @@ class ProductRestGatewayAdapterTest {
 
         ProductDocumentHistory doc = adapter.mapToProductDocument(PROD_ID, response);
 
-        assertNotNull(doc.content());
-        assertEquals(doc.content().length, doc.size());
+        assertNotNull(doc.getContent());
+        assertEquals(doc.getContent().length, doc.getSize());
     }
 
     @Test
@@ -154,7 +154,7 @@ class ProductRestGatewayAdapterTest {
 
         assertNotNull(result);
         assertEquals(1, result.size());
-        assertEquals("doc-1", result.get(0).documentId());
+        assertEquals("doc-1", result.get(0).getDocumentId());
     }
 
     @Test
@@ -197,10 +197,10 @@ class ProductRestGatewayAdapterTest {
         StepVerifier.create(adapter.getDocument("prod-1", "doc-1")
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(file -> {
-                assertEquals("prod-1", file.productId());
-                assertEquals("doc-1", file.documentId());
-                assertEquals("test.pdf", file.filename());
-                assertNotNull(file.content());
+                assertEquals("prod-1", file.getProductId());
+                assertEquals("doc-1", file.getDocumentId());
+                assertEquals("test.pdf", file.getFilename());
+                assertNotNull(file.getContent());
             })
             .verifyComplete();
     }
@@ -221,8 +221,8 @@ class ProductRestGatewayAdapterTest {
         StepVerifier.create(adapter.getDocumentsByProduct(product)
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(doc -> {
-                assertEquals("prod-1", doc.productId());
-                assertEquals("doc-1", doc.documentId());
+                assertEquals("prod-1", doc.getProductId());
+                assertEquals("doc-1", doc.getDocumentId());
             })
             .verifyComplete();
     }

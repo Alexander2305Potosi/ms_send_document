@@ -3,6 +3,8 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository;
+import org.reactivecommons.utils.ObjectMapper;
+import org.reactivecommons.utils.ObjectMapperImp;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,11 +26,12 @@ class DocumentR2dbcAdapterTest {
     @Mock
     private DocumentRepository springDataRepository;
 
+    private final ObjectMapper objectMapper = new ObjectMapperImp();
     private DocumentR2dbcAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        adapter = new DocumentR2dbcAdapter(springDataRepository);
+        adapter = new DocumentR2dbcAdapter(springDataRepository, objectMapper);
     }
 
     @Test
@@ -40,8 +43,8 @@ class DocumentR2dbcAdapterTest {
 
         StepVerifier.create(adapter.save(domain))
             .assertNext(res -> {
-                assertEquals(1L, res.id());
-                assertEquals("test.pdf", res.name());
+                assertEquals(1L, res.getId());
+                assertEquals("test.pdf", res.getName());
             })
             .verifyComplete();
     }
@@ -56,9 +59,9 @@ class DocumentR2dbcAdapterTest {
 
         StepVerifier.create(adapter.findByStateAndUseCaseToday("PENDING", "SYNC", startOfDay))
             .assertNext(doc -> {
-                assertEquals(1L, doc.id());
-                assertEquals("PENDING", doc.state());
-                assertEquals("SYNC", doc.useCase());
+                assertEquals(1L, doc.getId());
+                assertEquals("PENDING", doc.getState());
+                assertEquals("SYNC", doc.getUseCase());
             })
             .verifyComplete();
 

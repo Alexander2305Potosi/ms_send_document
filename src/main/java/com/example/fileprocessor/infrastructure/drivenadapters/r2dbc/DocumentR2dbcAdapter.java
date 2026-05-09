@@ -4,7 +4,7 @@ import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.common.AbstractReactiveAdapterOperation;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.mapper.DocumentMapper;
+import org.reactivecommons.utils.ObjectMapper;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -12,13 +12,15 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
 
 @Component
-public class DocumentR2dbcAdapter 
-    extends AbstractReactiveAdapterOperation<DocumentEntity, Document, Long, com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository> 
+public class DocumentR2dbcAdapter
+    extends AbstractReactiveAdapterOperation<DocumentEntity, Document, Long,
+        com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository>
     implements DocumentRepository {
 
     public DocumentR2dbcAdapter(
-            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository springDataRepository) {
-        super(springDataRepository, DocumentMapper::toEntity, DocumentMapper::toDomain);
+            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository repository,
+            ObjectMapper mapper) {
+        super(repository, mapper, d -> mapper.map(d, Document.class), DocumentEntity.class);
     }
 
     @Override
@@ -28,7 +30,7 @@ public class DocumentR2dbcAdapter
 
     @Override
     public Mono<Long> updateStateAndRetry(Long id, String expectedState, String newState,
-                                         Integer retryCount, LocalDateTime updatedAt) {
+                                          Integer retryCount, LocalDateTime updatedAt) {
         return repository.updateStateAndRetry(id, expectedState, newState, retryCount, updatedAt);
     }
 

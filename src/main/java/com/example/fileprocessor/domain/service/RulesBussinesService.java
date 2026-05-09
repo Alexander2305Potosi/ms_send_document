@@ -37,17 +37,17 @@ public class RulesBussinesService implements RulesBussinesGateway {
 
     public Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc, boolean includeSizeCheck) {
         return Mono.defer(() -> {
-            if (includeSizeCheck && maxFileSizeBytes != null && doc.size() != null && doc.size() > maxFileSizeBytes) {
+            if (includeSizeCheck && maxFileSizeBytes != null && doc.getSize() != null && doc.getSize() > maxFileSizeBytes) {
                 return Mono.error(new ProcessingException(
                     ProcessingResultCodes.SIZE_EXCEEDED.name(),
                     String.format("Size %,d bytes exceeds max %,d bytes for file '%s'",
-                        doc.size(), maxFileSizeBytes, doc.filename())));
+                        doc.getSize(), maxFileSizeBytes, doc.getFilename())));
             }
-            if (filenamePattern != null && !filenamePattern.matcher(doc.filename()).matches()) {
+            if (filenamePattern != null && !filenamePattern.matcher(doc.getFilename()).matches()) {
                 return Mono.error(new ProcessingException(
                     ProcessingResultCodes.PATTERN_MISMATCH.name(),
                     String.format("Filename '%s' does not match pattern '%s'",
-                        doc.filename(), filenamePattern.pattern())));
+                        doc.getFilename(), filenamePattern.pattern())));
             }
             return Mono.just(doc);
         });

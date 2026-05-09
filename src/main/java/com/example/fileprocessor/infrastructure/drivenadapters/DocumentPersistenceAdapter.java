@@ -3,6 +3,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters;
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
+import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
@@ -29,23 +30,23 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
 
     @Override
     public Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay) {
-        return documentRepository.findByStateAndUseCaseToday("PENDING", useCase, startOfDay);
+        return documentRepository.findByStateAndUseCaseToday(ProductState.PENDING, useCase, startOfDay);
     }
 
     @Override
     public Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount) {
-        return documentRepository.updateStateAndRetry(docId, "PENDING", "IN_PROGRESS", currentRetryCount, LocalDateTime.now());
+        return documentRepository.updateStateAndRetry(docId, ProductState.PENDING, ProductState.IN_PROGRESS, currentRetryCount, LocalDateTime.now());
     }
 
     @Override
     public Mono<FileUploadResponse> finalizeProcessingAtomically(FinalizeProcessingCommand command) {
         Document doc = command.document();
-        String historyFileName = Boolean.TRUE.equals(doc.isZip()) ? doc.name() : null;
+        String historyFileName = Boolean.TRUE.equals(doc.isZip()) ? doc.getName() : null;
 
         Mono<FileUploadResponse> combinedOperation = historyRepository.saveHistory(
-                doc.id(), historyFileName, doc.useCase(), command.response(), command.startTime())
+                doc.getId(), historyFileName, doc.getUseCase(), command.response(), command.startTime())
             .then(documentRepository.updateStateAndRetry(
-                doc.id(), "IN_PROGRESS", command.finalState(), command.nextRetryCount(), LocalDateTime.now()))
+                doc.getId(), ProductState.IN_PROGRESS, command.finalState(), command.nextRetryCount(), LocalDateTime.now()))
             .thenReturn(command.response());
 
         return combinedOperation.as(transactionalOperator::transactional);

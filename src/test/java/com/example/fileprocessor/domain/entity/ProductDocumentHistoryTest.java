@@ -18,15 +18,15 @@ class ProductDocumentHistoryTest {
             content, null
         );
 
-        assertEquals("prod-1", doc.productId());
-        assertEquals("doc-1", doc.documentId());
-        assertEquals("test.pdf", doc.filename());
-        assertArrayEquals(content, doc.content());
-        assertEquals("application/pdf", doc.contentType());
-        assertEquals(1024L, doc.size());
+        assertEquals("prod-1", doc.getProductId());
+        assertEquals("doc-1", doc.getDocumentId());
+        assertEquals("test.pdf", doc.getFilename());
+        assertArrayEquals(content, doc.getContent());
+        assertEquals("application/pdf", doc.getContentType());
+        assertEquals(1024L, doc.getSize());
         assertTrue(doc.isZip());
-        assertEquals("origin", doc.origin());
-        assertEquals("AR", doc.pais());
+        assertEquals("origin", doc.getOrigin());
+        assertEquals("AR", doc.getPais());
     }
 
     @Test
@@ -40,7 +40,7 @@ class ProductDocumentHistoryTest {
             new byte[100], null
         );
 
-        assertEquals(100L, doc.size());
+        assertEquals(100L, doc.getSize());
     }
 
     @Test

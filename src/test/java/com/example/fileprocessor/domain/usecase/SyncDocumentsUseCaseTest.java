@@ -99,10 +99,10 @@ class SyncDocumentsUseCaseTest {
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(docCaptor.capture());
         Document savedDoc = docCaptor.getValue();
-        assertEquals("doc1", savedDoc.documentId());
-        assertEquals("p1", savedDoc.productId());
-        assertEquals(ProductState.PENDING, savedDoc.state());
-        assertEquals("retention", savedDoc.useCase());
+        assertEquals("doc1", savedDoc.getDocumentId());
+        assertEquals("p1", savedDoc.getProductId());
+        assertEquals(ProductState.PENDING, savedDoc.getState());
+        assertEquals("retention", savedDoc.getUseCase());
     }
 
     @Test
@@ -122,7 +122,7 @@ class SyncDocumentsUseCaseTest {
         verify(documentRepository).save(docCaptor.capture());
         Document saved = docCaptor.getValue();
         assertTrue(saved.isZip());
-        assertNull(saved.parentZipName());
+        assertNull(saved.getParentZipName());
     }
 
     @Test
@@ -181,7 +181,7 @@ class SyncDocumentsUseCaseTest {
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
-        assertEquals("extract", captor.getValue().useCase());
+        assertEquals("extract", captor.getValue().getUseCase());
     }
 
     @Test
@@ -200,12 +200,12 @@ class SyncDocumentsUseCaseTest {
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(docCaptor.capture());
         Document savedDoc = docCaptor.getValue();
-        assertEquals("doc1", savedDoc.documentId());
-        assertEquals("p1", savedDoc.productId());
-        assertEquals(ProductState.ERR_DUPLICATED_DOC, savedDoc.state());
-        assertNotNull(savedDoc.errorMessage());
-        assertTrue(savedDoc.errorMessage().contains("duplicado"));
-        assertEquals("retention", savedDoc.useCase());
+        assertEquals("doc1", savedDoc.getDocumentId());
+        assertEquals("p1", savedDoc.getProductId());
+        assertEquals(ProductState.ERR_DUPLICATED_DOC, savedDoc.getState());
+        assertNotNull(savedDoc.getErrorMessage());
+        assertTrue(savedDoc.getErrorMessage().contains("duplicado"));
+        assertEquals("retention", savedDoc.getUseCase());
     }
 
     @Test
@@ -231,9 +231,9 @@ class SyncDocumentsUseCaseTest {
 
         java.util.List<Document> savedDocs = docCaptor.getAllValues();
         assertEquals(2, savedDocs.size());
-        assertEquals(ProductState.ERR_DUPLICATED_DOC, savedDocs.get(0).state());
-        assertEquals("doc1", savedDocs.get(0).documentId());
-        assertEquals(ProductState.PENDING, savedDocs.get(1).state());
-        assertEquals("doc2", savedDocs.get(1).documentId());
+        assertEquals(ProductState.ERR_DUPLICATED_DOC, savedDocs.get(0).getState());
+        assertEquals("doc1", savedDocs.get(0).getDocumentId());
+        assertEquals(ProductState.PENDING, savedDocs.get(1).getState());
+        assertEquals("doc2", savedDocs.get(1).getDocumentId());
     }
 }

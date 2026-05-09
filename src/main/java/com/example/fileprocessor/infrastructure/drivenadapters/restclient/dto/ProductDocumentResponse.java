@@ -1,17 +1,32 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-/**
- * Typed response for a document from the products REST API.
- */
-public record ProductDocumentResponse(
-    @JsonProperty("documentId") String documentId,
-    @JsonProperty("filename") String filename,
-    @JsonProperty("content") String content,
-    @JsonProperty("contentType") String contentType,
-    @JsonProperty("size") Long size,
-    @JsonProperty("isZip") Boolean isZip,
-    @JsonProperty("origin") String origin,
-    @JsonProperty("pais") String pais
-) {}
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ProductDocumentResponse {
+    @JsonProperty("documentId")
+    private String documentId;
+    @JsonProperty("filename")
+    private String filename;
+    @JsonProperty("content")
+    private String content;
+    @JsonProperty("contentType")
+    private String contentType;
+    @JsonProperty("size")
+    private Long size;
+    @JsonProperty("isZip")
+    private boolean isZip;
+    @JsonProperty("origin")
+    private String origin;
+    @JsonProperty("pais")
+    private String pais;
+}

@@ -47,19 +47,19 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             LOGGER.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
-                new Object[]{product.productId(), traceId});
+                new Object[]{product.getProductId(), traceId});
 
             return webClient.get()
-                .uri(properties.productDocumentsPath(), product.productId())
+                .uri(properties.productDocumentsPath(), product.getProductId())
                 .accept(MediaType.APPLICATION_JSON)
                 .header(ApiConstants.HEADER_TRACE_ID, traceId)
                 .retrieve()
                 .bodyToFlux(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .map(doc -> mapToProductDocument(product.productId(), doc))
+                .map(doc -> mapToProductDocument(product.getProductId(), doc))
                 .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
-                    new Object[]{doc.productId(), doc.documentId()}));
+                    new Object[]{doc.getProductId(), doc.getDocumentId()}));
         });
     }
 
@@ -82,14 +82,14 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                     ProductDocumentHistory doc = mapToProductDocument(productId, response);
                     return ProductDocumentFile.builder()
                         .productId(productId)
-                        .documentId(doc.documentId())
-                        .filename(doc.filename())
-                        .content(doc.content())
-                        .contentType(doc.contentType())
-                        .size(doc.size())
+                        .documentId(doc.getDocumentId())
+                        .filename(doc.getFilename())
+                        .content(doc.getContent())
+                        .contentType(doc.getContentType())
+                        .size(doc.getSize())
                         .isZip(doc.isZip())
-                        .origin(doc.origin())
-                        .pais(doc.pais())
+                        .origin(doc.getOrigin())
+                        .pais(doc.getPais())
                         .build();
                 })
                 .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
@@ -98,17 +98,17 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     Flux<ProductDocumentHistory> mapToProductDocumentHistory(ProductResponse json) {
-        if (json.documents() == null || json.documents().isEmpty()) {
+        if (json.getDocuments() == null || json.getDocuments().isEmpty()) {
             return Flux.empty();
         }
-        return Flux.fromIterable(json.documents())
-            .map(doc -> mapToProductDocument(json.productId(), doc));
+        return Flux.fromIterable(json.getDocuments())
+            .map(doc -> mapToProductDocument(json.getProductId(), doc));
     }
 
     ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
-        String contentBase64 = json.content();
-        String filename = json.filename();
-        String documentId = json.documentId();
+        String contentBase64 = json.getContent();
+        String filename = json.getFilename();
+        String documentId = json.getDocumentId();
 
         byte[] content;
         if (contentBase64 != null && !contentBase64.isBlank()) {
@@ -125,7 +125,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             content = null;
         }
 
-        long size = json.size() != null ? json.size() : (content != null ? content.length : 0);
+        long size = json.getSize() != null ? json.getSize() : (content != null ? content.length : 0);
 
         // Validate isZip based on filename extension
         boolean isZip = filename != null && filename.toLowerCase().endsWith(".zip");
@@ -135,11 +135,11 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .documentId(documentId)
             .name(filename)
             .filename(filename)
-            .contentType(json.contentType())
+            .contentType(json.getContentType())
             .size(size)
             .isZip(isZip)
-            .origin(json.origin())
-            .pais(json.pais())
+            .origin(json.getOrigin())
+            .pais(json.getPais())
             .content(content)
             .build();
     }

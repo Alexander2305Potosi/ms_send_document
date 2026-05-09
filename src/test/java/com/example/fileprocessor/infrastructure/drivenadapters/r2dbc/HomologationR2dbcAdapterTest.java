@@ -204,8 +204,8 @@ class HomologationR2dbcAdapterTest {
 
         StepVerifier.create(adapter.resolve("electronica", "AR"))
             .assertNext(result -> {
-                assertEquals("Electronica", result.origin());
-                assertEquals("Argentina", result.paisHomologado());
+                assertEquals("Electronica", result.getOrigin());
+                assertEquals("Argentina", result.getPaisHomologado());
             })
             .verifyComplete();
     }
@@ -216,8 +216,8 @@ class HomologationR2dbcAdapterTest {
 
         StepVerifier.create(adapter.resolve("unknown", "XX"))
             .assertNext(result -> {
-                assertEquals("unknown", result.origin());
-                assertEquals("XX", result.paisHomologado());
+                assertEquals("unknown", result.getOrigin());
+                assertEquals("XX", result.getPaisHomologado());
             })
             .verifyComplete();
     }
