@@ -3,10 +3,12 @@ package com.example.fileprocessor.application.service.config;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
+import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
@@ -38,7 +40,8 @@ public class DomainConfig {
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             DocumentHistoryRepository historyRepository,
-            TransactionalOperator transactionalOperator,
+            MimeTypeResolver mimeTypeResolver,
+            TransactionHandler transactionHandler,
             ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
             documentRepository,
@@ -47,7 +50,8 @@ public class DomainConfig {
             homologationRepository,
             new RulesBussinesService(properties.soap()),
             historyRepository,
-            transactionalOperator
+            mimeTypeResolver,
+            transactionHandler
         );
     }
 
@@ -58,7 +62,8 @@ public class DomainConfig {
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
             DocumentHistoryRepository historyRepository,
-            TransactionalOperator transactionalOperator,
+            MimeTypeResolver mimeTypeResolver,
+            TransactionHandler transactionHandler,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
             documentRepository,
@@ -66,9 +71,11 @@ public class DomainConfig {
             s3Gateway,
             new RulesBussinesService(properties.s3()),
             historyRepository,
-            transactionalOperator
+            mimeTypeResolver,
+            transactionHandler
         );
     }
+
     @Bean
     public com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase syncDocumentsUseCase(
             com.example.fileprocessor.domain.port.out.ProductRepository productRepository,

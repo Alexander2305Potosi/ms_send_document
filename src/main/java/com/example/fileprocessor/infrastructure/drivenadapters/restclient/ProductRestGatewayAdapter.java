@@ -26,7 +26,7 @@ import java.util.logging.Logger;
 @Component
 public class ProductRestGatewayAdapter implements ProductRestGateway {
 
-    private static final Logger log = Logger.getLogger(ProductRestGatewayAdapter.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(ProductRestGatewayAdapter.class.getName());
 
     private final WebClient webClient;
     private final DocumentRestProperties properties;
@@ -46,7 +46,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     public Flux<ProductDocumentHistory> getDocumentsByProduct(ProductHistory product) {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
+            LOGGER.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
                 new Object[]{product.productId(), traceId});
 
             return webClient.get()
@@ -58,7 +58,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
                 .map(doc -> mapToProductDocument(product.productId(), doc))
-                .doOnNext(doc -> log.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
+                .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
                     new Object[]{doc.productId(), doc.documentId()}));
         });
     }
@@ -67,7 +67,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     public Mono<ProductDocumentFile> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
-            log.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
+            LOGGER.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
                 new Object[]{documentId, productId, traceId});
 
             return webClient.get()
@@ -92,7 +92,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                         .pais(doc.pais())
                         .build();
                 })
-                .doOnNext(doc -> log.log(Level.INFO, "Document {0} retrieved for product {1}",
+                .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
                     new Object[]{documentId, productId}));
         });
     }
@@ -115,7 +115,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             try {
                 content = Base64Utils.decodeSafe(contentBase64, filename, documentId);
             } catch (Exception e) {
-                log.log(Level.SEVERE, "Failed to decode Base64 for document {0} ({1}): {2}",
+                LOGGER.log(Level.SEVERE, "Failed to decode Base64 for document {0} ({1}): {2}",
                     new Object[]{documentId, filename, e.getMessage()});
                 throw new ProcessingException(
                     "Base64 decode failed for document: " + documentId,

@@ -9,16 +9,17 @@ import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
+import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.S3ErrorCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -49,7 +50,10 @@ class S3DocumentProcessingUseCaseTest {
     private RulesBussinesGateway documentValidator;
 
     @Mock
-    private TransactionalOperator transactionalOperator;
+    private MimeTypeResolver mimeTypeResolver;
+
+    @Mock
+    private TransactionHandler transactionHandler;
 
     private S3DocumentProcessingUseCase useCase;
 
@@ -61,11 +65,12 @@ class S3DocumentProcessingUseCaseTest {
             s3Gateway,
             documentValidator,
             historyRepository,
-            transactionalOperator
+            mimeTypeResolver,
+            transactionHandler
         );
 
-        // Mock básico para TransactionalOperator
-        lenient().when(transactionalOperator.transactional(any(Mono.class)))
+        // Mock TransactionHandler
+        lenient().when(transactionHandler.run(any(Mono.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         lenient().when(historyRepository.saveHistory(anyLong(), any(), anyString(), any(), any()))

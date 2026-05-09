@@ -7,14 +7,15 @@ import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -37,14 +38,16 @@ class AbstractDocumentProcessingUseCaseTest {
     @Mock
     private DocumentHistoryRepository historyRepository;
     @Mock
-    private TransactionalOperator transactionalOperator;
+    private MimeTypeResolver mimeTypeResolver;
+    @Mock
+    private TransactionHandler transactionHandler;
 
     private AbstractDocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
         useCase = new AbstractDocumentProcessingUseCase(
-            documentRepository, productRestGateway, documentValidator, historyRepository, transactionalOperator
+            documentRepository, productRestGateway, documentValidator, historyRepository, mimeTypeResolver, transactionHandler
         ) {
             @Override
             protected Mono<FileUploadResponse> uploadDocument(com.example.fileprocessor.domain.entity.ProductDocumentHistory doc, String productId, Long docId) {
@@ -57,7 +60,8 @@ class AbstractDocumentProcessingUseCaseTest {
             }
         };
 
-        lenient().when(transactionalOperator.transactional(any(Mono.class)))
+        // Mock TransactionHandler to just run the publisher
+        lenient().when(transactionHandler.run(any(Mono.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         lenient().when(documentRepository.resetStaleDocumentsToday(anyString(), any(), any()))

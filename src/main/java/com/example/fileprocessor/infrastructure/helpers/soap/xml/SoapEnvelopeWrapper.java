@@ -18,7 +18,7 @@ import java.util.logging.Logger;
 @Component
 public class SoapEnvelopeWrapper {
 
-    private static final Logger log = Logger.getLogger(SoapEnvelopeWrapper.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SoapEnvelopeWrapper.class.getName());
 
     private final JAXBContext jaxbContext;
     private final DocumentBuilderFactory documentBuilderFactory;
@@ -78,7 +78,7 @@ public class SoapEnvelopeWrapper {
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
-            log.log(Level.SEVERE, "Error unmarshalling SOAP response", e);
+            LOGGER.log(Level.SEVERE, "Error unmarshalling SOAP response", e);
             throw ProcessingException.withTraceId(SoapConstants.MSG_PARSE_ERROR,
                 ProcessingResultCodes.INVALID_RESPONSE.name(), null, e);
         }

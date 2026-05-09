@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -31,7 +32,7 @@ import java.util.logging.Logger;
 @RequiredArgsConstructor
 public class SoapGatewayAdapter implements SoapGateway {
 
-    private static final Logger log = Logger.getLogger(SoapGatewayAdapter.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SoapGatewayAdapter.class.getName());
 
     private final WebClient soapWebClient;
     private final SoapProperties properties;
@@ -42,7 +43,7 @@ public class SoapGatewayAdapter implements SoapGateway {
         return Mono.deferContextual(ctx -> {
             final String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
 
-            log.log(Level.INFO, "[SOAP] Starting upload for file: {0}, traceId: {1}", 
+            LOGGER.log(Level.INFO, "[SOAP] Starting upload for file: {0}, traceId: {1}", 
                     new Object[]{request.getFilename(), traceId});
 
             return soapWebClient.post()
@@ -54,7 +55,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .retryWhen(Retry.backoff(properties.retryAttempts(), Duration.ofMillis(500))
                     .filter(this::isRetryable)
-                    .doBeforeRetry(signal -> log.log(Level.WARNING, 
+                    .doBeforeRetry(signal -> LOGGER.log(Level.WARNING, 
                         "[SOAP] Retry attempt {0}/{1} for traceId: {2}. Reason: {3}",
                         new Object[]{signal.totalRetries() + 1, properties.retryAttempts(), traceId, signal.failure().getMessage()})))
                 .map(xml -> mapper.parseResponse(xml, traceId))
@@ -91,8 +92,8 @@ public class SoapGatewayAdapter implements SoapGateway {
             message = "Timeout after " + properties.timeoutSeconds() + "s";
         }
 
-        log.log(Level.SEVERE, "[SOAP] Final failure for traceId: {0}, code: {1}, message: {2}",
-                new Object[]{traceId, errorCode, message});
+        LOGGER.log(Level.SEVERE, String.format("[SOAP] Final failure for traceId: %s, code: %s, message: %s",
+                traceId, errorCode, message), error);
 
         return FileUploadResponse.builder()
                 .status(DocumentStatus.FAILURE.name())
@@ -105,9 +106,12 @@ public class SoapGatewayAdapter implements SoapGateway {
     }
 
     private String mapErrorCode(Throwable error) {
-        if (error instanceof WebClientResponseException) return "BAD_GATEWAY";
-        if (error instanceof TimeoutException) return "GATEWAY_TIMEOUT";
-        if (error instanceof ConnectException) return "SERVICE_UNAVAILABLE";
-        return "UNKNOWN_ERROR";
+        if (error instanceof WebClientResponseException) return ProcessingResultCodes.BAD_GATEWAY.name();
+        if (error instanceof TimeoutException) return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+        if (error instanceof ConnectException || 
+            error instanceof org.springframework.web.reactive.function.client.WebClientRequestException) {
+            return ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
+        }
+        return ProcessingResultCodes.UNKNOWN_ERROR.name();
     }
 }

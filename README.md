@@ -30,7 +30,7 @@ Microservicio reactivo basado en **Spring WebFlux + R2DBC** que gestiona el proc
 
 ## Arquitectura (Clean Architecture)
 
-El proyecto sigue **Clean Architecture** con capas estrictamente separadas. La capa de dominio es Java puro sin dependencias de frameworks (excepto Reactor para el manejo de flujos asíncronos). La comunicación entre capas se realiza a través de puertos (interfaces en `port/out`).
+El proyecto sigue **Clean Architecture** con capas estrictamente separadas. La capa de dominio es **Java puro** sin ninguna dependencia de frameworks (incluyendo la eliminación de `org.springframework`). La comunicación entre capas se realiza exclusivamente a través de puertos (interfaces en `port/out`). Se ha implementado la inversión de dependencia para la gestión de transacciones y resolución de tipos MIME.
 
 ### Estructura de Directorios Detallada
 
@@ -67,15 +67,17 @@ com.example.fileprocessor/
 │   ├── port/out/
 │   │   ├── DocumentRepository.java               # Puerto: persistencia de estado atómica
 │   │   ├── DocumentHistoryRepository.java        # Puerto: trazabilidad (append-only)
-│   │   ├── ProductRepository.java               # Puerto: productos (lectura/escritura)
-│   │   ├── ProductRestGateway.java                # Puerto: consumo API REST externa de productos
-│   │   ├── RulesBussinesGateway.java              # Puerto: validación de documentos
-│   │   ├── S3Gateway.java                         # Puerto: envío a S3
-│   │   ├── SoapGateway.java                       # Puerto: envío a SOAP unificado
+│   │   ├── TransactionHandler.java               # Puerto: Abstracción de transacciones reactivas (Pura)
+│   │   ├── MimeTypeResolver.java                 # Puerto: Inferencia de MIME types sin Spring
+│   │   ├── ProductRepository.java                # Puerto: productos (lectura/escritura)
+│   │   ├── ProductRestGateway.java               # Puerto: consumo API REST externa de productos
+│   │   ├── RulesBussinesGateway.java             # Puerto: validación de documentos
+│   │   ├── S3Gateway.java                        # Puerto: envío a S3
+│   │   ├── SoapGateway.java                      # Puerto: envío a SOAP unificado
 │   │   └── HomologationRepository.java           # Puerto: resolución de origin y pais
 │   └── exception/
-│       ├── DomainException.java                   # Base abstracta (RuntimeException + errorCode)
-│       ├── InvalidBase64Exception.java            # Error de decodificación Base64
+│       ├── DomainException.java                  # Base abstracta (RuntimeException + errorCode)
+│       ├── InvalidBase64Exception.java           # Error de decodificación Base64
 │       └── ProcessingException.java              # Error general de procesamiento en el pipeline
 │
 ├── application/                                   # Capa de aplicación
@@ -89,7 +91,7 @@ com.example.fileprocessor/
     ├── drivenadapters/
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
     │   │   ├── DocumentR2dbcAdapter.java          # Implementa DocumentRepository vía Spring Data R2DBC (@Query)
-    │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentHistoryRepository
+    │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository
     │   │   ├── ProductR2dbcAdapter.java           # Implementa ProductRepository
     │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (caché en memoria)
     │   │   ├── entity/                            # Entidades mapeadas a tablas SQL
@@ -107,19 +109,19 @@ com.example.fileprocessor/
     │       ├── S3ErrorCodes.java                  # Constantes locales
     │       └── config/                            # Beans y propiedades AWS
     ├── entrypoints/rest/
-    │   ├── ProductRoutes.java                    # Router function (GET /products, GET /products/sync)
-    │   ├── handler/ProductHandler.java           # Orquestador de solicitudes HTTP
-    │   ├── config/DocumentRestProperties.java    # Propiedades de API REST externa
-    │   └── constants/ApiConstants.java           # Headers de trace-id
-    └── helpers/soap/                           # Herramientas consolidadas para construcción SOAP
-        ├── constants/SoapConstants.java          # Namespaces comunes
-        ├── mapper/SoapMapper.java                # Construcción y parseo JAXB unificado
+    │   ├── ProductRoutes.java                     # Router function (GET /products, GET /products/sync)
+    │   ├── handler/ProductHandler.java            # Orquestador de solicitudes HTTP
+    │   ├── config/DocumentRestProperties.java     # Propiedades de API REST externa
+    │   └── constants/ApiConstants.java            # Headers de trace-id
+    └── helpers/soap/                              # Herramientas consolidadas para construcción SOAP
+        ├── constants/SoapConstants.java           # Namespaces comunes
+        ├── mapper/SoapMapper.java                 # Construcción y parseo JAXB unificado
         └── xml/
-            ├── SoapBody.java                     # Payload JAXB del Body
-            ├── SoapEnvelope.java                 # Envolvente raíz JAXB (Header + Body)
-            ├── SoapHeader.java                     # Payload JAXB del Header
-            ├── SoapEnvelopeWrapper.java            # Parseo DOM seguro de la respuesta SOAP
-            └── model/                            # Modelos JAXB con Lombok (Header, Body, Request, Response)
+            ├── SoapBody.java                      # Payload JAXB del Body
+            ├── SoapEnvelope.java                  # Envolvente raíz JAXB (Header + Body)
+            ├── SoapHeader.java                    # Payload JAXB del Header
+            ├── SoapEnvelopeWrapper.java           # Parseo DOM seguro de la respuesta SOAP
+            └── model/                             # Modelos JAXB con Lombok (Header, Body, Request, Response)
 ```
 
 ---
@@ -486,11 +488,12 @@ Se eliminaron clases superfluas (`FileValidationException`) para consolidar la l
 
 ## Testing y QA
 
-El proyecto garantiza la calidad del código mediante una suite de más de **140 pruebas automatizadas**:
-- **Test de R2DBC**: Validación de consultas SQL nativas (`updateStateAndRetry`) y mapeos usando la configuración embebida de H2.
-- **Test de UseCases**: Uso de `StepVerifier` y `Mockito` para forzar timeouts y validar el incremento del contador `retry_count` y la transición a `FAILED`.
-- **Test de Gateways**: `MockWebServer` de OkHttp simula retardos y respuestas HTTP 500 para probar el comportamiento de backoff de Reactor.
-- **Test XML (JAXB)**: Verificación del empaquetado y desempaquetado de sobres SOAP usando el `SoapEnvelopeWrapper` protegido contra ataques XXE.
+El proyecto garantiza la calidad del código mediante una suite de más de **140 pruebas automatizadas** que cubren el 100% de la lógica crítica:
+- **Test de Arquitectura (ArchUnit)**: Verificación automática de que la capa de dominio no importa clases de `org.springframework`.
+- **Test de R2DBC**: Validación de consultas SQL nativas (`updateStateAndRetry`) y mapeos usando H2.
+- **Test de UseCases**: Uso de `StepVerifier` y `Mockito` para validar el pipeline de resiliencia y el incremento de `retry_count`.
+- **Test de Gateways**: `MockWebServer` simula retardos y errores HTTP para probar la resiliencia.
+- **Test XML (JAXB)**: Verificación de sobres SOAP protegidos contra XXE.
 
 ---
 

@@ -7,10 +7,11 @@ import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
+import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import org.springframework.transaction.reactive.TransactionalOperator;
+import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -31,8 +32,9 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
             HomologationRepository homologationRepository,
             RulesBussinesGateway documentValidator,
             DocumentHistoryRepository historyRepository,
-            TransactionalOperator transactionalOperator) {
-        super(documentRepository, productRestGateway, documentValidator, historyRepository, transactionalOperator);
+            MimeTypeResolver mimeTypeResolver,
+            TransactionHandler transactionHandler) {
+        super(documentRepository, productRestGateway, documentValidator, historyRepository, mimeTypeResolver, transactionHandler);
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
     }
@@ -43,7 +45,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
             .map(h -> FileUploadRequest.from(doc, docId))
             .flatMap(soapGateway::send)
             .onErrorResume(e -> {
-                log.log(Level.SEVERE, "SOAP processing failed for docId {0}: {1}", new Object[]{docId, e.getMessage()});
+                LOGGER.log(Level.SEVERE, "SOAP processing failed for docId {0}: {1}", new Object[]{docId, e.getMessage()});
                 return Mono.just(FileUploadResponse.builder()
                     .status(DocumentStatus.FAILURE.name())
                     .success(false)

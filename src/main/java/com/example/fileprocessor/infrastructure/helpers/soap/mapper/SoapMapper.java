@@ -34,7 +34,7 @@ import java.util.logging.Logger;
 @Component
 public class SoapMapper {
 
-    private static final Logger log = Logger.getLogger(SoapMapper.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SoapMapper.class.getName());
 
     private final SoapEnvelopeWrapper envelopeWrapper;
     private final JAXBContext jaxbContext;
@@ -96,7 +96,7 @@ public class SoapMapper {
             return sw.toString();
 
         } catch (Exception e) {
-            log.log(Level.SEVERE, "Error building SOAP envelope for traceId=" + traceId, e);
+            LOGGER.log(Level.SEVERE, "Error building SOAP envelope for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
                 "Failed to build SOAP envelope: " + e.getMessage(), ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId, e);
         }
@@ -109,7 +109,7 @@ public class SoapMapper {
             try {
                 processedAt = response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now();
             } catch (DateTimeParseException e) {
-                log.log(Level.WARNING, "TraceId {0}: Failed to parse processedAt date [{1}]. Using current time.", new Object[]{traceId, response.getProcessedAt()});
+                LOGGER.log(Level.WARNING, "TraceId {0}: Failed to parse processedAt date [{1}]. Using current time.", new Object[]{traceId, response.getProcessedAt()});
                 processedAt = Instant.now();
             }
             return ExternalServiceResponse.builder()
@@ -122,7 +122,7 @@ public class SoapMapper {
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
-            log.log(Level.SEVERE, "Error parsing SOAP V2 response for traceId=" + traceId, e);
+            LOGGER.log(Level.SEVERE, "Error parsing SOAP V2 response for traceId=" + traceId, e);
             throw ProcessingException.withTraceId("Failed to parse SOAP V2 response: " + e.getMessage(), ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
         }
     }

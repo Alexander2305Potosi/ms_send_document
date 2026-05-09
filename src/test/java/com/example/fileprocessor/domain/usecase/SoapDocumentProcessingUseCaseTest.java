@@ -8,16 +8,17 @@ import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
+import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.SoapErrorCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -49,7 +50,10 @@ class SoapDocumentProcessingUseCaseTest {
     private RulesBussinesGateway documentValidator;
 
     @Mock
-    private TransactionalOperator transactionalOperator;
+    private MimeTypeResolver mimeTypeResolver;
+
+    @Mock
+    private TransactionHandler transactionHandler;
 
     private SoapDocumentProcessingUseCase useCase;
 
@@ -62,14 +66,15 @@ class SoapDocumentProcessingUseCaseTest {
             homologationRepository,
             documentValidator,
             historyRepository,
-            transactionalOperator
+            mimeTypeResolver,
+            transactionHandler
         );
         
-        // Mock básico para TransactionalOperator (comportamiento passthrough)
-        lenient().when(transactionalOperator.transactional(any(Mono.class)))
+        // Mock TransactionHandler
+        lenient().when(transactionHandler.run(any(Mono.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
             
-        lenient().when(historyRepository.saveHistory(anyLong(), anyString(), anyString(), any(), any()))
+        lenient().when(historyRepository.saveHistory(anyLong(), any(), anyString(), any(), any()))
             .thenReturn(Mono.empty());
             
         lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))

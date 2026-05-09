@@ -13,7 +13,7 @@ import java.util.logging.Logger;
 
 public class SyncDocumentsUseCase {
 
-    private static final Logger log = Logger.getLogger(SyncDocumentsUseCase.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SyncDocumentsUseCase.class.getName());
 
     private final ProductRepository productRepository;
     private final DocumentRepository documentRepository;
@@ -29,30 +29,30 @@ public class SyncDocumentsUseCase {
     }
 
     public Mono<String> execute(String useCase) {
-        log.log(Level.INFO, "Starting document sync with useCase: {0}", new Object[]{useCase});
+        LOGGER.log(Level.INFO, "Starting document sync with useCase: {0}", new Object[]{useCase});
         return productRepository.findAll()
                 .concatMap(product -> {
-                    log.log(Level.INFO, "Syncing documents for product ID: {0}", new Object[]{product.productId()});
+                    LOGGER.log(Level.INFO, "Syncing documents for product ID: {0}", new Object[]{product.productId()});
                     return productRestGateway.getDocumentsByProduct(product)
                         .onErrorResume(e -> {
-                            log.log(Level.WARNING, "Failed to sync documents for product {0}: {1}", 
+                            LOGGER.log(Level.WARNING, "Failed to sync documents for product {0}: {1}", 
                                     new Object[]{product.productId(), e.getMessage()});
                             return reactor.core.publisher.Flux.empty();
                         });
                 })
                 .concatMap(doc -> saveDocument(doc, useCase))
                 .then(Mono.defer(() -> {
-                    log.log(Level.INFO, "Document sync completed successfully for useCase: {0}", new Object[]{useCase});
+                    LOGGER.log(Level.INFO, "Document sync completed successfully for useCase: {0}", new Object[]{useCase});
                     return Mono.just("Document sync completed");
                 }))
-            .doOnError(e -> log.log(Level.SEVERE, "Document sync failed fatally: " + e.getMessage()));
+            .doOnError(e -> LOGGER.log(Level.SEVERE, "Document sync failed fatally: " + e.getMessage()));
     }
 
     private Mono<Void> saveDocument(com.example.fileprocessor.domain.entity.ProductDocumentHistory doc, String useCase) {
         return documentRepository.existsByProductIdAndDocumentId(doc.productId(), doc.documentId())
             .flatMap(exists -> {
                 if (Boolean.TRUE.equals(exists)) {
-                    log.log(Level.INFO, "Duplicate document detected for productId={0}, documentId={1}. Marking as ERR_DUPLICATED_DOC.",
+                    LOGGER.log(Level.INFO, "Duplicate document detected for productId={0}, documentId={1}. Marking as ERR_DUPLICATED_DOC.",
                             new Object[]{doc.productId(), doc.documentId()});
                     Document duplicate = Document.builder()
                         .documentId(doc.documentId())

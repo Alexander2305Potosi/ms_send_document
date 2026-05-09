@@ -27,7 +27,7 @@ import java.util.logging.Logger;
 @Component
 public class S3GatewayAdapter implements S3Gateway {
 
-    private static final Logger log = Logger.getLogger(S3GatewayAdapter.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(S3GatewayAdapter.class.getName());
 
     private final S3AsyncClient s3Client;
     private final S3Properties s3Properties;
@@ -41,11 +41,11 @@ public class S3GatewayAdapter implements S3Gateway {
     public Mono<FileUploadResponse> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
-            log.log(Level.INFO, "Sending S3 upload request for documentId: {0}, traceId: {1}", new Object[]{request.getDocumentId(), traceId});
+            LOGGER.log(Level.INFO, "Sending S3 upload request for documentId: {0}, traceId: {1}", new Object[]{request.getDocumentId(), traceId});
 
             byte[] content = request.getContent();
             if (content == null || content.length == 0) {
-                log.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
+                LOGGER.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
                 return Mono.just(FileUploadResponse.builder()
                     .status(DocumentStatus.FAILURE.name())
                     .errorCode(ProcessingResultCodes.EMPTY_CONTENT.name())
@@ -79,11 +79,11 @@ public class S3GatewayAdapter implements S3Gateway {
                     .filter(this::isRetryableException)
                     .doBeforeRetry(retrySignal -> {
                         long attempt = retrySignal.totalRetries() + 1;
-                        log.log(Level.WARNING, "Retrying S3 upload for documentId={0}, attempt {1}/{2}",
+                        LOGGER.log(Level.WARNING, "Retrying S3 upload for documentId={0}, attempt {1}/{2}",
                             new Object[]{request.getDocumentId(), attempt, s3Properties.retryAttempts()});
                     }))
                 .map(completed -> {
-                    log.log(Level.INFO, "S3 upload successful: {0} -> {1}/{2}", new Object[]{request.getFilename(), s3Properties.bucketName(), key});
+                    LOGGER.log(Level.INFO, "S3 upload successful: {0} -> {1}/{2}", new Object[]{request.getFilename(), s3Properties.bucketName(), key});
                     return FileUploadResponse.builder()
                         .status(DocumentStatus.SUCCESS.name())
                         .message("Uploaded to S3: " + s3Properties.bucketName() + "/" + key)
@@ -104,7 +104,7 @@ public class S3GatewayAdapter implements S3Gateway {
             actualError = error.getCause();
         }
 
-        log.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, actualError.getMessage()});
+        LOGGER.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, actualError.getMessage()});
 
         String errorCode = categorizeS3Error(actualError);
         return Mono.just(FileUploadResponse.builder()

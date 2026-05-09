@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
 @Component
 public class HomologationR2dbcAdapter implements HomologationRepository {
 
-    private static final Logger log = Logger.getLogger(HomologationR2dbcAdapter.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(HomologationR2dbcAdapter.class.getName());
 
     private final CategoryManualRepository categoryRepository;
     private final CountryHomologatedRepository countryRepository;
@@ -92,7 +92,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
     }
 
     private Mono<Void> loadCache() {
-        log.log(Level.INFO, "Loading homologation cache");
+        LOGGER.log(Level.INFO, "Loading homologation cache");
 
         Mono<Void> loadCategories = categoryRepository.findAll()
             .collectMap(
@@ -102,7 +102,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             .doOnNext(map -> {
                 categoryCache.clear();
                 categoryCache.putAll(map);
-                log.log(Level.INFO, "Category cache loaded with {0} entries", new Object[]{categoryCache.size()});
+                LOGGER.log(Level.INFO, "Category cache loaded with {0} entries", new Object[]{categoryCache.size()});
             })
             .then();
 
@@ -114,7 +114,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             .doOnNext(map -> {
                 countryCache.clear();
                 countryCache.putAll(map);
-                log.log(Level.INFO, "Country cache loaded with {0} entries", new Object[]{countryCache.size()});
+                LOGGER.log(Level.INFO, "Country cache loaded with {0} entries", new Object[]{countryCache.size()});
             })
             .then();
 

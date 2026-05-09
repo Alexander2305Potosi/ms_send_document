@@ -2,8 +2,8 @@ package com.example.fileprocessor.domain.util;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
+import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import org.springframework.http.MediaTypeFactory;
 import reactor.core.publisher.Flux;
 
 import java.io.ByteArrayInputStream;
@@ -14,12 +14,19 @@ import java.util.zip.ZipInputStream;
 /**
  * Utility class for decompressing ZIP archives into individual ProductDocument instances.
  * Refactored to process entries as a stream (Flux) to avoid memory exhaustion (OOM).
+ * This class is now pure domain logic and depends on MimeTypeResolver port.
  */
 public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
-    public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc) {
+    /**
+     * Decompresses a ZIP file into individual documents.
+     * @param zipDoc The ZIP document to decompress.
+     * @param mimeTypeResolver The resolver to determine content type of entries.
+     * @return A Flux of decompressed documents.
+     */
+    public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc, MimeTypeResolver mimeTypeResolver) {
         if (!zipDoc.isZip() || zipDoc.content() == null) {
             return Flux.just(zipDoc);
         }
@@ -32,7 +39,7 @@ public final class ZipDecompressor {
                     while ((entry = zis.getNextEntry()) != null) {
                         if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
                             byte[] decompressed = zis.readAllBytes();
-                            sink.next(buildProductDocument(entry.getName(), decompressed, zipDoc));
+                            sink.next(buildProductDocument(entry.getName(), decompressed, zipDoc, mimeTypeResolver));
                             return zis; // Emit one entry and wait for next request
                         }
                     }
@@ -55,27 +62,19 @@ public final class ZipDecompressor {
         );
     }
 
-    private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, ProductDocumentHistory original) {
+    private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, 
+                                                             ProductDocumentHistory original,
+                                                             MimeTypeResolver mimeTypeResolver) {
         return ProductDocumentHistory.builder()
             .productId(original.productId())
             .documentId(original.documentId() + "/" + filename)
             .filename(filename)
-            .contentType(inferContentType(filename))
+            .contentType(mimeTypeResolver.resolve(filename))
             .size((long) content.length)
             .isZip(false)
             .pais(original.pais())
             .parentZipName(original.filename())
             .content(content)
             .build();
-    }
-
-    /**
-     * Infers the content type based on the filename using Spring's MediaTypeFactory.
-     * This avoids hardcoded if-else blocks and supports standard MIME types automatically.
-     */
-    private static String inferContentType(String filename) {
-        return MediaTypeFactory.getMediaType(filename)
-                .map(Object::toString)
-                .orElse("application/octet-stream");
     }
 }
