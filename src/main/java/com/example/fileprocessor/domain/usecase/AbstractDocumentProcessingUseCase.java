@@ -3,15 +3,13 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -31,37 +29,28 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger LOGGER = Logger.getLogger(getClass().getName());
 
-    private final DocumentRepository documentRepository;
+    private final DocumentPersistenceGateway persistencePort;
     private final ProductRestGateway productRestGateway;
     private final RulesBussinesGateway documentValidator;
-    private final DocumentHistoryRepository historyRepository;
-    private final MimeTypeResolver mimeTypeResolver;
-    private final TransactionHandler transactionHandler;
 
     protected AbstractDocumentProcessingUseCase(
-            DocumentRepository documentRepository,
+            DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
-            RulesBussinesGateway documentValidator,
-            DocumentHistoryRepository historyRepository,
-            MimeTypeResolver mimeTypeResolver,
-            TransactionHandler transactionHandler) {
-        this.documentRepository = documentRepository;
+            RulesBussinesGateway documentValidator) {
+        this.persistencePort = persistencePort;
         this.productRestGateway = productRestGateway;
         this.documentValidator = documentValidator;
-        this.historyRepository = historyRepository;
-        this.mimeTypeResolver = mimeTypeResolver;
-        this.transactionHandler = transactionHandler;
     }
 
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(15);
 
-        return documentRepository.resetStaleDocumentsToday(implementationName(), startOfDay, threshold)
+        return persistencePort.resetStaleDocumentsToday(implementationName(), startOfDay, threshold)
             .doOnNext(count -> {
                 if (count > 0) LOGGER.warning("[" + implementationName() + "] Recovered " + count + " stale documents from today.");
             })
-            .thenMany(documentRepository.findByStateAndUseCaseToday(ProductState.PENDING, implementationName(), startOfDay))
+            .thenMany(persistencePort.findPendingDocumentsToday(implementationName(), startOfDay))
             .concatMap(this::processWithTracking)
             .doOnTerminate(() -> LOGGER.log(Level.INFO, "[{0}] Daily pipeline execution completed", implementationName()));
     }
@@ -69,8 +58,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     private Mono<FileUploadResponse> processWithTracking(Document doc) {
         final Instant startTime = Instant.now();
         
-        return documentRepository.updateStateAndRetry(doc.id(), ProductState.PENDING, ProductState.IN_PROGRESS, 
-                                                     doc.getRetryCountSafe(), LocalDateTime.now())
+        return persistencePort.lockDocumentForProcessing(doc.id(), doc.getRetryCountSafe())
             .flatMap(rows -> {
                 if (rows == 0) return Mono.empty(); 
                 
@@ -110,16 +98,11 @@ public abstract class AbstractDocumentProcessingUseCase {
         LOGGER.log(Level.INFO, "[{0}] Finished processing document {1}. Final State: {2}", 
                 new Object[]{implementationName(), doc.documentId(), finalState});
 
-        final int finalRetryCount = nextRetryCount;
-        String historyFileName = Boolean.TRUE.equals(doc.isZip()) ? doc.name() : null;
-        
-        Mono<FileUploadResponse> operation = historyRepository.saveHistory(doc.id(), historyFileName, implementationName(), response, startTime)
-            .then(documentRepository.updateStateAndRetry(doc.id(), ProductState.IN_PROGRESS, finalState, 
-                                                       finalRetryCount, LocalDateTime.now()))
-            .thenReturn(response);
-            
-        // Use TransactionHandler port instead of Spring's TransactionalOperator
-        return transactionHandler.run(operation);
+        FinalizeProcessingCommand command = new FinalizeProcessingCommand(
+            doc, response, finalState, nextRetryCount, startTime
+        );
+
+        return persistencePort.finalizeProcessingAtomically(command);
     }
 
     private boolean isTransientError(String errorCode) {
@@ -160,7 +143,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         if (!file.isZip() || file.filename() == null || file.filename().isBlank()) {
             return Flux.just(file);
         }
-        return ZipDecompressor.decompress(file, mimeTypeResolver)
+        return ZipDecompressor.decompress(file)
             .onErrorMap(error -> new ProcessingException(
                 "Failed to decompress ZIP '" + file.filename() + "': " + error.getMessage(),
                 ProcessingResultCodes.DECOMPRESSION_ERROR.name(),

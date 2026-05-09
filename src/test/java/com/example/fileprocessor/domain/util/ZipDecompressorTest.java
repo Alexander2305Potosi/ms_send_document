@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.util;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -15,8 +14,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ZipDecompressorTest {
 
-    private final MimeTypeResolver mockResolver = filename -> "application/octet-stream";
-
     @Test
     void decompress_nonZip_returnsSameDocument() {
         ProductDocumentHistory doc = new ProductDocumentHistory(
@@ -28,7 +25,7 @@ class ZipDecompressorTest {
             new byte[]{1}, null
         );
 
-        StepVerifier.create(ZipDecompressor.decompress(doc, mockResolver))
+        StepVerifier.create(ZipDecompressor.decompress(doc))
             .expectNextMatches(result ->
                 result.documentId().equals("doc-1") &&
                 result.filename().equals("test.pdf") &&
@@ -49,7 +46,7 @@ class ZipDecompressorTest {
             zipContent, null
         );
 
-        Flux<ProductDocumentHistory> result = ZipDecompressor.decompress(zipDoc, mockResolver);
+        Flux<ProductDocumentHistory> result = ZipDecompressor.decompress(zipDoc);
 
         StepVerifier.create(result)
             .assertNext(doc -> {
@@ -82,7 +79,7 @@ class ZipDecompressorTest {
             emptyZip, null
         );
 
-        StepVerifier.create(ZipDecompressor.decompress(zipDoc, mockResolver))
+        StepVerifier.create(ZipDecompressor.decompress(zipDoc))
             .verifyComplete();
     }
 

@@ -4,13 +4,10 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
-import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -24,14 +21,11 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     private final S3Gateway s3Gateway;
 
     public S3DocumentProcessingUseCase(
-            DocumentRepository documentRepository,
+            DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            RulesBussinesGateway documentValidator,
-            DocumentHistoryRepository historyRepository,
-            MimeTypeResolver mimeTypeResolver,
-            TransactionHandler transactionHandler) {
-        super(documentRepository, productRestGateway, documentValidator, historyRepository, mimeTypeResolver, transactionHandler);
+            RulesBussinesGateway documentValidator) {
+        super(persistencePort, productRestGateway, documentValidator);
         this.s3Gateway = s3Gateway;
     }
 

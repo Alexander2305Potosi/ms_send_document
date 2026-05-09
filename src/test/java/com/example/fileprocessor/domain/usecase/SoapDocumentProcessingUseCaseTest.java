@@ -5,14 +5,11 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.HomologationResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
-import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import com.example.fileprocessor.infrastructure.drivenadapters.soap.SoapErrorCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,10 +29,7 @@ import static org.mockito.Mockito.*;
 class SoapDocumentProcessingUseCaseTest {
 
     @Mock
-    private DocumentRepository documentRepository;
-
-    @Mock
-    private DocumentHistoryRepository historyRepository;
+    private DocumentPersistenceGateway persistencePort;
 
     @Mock
     private ProductRestGateway productRestGateway;
@@ -49,36 +43,23 @@ class SoapDocumentProcessingUseCaseTest {
     @Mock
     private RulesBussinesGateway documentValidator;
 
-    @Mock
-    private MimeTypeResolver mimeTypeResolver;
-
-    @Mock
-    private TransactionHandler transactionHandler;
-
     private SoapDocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
         useCase = new SoapDocumentProcessingUseCase(
-            documentRepository,
+            persistencePort,
             productRestGateway,
             soapGateway,
             homologationRepository,
-            documentValidator,
-            historyRepository,
-            mimeTypeResolver,
-            transactionHandler
+            documentValidator
         );
-        
-        // Mock TransactionHandler
-        lenient().when(transactionHandler.run(any(Mono.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
             
-        lenient().when(historyRepository.saveHistory(anyLong(), any(), anyString(), any(), any()))
-            .thenReturn(Mono.empty());
-            
-        lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))
-            .thenReturn(Mono.just(1L));
+        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
+            .thenAnswer(invocation -> {
+                com.example.fileprocessor.domain.entity.FinalizeProcessingCommand cmd = invocation.getArgument(0);
+                return Mono.just(cmd.response());
+            });
     }
 
     private static ProductDocumentHistory doc() {

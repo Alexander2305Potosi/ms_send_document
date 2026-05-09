@@ -5,12 +5,9 @@ import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,8 +17,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.Instant;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -30,24 +25,18 @@ import static org.mockito.Mockito.*;
 class AbstractDocumentProcessingUseCaseTest {
 
     @Mock
-    private DocumentRepository documentRepository;
+    private DocumentPersistenceGateway persistencePort;
     @Mock
     private ProductRestGateway productRestGateway;
     @Mock
     private RulesBussinesGateway documentValidator;
-    @Mock
-    private DocumentHistoryRepository historyRepository;
-    @Mock
-    private MimeTypeResolver mimeTypeResolver;
-    @Mock
-    private TransactionHandler transactionHandler;
 
     private AbstractDocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
         useCase = new AbstractDocumentProcessingUseCase(
-            documentRepository, productRestGateway, documentValidator, historyRepository, mimeTypeResolver, transactionHandler
+            persistencePort, productRestGateway, documentValidator
         ) {
             @Override
             protected Mono<FileUploadResponse> uploadDocument(com.example.fileprocessor.domain.entity.ProductDocumentHistory doc, String productId, Long docId) {
@@ -60,18 +49,17 @@ class AbstractDocumentProcessingUseCaseTest {
             }
         };
 
-        // Mock TransactionHandler to just run the publisher
-        lenient().when(transactionHandler.run(any(Mono.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-
-        lenient().when(documentRepository.resetStaleDocumentsToday(anyString(), any(), any()))
+        lenient().when(persistencePort.resetStaleDocumentsToday(anyString(), any(), any()))
             .thenReturn(Mono.just(0L));
 
-        lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))
+        lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
             .thenReturn(Mono.just(1L));
 
-        lenient().when(historyRepository.saveHistory(eq(1L), any(), eq("TEST"), any(FileUploadResponse.class), any(Instant.class)))
-            .thenReturn(Mono.empty());
+        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
+            .thenAnswer(invocation -> {
+                com.example.fileprocessor.domain.entity.FinalizeProcessingCommand cmd = invocation.getArgument(0);
+                return Mono.just(cmd.response());
+            });
     }
 
     @Test
@@ -85,7 +73,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .retryCount(0)
             .build();
 
-        when(documentRepository.findByStateAndUseCaseToday(eq(ProductState.PENDING), eq("TEST"), any()))
+        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument(anyString(), anyString()))
             .thenReturn(Mono.error(new ProcessingException("GATEWAY_TIMEOUT", "Timeout error", (Throwable) null)));
@@ -97,8 +85,10 @@ class AbstractDocumentProcessingUseCaseTest {
             })
             .verifyComplete();
 
-        // Verify retry count incremented in repository call
-        verify(documentRepository).updateStateAndRetry(eq(1L), eq(ProductState.IN_PROGRESS), eq(ProductState.PENDING), eq(1), any());
+        verify(persistencePort).finalizeProcessingAtomically(argThat(cmd -> 
+            cmd.finalState().equals(ProductState.PENDING) && 
+            cmd.nextRetryCount() == 1
+        ));
     }
 
     @Test
@@ -112,7 +102,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .retryCount(3)
             .build();
 
-        when(documentRepository.findByStateAndUseCaseToday(eq(ProductState.PENDING), eq("TEST"), any()))
+        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument(anyString(), anyString()))
             .thenReturn(Mono.error(new ProcessingException("GATEWAY_TIMEOUT", "Final timeout", (Throwable) null)));
@@ -123,7 +113,9 @@ class AbstractDocumentProcessingUseCaseTest {
             })
             .verifyComplete();
 
-        // Verify state changed to FAILED because retryCount was already 3
-        verify(documentRepository).updateStateAndRetry(eq(1L), eq(ProductState.IN_PROGRESS), eq(ProductState.FAILED), eq(3), any());
+        verify(persistencePort).finalizeProcessingAtomically(argThat(cmd -> 
+            cmd.finalState().equals(ProductState.FAILED) && 
+            cmd.nextRetryCount() == 3
+        ));
     }
 }

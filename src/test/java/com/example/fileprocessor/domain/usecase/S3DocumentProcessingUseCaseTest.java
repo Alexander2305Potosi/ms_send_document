@@ -7,13 +7,10 @@ import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
-import com.example.fileprocessor.domain.port.out.TransactionHandler;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.S3ErrorCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,10 +32,7 @@ import static org.mockito.Mockito.*;
 class S3DocumentProcessingUseCaseTest {
 
     @Mock
-    private DocumentRepository documentRepository;
-
-    @Mock
-    private DocumentHistoryRepository historyRepository;
+    private DocumentPersistenceGateway persistencePort;
 
     @Mock
     private ProductRestGateway productRestGateway;
@@ -49,37 +43,27 @@ class S3DocumentProcessingUseCaseTest {
     @Mock
     private RulesBussinesGateway documentValidator;
 
-    @Mock
-    private MimeTypeResolver mimeTypeResolver;
-
-    @Mock
-    private TransactionHandler transactionHandler;
-
     private S3DocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
         useCase = new S3DocumentProcessingUseCase(
-            documentRepository,
+            persistencePort,
             productRestGateway,
             s3Gateway,
-            documentValidator,
-            historyRepository,
-            mimeTypeResolver,
-            transactionHandler
+            documentValidator
         );
 
-        // Mock TransactionHandler
-        lenient().when(transactionHandler.run(any(Mono.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
+            .thenAnswer(invocation -> {
+                com.example.fileprocessor.domain.entity.FinalizeProcessingCommand cmd = invocation.getArgument(0);
+                return Mono.just(cmd.response());
+            });
 
-        lenient().when(historyRepository.saveHistory(anyLong(), any(), anyString(), any(), any()))
-            .thenReturn(Mono.empty());
-
-        lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))
+        lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
             .thenReturn(Mono.just(1L));
             
-        lenient().when(documentRepository.resetStaleDocumentsToday(anyString(), any(), any()))
+        lenient().when(persistencePort.resetStaleDocumentsToday(anyString(), any(), any()))
             .thenReturn(Mono.just(0L));
     }
 
@@ -188,7 +172,7 @@ class S3DocumentProcessingUseCaseTest {
             .processedAt(Instant.now())
             .build();
 
-        when(documentRepository.findByStateAndUseCaseToday(eq(ProductState.PENDING), eq("S3"), any()))
+        when(persistencePort.findPendingDocumentsToday(eq("S3"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument("prod-1", "doc-1"))
             .thenReturn(Mono.just(file));

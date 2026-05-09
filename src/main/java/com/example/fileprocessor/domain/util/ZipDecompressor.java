@@ -2,7 +2,6 @@ package com.example.fileprocessor.domain.util;
 
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.port.out.MimeTypeResolver;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import reactor.core.publisher.Flux;
 
@@ -23,10 +22,9 @@ public final class ZipDecompressor {
     /**
      * Decompresses a ZIP file into individual documents.
      * @param zipDoc The ZIP document to decompress.
-     * @param mimeTypeResolver The resolver to determine content type of entries.
      * @return A Flux of decompressed documents.
      */
-    public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc, MimeTypeResolver mimeTypeResolver) {
+    public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc) {
         if (!zipDoc.isZip() || zipDoc.content() == null) {
             return Flux.just(zipDoc);
         }
@@ -39,7 +37,7 @@ public final class ZipDecompressor {
                     while ((entry = zis.getNextEntry()) != null) {
                         if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
                             byte[] decompressed = zis.readAllBytes();
-                            sink.next(buildProductDocument(entry.getName(), decompressed, zipDoc, mimeTypeResolver));
+                            sink.next(buildProductDocument(entry.getName(), decompressed, zipDoc));
                             return zis; // Emit one entry and wait for next request
                         }
                     }
@@ -63,13 +61,12 @@ public final class ZipDecompressor {
     }
 
     private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, 
-                                                             ProductDocumentHistory original,
-                                                             MimeTypeResolver mimeTypeResolver) {
+                                                             ProductDocumentHistory original) {
         return ProductDocumentHistory.builder()
             .productId(original.productId())
             .documentId(original.documentId() + "/" + filename)
             .filename(filename)
-            .contentType(mimeTypeResolver.resolve(filename))
+            .contentType(MimeTypeUtil.getMimeType(filename))
             .size((long) content.length)
             .isZip(false)
             .pais(original.pais())
