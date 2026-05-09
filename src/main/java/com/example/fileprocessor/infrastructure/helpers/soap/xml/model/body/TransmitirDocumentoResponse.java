@@ -5,10 +5,12 @@ import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Getter
 @Setter
+@NoArgsConstructor
 @XmlRootElement(name = "transmitirDocumentoResponse")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class TransmitirDocumentoResponse {
@@ -27,6 +29,4 @@ public class TransmitirDocumentoResponse {
 
     @XmlElement(name = "externalReference")
     private String externalReference;
-
-    public TransmitirDocumentoResponse() {}
 }

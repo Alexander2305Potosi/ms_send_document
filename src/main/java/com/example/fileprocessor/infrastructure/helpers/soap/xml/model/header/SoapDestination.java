@@ -3,8 +3,16 @@ package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.header;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @XmlAccessorType(XmlAccessType.FIELD)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 public class SoapDestination {
 
     @XmlElement(name = "name")
@@ -15,20 +23,4 @@ public class SoapDestination {
 
     @XmlElement(name = "operation")
     private String operation;
-
-    public SoapDestination() {}
-
-    public SoapDestination(String name, String namespace, String operation) {
-        this.name = name;
-        this.namespace = namespace;
-        this.operation = operation;
-    }
-
-    public String getName() { return name; }
-    public String getNamespace() { return namespace; }
-    public String getOperation() { return operation; }
-
-    public void setName(String name) { this.name = name; }
-    public void setNamespace(String namespace) { this.namespace = namespace; }
-    public void setOperation(String operation) { this.operation = operation; }
 }

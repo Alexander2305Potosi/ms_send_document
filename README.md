@@ -47,7 +47,7 @@ com.example.fileprocessor/
 │   │   ├── ProductDocumentHistory.java          # Record: documento procesable (incluye productId, isZip, pais)
 │   │   ├── ProductState.java                   # Constantes de estado: PENDING, IN_PROGRESS, PROCESSED, FAILED
 │   │   ├── FileUploadRequest.java              # Request para upload a gateway (SOAP/S3)
-│   │   ├── FileUploadResult.java               # Resultado de upload con status, errorCode
+│   │   ├── FileUploadResponse.java               # Resultado de upload con status, errorCode
 │   │   ├── HomologationResult.java             # Resultado de homologacion (origin, paisHomologado)
 │   │   ├── ExternalServiceResponse.java        # Respuesta genérica de servicio externo
 │   │   ├── ProductHistory.java                 # Record: producto (metadata)
@@ -88,12 +88,12 @@ com.example.fileprocessor/
     │   └── JaxbConfig.java                        # Contexto compartido JAXB para SOAP
     ├── drivenadapters/
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
-    │   │   ├── DocumentR2dbcAdapter.java          # Implementa DocumentRepository (bloqueo atómico)
+    │   │   ├── DocumentR2dbcAdapter.java          # Implementa DocumentRepository vía Spring Data R2DBC (@Query)
     │   │   ├── DocumentHistoryR2dbcAdapter.java    # Implementa DocumentHistoryRepository
     │   │   ├── ProductR2dbcAdapter.java           # Implementa ProductRepository
     │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (caché en memoria)
     │   │   ├── entity/                            # Entidades mapeadas a tablas SQL
-    │   │   ├── mapper/                            # Mapeadores Entidad-Dominio
+    │   │   ├── mapper/                            # Mapeadores Entidad-Dominio (DocumentMapper, ProductMapper)
     │   │   └── repository/                        # Repositorios Spring Data R2DBC
     │   ├── restclient/
     │   │   ├── ProductRestGatewayAdapter.java     # Implementa cliente WebClient para API REST
@@ -115,8 +115,11 @@ com.example.fileprocessor/
         ├── constants/SoapConstants.java          # Namespaces comunes
         ├── mapper/SoapMapper.java                # Construcción y parseo JAXB unificado
         └── xml/
-            ├── SoapEnvelopeWrapper.java          # Parseo DOM seguro de la respuesta SOAP
-            └── model/                            # Modelos JAXB (Header, Body, Request, Response)
+            ├── SoapBody.java                     # Payload JAXB del Body
+            ├── SoapEnvelope.java                 # Envolvente raíz JAXB (Header + Body)
+            ├── SoapHeader.java                     # Payload JAXB del Header
+            ├── SoapEnvelopeWrapper.java            # Parseo DOM seguro de la respuesta SOAP
+            └── model/                            # Modelos JAXB con Lombok (Header, Body, Request, Response)
 ```
 
 ---
@@ -518,7 +521,7 @@ Los diccionarios se cargan de forma *perezosa* (Lazy) en estructuras `Concurrent
 - **Integración AWS**: AWS SDK for Java v2 (`software.amazon.awssdk:s3`)
 - **Testing**: JUnit 5, Reactor Test (StepVerifier), Mockito, MockWebServer
 - **Build Tool**: Gradle (Kotlin DSL / Groovy)
-- **Boilerplate**: Lombok (Gestión de Builders y Loggers)
+- **Boilerplate**: Lombok (Entidades R2DBC + Modelos JAXB SOAP + Builders/Loggers)
 
 ---
 
