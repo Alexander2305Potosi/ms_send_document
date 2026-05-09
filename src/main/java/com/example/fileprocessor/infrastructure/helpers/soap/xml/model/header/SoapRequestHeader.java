@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.header;
 
+import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
@@ -8,7 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@XmlRootElement(name = "requestHeader")
+@XmlRootElement(name = SoapConstants.EL_REQUEST_HEADER)
 @XmlAccessorType(XmlAccessType.FIELD)
 @Getter
 @Setter

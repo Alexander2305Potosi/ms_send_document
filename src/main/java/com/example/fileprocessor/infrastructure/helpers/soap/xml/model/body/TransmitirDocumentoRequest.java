@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body;
 
+import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
@@ -8,7 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-@XmlRootElement(name = "transmitirDocumento")
+@XmlRootElement(name = SoapConstants.EL_TRANSMITIR_DOCUMENTO_REQUEST)
 @XmlAccessorType(XmlAccessType.FIELD)
 @Getter
 @NoArgsConstructor

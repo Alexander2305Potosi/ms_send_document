@@ -1,17 +1,19 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
+import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
-@XmlRootElement(name = "soapenv:Envelope", namespace = "http://schemas.xmlsoap.org/soap/envelope/")
+
+@XmlRootElement(name = SoapConstants.EL_ENVELOPE, namespace = SoapConstants.NS_SOAPENV)
 @XmlAccessorType(XmlAccessType.FIELD)
 public class SoapEnvelope {
 
-    @XmlElement(name = "soapenv:Header", namespace = "http://schemas.xmlsoap.org/soap/envelope/")
+    @XmlElement(name = SoapConstants.EL_HEADER, namespace = SoapConstants.NS_SOAPENV)
     private SoapHeader header;
 
-    @XmlElement(name = "soapenv:Body", namespace = "http://schemas.xmlsoap.org/soap/envelope/")
+    @XmlElement(name = SoapConstants.EL_BODY, namespace = SoapConstants.NS_SOAPENV)
     private SoapBody body;
 
     public SoapEnvelope() {}

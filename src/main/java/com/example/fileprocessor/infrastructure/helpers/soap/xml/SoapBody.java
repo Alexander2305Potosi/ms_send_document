@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
+import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
@@ -8,7 +9,7 @@ import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.Tran
 @XmlAccessorType(XmlAccessType.FIELD)
 public class SoapBody {
 
-    @XmlElement(name = "body:TransmitirDocumentoRequest", namespace = "http://example.com/body") // Default namespace, will be overridden by props
+    @XmlElement(name = SoapConstants.EL_TRANSMITIR_DOCUMENTO_REQUEST, namespace = SoapConstants.NS_V1)
     private TransmitirDocumentoRequest transmitirDocumentoRequest;
 
     public SoapBody() {}
