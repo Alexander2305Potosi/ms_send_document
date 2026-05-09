@@ -45,7 +45,7 @@ public final class ZipDecompressor {
             }
         } catch (IOException e) {
             throw new ProcessingException(
-                ProcessingResultCodes.DECOMPRESSION_ERROR,
+                ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
                 "Failed to decompress ZIP '" + zipDoc.filename() + "': " + e.getMessage(),
                 e);
         }

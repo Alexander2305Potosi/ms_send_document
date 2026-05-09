@@ -16,7 +16,7 @@ public final class Base64Utils {
         if (encoded == null || encoded.isBlank()) {
             throw new InvalidBase64Exception(
                 "Empty Base64 content for document: " + filename + " (documentId=" + documentId + ")",
-                ProcessingResultCodes.EMPTY_CONTENT);
+                ProcessingResultCodes.EMPTY_CONTENT.name());
         }
         try {
             return Base64.getDecoder().decode(encoded);
@@ -24,7 +24,7 @@ public final class Base64Utils {
             throw new InvalidBase64Exception(
                 "Invalid Base64 content for document: " + filename
                 + " (documentId=" + documentId + "): " + e.getMessage(),
-                ProcessingResultCodes.INVALID_BASE64, e);
+                ProcessingResultCodes.INVALID_BASE64.name(), e);
         }
     }
 

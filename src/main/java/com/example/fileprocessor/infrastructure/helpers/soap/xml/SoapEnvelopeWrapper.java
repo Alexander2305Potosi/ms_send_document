@@ -52,24 +52,24 @@ public class SoapEnvelopeWrapper {
                     if ("faultstring".equals(currentNode.getLocalName())) {
                         throw ProcessingException.withTraceId(
                             "SOAP Fault received: " + currentNode.getTextContent(),
-                            ProcessingResultCodes.INVALID_RESPONSE, null);
+                            ProcessingResultCodes.INVALID_RESPONSE.name(), null);
                     }
                     currentNode = currentNode.getNextSibling();
                 }
                 throw ProcessingException.withTraceId(
-                    "SOAP Fault received", ProcessingResultCodes.INVALID_RESPONSE, null);
+                    "SOAP Fault received", ProcessingResultCodes.INVALID_RESPONSE.name(), null);
             }
 
             Node body = doc.getElementsByTagNameNS(SoapConstants.SOAP_ENVELOPE, "Body").item(0);
             if (body == null) {
                 throw ProcessingException.withTraceId(SoapConstants.MSG_SOAP_BODY_NOT_FOUND,
-                    ProcessingResultCodes.INVALID_RESPONSE, null);
+                    ProcessingResultCodes.INVALID_RESPONSE.name(), null);
             }
 
             Node responseNode = findFirstElementNode(body);
             if (responseNode == null) {
                 throw ProcessingException.withTraceId(SoapConstants.MSG_RESPONSE_ELEMENT_NOT_FOUND,
-                    ProcessingResultCodes.INVALID_RESPONSE, null);
+                    ProcessingResultCodes.INVALID_RESPONSE.name(), null);
             }
 
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
@@ -80,7 +80,7 @@ public class SoapEnvelopeWrapper {
         } catch (Exception e) {
             log.log(Level.SEVERE, "Error unmarshalling SOAP response", e);
             throw ProcessingException.withTraceId(SoapConstants.MSG_PARSE_ERROR,
-                ProcessingResultCodes.INVALID_RESPONSE, null, e);
+                ProcessingResultCodes.INVALID_RESPONSE.name(), null, e);
         }
     }
 

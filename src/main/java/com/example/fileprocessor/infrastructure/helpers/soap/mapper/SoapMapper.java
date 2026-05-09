@@ -98,7 +98,7 @@ public class SoapMapper {
         } catch (Exception e) {
             log.log(Level.SEVERE, "Error building SOAP envelope for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
-                "Failed to build SOAP envelope: " + e.getMessage(), ProcessingResultCodes.UNKNOWN_ERROR, traceId, e);
+                "Failed to build SOAP envelope: " + e.getMessage(), ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId, e);
         }
     }
 
@@ -123,7 +123,7 @@ public class SoapMapper {
             throw e;
         } catch (Exception e) {
             log.log(Level.SEVERE, "Error parsing SOAP V2 response for traceId=" + traceId, e);
-            throw ProcessingException.withTraceId("Failed to parse SOAP V2 response: " + e.getMessage(), ProcessingResultCodes.INVALID_RESPONSE, traceId, e);
+            throw ProcessingException.withTraceId("Failed to parse SOAP V2 response: " + e.getMessage(), ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
         }
     }
 }

@@ -48,7 +48,7 @@ public class S3GatewayAdapter implements S3Gateway {
                 log.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
                 return Mono.just(FileUploadResponse.builder()
                     .status(DocumentStatus.FAILURE.name())
-                    .errorCode(ProcessingResultCodes.EMPTY_CONTENT)
+                    .errorCode(ProcessingResultCodes.EMPTY_CONTENT.name())
                     .traceId(traceId)
                     .message("Cannot upload empty content to S3")
                     .processedAt(Instant.now())

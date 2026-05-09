@@ -10,6 +10,7 @@ import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.Pr
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
@@ -120,7 +121,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                     new Object[]{documentId, filename, e.getMessage()});
                 throw new ProcessingException(
                     "Base64 decode failed for document: " + documentId,
-                    com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64, documentId);
+                    ProcessingResultCodes.INVALID_BASE64.name(), documentId);
             }
         } else {
             content = null;

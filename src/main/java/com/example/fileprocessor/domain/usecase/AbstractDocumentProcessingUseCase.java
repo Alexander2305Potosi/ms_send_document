@@ -115,8 +115,12 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private boolean isTransientError(String errorCode) {
-        return "BAD_GATEWAY".equals(errorCode) || "GATEWAY_TIMEOUT".equals(errorCode) 
-            || "SERVICE_UNAVAILABLE".equals(errorCode) || "UNKNOWN_ERROR".equals(errorCode);
+        return java.util.Set.of(
+            ProcessingResultCodes.BAD_GATEWAY.name(),
+            ProcessingResultCodes.GATEWAY_TIMEOUT.name(),
+            ProcessingResultCodes.SERVICE_UNAVAILABLE.name(),
+            ProcessingResultCodes.UNKNOWN_ERROR.name()
+        ).contains(errorCode);
     }
 
     private Mono<ProductDocumentHistory> handleBusinessRuleSkip(Document doc, ProcessingException e) {
@@ -128,7 +132,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc) {
-        String errorCode = error instanceof ProcessingException pe ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
+        String errorCode = error instanceof ProcessingException pe ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR.name();
         log.log(Level.SEVERE, "[{0}] Pipeline error for document {1} (Product: {2}): {3}", 
                 new Object[]{implementationName(), doc.documentId(), doc.productId(), error.getMessage()});
         return Mono.just(buildErrorResponse(errorCode, error.getMessage()));
@@ -150,8 +154,9 @@ public abstract class AbstractDocumentProcessingUseCase {
         }
         return ZipDecompressor.decompress(file)
             .onErrorMap(error -> new ProcessingException(
-                ProcessingResultCodes.DECOMPRESSION_ERROR,
                 "Failed to decompress ZIP '" + file.filename() + "': " + error.getMessage(),
+                ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
+                "unknown",
                 error));
     }
 
