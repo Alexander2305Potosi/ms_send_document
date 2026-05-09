@@ -521,4 +521,34 @@ Los diccionarios se cargan de forma *perezosa* (Lazy) en estructuras `Concurrent
 - **Boilerplate**: Lombok (Gestión de Builders y Loggers)
 
 ---
+
+## Plan de Pruebas y Escenarios de Validación
+
+Para garantizar la estabilidad y resiliencia del `File Processor Service`, se recomienda ejecutar la siguiente matriz de pruebas funcionales y de caos (Chaos Engineering).
+
+### 1. Escenarios Exitosos (Happy Paths)
+
+| Escenario | Acción (Simulación) | Comportamiento Esperado | Verificación |
+| :--- | :--- | :--- | :--- |
+| **Sincronización Inicial** | Llamar `GET /api/v1/products/sync` con DB vacía. | El orquestador extrae los productos y sus metadatos del Gateway REST. | La tabla `documentos` tiene registros en estado `PENDING` con `retry_count = 0`. |
+| **Envío a SOAP (Simple)** | Ejecutar `GET /api/v1/products` con documentos PDF pendientes. | El servicio descarga el archivo, pasa el validador, y envía a SOAP. | Tabla `documentos`: estado `PROCESSED`. Tabla `historico_documentos`: registra "SUCCESS" con `nombre_archivo = NULL`. |
+| **Envío a S3 (Archivo ZIP)** | Ejecutar pipeline con un archivo comprimido pendiente. | El sistema extrae en memoria los archivos del ZIP y los envía iterativamente. | Tabla `historico_documentos`: registra un "SUCCESS" **por cada archivo extraído** con el campo `nombre_archivo` debidamente poblado. |
+
+### 2. Escenarios de Negocio y Filtrado
+
+| Escenario | Acción (Simulación) | Comportamiento Esperado | Verificación |
+| :--- | :--- | :--- | :--- |
+| **Regla de Exclusión por Regex** | Ingresar un documento en base de datos cuyo nombre no coincida con el patrón Regex configurado. | El validador (`RulesBussinesService`) lanza un skip. No se contacta al Gateway SOAP/S3. | Tabla `documentos`: estado `PROCESSED` (para no reintentar). Tabla `historico_documentos`: resultado `FAILURE` con el mensaje del filtro de exclusión. |
+| **Descompresión Inválida** | Sincronizar un archivo marcado como `isZip=true` pero que es un PDF corrupto. | El motor reactivo falla limpiamente al intentar extraer entradas ZIP. | Tabla `historico_documentos`: registra un `FAILURE` técnico. `documentos` incrementa reintentos. |
+
+### 3. Escenarios de Caos y Resiliencia Estructural
+
+| Escenario | Acción (Simulación) | Comportamiento Esperado | Verificación |
+| :--- | :--- | :--- | :--- |
+| **Fallo Transitorio en API Externa (SOAP/S3 Caídos)** | Bloquear el puerto de salida del gateway SOAP o devolver HTTP 503 desde S3. | El adaptador reintenta 3 veces rápido (en memoria). Luego lanza `GATEWAY_TIMEOUT`. | Tabla `documentos`: el estado vuelve a `PENDING` y el `retry_count` se incrementa en 1. Tabla `historico_documentos`: guarda `FAILURE`. |
+| **Límite de Reintentos Agotado** | Provocar 3 fallos transitorios consecutivos en el mismo documento en distintas ejecuciones del pipeline. | Al llegar al tercer intento (`retry_count >= 3`), el orquestador aborta definitivamente el ciclo de vida del documento. | Tabla `documentos`: estado final marcado como `FAILED`. Ya no será extraído por las siguientes tareas. |
+| **Auto-Curación (Stale Lock Rescue)** | Manipular la base de datos cambiando el estado a `IN_PROGRESS` con fecha de hace 20 minutos (simulando que el pod de Kubernetes murió a medio procesar). | Al iniciar el pipeline, la primera instrucción barre la tabla buscando documentos atascados. | El log arroja `Recovered X stale documents`. Tabla `documentos`: los registros son retrocedidos a `PENDING` para procesarse nuevamente. |
+| **Sincronización con Falla Parcial** | En `GET /api/v1/products/sync`, hacer que la API retorne HTTP 500 para el *Producto A*, pero HTTP 200 para el *Producto B*. | El sistema captura el error a nivel individual (`onErrorResume`), avisa en los logs y prosigue exitosamente con el Producto B. | El *Producto B* se sincroniza en DB, la llamada HTTP global al endpoint no se rompe y devuelve "Document sync completed". |
+
+---
 *Fin del documento técnico.*
