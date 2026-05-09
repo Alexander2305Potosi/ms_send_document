@@ -1,5 +1,8 @@
 package com.example.fileprocessor.infrastructure.config;
 
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapBody;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelope;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapHeader;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.TransmitirDocumentoRequest;
@@ -27,6 +30,9 @@ public class JaxbConfig {
     @Bean
     public JAXBContext soapJaxbContext() throws JAXBException {
         return JAXBContext.newInstance(
+                SoapEnvelope.class,
+                SoapHeader.class,
+                SoapBody.class,
                 TransmitirDocumentoRequest.class,
                 TransmitirDocumentoResponse.class,
                 MetaDataWrapper.class,

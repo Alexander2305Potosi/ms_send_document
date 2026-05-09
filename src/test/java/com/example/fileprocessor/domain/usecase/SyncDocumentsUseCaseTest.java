@@ -88,6 +88,7 @@ class SyncDocumentsUseCaseTest {
         when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
+        when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
         when(documentRepository.save(any(Document.class)))
             .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")));
 
@@ -109,6 +110,7 @@ class SyncDocumentsUseCaseTest {
         when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", true)));
+        when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
         when(documentRepository.save(any(Document.class)))
             .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")));
 
@@ -129,6 +131,7 @@ class SyncDocumentsUseCaseTest {
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)))
             .thenReturn(Flux.just(doc("p2", "doc2", false)));
+        when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
         when(documentRepository.save(any(Document.class)))
             .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")))
             .thenReturn(Mono.just(savedDocument(11L, "doc2", "retention")));
@@ -168,6 +171,7 @@ class SyncDocumentsUseCaseTest {
         when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
+        when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
         when(documentRepository.save(any(Document.class)))
             .thenReturn(Mono.just(savedDocument(10L, "doc1", "extract")));
 
@@ -178,5 +182,58 @@ class SyncDocumentsUseCaseTest {
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
         assertEquals("extract", captor.getValue().useCase());
+    }
+
+    @Test
+    void execute_whenDocumentAlreadyExists_savesAsDuplicated() {
+        when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
+        when(productRestGateway.getDocumentsByProduct(any()))
+            .thenReturn(Flux.just(doc("p1", "doc1", false)));
+        when(documentRepository.existsByProductIdAndDocumentId("p1", "doc1")).thenReturn(Mono.just(true));
+        when(documentRepository.save(any(Document.class)))
+            .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")));
+
+        StepVerifier.create(useCase.execute("retention"))
+            .assertNext(result -> assertEquals("Document sync completed", result))
+            .verifyComplete();
+
+        ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(docCaptor.capture());
+        Document savedDoc = docCaptor.getValue();
+        assertEquals("doc1", savedDoc.documentId());
+        assertEquals("p1", savedDoc.productId());
+        assertEquals(ProductState.ERR_DUPLICATED_DOC, savedDoc.state());
+        assertNotNull(savedDoc.errorMessage());
+        assertTrue(savedDoc.errorMessage().contains("duplicado"));
+        assertEquals("retention", savedDoc.useCase());
+    }
+
+    @Test
+    void execute_mixedNewAndDuplicateDocuments_savesCorrectly() {
+        when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
+        when(productRestGateway.getDocumentsByProduct(any()))
+            .thenReturn(Flux.just(
+                doc("p1", "doc1", false),
+                doc("p1", "doc2", false)
+            ));
+        when(documentRepository.existsByProductIdAndDocumentId("p1", "doc1")).thenReturn(Mono.just(true));
+        when(documentRepository.existsByProductIdAndDocumentId("p1", "doc2")).thenReturn(Mono.just(false));
+        when(documentRepository.save(any(Document.class)))
+            .thenReturn(Mono.just(savedDocument(10L, "doc1", "retention")))
+            .thenReturn(Mono.just(savedDocument(11L, "doc2", "retention")));
+
+        StepVerifier.create(useCase.execute("retention"))
+            .assertNext(result -> assertEquals("Document sync completed", result))
+            .verifyComplete();
+
+        ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository, times(2)).save(docCaptor.capture());
+
+        java.util.List<Document> savedDocs = docCaptor.getAllValues();
+        assertEquals(2, savedDocs.size());
+        assertEquals(ProductState.ERR_DUPLICATED_DOC, savedDocs.get(0).state());
+        assertEquals("doc1", savedDocs.get(0).documentId());
+        assertEquals(ProductState.PENDING, savedDocs.get(1).state());
+        assertEquals("doc2", savedDocs.get(1).documentId());
     }
 }

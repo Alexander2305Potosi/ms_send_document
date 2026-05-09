@@ -8,13 +8,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.r2dbc.core.DatabaseClient;
-import org.springframework.r2dbc.core.FetchSpec;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.*;
@@ -26,20 +24,11 @@ class DocumentR2dbcAdapterTest {
     @Mock
     private DocumentRepository springDataRepository;
 
-    @Mock
-    private DatabaseClient databaseClient;
-
-    @Mock
-    private DatabaseClient.GenericExecuteSpec executeSpec;
-
-    @Mock
-    private FetchSpec<Map<String, Object>> fetchSpec;
-
     private DocumentR2dbcAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        adapter = new DocumentR2dbcAdapter(springDataRepository, databaseClient);
+        adapter = new DocumentR2dbcAdapter(springDataRepository);
     }
 
     @Test
@@ -58,17 +47,61 @@ class DocumentR2dbcAdapterTest {
     }
 
     @Test
-    void updateStateAndRetry_executesSqlCorrectly() {
-        when(databaseClient.sql(anyString())).thenReturn(executeSpec);
-        when(executeSpec.bind(anyString(), any())).thenReturn(executeSpec);
-        when(executeSpec.fetch()).thenReturn(fetchSpec);
-        
-        when(fetchSpec.rowsUpdated()).thenReturn(Mono.just(1L));
+    void findByStateAndUseCaseToday_delegatesToSpringDataRepository() {
+        LocalDateTime startOfDay = LocalDateTime.of(2026, 5, 9, 0, 0);
+        DocumentEntity entity = DocumentEntity.builder().id(1L).state("PENDING").useCase("SYNC").build();
 
-        StepVerifier.create(adapter.updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 0, LocalDateTime.now()))
+        when(springDataRepository.findByStateAndUseCaseToday("PENDING", "SYNC", startOfDay))
+            .thenReturn(Flux.just(entity));
+
+        StepVerifier.create(adapter.findByStateAndUseCaseToday("PENDING", "SYNC", startOfDay))
+            .assertNext(doc -> {
+                assertEquals(1L, doc.id());
+                assertEquals("PENDING", doc.state());
+                assertEquals("SYNC", doc.useCase());
+            })
+            .verifyComplete();
+
+        verify(springDataRepository).findByStateAndUseCaseToday("PENDING", "SYNC", startOfDay);
+    }
+
+    @Test
+    void updateStateAndRetry_delegatesToSpringDataRepository() {
+        LocalDateTime updatedAt = LocalDateTime.now();
+        when(springDataRepository.updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt))
+            .thenReturn(Mono.just(1L));
+
+        StepVerifier.create(adapter.updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt))
             .expectNext(1L)
             .verifyComplete();
 
-        verify(databaseClient).sql(contains("UPDATE documentos SET estado = :newState"));
+        verify(springDataRepository).updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt);
+    }
+
+    @Test
+    void existsByProductIdAndDocumentId_delegatesToSpringDataRepository() {
+        when(springDataRepository.existsByProductIdAndDocumentId("PROD-1", "DOC-1"))
+            .thenReturn(Mono.just(true));
+
+        StepVerifier.create(adapter.existsByProductIdAndDocumentId("PROD-1", "DOC-1"))
+            .expectNext(true)
+            .verifyComplete();
+
+        verify(springDataRepository).existsByProductIdAndDocumentId("PROD-1", "DOC-1");
+    }
+
+    @Test
+    void resetStaleDocumentsToday_delegatesToSpringDataRepository() {
+        LocalDateTime startOfDay = LocalDateTime.of(2026, 5, 9, 0, 0);
+        LocalDateTime threshold = LocalDateTime.of(2026, 5, 9, 10, 0);
+
+        when(springDataRepository.resetStaleDocumentsToday(eq("SYNC"), eq(startOfDay), eq(threshold), any()))
+            .thenReturn(Mono.just(2L));
+
+        StepVerifier.create(adapter.resetStaleDocumentsToday("SYNC", startOfDay, threshold))
+            .expectNext(2L)
+            .verifyComplete();
+
+        verify(springDataRepository).resetStaleDocumentsToday(eq("SYNC"), eq(startOfDay), eq(threshold), any());
     }
 }

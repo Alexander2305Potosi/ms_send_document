@@ -50,20 +50,40 @@ public class SyncDocumentsUseCase {
     }
 
     private Mono<Void> saveDocument(com.example.fileprocessor.domain.entity.ProductDocumentHistory doc, String useCase) {
-        Document document = Document.builder()
-            .documentId(doc.documentId())
-            .productId(doc.productId())
-            .name(doc.filename())
-            .owner(doc.productId())
-            .useCase(useCase)
-            .state(ProductState.PENDING)
-            .isZip(doc.isZip())
-            .parentZipName(null)
-            .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
-            .build();
+        return documentRepository.existsByProductIdAndDocumentId(doc.productId(), doc.documentId())
+            .flatMap(exists -> {
+                if (Boolean.TRUE.equals(exists)) {
+                    log.log(Level.INFO, "Duplicate document detected for productId={0}, documentId={1}. Marking as ERR_DUPLICATED_DOC.",
+                            new Object[]{doc.productId(), doc.documentId()});
+                    Document duplicate = Document.builder()
+                        .documentId(doc.documentId())
+                        .productId(doc.productId())
+                        .name(doc.filename())
+                        .owner(doc.productId())
+                        .useCase(useCase)
+                        .state(ProductState.ERR_DUPLICATED_DOC)
+                        .errorMessage("Documento duplicado detectado para productId=" + doc.productId() + " y documentId=" + doc.documentId())
+                        .isZip(doc.isZip())
+                        .parentZipName(null)
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build();
+                    return documentRepository.save(duplicate).then(Mono.empty());
+                }
 
-        return documentRepository.save(document)
-            .then(Mono.empty());
+                Document document = Document.builder()
+                    .documentId(doc.documentId())
+                    .productId(doc.productId())
+                    .name(doc.filename())
+                    .owner(doc.productId())
+                    .useCase(useCase)
+                    .state(ProductState.PENDING)
+                    .isZip(doc.isZip())
+                    .parentZipName(null)
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+                return documentRepository.save(document).then(Mono.empty());
+            });
     }
 }

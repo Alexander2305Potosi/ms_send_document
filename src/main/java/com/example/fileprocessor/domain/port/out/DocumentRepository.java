@@ -27,4 +27,9 @@ public interface DocumentRepository {
      * Resets stale IN_PROGRESS documents from today back to PENDING.
      */
     Mono<Long> resetStaleDocumentsToday(String useCase, LocalDateTime startOfDay, LocalDateTime threshold);
+
+    /**
+     * Checks if a document with the given productId and documentId already exists.
+     */
+    Mono<Boolean> existsByProductIdAndDocumentId(String productId, String documentId);
 }
