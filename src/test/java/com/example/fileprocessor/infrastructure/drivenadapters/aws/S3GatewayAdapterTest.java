@@ -2,7 +2,6 @@ package com.example.fileprocessor.infrastructure.drivenadapters.aws;
 
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -43,18 +42,6 @@ class S3GatewayAdapterTest {
             null, null, 1, 500, 10, "docs/"
         );
         adapter = new S3GatewayAdapter(s3Client, s3Properties);
-    }
-
-    static class ServiceException extends SdkException {
-        public ServiceException() { super(builder().message("service error")); }
-    }
-
-    static class SocketTimeoutException extends SdkException {
-        public SocketTimeoutException() { super(builder().message("socket timeout")); }
-    }
-
-    static class ConnectTimeoutException extends SdkException {
-        public ConnectTimeoutException() { super(builder().message("connect timeout")); }
     }
 
     private static FileUploadRequest request(String docId, String filename, byte[] content) {

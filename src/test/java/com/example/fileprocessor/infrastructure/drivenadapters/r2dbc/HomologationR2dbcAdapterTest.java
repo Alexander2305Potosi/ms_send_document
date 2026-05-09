@@ -2,9 +2,6 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.CategoryManual;
 import com.example.fileprocessor.domain.entity.CountryHomologated;
-import com.example.fileprocessor.domain.entity.HomologationResult;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CategoryManualEntity;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CountryHomologatedEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CountryHomologatedRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,12 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 import java.lang.reflect.Field;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;

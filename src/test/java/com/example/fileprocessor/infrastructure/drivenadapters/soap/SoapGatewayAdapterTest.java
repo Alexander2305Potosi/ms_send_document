@@ -3,7 +3,6 @@ package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
