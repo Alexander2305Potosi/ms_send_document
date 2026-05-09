@@ -151,15 +151,16 @@ class SyncDocumentsUseCaseTest {
     }
 
     @Test
-    void execute_whenGatewayFails_propagatesError() {
+    void execute_whenGatewayFails_ignoresErrorAndContinues() {
         when(productRepository.findAll()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.error(new RuntimeException("Gateway error")));
 
         StepVerifier.create(useCase.execute("retention"))
-            .expectErrorMatches(error -> error instanceof RuntimeException
-                && "Gateway error".equals(error.getMessage()))
-            .verify();
+            .assertNext(result -> assertEquals("Document sync completed", result))
+            .verifyComplete();
+
+        verify(documentRepository, never()).save(any());
     }
 
     @Test

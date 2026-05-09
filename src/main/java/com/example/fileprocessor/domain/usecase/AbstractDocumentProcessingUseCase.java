@@ -57,7 +57,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 if (count > 0) log.warning("[" + implementationName() + "] Recovered " + count + " stale documents from today.");
             })
             .thenMany(documentRepository.findByStateAndUseCaseToday(ProductState.PENDING, implementationName(), startOfDay))
-            .flatMap(this::processWithTracking)
+            .concatMap(this::processWithTracking)
             .doOnTerminate(() -> log.log(Level.INFO, "[{0}] Daily pipeline execution completed", implementationName()));
     }
 
@@ -69,15 +69,18 @@ public abstract class AbstractDocumentProcessingUseCase {
             .flatMap(rows -> {
                 if (rows == 0) return Mono.empty(); 
                 
+                log.log(Level.INFO, "[{0}] Started processing document {1} for product {2}", 
+                        new Object[]{implementationName(), doc.documentId(), doc.productId()});
+                
                 return productRestGateway.getDocument(doc.productId(), doc.documentId())
                     .map(ProductDocumentHistory::from)
                     .flatMapMany(this::decompress)
-                    .flatMap(file -> documentValidator.validate(file, true)
+                    .concatMap(file -> documentValidator.validate(file, true)
                         .onErrorResume(ProcessingException.class, e -> handleBusinessRuleSkip(doc, e))
                         .flatMap(v -> uploadDocument(v, doc.productId(), doc.id()))
                     )
                     .next()
-                    .onErrorResume(error -> handleGlobalError(error, doc.id()))
+                    .onErrorResume(error -> handleGlobalError(error, doc))
                     .flatMap(response -> finalizeProcessing(doc, response, startTime));
             });
     }
@@ -95,7 +98,12 @@ public abstract class AbstractDocumentProcessingUseCase {
                     new Object[]{implementationName(), doc.documentId(), nextRetryCount});
         } else {
             finalState = ProductState.FAILED; // Fallo de negocio o reintentos agotados
+            log.log(Level.SEVERE, "[{0}] Failed to process document {1} permanently. State set to FAILED.", 
+                    new Object[]{implementationName(), doc.documentId()});
         }
+
+        log.log(Level.INFO, "[{0}] Finished processing document {1}. Final State: {2}", 
+                new Object[]{implementationName(), doc.documentId(), finalState});
 
         final int finalRetryCount = nextRetryCount;
         String historyFileName = Boolean.TRUE.equals(doc.isZip()) ? doc.name() : null;
@@ -115,18 +123,18 @@ public abstract class AbstractDocumentProcessingUseCase {
         log.log(Level.INFO, "[{0}] Business rule skip for document {1}: {2}", 
                 new Object[]{implementationName(), doc.documentId(), e.getMessage()});
         
-        FileUploadResponse skipResponse = buildErrorResponse(e, e.getErrorCode(), "Business Rule: " + e.getMessage());
+        FileUploadResponse skipResponse = buildErrorResponse(e.getErrorCode(), "Business Rule: " + e.getMessage());
         return finalizeProcessing(doc, skipResponse, Instant.now()).then(Mono.empty());
     }
 
-    private Mono<FileUploadResponse> handleGlobalError(Throwable error, Long docId) {
+    private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc) {
         String errorCode = error instanceof ProcessingException pe ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR;
-        log.log(Level.SEVERE, "[{0}] Pipeline error for docId {1}: {2}", 
-                new Object[]{implementationName(), docId, error.getMessage()});
-        return Mono.just(buildErrorResponse(error, errorCode, error.getMessage()));
+        log.log(Level.SEVERE, "[{0}] Pipeline error for document {1} (Product: {2}): {3}", 
+                new Object[]{implementationName(), doc.documentId(), doc.productId(), error.getMessage()});
+        return Mono.just(buildErrorResponse(errorCode, error.getMessage()));
     }
 
-    private FileUploadResponse buildErrorResponse(Throwable error, String errorCode, String message) {
+    private FileUploadResponse buildErrorResponse(String errorCode, String message) {
         return FileUploadResponse.builder()
             .status(DocumentStatus.FAILURE.name())
             .errorCode(errorCode)

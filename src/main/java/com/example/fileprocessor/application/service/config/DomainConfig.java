@@ -69,4 +69,15 @@ public class DomainConfig {
             transactionalOperator
         );
     }
+    @Bean
+    public com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase syncDocumentsUseCase(
+            com.example.fileprocessor.domain.port.out.ProductRepository productRepository,
+            DocumentRepository documentRepository,
+            ProductRestGateway productRestGateway) {
+        return new com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase(
+            productRepository,
+            documentRepository,
+            productRestGateway
+        );
+    }
 }
