@@ -1,6 +1,10 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap.config;
 
+import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -10,25 +14,25 @@ class SoapPropertiesTest {
     void soapProperties_recordCreatesValidProperties() {
         SoapProperties props = new SoapProperties(
             "http://localhost:9000/soap",
+            "SYS-01",
+            "user",
+            "h-ns",
+            "b-ns",
+            "token",
+            "dest",
+            "d-ns",
+            "op",
+            "action",
+            List.of(),
+            Map.of(),
+            Map.of(),
             30,
             3
         );
 
         assertEquals("http://localhost:9000/soap", props.endpoint());
+        assertEquals("SYS-01", props.systemId());
         assertEquals(30, props.timeoutSeconds());
         assertEquals(3, props.retryAttempts());
-    }
-
-    @Test
-    void soapProperties_withValidValues() {
-        SoapProperties props = new SoapProperties(
-            "http://soap.example.com/service",
-            60,
-            5
-        );
-
-        assertEquals("http://soap.example.com/service", props.endpoint());
-        assertEquals(60, props.timeoutSeconds());
-        assertEquals(5, props.retryAttempts());
     }
 }

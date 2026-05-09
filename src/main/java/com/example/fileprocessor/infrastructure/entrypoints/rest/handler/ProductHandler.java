@@ -53,7 +53,7 @@ public class ProductHandler {
 
             return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_NDJSON)
-                .body(results, com.example.fileprocessor.domain.entity.FileUploadResult.class);
+                .body(results, com.example.fileprocessor.domain.entity.FileUploadResponse.class);
         }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
     }
 

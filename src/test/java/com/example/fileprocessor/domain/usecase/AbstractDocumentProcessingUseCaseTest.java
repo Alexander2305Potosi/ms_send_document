@@ -1,13 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
-import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.entity.ProductDocumentFile;
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductState;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -15,16 +12,16 @@ import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -33,116 +30,96 @@ class AbstractDocumentProcessingUseCaseTest {
 
     @Mock
     private DocumentRepository documentRepository;
-
-    @Mock
-    private DocumentHistoryRepository historyRepository;
-
     @Mock
     private ProductRestGateway productRestGateway;
-
     @Mock
     private RulesBussinesGateway documentValidator;
+    @Mock
+    private DocumentHistoryRepository historyRepository;
+    @Mock
+    private TransactionalOperator transactionalOperator;
 
-    private TestProcessingUseCase useCase;
-
-    // Minimal concrete subclass for testing the abstract class
-    static class TestProcessingUseCase extends AbstractDocumentProcessingUseCase {
-        private final FileUploadResult result;
-
-        TestProcessingUseCase(DocumentRepository documentRepository,
-                             DocumentHistoryRepository historyRepository,
-                             ProductRestGateway productRestGateway,
-                             RulesBussinesGateway documentValidator,
-                             FileUploadResult result) {
-            super(documentRepository, historyRepository, productRestGateway, documentValidator);
-            this.result = result;
-        }
-
-        @Override
-        protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
-            return Mono.just(result);
-        }
-
-        @Override
-        protected String implementationName() {
-            return "TEST";
-        }
-    }
+    private AbstractDocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
-        useCase = new TestProcessingUseCase(documentRepository, historyRepository,
-            productRestGateway, documentValidator,
-            FileUploadResult.builder()
-                .status(DocumentStatus.SUCCESS.name())
-                .success(true)
-                .build());
-        lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
-        lenient().when(documentRepository.updateStateById(anyLong(), anyString(), any())).thenReturn(Mono.empty());
-        lenient().when(documentRepository.updateStateById(anyLong(), anyString(), anyString(), any())).thenReturn(Mono.just(1L));
+        useCase = new AbstractDocumentProcessingUseCase(
+            documentRepository, productRestGateway, documentValidator, historyRepository, transactionalOperator
+        ) {
+            @Override
+            protected Mono<FileUploadResponse> uploadDocument(com.example.fileprocessor.domain.entity.ProductDocumentHistory doc, String productId, Long docId) {
+                return Mono.empty();
+            }
+
+            @Override
+            protected String implementationName() {
+                return "TEST";
+            }
+        };
+
+        lenient().when(transactionalOperator.transactional(any(Mono.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        lenient().when(documentRepository.resetStaleDocumentsToday(anyString(), any(), any()))
+            .thenReturn(Mono.just(0L));
+
+        lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))
+            .thenReturn(Mono.just(1L));
+
+        lenient().when(historyRepository.saveHistory(anyLong(), anyString(), anyString(), any(), any()))
+            .thenReturn(Mono.empty());
     }
 
     @Test
-    void traceFailure_whenFindLastAuditEmpty_usesRetry1() {
+    void executePendingDocuments_withTechnicalError_incrementsRetryCount() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
             .state(ProductState.PENDING)
-            .useCase("TEST")
-            .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
+            .retryCount(0)
             .build();
 
-        when(documentRepository.findByStateAndUseCase(ProductState.PENDING, "TEST"))
+        when(documentRepository.findByStateAndUseCaseToday(eq(ProductState.PENDING), eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.error(new RuntimeException("Force pipeline failure")));
-        when(historyRepository.findLastAudit(eq(1L), eq("TEST")))
-            .thenReturn(Mono.empty());
+            .thenReturn(Mono.error(new ProcessingException("GATEWAY_TIMEOUT", "Timeout error", (Throwable) null)));
 
         StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(result -> {
+                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals("GATEWAY_TIMEOUT", result.getErrorCode());
+            })
             .verifyComplete();
 
-        ArgumentCaptor<DocumentHistory> captor = ArgumentCaptor.forClass(DocumentHistory.class);
-        verify(historyRepository, atLeastOnce()).save(captor.capture());
-        DocumentHistory saved = captor.getValue();
-        assertEquals(1, saved.retry());
-        assertEquals("FAILURE", saved.result());
+        // Verify retry count incremented in repository call
+        verify(documentRepository).updateStateAndRetry(eq(1L), eq(ProductState.IN_PROGRESS), eq(ProductState.PENDING), eq(1), any());
     }
 
     @Test
-    void traceFailure_whenLastAuditHasNullRetry_defaultsTo1() {
+    void executePendingDocuments_withMaxRetriesReached_marksAsFailed() {
         Document doc = Document.builder()
-            .id(2L)
-            .documentId("doc-2")
-            .productId("prod-2")
-            .name("test2.pdf")
+            .id(1L)
+            .documentId("doc-1")
+            .productId("prod-1")
+            .name("test.pdf")
             .state(ProductState.PENDING)
-            .useCase("TEST")
-            .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
+            .retryCount(3)
             .build();
 
-        DocumentHistory lastAudit = DocumentHistory.builder()
-            .documentId(2L)
-            .retry(null)
-            .build();
-
-        when(documentRepository.findByStateAndUseCase(ProductState.PENDING, "TEST"))
+        when(documentRepository.findByStateAndUseCaseToday(eq(ProductState.PENDING), eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.error(new RuntimeException("Force pipeline failure")));
-        when(historyRepository.findLastAudit(eq(2L), eq("TEST")))
-            .thenReturn(Mono.just(lastAudit));
+            .thenReturn(Mono.error(new ProcessingException("GATEWAY_TIMEOUT", "Final timeout", (Throwable) null)));
 
         StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(result -> {
+                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+            })
             .verifyComplete();
 
-        ArgumentCaptor<DocumentHistory> captor = ArgumentCaptor.forClass(DocumentHistory.class);
-        verify(historyRepository, atLeastOnce()).save(captor.capture());
-        DocumentHistory saved = captor.getValue();
-        assertEquals(1, saved.retry());
+        // Verify state changed to FAILED because retryCount was already 3
+        verify(documentRepository).updateStateAndRetry(eq(1L), eq(ProductState.IN_PROGRESS), eq(ProductState.FAILED), eq(3), any());
     }
 }

@@ -24,4 +24,17 @@ public record ProductDocumentHistory(
     String origin,
     byte[] content,
     String parentZipName
-) {}
+) {
+    public static ProductDocumentHistory from(ProductDocumentFile file) {
+        return ProductDocumentHistory.builder()
+            .documentId(file.documentId())
+            .filename(file.filename())
+            .content(file.content())
+            .contentType(file.contentType())
+            .size(file.size())
+            .isZip(file.isZip())
+            .origin(file.origin())
+            .pais(file.pais())
+            .build();
+    }
+}

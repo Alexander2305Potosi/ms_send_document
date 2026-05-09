@@ -5,22 +5,30 @@ import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
-import lombok.AllArgsConstructor;
-import lombok.extern.java.Log;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Component
-@Log
-@AllArgsConstructor
 public class SyncDocumentsUseCase {
+
+    private static final Logger log = Logger.getLogger(SyncDocumentsUseCase.class.getName());
 
     private final ProductRepository productRepository;
     private final DocumentRepository documentRepository;
     private final ProductRestGateway productRestGateway;
+
+    public SyncDocumentsUseCase(
+            ProductRepository productRepository,
+            DocumentRepository documentRepository,
+            ProductRestGateway productRestGateway) {
+        this.productRepository = productRepository;
+        this.documentRepository = documentRepository;
+        this.productRestGateway = productRestGateway;
+    }
 
     public Mono<String> execute(String useCase) {
         log.log(Level.INFO, "Starting document sync with useCase: {0}", new Object[]{useCase});

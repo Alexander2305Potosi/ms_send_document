@@ -1,29 +1,48 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.DocumentHistory;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.mapper.DocumentHistoryMapper;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
 @Component
+@RequiredArgsConstructor
 public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
 
     private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository springDataRepository;
 
-    public DocumentHistoryR2dbcAdapter(
-            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository springDataRepository) {
-        this.springDataRepository = springDataRepository;
+    @Override
+    public Mono<Void> saveHistory(Long docId, String filename, String operation, 
+                                 FileUploadResponse response, Instant startTime) {
+        
+        // Si no es exitoso, el 'resultado' será el código de error específico para mayor visibilidad
+        String resultStatus = response.isSuccess() ? "SUCCESS" : response.getErrorCode();
+
+        DocumentHistoryEntity entity = DocumentHistoryEntity.builder()
+            .documentId(docId)
+            .filename(filename)
+            .operation(operation)
+            .messageId(response.getCorrelationId() != null ? response.getCorrelationId() : response.getTraceId())
+            .result(resultStatus) // Aquí guardamos el estado del error detallado
+            .errorCode(response.getErrorCode())
+            .errorMessage(response.getMessage())
+            .retry(response.getAttemptCount())
+            .startedAt(toLocalDateTime(startTime))
+            .completedAt(toLocalDateTime(Instant.now()))
+            .createdAt(LocalDateTime.now())
+            .build();
+
+        return springDataRepository.save(entity).then();
     }
 
-    @Override
-    public Mono<Void> save(DocumentHistory history) {
-        return springDataRepository.save(DocumentHistoryMapper.toEntity(history)).then();
-    }
-
-    @Override
-    public Mono<DocumentHistory> findLastAudit(Long documentId, String useCase) {
-        return springDataRepository.findLastByDocumentoIdAndOperacionOrderByFechaCreacionDesc(documentId, useCase)
-            .map(DocumentHistoryMapper::toDomain);
+    private LocalDateTime toLocalDateTime(Instant instant) {
+        if (instant == null) return null;
+        return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
     }
 }

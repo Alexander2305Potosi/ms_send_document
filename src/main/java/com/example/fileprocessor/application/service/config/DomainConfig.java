@@ -1,5 +1,6 @@
 package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -14,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.reactive.TransactionalOperator;
 
 @Configuration
 @EnableConfigurationProperties(ProcessorsProperties.class)
@@ -35,13 +37,17 @@ public class DomainConfig {
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
+            DocumentHistoryRepository historyRepository,
+            TransactionalOperator transactionalOperator,
             ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
             documentRepository,
             productRestGateway,
             soapGateway,
             homologationRepository,
-            new RulesBussinesService(properties.soap())
+            new RulesBussinesService(properties.soap()),
+            historyRepository,
+            transactionalOperator
         );
     }
 
@@ -51,12 +57,16 @@ public class DomainConfig {
             DocumentRepository documentRepository,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
+            DocumentHistoryRepository historyRepository,
+            TransactionalOperator transactionalOperator,
             ProcessorsProperties properties) {
         return new S3DocumentProcessingUseCase(
             documentRepository,
             productRestGateway,
             s3Gateway,
-            new RulesBussinesService(properties.s3())
+            new RulesBussinesService(properties.s3()),
+            historyRepository,
+            transactionalOperator
         );
     }
 }

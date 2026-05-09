@@ -3,7 +3,7 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -47,21 +48,34 @@ class S3DocumentProcessingUseCaseTest {
     @Mock
     private RulesBussinesGateway documentValidator;
 
+    @Mock
+    private TransactionalOperator transactionalOperator;
+
     private S3DocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
         useCase = new S3DocumentProcessingUseCase(
             documentRepository,
-            historyRepository,
             productRestGateway,
             s3Gateway,
-            documentValidator
+            documentValidator,
+            historyRepository,
+            transactionalOperator
         );
-        lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
-        lenient().when(historyRepository.findLastAudit(anyLong(), anyString())).thenReturn(Mono.empty());
-        lenient().when(documentRepository.updateStateById(anyLong(), anyString(), any())).thenReturn(Mono.empty());
-        lenient().when(documentRepository.updateStateById(anyLong(), anyString(), anyString(), any())).thenReturn(Mono.just(1L));
+
+        // Mock básico para TransactionalOperator
+        lenient().when(transactionalOperator.transactional(any(Mono.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        lenient().when(historyRepository.saveHistory(anyLong(), anyString(), anyString(), any(), any()))
+            .thenReturn(Mono.empty());
+
+        lenient().when(documentRepository.updateStateAndRetry(anyLong(), anyString(), anyString(), anyInt(), any()))
+            .thenReturn(Mono.just(1L));
+            
+        lenient().when(documentRepository.resetStaleDocumentsToday(anyString(), any(), any()))
+            .thenReturn(Mono.just(0L));
     }
 
     private static ProductDocumentHistory doc() {
@@ -86,7 +100,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenSuccess_returnsSuccessResult() {
-        FileUploadResult successResult = FileUploadResult.builder()
+        FileUploadResponse successResult = FileUploadResponse.builder()
             .status(DocumentStatus.SUCCESS.name())
             .success(true)
             .correlationId("corr-123")
@@ -119,7 +133,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenGatewayReturnsFailureStatus_propagatesFailure() {
-        FileUploadResult failureResult = FileUploadResult.builder()
+        FileUploadResponse failureResult = FileUploadResponse.builder()
             .status(DocumentStatus.FAILURE.name())
             .success(false)
             .errorCode(S3ErrorCodes.SERVICE_UNAVAILABLE)
@@ -148,6 +162,7 @@ class S3DocumentProcessingUseCaseTest {
             .useCase("S3")
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
+            .retryCount(0)
             .build();
 
         ProductDocumentFile file = ProductDocumentFile.builder()
@@ -161,14 +176,14 @@ class S3DocumentProcessingUseCaseTest {
             .pais("AR")
             .build();
 
-        FileUploadResult successResult = FileUploadResult.builder()
+        FileUploadResponse successResult = FileUploadResponse.builder()
             .status(DocumentStatus.SUCCESS.name())
             .success(true)
             .correlationId("corr-123")
             .processedAt(Instant.now())
             .build();
 
-        when(documentRepository.findByStateAndUseCase(ProductState.PENDING, "S3"))
+        when(documentRepository.findByStateAndUseCaseToday(eq(ProductState.PENDING), eq("S3"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument("prod-1", "doc-1"))
             .thenReturn(Mono.just(file));

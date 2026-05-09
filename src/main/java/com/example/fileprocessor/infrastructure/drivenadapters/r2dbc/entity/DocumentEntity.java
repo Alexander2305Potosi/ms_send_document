@@ -67,4 +67,7 @@ public class DocumentEntity {
 
     @Column("fecha_actualizacion")
     private LocalDateTime updatedAt;
+
+    @Column("reintentos")
+    private Integer retryCount;
 }

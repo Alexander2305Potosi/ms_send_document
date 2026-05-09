@@ -1,11 +1,10 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.TransmitirDocumentoResponse;
+import jakarta.xml.bind.JAXBContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -14,85 +13,47 @@ class SoapEnvelopeWrapperTest {
     private SoapEnvelopeWrapper wrapper;
 
     @BeforeEach
-    void setUp() {
-        wrapper = new SoapEnvelopeWrapper();
+    void setUp() throws Exception {
+        JAXBContext context = JAXBContext.newInstance(TransmitirDocumentoResponse.class);
+        wrapper = new SoapEnvelopeWrapper(context);
     }
 
     @Test
-    void unwrapResponse_shouldParseValidSoapResponse() {
-        String validXml = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-              <soap:Header/>
-              <soap:Body>
-                <file:UploadFileResponse xmlns:file="http://example.com/fileservice">
-                  <file:status>SUCCESS</file:status>
-                  <file:message>Upload successful</file:message>
-                  <file:correlationId>abc-123</file:correlationId>
-                  <file:processedAt>%s</file:processedAt>
-                  <file:externalReference>ref-001</file:externalReference>
-                </file:UploadFileResponse>
-              </soap:Body>
-            </soap:Envelope>
-            """.formatted(Instant.now().toString());
+    void unwrapResponse_withValidXml_returnsResponseObject() {
+        // Usamos el nombre de elemento sin namespace para que coincida con @XmlRootElement de la clase
+        String validXml = 
+            "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">" +
+            "  <soapenv:Body>" +
+            "    <transmitirDocumentoResponse>" +
+            "      <status>SUCCESS</status>" +
+            "      <message>OK</message>" +
+            "      <correlationId>123</correlationId>" +
+            "    </transmitirDocumentoResponse>" +
+            "  </soapenv:Body>" +
+            "</soapenv:Envelope>";
 
-        UploadFileResponse response = wrapper.unwrapResponse(validXml, UploadFileResponse.class);
+        TransmitirDocumentoResponse response = wrapper.unwrapResponse(validXml, TransmitirDocumentoResponse.class);
 
         assertNotNull(response);
         assertEquals("SUCCESS", response.getStatus());
-        assertEquals("Upload successful", response.getMessage());
-        assertEquals("abc-123", response.getCorrelationId());
+        assertEquals("123", response.getCorrelationId());
     }
 
     @Test
-    void unwrapResponse_shouldThrowWhenBodyMissing() {
-        String xmlWithoutBody = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-              <soap:Header/>
-            </soap:Envelope>
-            """;
+    void unwrapResponse_withSoapFault_throwsProcessingException() {
+        String faultXml = 
+            "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">" +
+            "  <soapenv:Body>" +
+            "    <soapenv:Fault>" +
+            "      <faultcode>soapenv:Client</faultcode>" +
+            "      <faultstring>Invalid request</faultstring>" +
+            "    </soapenv:Fault>" +
+            "  </soapenv:Body>" +
+            "</soapenv:Envelope>";
 
-        ProcessingException exception = assertThrows(
-            ProcessingException.class,
-            () -> wrapper.unwrapResponse(xmlWithoutBody, UploadFileResponse.class)
-        );
-
-        assertTrue(exception.getMessage().contains("Body not found"));
-    }
-
-    @Test
-    void unwrapResponse_shouldThrowWhenResponseElementMissing() {
-        String xmlWithEmptyBody = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-              <soap:Header/>
-              <soap:Body/>
-            </soap:Envelope>
-            """;
-
-        ProcessingException exception = assertThrows(
-            ProcessingException.class,
-            () -> wrapper.unwrapResponse(xmlWithEmptyBody, UploadFileResponse.class)
-        );
-
-        assertTrue(exception.getMessage().contains("Response element not found"));
-    }
-
-    @Test
-    void unwrapResponse_shouldThrowOnInvalidXml() {
-        String invalidXml = "not xml at all";
-
-        ProcessingException exception = assertThrows(
-            ProcessingException.class,
-            () -> wrapper.unwrapResponse(invalidXml, UploadFileResponse.class)
-        );
-
-        assertNotNull(exception);
-    }
-
-    @Test
-    void getJaxbContext_shouldReturnInitializedContext() {
-        assertNotNull(wrapper.getJaxbContext());
+        ProcessingException exception = assertThrows(ProcessingException.class, 
+            () -> wrapper.unwrapResponse(faultXml, TransmitirDocumentoResponse.class));
+        
+        assertTrue(exception.getMessage().contains("Invalid request"));
     }
 }

@@ -21,5 +21,10 @@ public record Document(
     String parentZipName,
     String useCase,
     LocalDateTime createdAt,
-    LocalDateTime updatedAt
-) {}
+    LocalDateTime updatedAt,
+    Integer retryCount
+) {
+    public int getRetryCountSafe() {
+        return retryCount != null ? retryCount : 0;
+    }
+}

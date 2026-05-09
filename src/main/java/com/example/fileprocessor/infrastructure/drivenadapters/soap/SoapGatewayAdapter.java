@@ -3,7 +3,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
@@ -38,7 +38,7 @@ public class SoapGatewayAdapter implements SoapGateway {
     private final SoapMapper mapper;
 
     @Override
-    public Mono<FileUploadResult> send(FileUploadRequest request) {
+    public Mono<FileUploadResponse> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
             final String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
 
@@ -71,8 +71,8 @@ public class SoapGatewayAdapter implements SoapGateway {
         return throwable instanceof TimeoutException || throwable instanceof ConnectException;
     }
 
-    private FileUploadResult buildSuccessResult(ExternalServiceResponse response) {
-        return FileUploadResult.builder()
+    private FileUploadResponse buildSuccessResult(ExternalServiceResponse response) {
+        return FileUploadResponse.builder()
                 .status(response.getStatus())
                 .message(response.getMessage())
                 .correlationId(response.getCorrelationId())
@@ -82,7 +82,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .build();
     }
 
-    private FileUploadResult buildErrorResult(Throwable error, String traceId) {
+    private FileUploadResponse buildErrorResult(Throwable error, String traceId) {
         String errorCode = mapErrorCode(error);
         String message = error.getMessage();
 
@@ -93,7 +93,7 @@ public class SoapGatewayAdapter implements SoapGateway {
         log.log(Level.SEVERE, "[SOAP] Final failure for traceId: {0}, code: {1}, message: {2}",
                 new Object[]{traceId, errorCode, message});
 
-        return FileUploadResult.builder()
+        return FileUploadResponse.builder()
                 .status(DocumentStatus.FAILURE.name())
                 .errorCode(errorCode)
                 .traceId(traceId)

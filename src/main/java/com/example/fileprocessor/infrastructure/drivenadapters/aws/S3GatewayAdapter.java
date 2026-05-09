@@ -1,11 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.aws;
 
-import com.example.fileprocessor.domain.entity.DocumentHistory;
 import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
-import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
@@ -20,7 +17,6 @@ import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
@@ -35,25 +31,22 @@ public class S3GatewayAdapter implements S3Gateway {
 
     private final S3AsyncClient s3Client;
     private final S3Properties s3Properties;
-    private final DocumentHistoryRepository historyRepository;
 
-    public S3GatewayAdapter(S3AsyncClient s3Client, S3Properties s3Properties,
-                            DocumentHistoryRepository historyRepository) {
+    public S3GatewayAdapter(S3AsyncClient s3Client, S3Properties s3Properties) {
         this.s3Client = s3Client;
         this.s3Properties = s3Properties;
-        this.historyRepository = historyRepository;
     }
 
     @Override
-    public Mono<FileUploadResult> send(FileUploadRequest request) {
+    public Mono<FileUploadResponse> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
-            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
             log.log(Level.INFO, "Sending S3 upload request for documentId: {0}, traceId: {1}", new Object[]{request.getDocumentId(), traceId});
 
             byte[] content = request.getContent();
             if (content == null || content.length == 0) {
                 log.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
-                return Mono.just(FileUploadResult.builder()
+                return Mono.just(FileUploadResponse.builder()
                     .status(DocumentStatus.FAILURE.name())
                     .errorCode(ProcessingResultCodes.EMPTY_CONTENT)
                     .traceId(traceId)
@@ -85,15 +78,13 @@ public class S3GatewayAdapter implements S3Gateway {
                 .retryWhen(Retry.backoff(s3Properties.retryAttempts(), Duration.ofMillis(s3Properties.retryBackoffMillis()))
                     .filter(this::isRetryableException)
                     .doBeforeRetry(retrySignal -> {
-                        traceRetry(request, retrySignal);
                         long attempt = retrySignal.totalRetries() + 1;
-                        log.log(Level.WARNING, "Retrying S3 upload for documentId={0}, attempt {1}/{2} (backoff={3}ms)",
-                            new Object[]{request.getDocumentId(), attempt, s3Properties.retryAttempts(),
-                            s3Properties.retryBackoffMillis() * attempt});
+                        log.log(Level.WARNING, "Retrying S3 upload for documentId={0}, attempt {1}/{2}",
+                            new Object[]{request.getDocumentId(), attempt, s3Properties.retryAttempts()});
                     }))
                 .map(completed -> {
                     log.log(Level.INFO, "S3 upload successful: {0} -> {1}/{2}", new Object[]{request.getFilename(), s3Properties.bucketName(), key});
-                    return FileUploadResult.builder()
+                    return FileUploadResponse.builder()
                         .status(DocumentStatus.SUCCESS.name())
                         .message("Uploaded to S3: " + s3Properties.bucketName() + "/" + key)
                         .correlationId(completed.eTag())
@@ -107,94 +98,42 @@ public class S3GatewayAdapter implements S3Gateway {
         });
     }
 
-    private Mono<FileUploadResult> handleS3Error(Throwable error, String documentId, String traceId) {
-        while (error instanceof RuntimeException && error.getCause() != null && error.getCause() != error) {
-            error = error.getCause();
-        }
-        log.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, error.getMessage()});
-
-        if (error instanceof TimeoutException) {
-            return Mono.just(FileUploadResult.builder()
-                .status(DocumentStatus.FAILURE.name())
-                .errorCode(S3ErrorCodes.GATEWAY_TIMEOUT)
-                .traceId(traceId)
-                .processedAt(Instant.now())
-                .success(false)
-                .build());
+    private Mono<FileUploadResponse> handleS3Error(Throwable error, String documentId, String traceId) {
+        Throwable actualError = error;
+        if (error.getCause() != null && error.getClass().getName().contains("RetryExhausted")) {
+            actualError = error.getCause();
         }
 
-        String errorCode = categorizeS3Error(error);
-        log.log(Level.WARNING, "S3 error categorized as {0} for documentId {1}", new Object[]{errorCode, documentId});
+        log.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, actualError.getMessage()});
 
-        return Mono.just(FileUploadResult.builder()
+        String errorCode = categorizeS3Error(actualError);
+        return Mono.just(FileUploadResponse.builder()
             .status(DocumentStatus.FAILURE.name())
             .errorCode(errorCode)
             .traceId(traceId)
+            .message(actualError.getMessage())
             .processedAt(Instant.now())
             .success(false)
             .build());
     }
 
-    private void traceRetry(FileUploadRequest request, Retry.RetrySignal signal) {
-        int attempt = (int) signal.totalRetries() + 1;
-        String errorCode = signal.failure() instanceof ProcessingException pe
-            ? pe.getErrorCode() : S3ErrorCodes.UNKNOWN_ERROR;
-        historyRepository.save(DocumentHistory.builder()
-            .documentId(request.getDocId())
-            .filename(request.getFilename())
-            .operation("S3")
-            .result(DocumentStatus.FAILURE.name())
-            .errorCode(errorCode)
-            .errorMessage(signal.failure().getMessage())
-            .retry(attempt)
-            .startedAt(LocalDateTime.now())
-            .completedAt(LocalDateTime.now())
-            .createdAt(LocalDateTime.now())
-            .build())
-            .doOnError(e -> log.log(Level.WARNING, "Failed to record S3 retry trace: {0}", e.getMessage()))
-            .subscribe();
-    }
-
     String categorizeS3Error(Throwable error) {
+        if (error instanceof TimeoutException) return S3ErrorCodes.GATEWAY_TIMEOUT;
+        
         if (error instanceof software.amazon.awssdk.services.s3.model.S3Exception e) {
             Integer statusCode = e.statusCode();
             if (statusCode != null) {
-                if (statusCode == 403) {
-                    return S3ErrorCodes.ACCESS_DENIED;
-                }
-                if (statusCode == 404) {
-                    return S3ErrorCodes.NOT_FOUND;
-                }
-                if (statusCode == 503) {
-                    return S3ErrorCodes.SERVICE_UNAVAILABLE;
-                }
-            }
-            String awsErrorCode = e.awsErrorDetails() != null ? e.awsErrorDetails().errorCode() : null;
-            if ("Throttling".equals(awsErrorCode) || "ThrottlingException".equals(awsErrorCode)) {
-                return S3ErrorCodes.SERVICE_UNAVAILABLE;
-            }
-            if ("AccessDenied".equals(awsErrorCode)) {
-                return S3ErrorCodes.ACCESS_DENIED;
-            }
-        }
-        if (error instanceof software.amazon.awssdk.core.exception.SdkException e) {
-            String name = e.getClass().getSimpleName();
-            if (name.contains("ServiceException") || name.contains("SocketTimeout")
-                || name.contains("ConnectTimeout")) {
-                return S3ErrorCodes.SERVICE_UNAVAILABLE;
+                if (statusCode == 403) return S3ErrorCodes.ACCESS_DENIED;
+                if (statusCode == 404) return S3ErrorCodes.NOT_FOUND;
+                if (statusCode == 503) return S3ErrorCodes.SERVICE_UNAVAILABLE;
             }
         }
         return S3ErrorCodes.UNKNOWN_ERROR;
     }
 
     boolean isRetryableException(Throwable throwable) {
-        if (throwable instanceof TimeoutException) return true;
-        if (throwable instanceof software.amazon.awssdk.core.exception.SdkException e) {
-            String name = e.getClass().getSimpleName();
-            return name.contains("ServiceException") || name.contains("SocketTimeoutException")
-                || name.contains("ConnectTimeoutException");
-        }
-        return false;
+        return throwable instanceof TimeoutException || 
+               throwable instanceof software.amazon.awssdk.core.exception.SdkException;
     }
 
     String buildKey(String traceId, String filename) {
@@ -204,10 +143,6 @@ public class S3GatewayAdapter implements S3Gateway {
 
     String sanitizeFilename(String filename) {
         if (filename == null || filename.isBlank()) return "unnamed";
-        String sanitized = filename.replaceAll("[\\x00-\\x1F\\x7F]", "");
-        sanitized = sanitized.replace("..", "").replace("/", "").replace("\\", "");
-        sanitized = sanitized.replaceAll("[^a-zA-Z0-9._-]", "");
-        if (sanitized.isBlank()) return "unnamed";
-        return sanitized;
+        return filename.replaceAll("[^a-zA-Z0-9._-]", "");
     }
 }

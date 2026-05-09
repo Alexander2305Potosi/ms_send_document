@@ -6,13 +6,13 @@ import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class FileUploadResultTest {
+class FileUploadResponseTest {
 
     @Test
     void builder_shouldCreateInstance() {
         Instant now = Instant.now();
 
-        FileUploadResult result = FileUploadResult.builder()
+        FileUploadResponse result = FileUploadResponse.builder()
             .status("SUCCESS")
             .message("Upload completed")
             .correlationId("corr-123")
@@ -33,7 +33,7 @@ class FileUploadResultTest {
 
     @Test
     void builder_withFailure_shouldSetSuccessFalse() {
-        FileUploadResult result = FileUploadResult.builder()
+        FileUploadResponse result = FileUploadResponse.builder()
             .status("FAILURE")
             .message("Upload failed")
             .success(false)

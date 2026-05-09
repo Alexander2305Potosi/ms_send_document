@@ -4,7 +4,11 @@ import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
 @XmlRootElement(name = "transmitirDocumentoResponse")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class TransmitirDocumentoResponse {
@@ -25,10 +29,4 @@ public class TransmitirDocumentoResponse {
     private String externalReference;
 
     public TransmitirDocumentoResponse() {}
-
-    public String getStatus() { return status; }
-    public String getMessage() { return message; }
-    public String getCorrelationId() { return correlationId; }
-    public String getProcessedAt() { return processedAt; }
-    public String getExternalReference() { return externalReference; }
 }
