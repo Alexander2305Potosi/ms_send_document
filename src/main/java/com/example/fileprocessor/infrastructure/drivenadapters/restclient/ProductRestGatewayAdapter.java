@@ -49,15 +49,14 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             log.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
                 new Object[]{product.productId(), traceId});
 
-            String path = properties.productDocumentsPath().replace("{productId}", product.productId());
-
             return webClient.get()
-                .uri(path)
+                .uri(properties.productDocumentsPath(), product.productId())
                 .accept(MediaType.APPLICATION_JSON)
                 .header(ApiConstants.HEADER_TRACE_ID, traceId)
                 .retrieve()
                 .bodyToFlux(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
                 .map(doc -> mapToProductDocument(product.productId(), doc))
                 .doOnNext(doc -> log.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
                     new Object[]{doc.productId(), doc.documentId()}));
@@ -71,15 +70,14 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             log.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
                 new Object[]{documentId, productId, traceId});
 
-            String path = properties.productDocumentsPath().replace("{productId}", productId);
-
             return webClient.get()
-                .uri(path + "/{documentId}", documentId)
+                .uri(properties.productDocumentsPath() + "/{documentId}", productId, documentId)
                 .accept(MediaType.APPLICATION_JSON)
                 .header(ApiConstants.HEADER_TRACE_ID, traceId)
                 .retrieve()
                 .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
                 .map(response -> {
                     ProductDocumentHistory doc = mapToProductDocument(productId, response);
                     return ProductDocumentFile.builder()

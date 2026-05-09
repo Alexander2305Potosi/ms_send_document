@@ -66,8 +66,9 @@ public class ProductHandler {
             syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> log.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
                 .doOnSuccess(v -> log.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
+                .contextWrite(ctx)
                 .subscribe();
-            return ServerResponse.ok()
+            return ServerResponse.accepted()
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(java.util.Map.of("status", "OK", "message", "Document sync initiated"));
         }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));

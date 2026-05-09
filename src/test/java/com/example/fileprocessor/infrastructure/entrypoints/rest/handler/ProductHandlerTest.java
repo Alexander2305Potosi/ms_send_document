@@ -191,7 +191,7 @@ class ProductHandlerTest {
 
         StepVerifier.create(responseMono)
             .assertNext(response -> {
-                assertEquals(HttpStatus.OK, response.statusCode());
+                assertEquals(HttpStatus.ACCEPTED, response.statusCode());
                 assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
             })
             .verifyComplete();
@@ -207,7 +207,7 @@ class ProductHandlerTest {
         Mono<ServerResponse> responseMono = handler.syncProducts(request);
 
         StepVerifier.create(responseMono)
-            .assertNext(response -> assertEquals(HttpStatus.OK, response.statusCode()))
+            .assertNext(response -> assertEquals(HttpStatus.ACCEPTED, response.statusCode()))
             .verifyComplete();
     }
 }

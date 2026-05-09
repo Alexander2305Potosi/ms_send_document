@@ -101,7 +101,7 @@ class S3GatewayAdapterTest {
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
-                assertEquals(ProcessingResultCodes.EMPTY_CONTENT, result.getErrorCode());
+                assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), result.getErrorCode());
             })
             .verifyComplete();
 

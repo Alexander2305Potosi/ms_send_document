@@ -65,10 +65,11 @@ public class SoapGatewayAdapter implements SoapGateway {
 
     private boolean isRetryable(Throwable throwable) {
         if (throwable instanceof WebClientResponseException wce) {
-            int code = wce.getStatusCode().value();
-            return code == 503 || code == 502 || code == 504 || code == 429;
+            return wce.getStatusCode().is5xxServerError() || wce.getStatusCode().value() == 429;
         }
-        return throwable instanceof TimeoutException || throwable instanceof ConnectException;
+        return throwable instanceof TimeoutException || 
+               throwable instanceof ConnectException ||
+               throwable instanceof org.springframework.web.reactive.function.client.WebClientRequestException;
     }
 
     private FileUploadResponse buildSuccessResult(ExternalServiceResponse response) {

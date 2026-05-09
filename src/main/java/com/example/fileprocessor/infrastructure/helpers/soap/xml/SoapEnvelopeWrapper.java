@@ -45,7 +45,7 @@ public class SoapEnvelopeWrapper {
             DocumentBuilder builder = documentBuilderFactory.newDocumentBuilder();
             Document doc = builder.parse(new org.xml.sax.InputSource(new StringReader(soapXml)));
 
-            Node fault = doc.getElementsByTagNameNS(SoapConstants.SOAP_ENVELOPE, "Fault").item(0);
+            Node fault = doc.getElementsByTagNameNS(SoapConstants.NS_V1, "Fault").item(0);
             if (fault != null) {
                 Node currentNode = fault.getFirstChild();
                 while (currentNode != null) {
@@ -60,7 +60,7 @@ public class SoapEnvelopeWrapper {
                     "SOAP Fault received", ProcessingResultCodes.INVALID_RESPONSE.name(), null);
             }
 
-            Node body = doc.getElementsByTagNameNS(SoapConstants.SOAP_ENVELOPE, "Body").item(0);
+            Node body = doc.getElementsByTagNameNS(SoapConstants.NS_V1, "Body").item(0);
             if (body == null) {
                 throw ProcessingException.withTraceId(SoapConstants.MSG_SOAP_BODY_NOT_FOUND,
                     ProcessingResultCodes.INVALID_RESPONSE.name(), null);

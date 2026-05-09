@@ -3,53 +3,56 @@ package com.example.fileprocessor.domain.util;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import org.springframework.http.MediaTypeFactory;
 import reactor.core.publisher.Flux;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
  * Utility class for decompressing ZIP archives into individual ProductDocument instances.
+ * Refactored to process entries as a stream (Flux) to avoid memory exhaustion (OOM).
  */
 public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
     public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc) {
-        if (!zipDoc.isZip()) {
+        if (!zipDoc.isZip() || zipDoc.content() == null) {
             return Flux.just(zipDoc);
         }
 
-        List<ProductDocumentHistory> entries = readZipEntries(zipDoc);
-        if (entries.isEmpty()) {
-            return Flux.empty();
-        }
-        return Flux.fromIterable(entries);
-    }
-
-    private static List<ProductDocumentHistory> readZipEntries(ProductDocumentHistory zipDoc) {
-        List<ProductDocumentHistory> entries = new ArrayList<>();
-        try (ZipInputStream zis = new ZipInputStream(
-                new ByteArrayInputStream(zipDoc.content()))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
-                    byte[] decompressed = zis.readAllBytes();
-                    ProductDocumentHistory expanded = buildProductDocument(entry.getName(), decompressed, zipDoc);
-                    entries.add(expanded);
+        return Flux.generate(
+            () -> new ZipInputStream(new ByteArrayInputStream(zipDoc.content())),
+            (zis, sink) -> {
+                try {
+                    ZipEntry entry;
+                    while ((entry = zis.getNextEntry()) != null) {
+                        if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
+                            byte[] decompressed = zis.readAllBytes();
+                            sink.next(buildProductDocument(entry.getName(), decompressed, zipDoc));
+                            return zis; // Emit one entry and wait for next request
+                        }
+                    }
+                    sink.complete();
+                } catch (IOException e) {
+                    sink.error(new ProcessingException(
+                        ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
+                        "Failed to decompress ZIP '" + zipDoc.filename() + "': " + e.getMessage(),
+                        e));
+                }
+                return zis;
+            },
+            zis -> {
+                try {
+                    zis.close();
+                } catch (IOException e) {
+                    // Silent close
                 }
             }
-        } catch (IOException e) {
-            throw new ProcessingException(
-                ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
-                "Failed to decompress ZIP '" + zipDoc.filename() + "': " + e.getMessage(),
-                e);
-        }
-        return entries;
+        );
     }
 
     private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, ProductDocumentHistory original) {
@@ -62,25 +65,17 @@ public final class ZipDecompressor {
             .isZip(false)
             .pais(original.pais())
             .parentZipName(original.filename())
+            .content(content)
             .build();
     }
 
+    /**
+     * Infers the content type based on the filename using Spring's MediaTypeFactory.
+     * This avoids hardcoded if-else blocks and supports standard MIME types automatically.
+     */
     private static String inferContentType(String filename) {
-        if (filename.endsWith(".pdf")) {
-            return "application/pdf";
-        }
-        if (filename.endsWith(".csv")) {
-            return "text/csv";
-        }
-        if (filename.endsWith(".txt")) {
-            return "text/plain";
-        }
-        if (filename.endsWith(".docx")) {
-            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        }
-        if (filename.endsWith(".xlsx")) {
-            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-        }
-        return "application/octet-stream";
+        return MediaTypeFactory.getMediaType(filename)
+                .map(Object::toString)
+                .orElse("application/octet-stream");
     }
 }
