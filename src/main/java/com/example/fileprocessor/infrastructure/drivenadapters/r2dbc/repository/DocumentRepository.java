@@ -4,7 +4,6 @@ import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.Docu
 import org.springframework.data.r2dbc.repository.Modifying;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -14,20 +13,20 @@ import java.time.LocalDateTime;
 @Repository
 public interface DocumentRepository extends R2dbcRepository<DocumentEntity, Long> {
 
-    @Query("SELECT * FROM documentos WHERE estado = :estado AND caso_uso = :casoUso ORDER BY fecha_creacion DESC")
-    Flux<DocumentEntity> findByEstadoAndCasoUsoOrderByFechaCreacionDesc(@Param("estado") String estado, @Param("casoUso") String casoUso);
+    @Query("SELECT * FROM documentos WHERE estado = $1 AND caso_uso = $2 ORDER BY fecha_creacion DESC")
+    Flux<DocumentEntity> findByEstadoAndCasoUsoOrderByFechaCreacionDesc(String estado, String casoUso);
 
-    @Query("SELECT * FROM documentos WHERE estado = :estado AND caso_uso = :casoUso AND fecha_creacion >= :startOfDay")
-    Flux<DocumentEntity> findByStateAndUseCaseToday(@Param("estado") String estado, @Param("casoUso") String casoUso, @Param("startOfDay") LocalDateTime startOfDay);
-
-    @Modifying
-    @Query("UPDATE documentos SET estado = :newState, reintentos = :retryCount, fecha_actualizacion = :updatedAt WHERE id = :id AND estado = :expectedState")
-    Mono<Long> updateStateAndRetry(@Param("id") Long id, @Param("expectedState") String expectedState, @Param("newState") String newState, @Param("retryCount") Integer retryCount, @Param("updatedAt") LocalDateTime updatedAt);
-
-    @Query("SELECT COUNT(*) > 0 FROM documentos WHERE id_producto = :productId AND id_documento = :documentId")
-    Mono<Boolean> existsByProductIdAndDocumentId(@Param("productId") String productId, @Param("documentId") String documentId);
+    @Query("SELECT * FROM documentos WHERE estado = $1 AND caso_uso = $2 AND fecha_creacion >= $3")
+    Flux<DocumentEntity> findByStateAndUseCaseToday(String estado, String casoUso, LocalDateTime startOfDay);
 
     @Modifying
-    @Query("UPDATE documentos SET estado = 'PENDING', fecha_actualizacion = :now WHERE estado = 'IN_PROGRESS' AND caso_uso = :useCase AND fecha_creacion >= :startOfDay AND fecha_actualizacion < :threshold")
-    Mono<Long> resetStaleDocumentsToday(@Param("useCase") String useCase, @Param("startOfDay") LocalDateTime startOfDay, @Param("threshold") LocalDateTime threshold, @Param("now") LocalDateTime now);
+    @Query("UPDATE documentos SET estado = $1, reintentos = $2, fecha_actualizacion = $3 WHERE id = $4 AND estado = $5")
+    Mono<Long> updateStateAndRetry(String newState, Integer retryCount, LocalDateTime updatedAt, Long id, String expectedState);
+
+    @Query("SELECT COUNT(*) > 0 FROM documentos WHERE id_producto = $1 AND id_documento = $2")
+    Mono<Boolean> existsByProductIdAndDocumentId(String productId, String documentId);
+
+    @Modifying
+    @Query("UPDATE documentos SET estado = 'PENDING', fecha_actualizacion = $1 WHERE estado = 'IN_PROGRESS' AND caso_uso = $2 AND fecha_creacion >= $3 AND fecha_actualizacion < $4")
+    Mono<Long> resetStaleDocumentsToday(LocalDateTime now, String useCase, LocalDateTime startOfDay, LocalDateTime threshold);
 }
