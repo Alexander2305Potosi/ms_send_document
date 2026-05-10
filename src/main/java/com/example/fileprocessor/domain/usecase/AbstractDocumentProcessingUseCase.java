@@ -14,6 +14,8 @@ import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import lombok.AllArgsConstructor;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -25,6 +27,7 @@ import java.util.logging.Logger;
  * 3-retry policy and transactional tracking.
  * Pure domain logic (no infrastructure dependencies).
  */
+@AllArgsConstructor
 public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger LOGGER = Logger.getLogger(getClass().getName());
@@ -32,15 +35,6 @@ public abstract class AbstractDocumentProcessingUseCase {
     private final DocumentPersistenceGateway persistencePort;
     private final ProductRestGateway productRestGateway;
     private final RulesBussinesGateway documentValidator;
-
-    protected AbstractDocumentProcessingUseCase(
-            DocumentPersistenceGateway persistencePort,
-            ProductRestGateway productRestGateway,
-            RulesBussinesGateway documentValidator) {
-        this.persistencePort = persistencePort;
-        this.productRestGateway = productRestGateway;
-        this.documentValidator = documentValidator;
-    }
 
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();

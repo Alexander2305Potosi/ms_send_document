@@ -20,14 +20,6 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(ProcessorsProperties.class)
 public class DomainConfig {
 
-    @Bean
-    public RulesBussinesGateway syncDocumentValidator(ProcessorsProperties properties) {
-        ProcessorsProperties.ProcessorConfig syncConfig = new ProcessorsProperties.ProcessorConfig(
-            Long.MAX_VALUE,
-            properties.soap() != null ? properties.soap().filenamePattern() : ".*"
-        );
-        return new RulesBussinesService(syncConfig);
-    }
 
     @Bean
     @ConditionalOnBean(SoapGateway.class)
