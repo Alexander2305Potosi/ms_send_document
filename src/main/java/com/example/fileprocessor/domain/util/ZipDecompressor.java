@@ -70,7 +70,6 @@ public final class ZipDecompressor {
             .size((long) content.length)
             .isZip(false)
             .pais(original.getPais())
-            .parentZipName(original.getFilename())
             .content(content)
             .build();
     }

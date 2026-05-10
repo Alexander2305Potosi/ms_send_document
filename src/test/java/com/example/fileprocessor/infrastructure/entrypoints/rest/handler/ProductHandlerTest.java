@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
@@ -82,7 +82,7 @@ class ProductHandlerTest {
 
     private static FileUploadResponse successResult() {
         return FileUploadResponse.builder()
-            .status(DocumentStatus.SUCCESS.name())
+            .status(ProcessingResultCodes.SUCCESS.name())
             .success(true)
             .correlationId("corr-123")
             .traceId("trace-1")

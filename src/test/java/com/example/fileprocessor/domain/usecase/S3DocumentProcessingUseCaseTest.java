@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductDocumentFile;
@@ -11,7 +10,6 @@ import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
-import com.example.fileprocessor.infrastructure.drivenadapters.aws.S3ErrorCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -90,7 +88,7 @@ class S3DocumentProcessingUseCaseTest {
     @Test
     void uploadDocument_whenSuccess_returnsSuccessResult() {
         FileUploadResponse successResult = FileUploadResponse.builder()
-            .status(DocumentStatus.SUCCESS.name())
+            .status(ProcessingResultCodes.SUCCESS.name())
             .success(true)
             .correlationId("corr-123")
             .processedAt(Instant.now())
@@ -115,7 +113,7 @@ class S3DocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
             })
             .verifyComplete();
     }
@@ -123,9 +121,9 @@ class S3DocumentProcessingUseCaseTest {
     @Test
     void uploadDocument_whenGatewayReturnsFailureStatus_propagatesFailure() {
         FileUploadResponse failureResult = FileUploadResponse.builder()
-            .status(DocumentStatus.FAILURE.name())
+            .status(ProcessingResultCodes.FAILURE.name())
             .success(false)
-            .errorCode(S3ErrorCodes.SERVICE_UNAVAILABLE)
+            .errorCode(ProcessingResultCodes.SERVICE_UNAVAILABLE.name())
             .message("S3 unavailable")
             .build();
 
@@ -135,7 +133,7 @@ class S3DocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(S3ErrorCodes.SERVICE_UNAVAILABLE, result.getErrorCode());
+                assertEquals(ProcessingResultCodes.SERVICE_UNAVAILABLE.name(), result.getErrorCode());
             })
             .verifyComplete();
     }
@@ -150,7 +148,6 @@ class S3DocumentProcessingUseCaseTest {
             .state(ProductState.PENDING)
             .useCase("S3")
             .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
             .retryCount(0)
             .build();
 
@@ -166,7 +163,7 @@ class S3DocumentProcessingUseCaseTest {
             .build();
 
         FileUploadResponse successResult = FileUploadResponse.builder()
-            .status(DocumentStatus.SUCCESS.name())
+            .status(ProcessingResultCodes.SUCCESS.name())
             .success(true)
             .correlationId("corr-123")
             .processedAt(Instant.now())

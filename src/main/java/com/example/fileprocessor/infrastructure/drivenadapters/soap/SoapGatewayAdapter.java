@@ -1,6 +1,5 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
@@ -96,7 +95,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                 traceId, errorCode, message), error);
 
         return FileUploadResponse.builder()
-                .status(DocumentStatus.FAILURE.name())
+                .status(ProcessingResultCodes.FAILURE.name())
                 .errorCode(errorCode)
                 .traceId(traceId)
                 .message(message)

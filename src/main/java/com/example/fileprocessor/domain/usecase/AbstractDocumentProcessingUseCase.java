@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
@@ -125,7 +124,7 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     private FileUploadResponse buildErrorResponse(String errorCode, String message) {
         return FileUploadResponse.builder()
-            .status(DocumentStatus.FAILURE.name())
+            .status(ProcessingResultCodes.FAILURE.name())
             .errorCode(errorCode)
             .message(message)
             .processedAt(Instant.now())

@@ -23,14 +23,13 @@ Microservicio reactivo basado en **Spring WebFlux + R2DBC** que gestiona el proc
 15. [Ejemplos de curl](#ejemplos-de-curl)
 16. [Excepciones y Manejo de Errores](#excepciones-y-manejo-de-errores)
 17. [Testing y QA](#testing-y-qa)
-18. [Estrategia de Homologación (SOAP)](#estrategia-de-homologacion-soap)
-19. [Stack Tecnológico](#stack-tecnologico)
+18. [Stack Tecnológico](#stack-tecnologico)
 
 ---
 
-## Arquitectura (Clean Architecture)
+## Arquitectura (Clean Architecture Simplificada)
 
-El proyecto sigue **Clean Architecture** con capas estrictamente separadas. La capa de dominio es **Java puro** sin ninguna dependencia de frameworks (incluyendo la eliminación de `org.springframework`). La comunicación entre capas se realiza exclusivamente a través de puertos (interfaces en `port/out`). Se ha implementado la inversión de dependencia para la gestión de transacciones y resolución de tipos MIME.
+El proyecto sigue **Clean Architecture** con una simplificación orientada a reducir el "pasamanos" innecesario y la complejidad técnica. Se ha eliminado el subsistema de homologación dinámico por no aportar valor al negocio actual. La capa de dominio es **Java puro** y la comunicación entre capas se realiza exclusivamente a través de puertos (interfaces en `port/out`). Se mantiene la inversión de dependencia para la gestión de transacciones y resolución de tipos MIME.
 
 ### Estructura de Directorios Detallada
 
@@ -40,26 +39,21 @@ com.example.fileprocessor/
 │
 ├── domain/                                       # Capa de dominio
 │   ├── entity/
-│   │   ├── Document.java                       # Record: metadatos del documento + estado actual (17 campos)
-│   │   ├── DocumentHistory.java                # Record: trazabilidad de operaciones (13 campos, append-only)
-│   │   ├── DocumentStatus.java                 # Enum: SUCCESS, FAILURE
+│   │   ├── Document.java                       # Record: metadatos del documento + estado actual
 │   │   ├── ProductDocumentFile.java            # Record: documento obtenido de REST API
-│   │   ├── ProductDocumentHistory.java          # Record: documento procesable (incluye productId, isZip, pais)
+│   │   ├── ProductDocumentHistory.java         # Record: documento procesable (productId, isZip, pais)
 │   │   ├── ProductState.java                   # Constantes de estado: PENDING, IN_PROGRESS, PROCESSED, FAILED
 │   │   ├── FileUploadRequest.java              # Request para upload a gateway (SOAP/S3)
-│   │   ├── FileUploadResponse.java               # Resultado de upload con status, errorCode
+│   │   ├── FileUploadResponse.java             # Resultado de upload con status, errorCode
 │   │   ├── FinalizeProcessingCommand.java      # Parameter Object: encapsula datos para finalización atómica
-│   │   ├── HomologationResult.java             # Resultado de homologacion (origin, paisHomologado)
 │   │   ├── ExternalServiceResponse.java        # Respuesta genérica de servicio externo
-│   │   ├── ProductHistory.java                 # Record: producto (metadata)
-│   │   ├── CategoryManual.java                 # Record: homologación de categoría
-│   │   └── CountryHomologated.java             # Record: homologación de país
+│   │   └── ProductHistory.java                 # Record: producto (metadata)
 │   ├── usecase/
 │   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method: Pipeline de Resiliencia y transaccionalidad
 │   │   ├── SoapDocumentProcessingUseCase.java       # Implementación SOAP Unificada
 │   │   ├── S3DocumentProcessingUseCase.java         # Implementación S3
 │   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y metadatos desde API REST
-│   │   └── ProcessingResultCodes.java               # Constantes de códigos de error
+│   │   └── ProcessingResultCodes.java               # Enum: Single source of truth para estados y errores
 │   ├── service/
 │   │   └── RulesBussinesService.java              # Validación de documentos (tamaño, patrón de nombre)
 │   ├── util/
@@ -72,8 +66,7 @@ com.example.fileprocessor/
 │   │   ├── ProductRestGateway.java               # Puerto: consumo API REST externa de productos
 │   │   ├── RulesBussinesGateway.java             # Puerto: validación de documentos
 │   │   ├── S3Gateway.java                        # Puerto: envío a S3
-│   │   ├── SoapGateway.java                      # Puerto: envío a SOAP unificado
-│   │   └── HomologationRepository.java           # Puerto: resolución de origin y pais
+│   │   └── SoapGateway.java                      # Puerto: envío a SOAP unificado
 │   └── exception/
 │       ├── DomainException.java                  # Base abstracta (RuntimeException + errorCode)
 │       ├── InvalidBase64Exception.java           # Error de decodificación Base64
@@ -94,7 +87,6 @@ com.example.fileprocessor/
     │   │   ├── DocumentR2dbcAdapter.java          # Hereda de AbstractReactiveAdapterOperation
     │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository
     │   │   ├── ProductR2dbcAdapter.java           # Hereda de AbstractReactiveAdapterOperation
-    │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (caché en memoria)
     │   │   ├── entity/                            # Entidades mapeadas a tablas SQL
     │   │   ├── mapper/                            # Mapeadores Entidad-Dominio (DocumentMapper, ProductMapper)
     │   │   └── repository/                        # Repositorios Spring Data R2DBC
@@ -102,13 +94,9 @@ com.example.fileprocessor/
     │   │   ├── ProductRestGatewayAdapter.java     # Implementa cliente WebClient para API REST
     │   │   └── dto/                               # DTOs JSON (ProductResponse, ProductDocumentResponse)
     │   ├── soap/
-    │   │   ├── SoapGatewayAdapter.java            # Cliente HTTP (WebClient) para peticiones SOAP
-    │   │   ├── SoapErrorCodes.java                # Constantes locales
-    │   │   └── config/SoapProperties.java         # Propiedades específicas de SOAP
+    │   │   └── SoapGatewayAdapter.java            # Cliente HTTP (WebClient) para peticiones SOAP
     │   └── aws/
-    │       ├── S3GatewayAdapter.java              # Cliente asíncrono para AWS S3
-    │       ├── S3ErrorCodes.java                  # Constantes locales
-    │       └── config/                            # Beans y propiedades AWS
+    │       └── S3GatewayAdapter.java              # Cliente asíncrono para AWS S3
     ├── entrypoints/rest/
     │   ├── ProductRoutes.java                     # Router function (GET /products, GET /products/sync)
     │   ├── handler/ProductHandler.java            # Orquestador de solicitudes HTTP
@@ -236,27 +224,24 @@ Se utiliza R2DBC para interactuar de forma no bloqueante con PostgreSQL (producc
 
 ### Tabla: `documentos` (Single Source of Truth)
 
-Almacena el estado transaccional actual del documento.
+Almacena el estado transaccional actual del documento. Se han simplificado los campos eliminando redundancias.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador único auto-generado |
 | `id_documento` | VARCHAR(100) | ID del documento en el sistema externo |
 | `id_producto` | VARCHAR(100) | ID del producto padre |
-| `activo` | BOOLEAN | Actividad lógica (default: TRUE) |
-| `clave_documento` | VARCHAR(255) | Clave de documento |
 | `nombre` | VARCHAR(255) | Nombre del archivo |
-| `propietario` | VARCHAR(255) | Propietario del documento |
-| `ruta` | TEXT | Ruta del documento (nullable) |
 | `estado` | VARCHAR(100) | Estado: PENDING, IN_PROGRESS, PROCESSED, FAILED |
-| `version_contrato` | VARCHAR(50) | Versión de contrato |
-| `mensaje_error` | TEXT | Resumen del último fallo |
+| `mensaje_error` | TEXT | Resumen del último fallo técnico |
 | `es_zip` | BOOLEAN | Indica si el origen fue un archivo ZIP comprimido |
-| `nombre_zip_padre` | VARCHAR(255) | Si viene de un ZIP, guarda el nombre de dicho ZIP padre |
 | `caso_uso` | VARCHAR(100) | Caso de uso: SOAP o S3 |
 | `retry_count` | INTEGER | Contador de intentos técnicos fallidos (Default: 0) |
 | `fecha_creacion` | TIMESTAMP | Fecha de creación del registro en sync |
 | `fecha_actualizacion` | TIMESTAMP | Crucial para la detección de "Stale Documents" |
+
+> [!NOTE]
+> Los campos `activo`, `clave_documento`, `propietario`, `ruta`, `version_contrato` y `nombre_zip_padre` han sido DEPRECATED y deben ser eliminados del esquema físico.
 
 ### Tabla: `historico_documentos` (Append-Only Audit Log)
 
@@ -266,22 +251,87 @@ Registra cada evento de manera inmutable. Su persistencia está vinculada transa
 |---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador único |
 | `documento_id` | BIGINT (FK) | Referencia a `documentos(id)` |
-| `nombre_archivo` | VARCHAR(255) | Útil para trazar entradas específicas dentro de un archivo ZIP descompreso (Será NULL si el origen no es ZIP) |
+| `nombre_archivo` | VARCHAR(255) | Útil para trazar entradas dentro de un ZIP (NULL si no es ZIP) |
 | `operacion` | VARCHAR(50) | Tipo de operación: SYNC, SOAP, S3 |
-| `message_id` | VARCHAR(100) | Trace ID para correlación ELK/Splunk |
-| `resultado` | VARCHAR(50) | SUCCESS / FAILURE |
+| `resultado` | VARCHAR(50) | SUCCESS / FAILURE (Mapeado desde ProcessingResultCodes) |
 | `codigo_error` | VARCHAR(50) | Categorización (GATEWAY_TIMEOUT, SIZE_EXCEEDED, etc.) |
 | `mensaje_error` | TEXT | Mensaje descriptivo del fallo |
 | `stack_trace` | TEXT | Stack trace detallado si ocurre una excepción |
-| `reintentos` | INTEGER | Intento en el que se generó esta traza (1 a 3) |
+| `reintentos` | INTEGER | Intento en el que se generó esta traza |
 | `fecha_inicio` | TIMESTAMP | Inicio de la operación |
 | `fecha_fin` | TIMESTAMP | Fin de la operación |
-| `fecha_creacion` | TIMESTAMP | Registro de la auditoría |
 
-### Otras tablas (Catálogos y Productos)
-- **`productos`**: Almacena información consolidada por producto (`id`, `id_producto`, `nombre`, `estado`).
-- **`categoria_manual`**: `categoria` (ej. "manual_tecnico"), `descripcion_manual` ("Manual Técnico del Producto").
-- **`pais_homologado`**: `pais` ("AR"), `pais_homologado` ("Argentina").
+> [!NOTE]
+> El campo `message_id` ha sido eliminado por falta de uso funcional en la arquitectura actual.
+
+### Esquema de Base de Datos (Estado Final Refactorizado)
+
+A continuación se detalla el DDL completo para recrear las tablas con secuencias explícitas:
+
+```sql
+-- Secuencias para auto-incremento
+CREATE SEQUENCE IF NOT EXISTS documentos_id_seq;
+CREATE SEQUENCE IF NOT EXISTS historico_documentos_id_seq;
+
+-- Tabla: documentos
+CREATE TABLE documentos (
+    id BIGINT PRIMARY KEY DEFAULT NEXTVAL('documentos_id_seq'),
+    id_documento VARCHAR(100) NOT NULL,
+    id_producto VARCHAR(100) NOT NULL,
+    nombre VARCHAR(255) NOT NULL,
+    estado VARCHAR(100) NOT NULL,
+    mensaje_error TEXT,
+    es_zip BOOLEAN DEFAULT FALSE,
+    caso_uso VARCHAR(100) NOT NULL,
+    reintentos INTEGER DEFAULT 0,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla: historico_documentos
+CREATE TABLE historico_documentos (
+    id BIGINT PRIMARY KEY DEFAULT NEXTVAL('historico_documentos_id_seq'),
+    documento_id BIGINT NOT NULL,
+    nombre_archivo VARCHAR(255),
+    operacion VARCHAR(50) NOT NULL,
+    resultado VARCHAR(50) NOT NULL,
+    codigo_error VARCHAR(50),
+    mensaje_error TEXT,
+    stack_trace TEXT,
+    reintentos INTEGER,
+    fecha_inicio TIMESTAMP,
+    fecha_fin TIMESTAMP,
+    CONSTRAINT fk_documento FOREIGN KEY (documento_id) REFERENCES documentos(id)
+);
+
+-- Vincular secuencias a las columnas (PostgreSQL)
+ALTER SEQUENCE documentos_id_seq OWNED BY documentos.id;
+ALTER SEQUENCE historico_documentos_id_seq OWNED BY historico_documentos.id;
+```
+
+### DDL de Migración (Limpieza de Esquema)
+
+Si ya cuentas con una base de datos previa, ejecuta este script para eliminar los campos obsoletos y las tablas innecesarias:
+
+```sql
+-- Tabla documentos: Eliminar campos en desuso
+ALTER TABLE documentos DROP COLUMN IF EXISTS activo;
+ALTER TABLE documentos DROP COLUMN IF EXISTS clave_documento;
+ALTER TABLE documentos DROP COLUMN IF EXISTS propietario;
+ALTER TABLE documentos DROP COLUMN IF EXISTS ruta;
+ALTER TABLE documentos DROP COLUMN IF EXISTS version_contrato;
+ALTER TABLE documentos DROP COLUMN IF EXISTS mensaje_error;
+ALTER TABLE documentos DROP COLUMN IF EXISTS nombre_zip_padre;
+
+-- Tabla historico_documentos: Eliminar campos en desuso
+ALTER TABLE historico_documentos DROP COLUMN IF EXISTS message_id;
+ALTER TABLE historico_documentos DROP COLUMN IF EXISTS fecha_creacion;
+
+-- Eliminar tablas obsoletas
+DROP TABLE IF EXISTS productos;
+DROP TABLE IF EXISTS categoria_manual;
+DROP TABLE IF EXISTS pais_homologado;
+```
 
 ### Índices Críticos
 ```sql
@@ -384,19 +434,24 @@ La clase `AbstractDocumentProcessingUseCase` maneja los siguientes escenarios:
 
 ---
 
-## Códigos de Error y Matriz de Fallos
+## Códigos de Error y Matriz de Fallos (ProcessingResultCodes)
+
+Se utiliza un Enum centralizado como única fuente de verdad para clasificar el resultado de las operaciones.
 
 | Código | Clasificación | Acción en Pipeline |
 | :--- | :--- | :--- |
-| `GATEWAY_TIMEOUT` | Técnico | Consume intento (Pasa a PENDING si hay retries disponibles) |
-| `BAD_GATEWAY` | Técnico | Consume intento (Pasa a PENDING) |
-| `SERVICE_UNAVAILABLE`| Técnico | Consume intento (Pasa a PENDING) |
-| `UNKNOWN_ERROR` | Técnico | Consume intento (Fallback general) |
-| `SIZE_EXCEEDED` | Negocio | Skip / Finaliza como PROCESSED (Fallo documentado en histórico) |
-| `INVALID_FILENAME` | Negocio | Skip / Finaliza como PROCESSED |
+| `SUCCESS` | Éxito | Finaliza como PROCESSED |
+| `GATEWAY_TIMEOUT` | Técnico (Retryable) | Reintenta (Vuelve a PENDING si hay intentos) |
+| `BAD_GATEWAY` | Técnico (Retryable) | Reintenta (Vuelve a PENDING) |
+| `SERVICE_UNAVAILABLE`| Técnico (Retryable) | Reintenta (Vuelve a PENDING) |
+| `EMPTY_CONTENT` | Negocio/Datos | Pasa a FAILED inmediatamente |
 | `INVALID_BASE64` | Datos (Crítico) | Pasa a FAILED inmediatamente |
 | `DECOMPRESSION_ERROR`| Datos (Crítico) | Pasa a FAILED inmediatamente |
-| `ACCESS_DENIED` | Negocio/Infra (403) | Pasa a FAILED inmediatamente |
+| `SIZE_EXCEEDED` | Negocio | Skip (Finaliza como PROCESSED) |
+| `PATTERN_MISMATCH` | Negocio | Skip (Finaliza como PROCESSED) |
+| `SOURCE_NOT_FOUND` | Externo (404) | Pasa a FAILED inmediatamente |
+| `DEST_UNAUTHORIZED` | Seguridad (403) | Pasa a FAILED inmediatamente |
+| `UNKNOWN_ERROR` | Genérico | Pasa a FAILED o reintenta según contexto |
 
 ---
 
@@ -413,6 +468,19 @@ return historyRepository.saveHistory(...)
 ```
 
 Si el servidor colapsa (OOM, SigKill) durante el envío, la transacción no se cierra. El documento quedará en `IN_PROGRESS` y será rescatado en la siguiente ejecución del `GET /api/v1/products` por el método `resetStaleDocumentsToday`.
+
+---
+
+## Decisiones de Diseño y Optimizaciones
+
+### 1. Procesamiento Secuencial (Backpressure)
+Aunque el stack es reactivo, se ha optado por un procesamiento secuencial de documentos (`concatMap`) dentro de cada petición. Esto evita saturar los gateways externos (SOAP/S3) con ráfagas masivas de peticiones concurrentes y permite un control granular de los reintentos.
+
+### 2. Auditoría Atómica
+Toda operación que cambie el estado de un documento (`documentos`) debe registrar obligatoriamente una entrada en `historico_documentos`. Ambas operaciones ocurren dentro de una transacción R2DBC gestionada por `DocumentPersistenceAdapter`.
+
+### 3. Eliminación de Homologación Dinámica
+Se eliminó el subsistema de homologación por base de datos para simplificar el flujo. Ahora, los metadatos necesarios se inyectan directamente desde la fuente original o se resuelven mediante constantes en el dominio, reduciendo la latencia de red.
 
 ---
 
@@ -497,21 +565,6 @@ El proyecto garantiza la calidad del código mediante una suite de más de **140
 - **Test XML (JAXB)**: Verificación de sobres SOAP protegidos contra XXE.
 
 ---
-
-## Estrategia de Homologación (SOAP)
-
-En el caso de SOAP, se aplica una traducción semántica basada en catálogos internos antes de despachar el request.
-
-### Homologación de Origin (Categorías)
-Si el documento tiene `origin="manual_tecnico"`, el sistema:
-1. Realiza una búsqueda aproximada (eliminando tildes y validando subcadenas) en el caché de `categoria_manual`.
-2. Extrae la descripción (ej. `"Manual Técnico del Producto"`) y la inyecta en el envoltorio SOAP.
-
-### Homologación de País
-Si el documento tiene `pais="AR"`, busca en el caché de `pais_homologado` e inyecta la descripción completa `"Argentina"`.
-
-### Memoria Caché
-Los diccionarios se cargan de forma *perezosa* (Lazy) en estructuras `ConcurrentHashMap` en la primera ejecución del `HomologationR2dbcAdapter`, garantizando un impacto (coste de DB) nulo en subsiguientes ejecuciones.
 
 ---
 

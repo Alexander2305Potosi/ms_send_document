@@ -16,14 +16,17 @@ class ZipDecompressorTest {
 
     @Test
     void decompress_nonZip_returnsSameDocument() {
-        ProductDocumentHistory doc = new ProductDocumentHistory(
-            "prod-1", false, "AR",
-            null, "doc-1", null, null,
-            "test.pdf", null, null,
-            null, null, null, null,
-            "test.pdf", "application/pdf", 1L, "origin",
-            new byte[]{1}, null
-        );
+        ProductDocumentHistory doc = ProductDocumentHistory.builder()
+            .productId("prod-1")
+            .isZip(false)
+            .pais("AR")
+            .documentId("doc-1")
+            .filename("test.pdf")
+            .contentType("application/pdf")
+            .size(1L)
+            .origin("origin")
+            .content(new byte[]{1})
+            .build();
 
         StepVerifier.create(ZipDecompressor.decompress(doc))
             .expectNextMatches(result ->
@@ -37,14 +40,17 @@ class ZipDecompressorTest {
     void decompress_zipWithTwoFiles_expandsToTwoDocuments() throws IOException {
         byte[] zipContent = createZip("test.pdf", new byte[]{1}, "data.csv", new byte[]{2});
 
-        ProductDocumentHistory zipDoc = new ProductDocumentHistory(
-            "prod-1", true, "AR",
-            null, "doc-1", null, null,
-            "docs.zip", null, null,
-            null, null, null, null,
-            "docs.zip", "application/zip", (long) zipContent.length, "origin",
-            zipContent, null
-        );
+        ProductDocumentHistory zipDoc = ProductDocumentHistory.builder()
+            .productId("prod-1")
+            .isZip(true)
+            .pais("AR")
+            .documentId("doc-1")
+            .filename("docs.zip")
+            .contentType("application/zip")
+            .size((long) zipContent.length)
+            .origin("origin")
+            .content(zipContent)
+            .build();
 
         Flux<ProductDocumentHistory> result = ZipDecompressor.decompress(zipDoc);
 
@@ -54,14 +60,12 @@ class ZipDecompressorTest {
                 assertEquals("doc-1/test.pdf", doc.getDocumentId());
                 assertFalse(doc.isZip());
                 assertEquals("AR", doc.getPais());
-                assertEquals("docs.zip", doc.getParentZipName());
             })
             .assertNext(doc -> {
                 assertTrue(doc.getFilename().endsWith("data.csv"));
                 assertEquals("doc-1/data.csv", doc.getDocumentId());
                 assertFalse(doc.isZip());
                 assertEquals("AR", doc.getPais());
-                assertEquals("docs.zip", doc.getParentZipName());
             })
             .verifyComplete();
     }
@@ -70,14 +74,17 @@ class ZipDecompressorTest {
     void decompress_emptyZip_returnsEmptyFlux() throws IOException {
         byte[] emptyZip = createEmptyZip();
 
-        ProductDocumentHistory zipDoc = new ProductDocumentHistory(
-            "prod-1", true, "AR",
-            null, "doc-1", null, null,
-            "empty.zip", null, null,
-            null, null, null, null,
-            "empty.zip", "application/zip", (long) emptyZip.length, "origin",
-            emptyZip, null
-        );
+        ProductDocumentHistory zipDoc = ProductDocumentHistory.builder()
+            .productId("prod-1")
+            .isZip(true)
+            .pais("AR")
+            .documentId("doc-1")
+            .filename("empty.zip")
+            .contentType("application/zip")
+            .size((long) emptyZip.length)
+            .origin("origin")
+            .content(emptyZip)
+            .build();
 
         StepVerifier.create(ZipDecompressor.decompress(zipDoc))
             .verifyComplete();

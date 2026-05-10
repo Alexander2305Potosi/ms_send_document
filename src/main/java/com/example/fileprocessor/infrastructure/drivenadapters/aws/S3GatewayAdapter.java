@@ -1,6 +1,5 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.aws;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -47,7 +46,7 @@ public class S3GatewayAdapter implements S3Gateway {
             if (content == null || content.length == 0) {
                 LOGGER.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
                 return Mono.just(FileUploadResponse.builder()
-                    .status(DocumentStatus.FAILURE.name())
+                    .status(ProcessingResultCodes.FAILURE.name())
                     .errorCode(ProcessingResultCodes.EMPTY_CONTENT.name())
                     .traceId(traceId)
                     .message("Cannot upload empty content to S3")
@@ -85,7 +84,7 @@ public class S3GatewayAdapter implements S3Gateway {
                 .map(completed -> {
                     LOGGER.log(Level.INFO, "S3 upload successful: {0} -> {1}/{2}", new Object[]{request.getFilename(), s3Properties.bucketName(), key});
                     return FileUploadResponse.builder()
-                        .status(DocumentStatus.SUCCESS.name())
+                        .status(ProcessingResultCodes.SUCCESS.name())
                         .message("Uploaded to S3: " + s3Properties.bucketName() + "/" + key)
                         .correlationId(completed.eTag())
                         .traceId(traceId)
@@ -108,7 +107,7 @@ public class S3GatewayAdapter implements S3Gateway {
 
         String errorCode = categorizeS3Error(actualError);
         return Mono.just(FileUploadResponse.builder()
-            .status(DocumentStatus.FAILURE.name())
+            .status(ProcessingResultCodes.FAILURE.name())
             .errorCode(errorCode)
             .traceId(traceId)
             .message(actualError.getMessage())
@@ -118,17 +117,17 @@ public class S3GatewayAdapter implements S3Gateway {
     }
 
     String categorizeS3Error(Throwable error) {
-        if (error instanceof TimeoutException) return S3ErrorCodes.GATEWAY_TIMEOUT;
+        if (error instanceof TimeoutException) return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
         
         if (error instanceof software.amazon.awssdk.services.s3.model.S3Exception e) {
             Integer statusCode = e.statusCode();
             if (statusCode != null) {
-                if (statusCode == 403) return S3ErrorCodes.ACCESS_DENIED;
-                if (statusCode == 404) return S3ErrorCodes.NOT_FOUND;
-                if (statusCode == 503) return S3ErrorCodes.SERVICE_UNAVAILABLE;
+                if (statusCode == 403) return ProcessingResultCodes.DEST_UNAUTHORIZED.name();
+                if (statusCode == 404) return ProcessingResultCodes.SOURCE_NOT_FOUND.name();
+                if (statusCode == 503) return ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
             }
         }
-        return S3ErrorCodes.UNKNOWN_ERROR;
+        return ProcessingResultCodes.UNKNOWN_ERROR.name();
     }
 
     boolean isRetryableException(Throwable throwable) {

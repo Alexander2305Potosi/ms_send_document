@@ -11,6 +11,10 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+/**
+ * R2DBC entity for the 'documentos' table.
+ * Redundant columns removed: activo, propietario, ruta, fecha_actualizacion.
+ */
 @Table("documentos")
 @Getter
 @Setter
@@ -29,26 +33,11 @@ public class DocumentEntity {
     @Column("id_producto")
     private String productId;
 
-    @Column("activo")
-    private Boolean active;
-
-    @Column("clave_documento")
-    private String docKey;
-
     @Column("nombre")
     private String name;
 
-    @Column("propietario")
-    private String owner;
-
-    @Column("ruta")
-    private String path;
-
     @Column("estado")
     private String state;
-
-    @Column("version_contrato")
-    private String versionContract;
 
     @Column("mensaje_error")
     private String errorMessage;
@@ -56,18 +45,15 @@ public class DocumentEntity {
     @Column("es_zip")
     private Boolean isZip;
 
-    @Column("nombre_zip_padre")
-    private String parentZipName;
-
     @Column("caso_uso")
     private String useCase;
+
+    @Column("reintentos")
+    private Integer retryCount;
 
     @Column("fecha_creacion")
     private LocalDateTime createdAt;
 
     @Column("fecha_actualizacion")
     private LocalDateTime updatedAt;
-
-    @Column("reintentos")
-    private Integer retryCount;
 }

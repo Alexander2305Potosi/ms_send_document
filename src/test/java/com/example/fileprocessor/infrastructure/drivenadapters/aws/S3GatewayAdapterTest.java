@@ -1,6 +1,5 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.aws;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
@@ -50,7 +49,6 @@ class S3GatewayAdapterTest {
             .filename(filename)
             .contentType("application/pdf")
             .content(content)
-            .origin("test-origin")
             .build();
     }
 
@@ -89,7 +87,7 @@ class S3GatewayAdapterTest {
     void categorizeS3Error_with403StatusCode_returnsAccessDenied() {
         S3Exception ex = mock(S3Exception.class);
         when(ex.statusCode()).thenReturn(403);
-        assertEquals(S3ErrorCodes.ACCESS_DENIED, adapter.categorizeS3Error(ex));
+        assertEquals(ProcessingResultCodes.DEST_UNAUTHORIZED.name(), adapter.categorizeS3Error(ex));
     }
 
     @Test
@@ -100,7 +98,7 @@ class S3GatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
                 assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), result.getErrorCode());
             })
             .verifyComplete();
@@ -119,7 +117,7 @@ class S3GatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertTrue(result.isSuccess());
-                assertEquals(DocumentStatus.SUCCESS.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.SUCCESS.name(), result.getStatus());
                 assertEquals("etag-abc123", result.getCorrelationId());
             })
             .verifyComplete();
@@ -141,7 +139,7 @@ class S3GatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(S3ErrorCodes.ACCESS_DENIED, result.getErrorCode());
+                assertEquals(ProcessingResultCodes.DEST_UNAUTHORIZED.name(), result.getErrorCode());
             })
             .verifyComplete();
     }

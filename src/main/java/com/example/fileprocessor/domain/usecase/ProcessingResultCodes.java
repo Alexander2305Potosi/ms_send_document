@@ -1,17 +1,40 @@
 package com.example.fileprocessor.domain.usecase;
 
 /**
- * Business-level error codes for document processing operations.
+ * Single source of truth for all processing result codes and error classifications.
+ * Replaces SoapErrorCodes, S3ErrorCodes and DocumentStatus, which have been deleted.
  */
 public enum ProcessingResultCodes {
-    INVALID_BASE64,
-    EMPTY_CONTENT,
-    INVALID_RESPONSE,
-    DECOMPRESSION_ERROR,
-    SIZE_EXCEEDED,
-    PATTERN_MISMATCH,
-    UNKNOWN_ERROR,
-    BAD_GATEWAY,
-    GATEWAY_TIMEOUT,
-    SERVICE_UNAVAILABLE;
+
+    // ── Result states ──────────────────────────────────────────────────────────
+    SUCCESS,                 // Operation completed successfully
+    FAILURE,                 // Generic failure (use a specific code when possible)
+
+    // ── Business rule errors (non-retryable) ───────────────────────────────────
+    INVALID_BASE64,          // File content is not valid Base64
+    EMPTY_CONTENT,           // File is 0 bytes
+    INVALID_RESPONSE,        // Unexpected response from source API
+    DECOMPRESSION_ERROR,     // ZIP is corrupt or password-protected
+    SIZE_EXCEEDED,           // File exceeds the maximum allowed size
+    PATTERN_MISMATCH,        // Extension / MIME type not supported by business rules
+    HOMOLOGATION_FAILED,     // Could not map metadata to the SOAP contract
+
+    // ── Network / transient errors (retryable) ─────────────────────────────────
+    BAD_GATEWAY,             // Source or destination responded with 5xx
+    GATEWAY_TIMEOUT,         // Timeout reaching source or destination
+    SERVICE_UNAVAILABLE,     // Service is down (502/503)
+
+    // ── Source system errors ───────────────────────────────────────────────────
+    SOURCE_NOT_FOUND,        // Document does not exist in source (404)
+    SOURCE_UNAUTHORIZED,     // Credentials rejected by source (401/403)
+    SOURCE_RATE_LIMIT,       // Rate limit exceeded in source (429)
+
+    // ── Destination errors ─────────────────────────────────────────────────────
+    DEST_BAD_REQUEST,        // Destination rejected our payload (400)
+    DEST_UNAUTHORIZED,       // Authentication failed against SOAP/S3 destination
+    DEST_QUOTA_EXCEEDED,     // Storage quota exceeded in destination
+
+    // ── Final states ───────────────────────────────────────────────────────────
+    MAX_RETRIES_EXCEEDED,    // All retry attempts exhausted
+    UNKNOWN_ERROR;           // Critical unclassified error
 }

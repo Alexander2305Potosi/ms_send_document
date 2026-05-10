@@ -42,13 +42,7 @@ public abstract class AbstractReactiveAdapterOperation<E, D, I, R extends Reacti
         return repository.save(toData(entity)).map(this::toEntity);
     }
 
-    public Flux<D> saveAll(Flux<D> entities) {
-        return repository.saveAll(entities.map(this::toData)).map(this::toEntity);
-    }
 
-    public Mono<D> findById(I id) {
-        return repository.findById(id).map(this::toEntity);
-    }
 
     public Flux<D> findAll() {
         return repository.findAll().map(this::toEntity);
@@ -58,7 +52,4 @@ public abstract class AbstractReactiveAdapterOperation<E, D, I, R extends Reacti
         return query.get().map(this::toEntity);
     }
 
-    protected Mono<D> doQuery(Supplier<Mono<E>> query) {
-        return query.get().map(this::toEntity);
-    }
 }

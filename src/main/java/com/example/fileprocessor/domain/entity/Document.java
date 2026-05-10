@@ -8,6 +8,10 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+/**
+ * Main domain entity representing a document in the processing pipeline.
+ * Redundant fields (active, owner, path, updatedAt) have been removed.
+ */
 @Getter
 @Setter
 @Builder
@@ -17,19 +21,12 @@ public class Document {
     private Long id;
     private String documentId;
     private String productId;
-    private Boolean active;
-    private String docKey;
     private String name;
-    private String owner;
-    private String path;
     private String state;
-    private String versionContract;
     private String errorMessage;
     private boolean isZip;
-    private String parentZipName;
     private String useCase;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
     private Integer retryCount;
 
     public int getRetryCountSafe() {

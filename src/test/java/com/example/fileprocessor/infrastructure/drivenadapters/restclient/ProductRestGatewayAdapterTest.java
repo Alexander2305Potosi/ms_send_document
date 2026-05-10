@@ -138,50 +138,6 @@ class ProductRestGatewayAdapterTest {
             () -> adapter.mapToProductDocument(PROD_ID, response));
     }
 
-    // mapToProductDocumentHistory tests
-
-    @Test
-    void mapToProductDocumentHistory_withDocuments_returnsMappedFlux() {
-        ProductDocumentResponse docResponse = new ProductDocumentResponse(
-            "doc-1", "test.pdf", "VGVzdENvbnRlbnQ=", "application/pdf", 12L, false, "origin", "AR"
-        );
-        ProductResponse productResponse = new ProductResponse(
-            PROD_ID, "Test Product", List.of(docResponse)
-        );
-
-        Flux<ProductDocumentHistory> flux = adapter.mapToProductDocumentHistory(productResponse);
-        List<ProductDocumentHistory> result = flux.collectList().block();
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("doc-1", result.get(0).getDocumentId());
-    }
-
-    @Test
-    void mapToProductDocumentHistory_withEmptyDocuments_returnsEmptyFlux() {
-        ProductResponse productResponse = new ProductResponse(
-            PROD_ID, "Test Product", List.of()
-        );
-
-        Flux<ProductDocumentHistory> flux = adapter.mapToProductDocumentHistory(productResponse);
-        List<ProductDocumentHistory> result = flux.collectList().block();
-
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    void mapToProductDocumentHistory_withNullDocuments_returnsEmptyFlux() {
-        ProductResponse productResponse = new ProductResponse(
-            PROD_ID, "Test Product", null
-        );
-
-        Flux<ProductDocumentHistory> flux = adapter.mapToProductDocumentHistory(productResponse);
-        List<ProductDocumentHistory> result = flux.collectList().block();
-
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
 
     // getDocument tests (using MockWebServer)
 

@@ -2,7 +2,6 @@ package com.example.fileprocessor.application.service.config;
 
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
@@ -27,13 +26,11 @@ public class DomainConfig {
             DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
-            HomologationRepository homologationRepository,
             ProcessorsProperties properties) {
         return new SoapDocumentProcessingUseCase(
             persistencePort,
             productRestGateway,
             soapGateway,
-            homologationRepository,
             new RulesBussinesService(properties.soap())
         );
     }
@@ -55,11 +52,9 @@ public class DomainConfig {
 
     @Bean
     public com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase syncDocumentsUseCase(
-            com.example.fileprocessor.domain.port.out.ProductRepository productRepository,
             DocumentRepository documentRepository,
             ProductRestGateway productRestGateway) {
         return new com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase(
-            productRepository,
             documentRepository,
             productRestGateway
         );

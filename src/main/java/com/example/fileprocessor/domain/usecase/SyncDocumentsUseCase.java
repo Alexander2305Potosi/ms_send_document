@@ -3,7 +3,6 @@ package com.example.fileprocessor.domain.usecase;
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.domain.port.out.ProductRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import reactor.core.publisher.Mono;
 
@@ -15,22 +14,19 @@ public class SyncDocumentsUseCase {
 
     private static final Logger LOGGER = Logger.getLogger(SyncDocumentsUseCase.class.getName());
 
-    private final ProductRepository productRepository;
     private final DocumentRepository documentRepository;
     private final ProductRestGateway productRestGateway;
 
     public SyncDocumentsUseCase(
-            ProductRepository productRepository,
             DocumentRepository documentRepository,
             ProductRestGateway productRestGateway) {
-        this.productRepository = productRepository;
         this.documentRepository = documentRepository;
         this.productRestGateway = productRestGateway;
     }
 
     public Mono<String> execute(String useCase) {
         LOGGER.log(Level.INFO, "Starting document sync with useCase: {0}", new Object[]{useCase});
-        return productRepository.findAll()
+        return productRestGateway.getAllProducts()
                 .concatMap(product -> {
                     LOGGER.log(Level.INFO, "Syncing documents for product ID: {0}", new Object[]{product.getProductId()});
                     return productRestGateway.getDocumentsByProduct(product)
@@ -58,14 +54,11 @@ public class SyncDocumentsUseCase {
                         .documentId(doc.getDocumentId())
                         .productId(doc.getProductId())
                         .name(doc.getFilename())
-                        .owner(doc.getProductId())
                         .useCase(useCase)
                         .state(ProductState.ERR_DUPLICATED_DOC)
                         .errorMessage("Documento duplicado detectado para productId=" + doc.getProductId() + " y documentId=" + doc.getDocumentId())
                         .isZip(doc.isZip())
-                        .parentZipName(null)
                         .createdAt(LocalDateTime.now())
-                        .updatedAt(LocalDateTime.now())
                         .build();
                     return documentRepository.save(duplicate).then(Mono.empty());
                 }
@@ -74,13 +67,10 @@ public class SyncDocumentsUseCase {
                     .documentId(doc.getDocumentId())
                     .productId(doc.getProductId())
                     .name(doc.getFilename())
-                    .owner(doc.getProductId())
                     .useCase(useCase)
                     .state(ProductState.PENDING)
                     .isZip(doc.isZip())
-                    .parentZipName(null)
                     .createdAt(LocalDateTime.now())
-                    .updatedAt(LocalDateTime.now())
                     .build();
                 return documentRepository.save(document).then(Mono.empty());
             });

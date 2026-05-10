@@ -28,14 +28,12 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
             .documentId(docId)
             .filename(filename)
             .operation(operation)
-            .messageId(response.getCorrelationId() != null ? response.getCorrelationId() : response.getTraceId())
-            .result(resultStatus) // Aquí guardamos el estado del error detallado
+            .result(resultStatus)
             .errorCode(response.getErrorCode())
             .errorMessage(response.getMessage())
             .retry(response.getAttemptCount())
             .startedAt(toLocalDateTime(startTime))
             .completedAt(toLocalDateTime(Instant.now()))
-            .createdAt(LocalDateTime.now())
             .build();
 
         return springDataRepository.save(entity).then();

@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +33,7 @@ class DocumentHistoryR2dbcAdapterTest {
     @Test
     void saveHistory_mapsResponseToEntityCorrectly() {
         FileUploadResponse response = FileUploadResponse.builder()
-            .status(DocumentStatus.SUCCESS.name())
+            .status(ProcessingResultCodes.SUCCESS.name())
             .success(true)
             .correlationId("corr-123")
             .message("OK")
@@ -47,7 +47,6 @@ class DocumentHistoryR2dbcAdapterTest {
 
         verify(springDataRepository).save(argThat(entity -> 
             "SUCCESS".equals(entity.getResult()) &&
-            "corr-123".equals(entity.getMessageId()) &&
             entity.getDocumentId().equals(10L)
         ));
     }

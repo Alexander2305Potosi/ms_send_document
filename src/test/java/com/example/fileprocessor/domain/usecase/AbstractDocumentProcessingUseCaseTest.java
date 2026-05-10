@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -80,7 +79,7 @@ class AbstractDocumentProcessingUseCaseTest {
 
         StepVerifier.create(useCase.executePendingDocuments())
             .assertNext(result -> {
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
                 assertEquals("GATEWAY_TIMEOUT", result.getErrorCode());
             })
             .verifyComplete();
@@ -109,7 +108,7 @@ class AbstractDocumentProcessingUseCaseTest {
 
         StepVerifier.create(useCase.executePendingDocuments())
             .assertNext(result -> {
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
             })
             .verifyComplete();
 

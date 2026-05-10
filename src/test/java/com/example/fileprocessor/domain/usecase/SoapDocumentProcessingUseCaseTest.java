@@ -1,16 +1,12 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.HomologationResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
-import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.infrastructure.drivenadapters.soap.SoapErrorCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,9 +34,6 @@ class SoapDocumentProcessingUseCaseTest {
     private SoapGateway soapGateway;
 
     @Mock
-    private HomologationRepository homologationRepository;
-
-    @Mock
     private RulesBussinesGateway documentValidator;
 
     private SoapDocumentProcessingUseCase useCase;
@@ -51,7 +44,6 @@ class SoapDocumentProcessingUseCaseTest {
             persistencePort,
             productRestGateway,
             soapGateway,
-            homologationRepository,
             documentValidator
         );
             
@@ -84,11 +76,8 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenSuccess_returnsSuccessResult() {
-        HomologationResult homologationResult = new HomologationResult("Manual de Origin", "Argentina");
-        when(homologationRepository.resolve("origin", "AR")).thenReturn(Mono.just(homologationResult));
-
         FileUploadResponse successResult = FileUploadResponse.builder()
-            .status(DocumentStatus.SUCCESS.name())
+            .status(ProcessingResultCodes.SUCCESS.name())
             .success(true)
             .correlationId("corr-456")
             .processedAt(Instant.now())
@@ -107,43 +96,23 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenError_returnsFailureResult() {
-        HomologationResult homologationResult = new HomologationResult("Manual de Origin", "Argentina");
-        when(homologationRepository.resolve("origin", "AR")).thenReturn(Mono.just(homologationResult));
         when(soapGateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.error(new RuntimeException("SOAP error")));
 
         StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
             })
             .verifyComplete();
-    }
-
-    @Test
-    void uploadDocument_homologationFails_propagatesError() {
-        when(homologationRepository.resolve("origin", "AR"))
-            .thenReturn(Mono.error(new RuntimeException("Origin not found")));
-
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
-            .assertNext(result -> {
-                assertFalse(result.isSuccess());
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
-            })
-            .verifyComplete();
-
-        verify(soapGateway, never()).send(any());
     }
 
     @Test
     void uploadDocument_whenGatewayReturnsFailureStatus_propagatesFailure() {
-        HomologationResult homologationResult = new HomologationResult("Manual de Origin", "Argentina");
-        when(homologationRepository.resolve("origin", "AR")).thenReturn(Mono.just(homologationResult));
-
         FileUploadResponse failureResult = FileUploadResponse.builder()
-            .status(DocumentStatus.FAILURE.name())
+            .status(ProcessingResultCodes.FAILURE.name())
             .success(false)
-            .errorCode(SoapErrorCodes.BAD_GATEWAY)
+            .errorCode(ProcessingResultCodes.BAD_GATEWAY.name())
             .message("SOAP gateway error")
             .build();
 
@@ -153,7 +122,7 @@ class SoapDocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(SoapErrorCodes.BAD_GATEWAY, result.getErrorCode());
+                assertEquals(ProcessingResultCodes.BAD_GATEWAY.name(), result.getErrorCode());
             })
             .verifyComplete();
     }

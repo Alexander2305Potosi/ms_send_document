@@ -1,8 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -109,7 +109,7 @@ class SoapGatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
             })
             .verifyComplete();
     }

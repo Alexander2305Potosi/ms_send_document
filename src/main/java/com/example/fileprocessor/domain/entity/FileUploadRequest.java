@@ -14,8 +14,6 @@ public class FileUploadRequest {
     private String filename;
     private String contentType;
     private long fileSize;
-    private String origin;
-    private String paisHomologado;
     private String subTipoDocumental;
     private Long docId;
 
@@ -26,7 +24,6 @@ public class FileUploadRequest {
             .filename(doc.getFilename())
             .contentType(doc.getContentType())
             .fileSize(doc.getSize())
-            .origin(doc.getOrigin())
             .docId(docId)
             .build();
     }

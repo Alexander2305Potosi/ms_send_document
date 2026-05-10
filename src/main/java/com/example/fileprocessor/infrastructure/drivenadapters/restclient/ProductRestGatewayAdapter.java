@@ -7,7 +7,6 @@ import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
-import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
@@ -40,6 +39,27 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
             .baseUrl(properties.endpoint())
             .clientConnector(new ReactorClientHttpConnector(httpClient))
             .build();
+    }
+
+    @Override
+    public Flux<ProductHistory> getAllProducts() {
+        return Flux.deferContextual(ctx -> {
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
+            LOGGER.log(Level.INFO, "Fetching all products from REST API, traceId: {0}", traceId);
+
+            return webClient.get()
+                .uri(properties.productsPath())
+                .accept(MediaType.APPLICATION_JSON)
+                .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                .retrieve()
+                .bodyToFlux(com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse.class)
+                .map(resp -> ProductHistory.builder()
+                    .productId(resp.getProductId())
+                    .name(resp.getName())
+                    .build())
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .doOnError(e -> LOGGER.log(Level.SEVERE, "Failed to fetch products: " + e.getMessage()));
+        });
     }
 
     @Override
@@ -97,13 +117,6 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         });
     }
 
-    Flux<ProductDocumentHistory> mapToProductDocumentHistory(ProductResponse json) {
-        if (json.getDocuments() == null || json.getDocuments().isEmpty()) {
-            return Flux.empty();
-        }
-        return Flux.fromIterable(json.getDocuments())
-            .map(doc -> mapToProductDocument(json.getProductId(), doc));
-    }
 
     ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
         String contentBase64 = json.getContent();
