@@ -20,13 +20,13 @@ public interface DocumentRepository extends R2dbcRepository<DocumentEntity, Long
     Flux<DocumentEntity> findByStateAndUseCaseToday(String estado, String casoUso, LocalDateTime startOfDay);
 
     @Modifying
-    @Query("UPDATE documentos SET estado = $1, reintentos = $2, fecha_actualizacion = $3 WHERE id = $4 AND estado = $5")
-    Mono<Long> updateStateAndRetry(String newState, Integer retryCount, LocalDateTime updatedAt, Long id, String expectedState);
+    @Query("UPDATE documentos SET estado = $3, reintentos = $4, fecha_actualizacion = $5 WHERE id = $1 AND estado = $2")
+    Mono<Long> updateStateAndRetry(Long id, String expectedState, String newState, Integer retryCount, LocalDateTime updatedAt);
 
     @Query("SELECT COUNT(*) > 0 FROM documentos WHERE id_producto = $1 AND id_documento = $2")
     Mono<Boolean> existsByProductIdAndDocumentId(String productId, String documentId);
 
     @Modifying
-    @Query("UPDATE documentos SET estado = 'PENDING', fecha_actualizacion = $1 WHERE estado = 'IN_PROGRESS' AND caso_uso = $2 AND fecha_creacion >= $3 AND fecha_actualizacion < $4")
-    Mono<Long> resetStaleDocumentsToday(LocalDateTime now, String useCase, LocalDateTime startOfDay, LocalDateTime threshold);
+    @Query("UPDATE documentos SET estado = 'PENDING', fecha_actualizacion = $4 WHERE estado = 'IN_PROGRESS' AND caso_uso = $1 AND fecha_creacion >= $2 AND fecha_actualizacion < $3")
+    Mono<Long> resetStaleDocumentsToday(String useCase, LocalDateTime startOfDay, LocalDateTime threshold, LocalDateTime now);
 }
