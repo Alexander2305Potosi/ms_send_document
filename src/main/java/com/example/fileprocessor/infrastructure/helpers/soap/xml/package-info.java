@@ -2,9 +2,7 @@
     namespace = SoapConstants.NS_SOAPENV,
     elementFormDefault = XmlNsForm.QUALIFIED,
     xmlns = {
-        @XmlNs(prefix = SoapConstants.PREFIX_SOAPENV, namespaceURI = SoapConstants.NS_SOAPENV),
-        @XmlNs(prefix = SoapConstants.PREFIX_V2, namespaceURI = SoapConstants.NS_V2),
-        @XmlNs(prefix = SoapConstants.PREFIX_V1, namespaceURI = SoapConstants.NS_V1)
+        @XmlNs(prefix = SoapConstants.PREFIX_SOAPENV, namespaceURI = SoapConstants.NS_SOAPENV)
     }
 )
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;

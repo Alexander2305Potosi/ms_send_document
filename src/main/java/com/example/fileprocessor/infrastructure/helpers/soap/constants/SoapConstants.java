@@ -1,31 +1,43 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.constants;
 
-/**
- * Unified SOAP constants for envelope structure and error messages.
- */
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class SoapConstants {
+    // Tokens para reemplazo en la plantilla XML
+    public static final String T_NS_ENV      = "{{ns_envelope}}";
+    public static final String T_NS_BODY     = "{{ns_body}}";
+    public static final String T_NS_STD      = "{{ns_standard}}";
+    
+    public static final String T_TRACE_ID    = "{{traceId}}";
+    public static final String T_TIMESTAMP   = "{{timestamp}}";
+    
+    public static final String T_SYSTEM_ID   = "{{systemId}}";
+    public static final String T_USER_NAME   = "{{userName}}";
+    public static final String T_USER_TOKEN  = "{{userToken}}";
+    
+    public static final String T_DEST_NAME   = "{{destName}}";
+    public static final String T_DEST_NS     = "{{destNs}}";
+    public static final String T_DEST_OP     = "{{destOp}}";
+    
+    public static final String T_CLASS       = "{{classification}}";
+    
+    public static final String T_SUBTYPE     = "{{subTipo}}";
+    public static final String T_FILENAME    = "{{filename}}";
+    public static final String T_CONTENT     = "{{base64Content}}";
+    
+    // Marcadores especiales
+    public static final String T_METADATA    = "{{METADATA_BLOCK}}";
+    public static final String T_CONTEXT     = "{{CONTEXT_BLOCK}}";
 
-    private SoapConstants() {}
+    // Elementos XML (Solo los necesarios para el Envelope y Response)
+    public static final String EL_ENVELOPE = "Envelope";
+    public static final String EL_HEADER = "Header";
+    public static final String EL_BODY = "Body";
+    public static final String EL_TRANSMITIR_DOCUMENTO_RESPONSE = "transmitirDocumentoResponse";
 
-    // ── Namespaces ────────────────────────────────────────────────────────
-    public static final String NS_SOAPENV = "http://example.com/header";
-    public static final String NS_V2 = "http://example.com/body";
-    public static final String NS_V1 = "http://schemas.xmlsoap.org/soap/envelope/";
-
-    // ── Prefixes ──────────────────────────────────────────────────────────
+    // Namespaces para JAXB (Utilizados en parseo de respuesta)
     public static final String PREFIX_SOAPENV = "soapenv";
-    public static final String PREFIX_V2 = "v2";
-    public static final String PREFIX_V1 = "v1";
-
-    // ── Elements ──────────────────────────────────────────────────────────
-    public static final String EL_ENVELOPE          = "Envelope";
-    public static final String EL_HEADER            = "Header";
-    public static final String EL_BODY              = "Body";
-    public static final String EL_REQUEST_HEADER    = "requestHeader";
-    public static final String EL_TRANSMITIR_DOCUMENTO_REQUEST = "transmitirDocumentoRequest";
-
-    // ── Error Messages ────────────────────────────────────────────────────
-    public static final String MSG_SOAP_BODY_NOT_FOUND = "SOAP Body not found in response";
-    public static final String MSG_RESPONSE_ELEMENT_NOT_FOUND = "Response element not found inside SOAP Body";
-    public static final String MSG_PARSE_ERROR = "Error parsing SOAP response";
+    public static final String NS_SOAPENV = "http://schemas.xmlsoap.org/soap/envelope/";
 }

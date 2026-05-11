@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
-import java.util.List;
 import java.util.Map;
 
 @Validated
@@ -16,6 +15,7 @@ public record SoapProperties(
     @NotBlank String userName,
     @NotBlank String headerNamespace,
     @NotBlank String bodyNamespace,
+    @NotBlank String soapNamespace,
 
     String userToken,
     String destinationName,
@@ -23,7 +23,7 @@ public record SoapProperties(
     String destinationOperation,
     String soapAction,
 
-    List<String> classifications,
+    String classification,
     Map<String, String> messageContext,
     Map<String, String> metaData,
 
@@ -31,7 +31,6 @@ public record SoapProperties(
     @Min(1) int retryAttempts
 ) {
     public SoapProperties {
-        if (classifications == null) classifications = List.of();
         if (messageContext == null) messageContext = Map.of();
         if (metaData == null) metaData = Map.of();
         if (timeoutSeconds <= 0) timeoutSeconds = 30;

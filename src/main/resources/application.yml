@@ -42,14 +42,13 @@ app:
       user-name: ${SOAP_V2_USER_NAME:775757775}
       header-namespace: ${SOAP_V2_HEADER_NS:http://prueba.com/ents/SOI/MessageFormat/V2.1}
       body-namespace: ${SOAP_V2_BODY_NS:http://prueba.com/intf/factory/adminDocs/V1.0}
-
+      soap-namespace: ${SOAP_V2_NAMESPACE:http://schemas.xmlsoap.org/soap/envelope/}
       user-token: ${SOAP_V2_USER_TOKEN:}
       destination-name: ${SOAP_V2_DEST_NAME:bussinesdocs}
       destination-namespace: ${SOAP_V2_DEST_NS:http://prueba.com/intf/factory/adminDocs/Enlace/V1.0}
       destination-operation: ${SOAP_V2_DEST_OP:senddocs}
       soap-action: ${SOAP_V2_SOAP_ACTION:}
-      classifications:
-        - "http://prueba.com/clas/AppsUpdated"
+      classification: ${SOAP_V2_CLASSIFICATION:http://prueba.com/clas/AppsUpdated}
       message-context:
         key01: "value01"
         key02: "value02"

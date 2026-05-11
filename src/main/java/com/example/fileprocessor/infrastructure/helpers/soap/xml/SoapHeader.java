@@ -1,23 +1,22 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.xml;
 
-import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
-import jakarta.xml.bind.annotation.XmlElement;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.header.SoapRequestHeader;
+import jakarta.xml.bind.annotation.XmlAnyElement;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @XmlAccessorType(XmlAccessType.FIELD)
+@Getter
+@Setter
+@NoArgsConstructor
 public class SoapHeader {
 
-    @XmlElement(name = SoapConstants.EL_REQUEST_HEADER, namespace = SoapConstants.NS_V2)
-    private SoapRequestHeader requestHeader;
+    @XmlAnyElement(lax = true)
+    private Object any;
 
-    public SoapHeader() {}
-
-    public SoapHeader(SoapRequestHeader requestHeader) {
-        this.requestHeader = requestHeader;
+    public SoapHeader(Object any) {
+        this.any = any;
     }
-
-    public SoapRequestHeader getRequestHeader() { return requestHeader; }
-    public void setRequestHeader(SoapRequestHeader requestHeader) { this.requestHeader = requestHeader; }
 }

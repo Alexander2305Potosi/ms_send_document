@@ -19,7 +19,6 @@ import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -50,8 +49,9 @@ class SoapGatewayAdapterTest {
     @BeforeEach
     void setUp() {
         properties = new SoapProperties(
-            "http://localhost:8080/soap", "SYS-01", "user", "h-ns", "b-ns",
-            null, null, null, null, "action", List.of(), Map.of(), Map.of(), 30, 1
+            "http://localhost:8080/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+            "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
+            Map.of(), Map.of(), 30, 1
         );
         adapter = new SoapGatewayAdapter(soapWebClient, properties, mapper);
     }
