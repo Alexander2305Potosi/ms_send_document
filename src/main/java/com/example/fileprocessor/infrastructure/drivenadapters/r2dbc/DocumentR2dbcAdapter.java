@@ -13,9 +13,9 @@ import java.time.LocalDateTime;
 
 @Component
 public class DocumentR2dbcAdapter
-    extends AbstractReactiveAdapterOperation<DocumentEntity, Document, Long,
-        com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository>
-    implements DocumentRepository {
+        extends
+        AbstractReactiveAdapterOperation<DocumentEntity, Document, Long, com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository>
+        implements DocumentRepository {
 
     public DocumentR2dbcAdapter(
             com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository repository,
@@ -30,7 +30,7 @@ public class DocumentR2dbcAdapter
 
     @Override
     public Mono<Long> updateStateAndRetry(Long id, String expectedState, String newState,
-                                          Integer retryCount, LocalDateTime updatedAt) {
+            Integer retryCount, LocalDateTime updatedAt) {
         return repository.updateStateAndRetry(id, expectedState, newState, retryCount, updatedAt);
     }
 

@@ -11,17 +11,17 @@ import java.time.LocalDateTime;
  */
 public interface DocumentRepository {
     Mono<Document> save(Document document);
-    
+
     /**
      * Finds documents for the current day.
      */
     Flux<Document> findByStateAndUseCaseToday(String state, String useCase, LocalDateTime startOfDay);
-    
+
     /**
      * Updates document state, retry count and timestamp.
      */
-    Mono<Long> updateStateAndRetry(Long id, String expectedState, String newState, 
-                                  Integer retryCount, LocalDateTime updatedAt);
+    Mono<Long> updateStateAndRetry(Long id, String expectedState, String newState,
+            Integer retryCount, LocalDateTime updatedAt);
 
     /**
      * Resets stale IN_PROGRESS documents from today back to PENDING.

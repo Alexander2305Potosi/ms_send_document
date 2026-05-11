@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
 import com.example.fileprocessor.domain.entity.ProductState;
+import com.example.fileprocessor.domain.entity.SaveHistoryCommand;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
@@ -35,7 +36,8 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
 
     @Override
     public Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount) {
-        return documentRepository.updateStateAndRetry(docId, ProductState.PENDING, ProductState.IN_PROGRESS, currentRetryCount, LocalDateTime.now());
+        return documentRepository.updateStateAndRetry(docId, ProductState.PENDING, ProductState.IN_PROGRESS,
+                currentRetryCount, LocalDateTime.now());
     }
 
     @Override
@@ -43,11 +45,16 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
         Document doc = command.document();
         String historyFileName = Boolean.TRUE.equals(doc.isZip()) ? doc.getName() : null;
 
-        Mono<FileUploadResponse> combinedOperation = historyRepository.saveHistory(
-                doc.getId(), historyFileName, doc.getUseCase(), command.response(), command.startTime())
-            .then(documentRepository.updateStateAndRetry(
-                doc.getId(), ProductState.IN_PROGRESS, command.finalState(), command.nextRetryCount(), LocalDateTime.now()))
-            .thenReturn(command.response());
+        SaveHistoryCommand historyCommand = new SaveHistoryCommand(
+                doc.getId(), historyFileName, doc.getUseCase(), 
+                command.response(), command.nextRetryCount(), command.startTime()
+        );
+
+        Mono<FileUploadResponse> combinedOperation = historyRepository.saveHistory(historyCommand)
+                .then(documentRepository.updateStateAndRetry(
+                        doc.getId(), ProductState.IN_PROGRESS, command.finalState(), command.nextRetryCount(),
+                        LocalDateTime.now()))
+                .thenReturn(command.response());
 
         return combinedOperation.as(transactionalOperator::transactional);
     }
