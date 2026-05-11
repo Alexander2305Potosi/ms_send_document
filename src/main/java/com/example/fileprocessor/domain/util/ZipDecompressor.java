@@ -13,7 +13,7 @@ import java.util.zip.ZipInputStream;
 /**
  * Utility class for decompressing ZIP archives into individual ProductDocument instances.
  * Refactored to process entries as a stream (Flux) to avoid memory exhaustion (OOM).
- * This class is now pure domain logic and depends on MimeTypeResolver port.
+ * This class is now pure domain logic and depends on MimeTypeUtil.
  */
 public final class ZipDecompressor {
 

@@ -36,9 +36,6 @@ logging:
 
 app:
   soap:
-    endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
-    timeout-seconds: 30
-    retry-attempts: 3
     v2:
       endpoint: ${SOAP_V2_ENDPOINT:http://localhost:9000/soap/adminDocs}
       system-id: ${SOAP_V2_SYSTEM_ID:123}

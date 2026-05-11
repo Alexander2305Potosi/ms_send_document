@@ -106,7 +106,7 @@ class ZipDecompressorTest {
     private byte[] createEmptyZip() throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-            // empty ZIP
+            zos.flush(); // Silences unused variable warning
         }
         return baos.toByteArray();
     }
