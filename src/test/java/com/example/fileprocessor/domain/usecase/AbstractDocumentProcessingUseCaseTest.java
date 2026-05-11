@@ -56,7 +56,7 @@ class AbstractDocumentProcessingUseCaseTest {
 
         lenient().when(persistencePort.finalizeProcessingAtomically(any()))
             .thenAnswer(invocation -> {
-                com.example.fileprocessor.domain.entity.FinalizeProcessingCommand cmd = invocation.getArgument(0);
+                com.example.fileprocessor.domain.entity.DocumentUpdateCommand cmd = invocation.getArgument(0);
                 return Mono.just(cmd.response());
             });
     }
@@ -85,7 +85,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .verifyComplete();
 
         verify(persistencePort).finalizeProcessingAtomically(argThat(cmd -> 
-            cmd.finalState().equals(ProductState.PENDING) && 
+            cmd.newState().equals(ProductState.PENDING) && 
             cmd.nextRetryCount() == 1
         ));
     }
@@ -112,8 +112,8 @@ class AbstractDocumentProcessingUseCaseTest {
             })
             .verifyComplete();
 
-        verify(persistencePort).finalizeProcessingAtomically(argThat(cmd -> 
-            cmd.finalState().equals(ProductState.FAILED) && 
+        verify(persistencePort, times(1)).finalizeProcessingAtomically(argThat(cmd -> 
+            cmd.newState().equals(ProductState.FAILED) && 
             cmd.nextRetryCount() == 3
         ));
     }

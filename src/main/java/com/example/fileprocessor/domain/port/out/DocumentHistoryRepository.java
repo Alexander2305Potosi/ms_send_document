@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
+import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import reactor.core.publisher.Mono;
 
 /**
@@ -10,5 +10,5 @@ public interface DocumentHistoryRepository {
     /**
      * Records the outcome of a document processing attempt.
      */
-    Mono<Void> saveHistory(FinalizeProcessingCommand command);
+    Mono<Void> saveHistory(DocumentUpdateCommand command);
 }

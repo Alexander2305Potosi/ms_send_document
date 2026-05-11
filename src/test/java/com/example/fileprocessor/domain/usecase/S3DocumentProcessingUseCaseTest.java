@@ -54,7 +54,7 @@ class S3DocumentProcessingUseCaseTest {
 
         lenient().when(persistencePort.finalizeProcessingAtomically(any()))
             .thenAnswer(invocation -> {
-                com.example.fileprocessor.domain.entity.FinalizeProcessingCommand cmd = invocation.getArgument(0);
+                com.example.fileprocessor.domain.entity.DocumentUpdateCommand cmd = invocation.getArgument(0);
                 return Mono.just(cmd.response());
             });
 

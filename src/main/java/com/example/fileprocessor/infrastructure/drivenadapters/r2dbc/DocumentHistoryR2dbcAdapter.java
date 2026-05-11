@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
+import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
 import lombok.RequiredArgsConstructor;
@@ -18,8 +18,14 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
     private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository springDataRepository;
 
     @Override
-    public Mono<Void> saveHistory(FinalizeProcessingCommand command) {
+    public Mono<Void> saveHistory(DocumentUpdateCommand command) {
         
+        // Si no hay respuesta (ej: bloqueo inicial), no grabamos historial o grabamos uno genérico.
+        // En este sistema, grabamos historial solo al finalizar (cuando hay response).
+        if (command.response() == null) {
+            return Mono.empty();
+        }
+
         // Si no es exitoso, el 'resultado' será el código de error específico para mayor visibilidad
         String resultStatus = command.response().isSuccess() ? "SUCCESS" : command.response().getErrorCode();
         

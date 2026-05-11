@@ -2,7 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
+import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -91,7 +91,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         LOGGER.log(Level.INFO, "[{0}] Finished processing document {1}. Final State: {2}", 
                 new Object[]{implementationName(), doc.getDocumentId(), finalState});
 
-        FinalizeProcessingCommand command = new FinalizeProcessingCommand(
+        DocumentUpdateCommand command = DocumentUpdateCommand.finalize(
             doc, response, finalState, nextRetryCount, startTime
         );
 

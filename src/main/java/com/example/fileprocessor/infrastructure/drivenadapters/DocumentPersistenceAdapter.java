@@ -2,7 +2,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters;
 
 import com.example.fileprocessor.domain.entity.Document;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
+import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
@@ -35,15 +35,19 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
 
     @Override
     public Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount) {
-        return documentRepository.updateStateAndRetry(docId, ProductState.PENDING, ProductState.IN_PROGRESS, currentRetryCount, LocalDateTime.now(), null);
+        // We use the ID directly here, but we could wrap it in a placeholder Document if needed.
+        // For simplicity, let's just create a minimal command here.
+        DocumentUpdateCommand lockCommand = new DocumentUpdateCommand(
+            Document.builder().id(docId).build(),
+            ProductState.PENDING, ProductState.IN_PROGRESS, currentRetryCount, null, null
+        );
+        return documentRepository.updateStateAndRetry(lockCommand);
     }
 
     @Override
-    public Mono<FileUploadResponse> finalizeProcessingAtomically(FinalizeProcessingCommand command) {
+    public Mono<FileUploadResponse> finalizeProcessingAtomically(DocumentUpdateCommand command) {
         Mono<FileUploadResponse> combinedOperation = historyRepository.saveHistory(command)
-                .then(documentRepository.updateStateAndRetry(
-                        command.document().getId(), ProductState.IN_PROGRESS, command.finalState(), command.nextRetryCount(),
-                        LocalDateTime.now(), command.response().getMessage()))
+                .then(documentRepository.updateStateAndRetry(command))
                 .thenReturn(command.response());
 
         return combinedOperation.as(transactionalOperator::transactional);
