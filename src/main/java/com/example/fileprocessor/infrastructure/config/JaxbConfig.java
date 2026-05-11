@@ -5,6 +5,7 @@ import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelope;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapHeader;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.SoapFaultDetail;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.TransmitirDocumentoResponse;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
@@ -25,6 +26,7 @@ public class JaxbConfig {
                 SoapHeader.class,
                 SoapBody.class,
                 TransmitirDocumentoResponse.class,
+                SoapFaultDetail.class,
                 MetaDataWrapper.class,
                 MetaDataEntry.class
         );

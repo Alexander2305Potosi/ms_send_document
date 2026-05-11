@@ -9,6 +9,7 @@ import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConst
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelope;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.SoapFaultDetail;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.TransmitirDocumentoResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.xml.bind.JAXBContext;
@@ -17,7 +18,9 @@ import jakarta.xml.bind.Unmarshaller;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
+import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 import java.io.InputStream;
 import java.io.StringReader;
@@ -49,12 +52,9 @@ public class SoapMapper {
     @PostConstruct
     public void init() {
         try {
-            // Cargar la plantilla física desde resources
             Resource resource = resourceLoader.getResource("classpath:templates/soap-envelope.xml");
             try (InputStream is = resource.getInputStream()) {
                 String rawTemplate = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                
-                // Pre-inyectamos los valores estáticos (configuración) para que no se procesen en cada petición
                 this.xmlTemplate = rawTemplate
                     .replace(SoapConstants.T_NS_STD, props.soapNamespace())
                     .replace(SoapConstants.T_NS_BODY, props.bodyNamespace())
@@ -81,7 +81,6 @@ public class SoapMapper {
             String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
             String safeSubtype = escapeXml(request.getSubTipoDocumental());
 
-            // Solo reemplazamos lo que varía por cada petición (Máximo rendimiento)
             String result = this.xmlTemplate
                 .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
                 .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
@@ -89,7 +88,6 @@ public class SoapMapper {
                 .replace(SoapConstants.T_FILENAME, safeFilename)
                 .replace(SoapConstants.T_CONTENT, base64Content);
 
-            // Manejo de Metadata dinámico
             if (!props.metaData().isEmpty()) {
                 result = result.replace(SoapConstants.T_METADATA, generateMetadataXml(props.metaData()));
             } else {
@@ -97,7 +95,6 @@ public class SoapMapper {
             }
 
             return result;
-
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error building SOAP envelope for traceId=" + traceId, e);
             throw ProcessingException.withTraceId(
@@ -132,31 +129,88 @@ public class SoapMapper {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
             SoapEnvelope envelope = (SoapEnvelope) unmarshaller.unmarshal(new StringReader(xml));
             
-            TransmitirDocumentoResponse response = null;
-            if (envelope.getBody() != null && envelope.getBody().getAny() != null) {
-                Object bodyAny = envelope.getBody().getAny();
-                if (bodyAny instanceof TransmitirDocumentoResponse) {
-                    response = (TransmitirDocumentoResponse) bodyAny;
-                } else if (bodyAny instanceof Node) {
-                    response = unmarshaller.unmarshal((Node) bodyAny, TransmitirDocumentoResponse.class).getValue();
-                }
-            }
-
-            if (response == null) {
+            if (envelope.getBody() == null || envelope.getBody().getAny() == null) {
                 throw new ProcessingException("Invalid SOAP response: missing body content", ProcessingResultCodes.INVALID_RESPONSE.name());
             }
 
-            return ExternalServiceResponse.builder()
-                .status(Objects.requireNonNullElse(response.getStatus(), "UNKNOWN"))
-                .message(Objects.requireNonNullElse(response.getMessage(), "No message received"))
-                .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), "N/A"))
-                .processedAt(response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now())
-                .externalReference(response.getExternalReference())
-                .build();
+            Object bodyAny = envelope.getBody().getAny();
 
+            // Caso 1: Respuesta exitosa estándar
+            if (bodyAny instanceof TransmitirDocumentoResponse) {
+                return mapToExternalResponse((TransmitirDocumentoResponse) bodyAny);
+            }
+
+            // Caso 2: El cuerpo es un Nodo DOM (Puede ser Fault o la respuesta sin mapear)
+            if (bodyAny instanceof Element) {
+                Element element = (Element) bodyAny;
+                
+                // ¿Es un SOAP Fault?
+                if (element.getLocalName().equals("Fault")) {
+                    return handleSoapFault(element, unmarshaller, traceId);
+                }
+
+                // Intentar unmarshal del elemento como respuesta exitosa
+                try {
+                    TransmitirDocumentoResponse res = unmarshaller.unmarshal(element, TransmitirDocumentoResponse.class).getValue();
+                    return mapToExternalResponse(res);
+                } catch (Exception ignored) {
+                    // Si falla, seguimos al error genérico
+                }
+            }
+
+            throw new ProcessingException("Unexpected body content in SOAP response", ProcessingResultCodes.INVALID_RESPONSE.name());
+
+        } catch (ProcessingException e) {
+            throw e;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error parsing SOAP response for traceId=" + traceId, e);
             throw ProcessingException.withTraceId("Failed to parse SOAP response: " + e.getMessage(), ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
         }
+    }
+
+    private ExternalServiceResponse mapToExternalResponse(TransmitirDocumentoResponse response) {
+        return ExternalServiceResponse.builder()
+            .status(Objects.requireNonNullElse(response.getStatus(), "UNKNOWN"))
+            .message(Objects.requireNonNullElse(response.getMessage(), "No message received"))
+            .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), "N/A"))
+            .processedAt(response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now())
+            .externalReference(response.getExternalReference())
+            .build();
+    }
+
+    private ExternalServiceResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
+        String faultString = "SOAP Fault received";
+        String errorCode = "SOAP_FAULT";
+
+        try {
+            NodeList details = faultElement.getElementsByTagName("detail");
+            if (details.getLength() > 0) {
+                Element detailElement = (Element) details.item(0);
+                // Intentamos parsear el detalle específico que definimos
+                SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailElement, SoapFaultDetail.class).getValue();
+                
+                if (faultDetail != null && faultDetail.getSystemException() != null 
+                    && faultDetail.getSystemException().getGenericException() != null) {
+                    
+                    var genEx = faultDetail.getSystemException().getGenericException();
+                    errorCode = genEx.getCode();
+                    faultString = genEx.getDescription();
+                }
+            } else {
+                NodeList faultStrings = faultElement.getElementsByTagName("faultstring");
+                if (faultStrings.getLength() > 0) {
+                    faultString = faultStrings.item(0).getTextContent();
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Could not parse SOAP Fault details for traceId=" + traceId, e);
+        }
+
+        return ExternalServiceResponse.builder()
+            .status(ProcessingResultCodes.FAILURE.name())
+            .message(faultString)
+            .correlationId(errorCode) // Usamos el código de error como correlationId para trazabilidad
+            .processedAt(Instant.now())
+            .build();
     }
 }
