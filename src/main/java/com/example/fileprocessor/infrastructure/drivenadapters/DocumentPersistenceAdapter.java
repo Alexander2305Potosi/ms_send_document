@@ -35,7 +35,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
 
     @Override
     public Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount) {
-        return documentRepository.updateStateAndRetry(docId, ProductState.PENDING, ProductState.IN_PROGRESS, currentRetryCount, LocalDateTime.now());
+        return documentRepository.updateStateAndRetry(docId, ProductState.PENDING, ProductState.IN_PROGRESS, currentRetryCount, LocalDateTime.now(), null);
     }
 
     @Override
@@ -43,7 +43,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
         Mono<FileUploadResponse> combinedOperation = historyRepository.saveHistory(command)
                 .then(documentRepository.updateStateAndRetry(
                         command.document().getId(), ProductState.IN_PROGRESS, command.finalState(), command.nextRetryCount(),
-                        LocalDateTime.now()))
+                        LocalDateTime.now(), command.response().getMessage()))
                 .thenReturn(command.response());
 
         return combinedOperation.as(transactionalOperator::transactional);

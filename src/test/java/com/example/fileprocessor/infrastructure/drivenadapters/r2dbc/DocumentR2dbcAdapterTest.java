@@ -71,14 +71,14 @@ class DocumentR2dbcAdapterTest {
     @Test
     void updateStateAndRetry_delegatesToSpringDataRepository() {
         LocalDateTime updatedAt = LocalDateTime.now();
-        when(springDataRepository.updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt))
+        when(springDataRepository.updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt, null))
             .thenReturn(Mono.just(1L));
 
-        StepVerifier.create(adapter.updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt))
+        StepVerifier.create(adapter.updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt, null))
             .expectNext(1L)
             .verifyComplete();
 
-        verify(springDataRepository).updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt);
+        verify(springDataRepository).updateStateAndRetry(1L, "PENDING", "IN_PROGRESS", 1, updatedAt, null);
     }
 
     @Test

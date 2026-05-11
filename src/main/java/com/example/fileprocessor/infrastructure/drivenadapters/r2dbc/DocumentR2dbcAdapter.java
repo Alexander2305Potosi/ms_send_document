@@ -30,8 +30,8 @@ public class DocumentR2dbcAdapter
 
     @Override
     public Mono<Long> updateStateAndRetry(Long id, String expectedState, String newState,
-            Integer retryCount, LocalDateTime updatedAt) {
-        return repository.updateStateAndRetry(id, expectedState, newState, retryCount, updatedAt);
+            Integer retryCount, LocalDateTime updatedAt, String errorMessage) {
+        return repository.updateStateAndRetry(id, expectedState, newState, retryCount, updatedAt, errorMessage);
     }
 
     @Override

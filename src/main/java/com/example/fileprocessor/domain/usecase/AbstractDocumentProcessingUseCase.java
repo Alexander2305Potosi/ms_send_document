@@ -117,10 +117,33 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc) {
-        String errorCode = error instanceof ProcessingException pe ? pe.getErrorCode() : ProcessingResultCodes.UNKNOWN_ERROR.name();
-        LOGGER.log(Level.SEVERE, "[{0}] Pipeline error for document {1} (Product: {2}): {3}", 
-                new Object[]{implementationName(), doc.getDocumentId(), doc.getProductId(), error.getMessage()});
-        return Mono.just(buildErrorResponse(errorCode, error.getMessage()));
+        String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
+        String message = error.getMessage();
+
+        if (error instanceof ProcessingException pe) {
+            errorCode = pe.getErrorCode();
+        } else if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException wcre) {
+            errorCode = wcre.getStatusCode().is5xxServerError() ? 
+                ProcessingResultCodes.BAD_GATEWAY.name() : ProcessingResultCodes.UNKNOWN_ERROR.name();
+            message = "API Error: " + wcre.getStatusCode() + " - " + wcre.getResponseBodyAsString();
+        } else if (error instanceof java.util.concurrent.TimeoutException || 
+                   error.getCause() instanceof java.util.concurrent.TimeoutException) {
+            errorCode = ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+            message = "Connection timeout reaching external service";
+        } else if (error instanceof java.net.ConnectException || 
+                   error.getCause() instanceof java.net.ConnectException) {
+            errorCode = ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
+            message = "Connection refused reaching external service";
+        }
+
+        if (message == null || message.isBlank()) {
+            message = error.getClass().getSimpleName();
+        }
+
+        LOGGER.log(Level.SEVERE, "[{0}] Pipeline error for document {1} (Product: {2}): Code={3}, Message={4}", 
+                new Object[]{implementationName(), doc.getDocumentId(), doc.getProductId(), errorCode, message});
+        
+        return Mono.just(buildErrorResponse(errorCode, message));
     }
 
     private FileUploadResponse buildErrorResponse(String errorCode, String message) {
