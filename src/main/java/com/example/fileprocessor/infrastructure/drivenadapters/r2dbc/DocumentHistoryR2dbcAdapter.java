@@ -2,6 +2,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -26,8 +27,15 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
             return Mono.empty();
         }
 
-        // Si no es exitoso, el 'resultado' será el código de error específico para mayor visibilidad
-        String resultStatus = command.response().isSuccess() ? "SUCCESS" : command.response().getErrorCode();
+        // Determinamos el resultado por categorías usando el enumerado unificado ProcessingResultCodes
+        String resultStatus;
+        if (command.response().isSuccess()) {
+            resultStatus = ProcessingResultCodes.SUCCESS.name();
+        } else if (isBusinessRule(command.response().getErrorCode())) {
+            resultStatus = ProcessingResultCodes.SKIPPED.name();
+        } else {
+            resultStatus = ProcessingResultCodes.ERROR.name();
+        }
         
         // El nombre del archivo en el historial solo se guarda si es un procesamiento de ZIP (o según reglas de negocio)
         String historyFileName = Boolean.TRUE.equals(command.document().isZip()) ? command.document().getName() : null;
@@ -45,6 +53,18 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
             .build();
 
         return springDataRepository.save(entity).then();
+    }
+
+    private boolean isBusinessRule(String errorCode) {
+        if (errorCode == null) return false;
+        return java.util.Set.of(
+            ProcessingResultCodes.SIZE_EXCEEDED.name(),
+            ProcessingResultCodes.PATTERN_MISMATCH.name(),
+            ProcessingResultCodes.INVALID_BASE64.name(),
+            ProcessingResultCodes.EMPTY_CONTENT.name(),
+            ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
+            ProcessingResultCodes.HOMOLOGATION_FAILED.name()
+        ).contains(errorCode);
     }
 
     private LocalDateTime toLocalDateTime(Instant instant) {

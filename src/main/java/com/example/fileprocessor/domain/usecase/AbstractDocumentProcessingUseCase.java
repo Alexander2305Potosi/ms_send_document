@@ -9,6 +9,7 @@ import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.util.ExceptionMapper;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -117,33 +118,12 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc) {
-        String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
-        String message = error.getMessage();
-
-        if (error instanceof ProcessingException pe) {
-            errorCode = pe.getErrorCode();
-        } else if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException wcre) {
-            errorCode = wcre.getStatusCode().is5xxServerError() ? 
-                ProcessingResultCodes.BAD_GATEWAY.name() : ProcessingResultCodes.UNKNOWN_ERROR.name();
-            message = "API Error: " + wcre.getStatusCode() + " - " + wcre.getResponseBodyAsString();
-        } else if (error instanceof java.util.concurrent.TimeoutException || 
-                   error.getCause() instanceof java.util.concurrent.TimeoutException) {
-            errorCode = ProcessingResultCodes.GATEWAY_TIMEOUT.name();
-            message = "Connection timeout reaching external service";
-        } else if (error instanceof java.net.ConnectException || 
-                   error.getCause() instanceof java.net.ConnectException) {
-            errorCode = ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
-            message = "Connection refused reaching external service";
-        }
-
-        if (message == null || message.isBlank()) {
-            message = error.getClass().getSimpleName();
-        }
+        ExceptionMapper.ErrorClassification classification = ExceptionMapper.classify(error);
 
         LOGGER.log(Level.SEVERE, "[{0}] Pipeline error for document {1} (Product: {2}): Code={3}, Message={4}", 
-                new Object[]{implementationName(), doc.getDocumentId(), doc.getProductId(), errorCode, message});
+                new Object[]{implementationName(), doc.getDocumentId(), doc.getProductId(), classification.code(), classification.message()});
         
-        return Mono.just(buildErrorResponse(errorCode, message));
+        return Mono.just(buildErrorResponse(classification.code(), classification.message()));
     }
 
     private FileUploadResponse buildErrorResponse(String errorCode, String message) {
