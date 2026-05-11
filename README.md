@@ -216,17 +216,42 @@ El componente `ZipDecompressor` expande archivos comprimidos en memoria durante 
 
 ## Reglas de Negocio (RulesBussinesService)
 
-El servicio aplica validaciones críticas antes de realizar el envío al gateway externo. Si un documento no cumple las reglas, se marca como `PROCESSED` con un código de error de negocio para evitar reprocesamientos innecesarios (Skip Logic).
+El componente `RulesBussinesService` actúa como un **filtro reactivo (Guard Clause)** dentro del pipeline de procesamiento (`AbstractDocumentProcessingUseCase`). Su responsabilidad principal es prevenir que documentos inválidos alcancen los gateways externos (SOAP/S3), ahorrando ancho de banda y tiempos de CPU.
 
-### Reglas Implementadas:
+### 1. Inyección Dinámica y Binding de Configuración
+La instanciación del servicio no utiliza `@Service` a nivel de clase, sino que se inyecta dinámicamente vía `@Bean` en la clase `DomainConfig`. Esto permite crear instancias independientes del validador para cada caso de uso con límites distintos (Ej: SOAP permite 10MB, S3 permite 50MB), leyéndolo directamente desde las propiedades de Spring (`ProcessorsProperties`).
 
-| Regla | Descripción | Acción si Falla |
-|-------|-------------|-----------------|
-| **Tamaño Máximo** | Verifica que el archivo no exceda el límite configurado (Ej: 10MB para SOAP). | Marca como PROCESSED, código `SIZE_EXCEEDED`. |
-| **Patrón de Nombre** | Valida el nombre del archivo contra una expresión regular (Regex). | Marca como PROCESSED, código `PATTERN_MISMATCH`. |
+El binding desde `application.yml` se estructura de la siguiente forma:
+```yaml
+app:
+  processors:
+    soap:
+      max-file-size-bytes: 10485760        # 10 MB exactos
+      filename-pattern: ".*\\.(pdf|docx|txt)$"
+```
+Durante la instanciación, la expresión regular (Regex) de `filename-pattern` es compilada internamente en memoria usando `java.util.regex.Pattern.compile()` para garantizar un rendimiento óptimo de coincidencia en operaciones de streaming.
 
-> [!TIP]
-> Estas reglas se configuran dinámicamente vía `application.yml` bajo la sección `app.processors`.
+### 2. Matriz de Validación y Ejecución Tardía (Lazy Evaluation)
+El servicio distingue dos fases en las que actúa, permitiendo un nivel de rigurosidad adaptativo:
+- **Fase de Sincronización (Sync)**: Únicamente valida el `filenamePattern`. No valida el tamaño, ya que en la respuesta de la API REST externa el tamaño base64 no refleja el tamaño del archivo binario decodificado.
+- **Fase de Procesamiento**: Valida de manera estricta tanto el patrón del nombre como el peso real del binario (ya decodificado en memoria).
+
+La ejecución de la regla es reactivamente perezosa mediante `Mono.defer(...)`, garantizando que la evaluación matemática y Regex se apliquen **solo en el momento en que un hilo del Schedulers** asume la ejecución del bloque, respetando el control de concurrencia y Backpressure de Project Reactor.
+
+### 3. Mecánica de Bypass (Skip Logic) y Flujo de Interrupciones
+Cuando una regla falla, el diseño evita usar condicionales `if-else` en el pipeline. En su lugar, el `RulesBussinesService` lanza un `Mono.error(new ProcessingException(...))`.
+
+```java
+// Ejemplo interno de validación
+if (doc.getSize() > maxFileSizeBytes) {
+    return Mono.error(new ProcessingException(ProcessingResultCodes.SIZE_EXCEEDED.name(), ...));
+}
+```
+
+Esta excepción rompe el flujo normal y es atrapada por el operador `.onErrorResume` en el `AbstractDocumentProcessingUseCase`. Aquí es donde ocurre la magia de la "Lógica de Salto" (Skip Logic):
+1. **Atrapado Controlado**: Al identificar que el código de error (`SIZE_EXCEEDED` o `PATTERN_MISMATCH`) pertenece a un fallo **determinista** (de Negocio), el sistema decide no reintentar. Un archivo de 20MB nunca pasará una regla de 10MB.
+2. **Commit Atómico Diferenciado**: En lugar de marcar el documento como `FAILED`, el sistema lo marca en la base de datos como **`PROCESSED`**. Esto saca permanentemente el archivo del "pool" de documentos pendientes, simulando que su ciclo de vida terminó correctamente.
+3. **Auditoría Honesta**: Aunque el estado en la tabla `documentos` sea `PROCESSED`, en la tabla transaccional `historico_documentos` se inserta un registro con resultado **`FAILURE`** y el respectivo `codigo_error`. Así, el negocio sabe exactamente por qué no se envió al sistema externo.
 
 ---
 
