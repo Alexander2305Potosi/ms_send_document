@@ -99,6 +99,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private boolean isTransientError(String errorCode) {
+        if(errorCode == null) return false;
         return java.util.Set.of(
             ProcessingResultCodes.BAD_GATEWAY.name(),
             ProcessingResultCodes.GATEWAY_TIMEOUT.name(),

@@ -1,5 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
+import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.FinalizeProcessingCommand;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
@@ -32,6 +34,13 @@ class DocumentHistoryR2dbcAdapterTest {
 
     @Test
     void saveHistory_mapsResponseToEntityCorrectly() {
+        Document doc = Document.builder()
+            .id(10L)
+            .name("file.pdf")
+            .useCase("TEST")
+            .isZip(false)
+            .build();
+
         FileUploadResponse response = FileUploadResponse.builder()
             .status(ProcessingResultCodes.SUCCESS.name())
             .success(true)
@@ -39,10 +48,14 @@ class DocumentHistoryR2dbcAdapterTest {
             .message("OK")
             .build();
 
+        FinalizeProcessingCommand command = new FinalizeProcessingCommand(
+            doc, response, "PROCESSED", 0, Instant.now()
+        );
+
         when(springDataRepository.save(any(DocumentHistoryEntity.class)))
             .thenReturn(Mono.just(new DocumentHistoryEntity()));
 
-        StepVerifier.create(adapter.saveHistory(10L, "file.pdf", "TEST", response, Instant.now()))
+        StepVerifier.create(adapter.saveHistory(command))
             .verifyComplete();
 
         verify(springDataRepository).save(argThat(entity -> 
