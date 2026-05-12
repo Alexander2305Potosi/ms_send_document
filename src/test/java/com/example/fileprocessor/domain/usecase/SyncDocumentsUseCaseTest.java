@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,13 +28,16 @@ class SyncDocumentsUseCaseTest {
     private DocumentRepository documentRepository;
 
     @Mock
+    private ProductMasterRepository productMasterRepository;
+
+    @Mock
     private ProductRestGateway productRestGateway;
 
     private SyncDocumentsUseCase useCase;
 
     @BeforeEach
     void setUp() {
-        useCase = new SyncDocumentsUseCase(documentRepository, productRestGateway);
+        useCase = new SyncDocumentsUseCase(documentRepository, productMasterRepository, productRestGateway);
     }
 
     private static ProductHistory product(String id) {

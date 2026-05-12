@@ -2,11 +2,13 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.entity.HomologationResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,9 @@ class SoapDocumentProcessingUseCaseTest {
     @Mock
     private RulesBussinesGateway documentValidator;
 
+    @Mock
+    private HomologationRepository homologationRepository;
+
     private SoapDocumentProcessingUseCase useCase;
 
     @BeforeEach
@@ -44,8 +49,12 @@ class SoapDocumentProcessingUseCaseTest {
             persistencePort,
             productRestGateway,
             soapGateway,
-            documentValidator
+            documentValidator,
+            homologationRepository
         );
+
+        lenient().when(homologationRepository.resolve(anyString(), anyString()))
+            .thenReturn(Mono.just(new HomologationResult("homo-origin", "homo-pais")));
             
         lenient().when(persistencePort.finalizeProcessingAtomically(any()))
             .thenAnswer(invocation -> {

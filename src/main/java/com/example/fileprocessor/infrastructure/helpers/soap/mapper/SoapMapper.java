@@ -125,13 +125,12 @@ public class SoapMapper {
                         return mapToExternalResponse((TransmitirDocumentoResponse) bodyAny);
                     }
                     if (bodyAny instanceof Element) {
-                        Element element = (Element) bodyAny;
-                        if (getLocalName(element).equalsIgnoreCase("Fault")) {
-                            return handleSoapFault(element, unmarshaller, traceId);
-                        }
+                        return handleSoapFault((Element) bodyAny, unmarshaller, traceId);
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Standard JAXB unmarshal failed for response parsing: {0}", e.getMessage());
+            }
 
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
@@ -166,72 +165,80 @@ public class SoapMapper {
     }
 
     private ExternalServiceResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
-        String faultString = "SOAP Fault";
+        String faultString = "SOAP Fault received";
         String errorCode = "SOAP_ERROR";
 
         try {
-            // Buscamos el nodo 'detail' sin importar prefijos
-            Node detailNode = findNodeByName(faultElement, "detail");
+            // 1. Intento mandatorio: Mapeo a SoapFaultDetail
+            Node detailNode = findNodeRecursive(faultElement, "detail");
             if (detailNode != null) {
                 try {
-                    // Forzamos el unmarshalling del nodo a nuestra clase SoapFaultDetail
                     SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailNode, SoapFaultDetail.class).getValue();
                     if (faultDetail != null && faultDetail.getSystemException() != null 
                         && faultDetail.getSystemException().getGenericException() != null) {
                         
                         var genEx = faultDetail.getSystemException().getGenericException();
-                        errorCode = Objects.requireNonNullElse(genEx.getCode(), errorCode);
-                        faultString = Objects.requireNonNullElse(genEx.getDescription(), faultString);
+                        if (genEx.getCode() != null) errorCode = genEx.getCode();
+                        if (genEx.getDescription() != null) faultString = genEx.getDescription();
                     }
                 } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "SoapFaultDetail mapping failed, checking for direct code/description nodes");
-                    // Fallback a búsqueda directa por nombre de etiqueta si JAXB falla
-                    String directCode = extractTextContent(faultElement, "code");
-                    String directDesc = extractTextContent(faultElement, "description");
-                    if (directCode != null) errorCode = directCode;
-                    if (directDesc != null) faultString = directDesc;
+                    LOGGER.log(Level.FINE, "SoapFaultDetail unmarshal failed, falling back to manual extraction");
                 }
             }
             
-            // Si después de todo seguimos con el mensaje genérico, usamos faultstring
-            if (faultString.equals("SOAP Fault") || faultString.isBlank()) {
-                Node fsNode = findNodeByName(faultElement, "faultstring");
-                if (fsNode != null) faultString = fsNode.getTextContent();
+            // 2. Fallback manual: Búsqueda agresiva de etiquetas code/description en todo el árbol
+            if (errorCode.equals("SOAP_ERROR")) {
+                String directCode = extractTextContentRecursive(faultElement, "code");
+                if (directCode != null) errorCode = directCode;
+            }
+            
+            if (faultString.equals("SOAP Fault received") || faultString.isBlank()) {
+                String directDesc = extractTextContentRecursive(faultElement, "description");
+                if (directDesc != null) {
+                    faultString = directDesc;
+                } else {
+                    String faultStringStandard = extractTextContentRecursive(faultElement, "faultstring");
+                    if (faultStringStandard != null) faultString = faultStringStandard;
+                }
             }
             
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Error extracting Fault details", e);
+            LOGGER.log(Level.WARNING, "Error during Fault extraction for traceId=" + traceId, e);
         }
 
         return ExternalServiceResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name()) 
-            .message(faultString != null && !faultString.isBlank() ? faultString : "SOAP Fault received")
+            .message(faultString)
             .correlationId(errorCode)
             .processedAt(Instant.now())
             .build();
     }
 
-    private String extractTextContent(Element parent, String localName) {
+    /**
+     * Busca recursivamente el contenido de texto de una etiqueta por su nombre local en cualquier nivel.
+     */
+    private String extractTextContentRecursive(Element parent, String localName) {
         NodeList nodes = parent.getElementsByTagNameNS("*", localName);
         if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
-        return (nodes.getLength() > 0) ? nodes.item(0).getTextContent() : null;
-    }
-
-    private Node findNodeByName(Element parent, String localName) {
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node child = children.item(i);
-            String nodeName = getLocalName(child);
-            if (nodeName.equalsIgnoreCase(localName)) {
-                return child;
-            }
+        
+        if (nodes.getLength() > 0) {
+            return nodes.item(0).getTextContent();
         }
         return null;
     }
 
+    /**
+     * Busca recursivamente un nodo por su nombre local.
+     */
+    private Node findNodeRecursive(Element parent, String localName) {
+        NodeList nodes = parent.getElementsByTagNameNS("*", localName);
+        if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
+        return (nodes.getLength() > 0) ? nodes.item(0) : null;
+    }
+
     private String getLocalName(Node node) {
         String name = node.getLocalName() != null ? node.getLocalName() : node.getNodeName();
-        if (name.contains(":")) {
+        if (name != null && name.contains(":")) {
             name = name.substring(name.indexOf(":") + 1);
         }
         return name;
