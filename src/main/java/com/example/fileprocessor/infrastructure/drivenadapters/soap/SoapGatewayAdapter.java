@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 
 /**
  * Unified and streamlined SOAP gateway adapter.
- * Refactored to remove unused variables and redundant logic.
+ * Enhanced to capture and parse detailed error responses (SOAP Faults) for traceability.
  */
 @Component
 @RequiredArgsConstructor
@@ -59,17 +59,49 @@ public class SoapGatewayAdapter implements SoapGateway {
                         new Object[]{signal.totalRetries() + 1, properties.retryAttempts(), traceId, signal.failure().getMessage()})))
                 .map(xml -> mapper.parseResponse(xml, traceId))
                 .map(this::buildSuccessResult)
-                .onErrorResume(error -> Mono.just(buildErrorResult(error, traceId)));
+                .onErrorResume(error -> handleFinalError(error, traceId));
         });
     }
 
+    /**
+     * Decisions on whether to retry based on the type of error.
+     * Retries are for infrastructure issues (503, 504, 500) and timeouts.
+     */
     private boolean isRetryable(Throwable throwable) {
         if (throwable instanceof WebClientResponseException wce) {
-            return wce.getStatusCode().is5xxServerError() || wce.getStatusCode().value() == 429;
+            int code = wce.getStatusCode().value();
+            // Retentamos en errores de servidor temporales o limitación de tasa
+            return code == 500 || code == 503 || code == 504 || code == 429;
         }
         return throwable instanceof TimeoutException || 
                throwable instanceof ConnectException ||
                throwable instanceof org.springframework.web.reactive.function.client.WebClientRequestException;
+    }
+
+    /**
+     * Detailed error handler that attempts to parse the response body if it's an XML/SOAP Fault.
+     */
+    private Mono<FileUploadResponse> handleFinalError(Throwable error, String traceId) {
+        if (error instanceof WebClientResponseException wce) {
+            String rawBody = wce.getResponseBodyAsString();
+            
+            // Si el cuerpo parece un XML (y no un HTML de error genérico)
+            if (isXml(rawBody)) {
+                try {
+                    LOGGER.log(Level.WARNING, "[SOAP] HTTP Error {0} detected, parsing XML Fault detail for traceId: {1}", 
+                            new Object[]{wce.getStatusCode(), traceId});
+                    ExternalServiceResponse parsed = mapper.parseResponse(rawBody, traceId);
+                    return Mono.just(buildSuccessResult(parsed));
+                } catch (Exception e) {
+                    LOGGER.log(Level.FINE, "Failed to parse error body as SOAP, falling back to generic error", e);
+                }
+            }
+        }
+        return Mono.just(buildErrorResult(error, traceId));
+    }
+
+    private boolean isXml(String body) {
+        return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
     }
 
     private FileUploadResponse buildSuccessResult(ExternalServiceResponse response) {
@@ -87,12 +119,14 @@ public class SoapGatewayAdapter implements SoapGateway {
         String errorCode = mapErrorCode(error);
         String message = error.getMessage();
 
-        if (error instanceof TimeoutException) {
+        if (error instanceof WebClientResponseException wce) {
+            message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
+        } else if (error instanceof TimeoutException) {
             message = "Timeout after " + properties.timeoutSeconds() + "s";
         }
 
-        LOGGER.log(Level.SEVERE, String.format("[SOAP] Final failure for traceId: %s, code: %s, message: %s",
-                traceId, errorCode, message), error);
+        LOGGER.log(Level.SEVERE, "[SOAP] Final failure for traceId: {0}, code: {1}, message: {2}",
+                new Object[]{traceId, errorCode, message});
 
         return FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILURE.name())
