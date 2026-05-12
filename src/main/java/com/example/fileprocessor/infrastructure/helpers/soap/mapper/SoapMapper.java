@@ -19,6 +19,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import java.io.InputStream;
@@ -66,10 +67,10 @@ public class SoapMapper {
                     .replace(SoapConstants.T_DEST_OP, Objects.requireNonNullElse(props.destinationOperation(), ""))
                     .replace(SoapConstants.T_CLASS, Objects.requireNonNullElse(props.classification(), ""));
 
-                LOGGER.info("SOAP Physical Template loaded and pre-configured successfully");
+                LOGGER.info("SOAP Physical Template loaded successfully");
             }
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Failed to load SOAP Physical Template", e);
+            LOGGER.log(Level.SEVERE, "Failed to load SOAP Template", e);
             throw new RuntimeException("SOAP Initialization Failure", e);
         }
     }
@@ -78,36 +79,25 @@ public class SoapMapper {
         try {
             String base64Content = request.getContent() != null ? Base64.getEncoder().encodeToString(request.getContent()) : "";
             String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
-            
-            // Usamos el origen homologado para el campo subTipo
             String safeOrigin = escapeXml(request.getOrigin());
 
-            String result = this.xmlTemplate
+            return this.xmlTemplate
                 .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
                 .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
                 .replace(SoapConstants.T_SUBTYPE, safeOrigin)
                 .replace(SoapConstants.T_FILENAME, safeFilename)
-                .replace(SoapConstants.T_CONTENT, base64Content);
+                .replace(SoapConstants.T_CONTENT, base64Content)
+                .replace(SoapConstants.T_METADATA, !props.metaData().isEmpty() ? generateMetadataXml(props.metaData()) : "");
 
-            if (!props.metaData().isEmpty()) {
-                result = result.replace(SoapConstants.T_METADATA, generateMetadataXml(props.metaData()));
-            } else {
-                result = result.replace(SoapConstants.T_METADATA, "");
-            }
-
-            return result;
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error building SOAP envelope for traceId=" + traceId, e);
-            throw ProcessingException.withTraceId(
-                "Failed to build SOAP envelope: " + e.getMessage(), ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId, e);
+            LOGGER.log(Level.SEVERE, "Error building SOAP envelope", e);
+            throw ProcessingException.withTraceId("Build failed", ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId, e);
         }
     }
 
     private String generateMetadataXml(Map<String, String> metaData) throws Exception {
         MetaDataWrapper wrapper = new MetaDataWrapper(
-            metaData.entrySet().stream()
-                .map(e -> new MetaDataEntry(e.getKey(), e.getValue()))
-                .toList()
+            metaData.entrySet().stream().map(e -> new MetaDataEntry(e.getKey(), e.getValue())).toList()
         );
         StringWriter sw = new StringWriter();
         Marshaller marshaller = jaxbContext.createMarshaller();
@@ -118,11 +108,7 @@ public class SoapMapper {
 
     private String escapeXml(String value) {
         if (value == null) return "";
-        return value.replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                    .replace("\"", "&quot;")
-                    .replace("'", "&apos;");
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     public ExternalServiceResponse parseResponse(String xml, String traceId) {
@@ -131,7 +117,7 @@ public class SoapMapper {
             SoapEnvelope envelope = (SoapEnvelope) unmarshaller.unmarshal(new StringReader(xml));
             
             if (envelope.getBody() == null || envelope.getBody().getAny() == null) {
-                throw new ProcessingException("Invalid SOAP response: missing body content", ProcessingResultCodes.INVALID_RESPONSE.name());
+                throw new ProcessingException("Invalid SOAP response: missing body", ProcessingResultCodes.INVALID_RESPONSE.name());
             }
 
             Object bodyAny = envelope.getBody().getAny();
@@ -142,29 +128,34 @@ public class SoapMapper {
 
             if (bodyAny instanceof Element) {
                 Element element = (Element) bodyAny;
-                if (element.getLocalName().equals("Fault")) {
+                String localName = element.getLocalName() != null ? element.getLocalName() : element.getTagName();
+                
+                if (localName.equalsIgnoreCase("Fault")) {
                     return handleSoapFault(element, unmarshaller, traceId);
                 }
+                
                 try {
                     TransmitirDocumentoResponse res = unmarshaller.unmarshal(element, TransmitirDocumentoResponse.class).getValue();
                     return mapToExternalResponse(res);
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    LOGGER.log(Level.FINE, "Normal response mapping failed, checking for nested Fault");
+                }
             }
 
-            throw new ProcessingException("Unexpected body content in SOAP response", ProcessingResultCodes.INVALID_RESPONSE.name());
+            throw new ProcessingException("Unknown SOAP response structure", ProcessingResultCodes.INVALID_RESPONSE.name());
 
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error parsing SOAP response for traceId=" + traceId, e);
-            throw ProcessingException.withTraceId("Failed to parse SOAP response: " + e.getMessage(), ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
+            LOGGER.log(Level.SEVERE, "Error parsing SOAP response", e);
+            throw ProcessingException.withTraceId("Parse failed", ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
         }
     }
 
     private ExternalServiceResponse mapToExternalResponse(TransmitirDocumentoResponse response) {
         return ExternalServiceResponse.builder()
-            .status(Objects.requireNonNullElse(response.getStatus(), "UNKNOWN"))
-            .message(Objects.requireNonNullElse(response.getMessage(), "No message received"))
+            .status(Objects.requireNonNullElse(response.getStatus(), ProcessingResultCodes.SUCCESS.name()))
+            .message(Objects.requireNonNullElse(response.getMessage(), "Success"))
             .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), "N/A"))
             .processedAt(response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now())
             .externalReference(response.getExternalReference())
@@ -172,37 +163,61 @@ public class SoapMapper {
     }
 
     private ExternalServiceResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
-        String faultString = "SOAP Fault received";
-        String errorCode = "SOAP_FAULT";
+        String faultString = "SOAP Fault";
+        String errorCode = "SOAP_ERROR";
 
         try {
-            NodeList details = faultElement.getElementsByTagName("detail");
-            if (details.getLength() > 0) {
-                Element detailElement = (Element) details.item(0);
-                SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailElement, SoapFaultDetail.class).getValue();
-                
-                if (faultDetail != null && faultDetail.getSystemException() != null 
-                    && faultDetail.getSystemException().getGenericException() != null) {
-                    
-                    var genEx = faultDetail.getSystemException().getGenericException();
-                    errorCode = genEx.getCode();
-                    faultString = genEx.getDescription();
-                }
-            } else {
-                NodeList faultStrings = faultElement.getElementsByTagName("faultstring");
-                if (faultStrings.getLength() > 0) {
-                    faultString = faultStrings.item(0).getTextContent();
+            // Intento encontrar la etiqueta 'detail' buscando en cualquier namespace
+            Node detailNode = findNodeByName(faultElement, "detail");
+            
+            if (detailNode != null) {
+                try {
+                    SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailNode, SoapFaultDetail.class).getValue();
+                    if (faultDetail != null && faultDetail.getSystemException() != null 
+                        && faultDetail.getSystemException().getGenericException() != null) {
+                        
+                        var genEx = faultDetail.getSystemException().getGenericException();
+                        errorCode = Objects.requireNonNullElse(genEx.getCode(), errorCode);
+                        faultString = Objects.requireNonNullElse(genEx.getDescription(), faultString);
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.WARNING, "Failed to unmarshal SoapFaultDetail, fallback to faultstring");
                 }
             }
+            
+            // Fallback al faultstring general si no hay detalle o falló el unmarshal
+            if (faultString.equals("SOAP Fault")) {
+                Node faultStringNode = findNodeByName(faultElement, "faultstring");
+                if (faultStringNode != null) {
+                    faultString = faultStringNode.getTextContent();
+                }
+            }
+            
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Could not parse SOAP Fault details for traceId=" + traceId, e);
+            LOGGER.log(Level.WARNING, "Error extracting Fault details", e);
         }
 
+        // GARANTÍA: Status nunca nulo para evitar error de DB
         return ExternalServiceResponse.builder()
-            .status(ProcessingResultCodes.FAILURE.name())
+            .status(ProcessingResultCodes.FAILURE.name()) 
             .message(faultString)
             .correlationId(errorCode)
             .processedAt(Instant.now())
             .build();
+    }
+
+    private Node findNodeByName(Element parent, String localName) {
+        NodeList children = parent.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            String nodeName = child.getLocalName() != null ? child.getLocalName() : child.getNodeName();
+            if (nodeName.contains(":") ) {
+                nodeName = nodeName.substring(nodeName.indexOf(":") + 1);
+            }
+            if (nodeName.equalsIgnoreCase(localName)) {
+                return child;
+            }
+        }
+        return null;
     }
 }

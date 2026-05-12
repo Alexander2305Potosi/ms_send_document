@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 
 /**
  * Unified and streamlined SOAP gateway adapter.
- * Enhanced to capture and parse detailed error responses (SOAP Faults) for traceability.
+ * Enhanced to capture and parse detailed error responses (SOAP Faults).
  */
 @Component
 @RequiredArgsConstructor
@@ -42,9 +42,6 @@ public class SoapGatewayAdapter implements SoapGateway {
         return Mono.deferContextual(ctx -> {
             final String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
 
-            LOGGER.log(Level.INFO, "[SOAP] Starting upload for file: {0}, traceId: {1}", 
-                    new Object[]{request.getFilename(), traceId});
-
             return soapWebClient.post()
                 .contentType(MediaType.TEXT_XML)
                 .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
@@ -53,47 +50,30 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .retryWhen(Retry.backoff(properties.retryAttempts(), Duration.ofMillis(500))
-                    .filter(this::isRetryable)
-                    .doBeforeRetry(signal -> LOGGER.log(Level.WARNING, 
-                        "[SOAP] Retry attempt {0}/{1} for traceId: {2}. Reason: {3}",
-                        new Object[]{signal.totalRetries() + 1, properties.retryAttempts(), traceId, signal.failure().getMessage()})))
+                    .filter(this::isRetryable))
                 .map(xml -> mapper.parseResponse(xml, traceId))
-                .map(this::buildSuccessResult)
+                .map(res -> buildResponse(res, traceId))
                 .onErrorResume(error -> handleFinalError(error, traceId));
         });
     }
 
-    /**
-     * Decisions on whether to retry based on the type of error.
-     * Retries are for infrastructure issues (503, 504, 500) and timeouts.
-     */
     private boolean isRetryable(Throwable throwable) {
         if (throwable instanceof WebClientResponseException wce) {
             int code = wce.getStatusCode().value();
-            // Retentamos en errores de servidor temporales o limitación de tasa
             return code == 500 || code == 503 || code == 504 || code == 429;
         }
-        return throwable instanceof TimeoutException || 
-               throwable instanceof ConnectException ||
-               throwable instanceof org.springframework.web.reactive.function.client.WebClientRequestException;
+        return throwable instanceof TimeoutException || throwable instanceof ConnectException;
     }
 
-    /**
-     * Detailed error handler that attempts to parse the response body if it's an XML/SOAP Fault.
-     */
     private Mono<FileUploadResponse> handleFinalError(Throwable error, String traceId) {
         if (error instanceof WebClientResponseException wce) {
             String rawBody = wce.getResponseBodyAsString();
-            
-            // Si el cuerpo parece un XML (y no un HTML de error genérico)
             if (isXml(rawBody)) {
                 try {
-                    LOGGER.log(Level.WARNING, "[SOAP] HTTP Error {0} detected, parsing XML Fault detail for traceId: {1}", 
-                            new Object[]{wce.getStatusCode(), traceId});
                     ExternalServiceResponse parsed = mapper.parseResponse(rawBody, traceId);
-                    return Mono.just(buildSuccessResult(parsed));
+                    return Mono.just(buildResponse(parsed, traceId));
                 } catch (Exception e) {
-                    LOGGER.log(Level.FINE, "Failed to parse error body as SOAP, falling back to generic error", e);
+                    LOGGER.log(Level.FINE, "Fault parsing failed", e);
                 }
             }
         }
@@ -104,11 +84,16 @@ public class SoapGatewayAdapter implements SoapGateway {
         return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
     }
 
-    private FileUploadResponse buildSuccessResult(ExternalServiceResponse response) {
+    private FileUploadResponse buildResponse(ExternalServiceResponse response, String traceId) {
+        // MAREO CRÍTICO: Si es un error parseado, el correlationId (code) se mueve a errorCode
+        String errorCode = !response.isSuccess() ? response.getCorrelationId() : null;
+        
         return FileUploadResponse.builder()
                 .status(response.getStatus())
                 .message(response.getMessage())
                 .correlationId(response.getCorrelationId())
+                .errorCode(errorCode) // <--- ESTO ASEGURA EL CÓDIGO EN BD
+                .traceId(traceId)
                 .processedAt(response.getProcessedAt())
                 .externalReference(response.getExternalReference())
                 .success(response.isSuccess())
@@ -121,12 +106,7 @@ public class SoapGatewayAdapter implements SoapGateway {
 
         if (error instanceof WebClientResponseException wce) {
             message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
-        } else if (error instanceof TimeoutException) {
-            message = "Timeout after " + properties.timeoutSeconds() + "s";
         }
-
-        LOGGER.log(Level.SEVERE, "[SOAP] Final failure for traceId: {0}, code: {1}, message: {2}",
-                new Object[]{traceId, errorCode, message});
 
         return FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILURE.name())
@@ -141,10 +121,6 @@ public class SoapGatewayAdapter implements SoapGateway {
     private String mapErrorCode(Throwable error) {
         if (error instanceof WebClientResponseException) return ProcessingResultCodes.BAD_GATEWAY.name();
         if (error instanceof TimeoutException) return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
-        if (error instanceof ConnectException || 
-            error instanceof org.springframework.web.reactive.function.client.WebClientRequestException) {
-            return ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
-        }
         return ProcessingResultCodes.UNKNOWN_ERROR.name();
     }
 }
