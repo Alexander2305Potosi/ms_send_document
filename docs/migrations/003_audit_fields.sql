@@ -1,6 +1,0 @@
-ALTER TABLE historico_documentos
-    ADD COLUMN IF NOT EXISTS operacion VARCHAR(50),
-    ADD COLUMN IF NOT EXISTS message_id VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS stack_trace TEXT,
-    ADD COLUMN IF NOT EXISTS fecha_inicio TIMESTAMP,
-    ADD COLUMN IF NOT EXISTS fecha_fin TIMESTAMP;

@@ -19,7 +19,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import java.io.InputStream;
@@ -79,12 +78,14 @@ public class SoapMapper {
         try {
             String base64Content = request.getContent() != null ? Base64.getEncoder().encodeToString(request.getContent()) : "";
             String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
-            String safeSubtype = escapeXml(request.getSubTipoDocumental());
+            
+            // Usamos el origen homologado para el campo subTipo
+            String safeOrigin = escapeXml(request.getOrigin());
 
             String result = this.xmlTemplate
                 .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
                 .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
-                .replace(SoapConstants.T_SUBTYPE, safeSubtype)
+                .replace(SoapConstants.T_SUBTYPE, safeOrigin)
                 .replace(SoapConstants.T_FILENAME, safeFilename)
                 .replace(SoapConstants.T_CONTENT, base64Content);
 
@@ -135,27 +136,19 @@ public class SoapMapper {
 
             Object bodyAny = envelope.getBody().getAny();
 
-            // Caso 1: Respuesta exitosa estándar
             if (bodyAny instanceof TransmitirDocumentoResponse) {
                 return mapToExternalResponse((TransmitirDocumentoResponse) bodyAny);
             }
 
-            // Caso 2: El cuerpo es un Nodo DOM (Puede ser Fault o la respuesta sin mapear)
             if (bodyAny instanceof Element) {
                 Element element = (Element) bodyAny;
-                
-                // ¿Es un SOAP Fault?
                 if (element.getLocalName().equals("Fault")) {
                     return handleSoapFault(element, unmarshaller, traceId);
                 }
-
-                // Intentar unmarshal del elemento como respuesta exitosa
                 try {
                     TransmitirDocumentoResponse res = unmarshaller.unmarshal(element, TransmitirDocumentoResponse.class).getValue();
                     return mapToExternalResponse(res);
-                } catch (Exception ignored) {
-                    // Si falla, seguimos al error genérico
-                }
+                } catch (Exception ignored) {}
             }
 
             throw new ProcessingException("Unexpected body content in SOAP response", ProcessingResultCodes.INVALID_RESPONSE.name());
@@ -186,7 +179,6 @@ public class SoapMapper {
             NodeList details = faultElement.getElementsByTagName("detail");
             if (details.getLength() > 0) {
                 Element detailElement = (Element) details.item(0);
-                // Intentamos parsear el detalle específico que definimos
                 SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailElement, SoapFaultDetail.class).getValue();
                 
                 if (faultDetail != null && faultDetail.getSystemException() != null 
@@ -209,7 +201,7 @@ public class SoapMapper {
         return ExternalServiceResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name())
             .message(faultString)
-            .correlationId(errorCode) // Usamos el código de error como correlationId para trazabilidad
+            .correlationId(errorCode)
             .processedAt(Instant.now())
             .build();
     }

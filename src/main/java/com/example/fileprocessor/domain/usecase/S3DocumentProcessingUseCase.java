@@ -13,7 +13,7 @@ import java.time.Instant;
 import java.util.logging.Level;
 
 /**
- * Use case for processing documents via S3.
+ * Use case for processing documents via S3. Restored to use ProductRestGateway.
  */
 public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
@@ -30,8 +30,8 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
 
     @Override
     protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
-        return Mono.just(FileUploadRequest.from(doc, docId))
-            .flatMap(s3Gateway::send)
+        return Mono.fromCallable(() -> FileUploadRequest.from(doc, docId, null))
+            .flatMap(request -> s3Gateway.send(request))
             .onErrorResume(e -> {
                 LOGGER.log(Level.SEVERE, "S3 processing failed for docId {0}: {1}", new Object[]{docId, e.getMessage()});
                 return Mono.just(FileUploadResponse.builder()

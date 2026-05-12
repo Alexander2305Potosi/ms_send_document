@@ -14,8 +14,6 @@ import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import lombok.AllArgsConstructor;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -23,11 +21,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Base use case for document processing with daily load resilience, 
- * 3-retry policy and transactional tracking.
- * Pure domain logic (no infrastructure dependencies).
+ * Base use case for document processing. Restored to use ProductRestGateway.
  */
-@AllArgsConstructor
 public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger LOGGER = Logger.getLogger(getClass().getName());
@@ -36,17 +31,22 @@ public abstract class AbstractDocumentProcessingUseCase {
     private final ProductRestGateway productRestGateway;
     private final RulesBussinesGateway documentValidator;
 
+    protected AbstractDocumentProcessingUseCase(
+            DocumentPersistenceGateway persistencePort,
+            ProductRestGateway productRestGateway,
+            RulesBussinesGateway documentValidator) {
+        this.persistencePort = persistencePort;
+        this.productRestGateway = productRestGateway;
+        this.documentValidator = documentValidator;
+    }
+
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(15);
 
         return persistencePort.resetStaleDocumentsToday(implementationName(), startOfDay, threshold)
-            .doOnNext(count -> {
-                if (count > 0) LOGGER.warning("[" + implementationName() + "] Recovered " + count + " stale documents from today.");
-            })
             .thenMany(persistencePort.findPendingDocumentsToday(implementationName(), startOfDay))
-            .concatMap(this::processWithTracking)
-            .doOnTerminate(() -> LOGGER.log(Level.INFO, "[{0}] Daily pipeline execution completed", implementationName()));
+            .concatMap(this::processWithTracking);
     }
 
     private Mono<FileUploadResponse> processWithTracking(Document doc) {
@@ -56,9 +56,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             .flatMap(rows -> {
                 if (rows == 0) return Mono.empty(); 
                 
-                LOGGER.log(Level.INFO, "[{0}] Started processing document {1} for product {2}", 
-                        new Object[]{implementationName(), doc.getDocumentId(), doc.getProductId()});
-                
+                // RESTAURADO: Se sigue consultando el contenido vía API REST para SOAP/S3
                 return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
                     .map(ProductDocumentHistory::from)
                     .flatMapMany(this::decompress)
@@ -79,18 +77,11 @@ public abstract class AbstractDocumentProcessingUseCase {
         if (response.isSuccess()) {
             finalState = ProductState.PROCESSED;
         } else if (isTransientError(response.getErrorCode()) && nextRetryCount < 3) {
-            finalState = ProductState.PENDING; // Reintento técnico
+            finalState = ProductState.PENDING;
             nextRetryCount++;
-            LOGGER.log(Level.WARNING, "[{0}] Technical error. Retrying document {1} (Attempt {2}/3)", 
-                    new Object[]{implementationName(), doc.getDocumentId(), nextRetryCount});
         } else {
-            finalState = ProductState.FAILED; // Fallo de negocio o reintentos agotados
-            LOGGER.log(Level.SEVERE, "[{0}] Failed to process document {1} permanently. State set to FAILED.", 
-                    new Object[]{implementationName(), doc.getDocumentId()});
+            finalState = ProductState.FAILED;
         }
-
-        LOGGER.log(Level.INFO, "[{0}] Finished processing document {1}. Final State: {2}", 
-                new Object[]{implementationName(), doc.getDocumentId(), finalState});
 
         DocumentUpdateCommand command = DocumentUpdateCommand.finalize(
             doc, response, finalState, nextRetryCount, startTime
@@ -110,42 +101,32 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<ProductDocumentHistory> handleBusinessRuleSkip(Document doc, ProcessingException e) {
-        LOGGER.log(Level.INFO, "[{0}] Business rule skip for document {1}: {2}", 
-                new Object[]{implementationName(), doc.getDocumentId(), e.getMessage()});
-        
-        FileUploadResponse skipResponse = buildErrorResponse(e.getErrorCode(), "Business Rule: " + e.getMessage());
+        FileUploadResponse skipResponse = FileUploadResponse.builder()
+            .status(ProcessingResultCodes.FAILURE.name())
+            .errorCode(e.getErrorCode())
+            .message("Business Rule: " + e.getMessage())
+            .processedAt(Instant.now())
+            .success(false)
+            .build();
         return finalizeProcessing(doc, skipResponse, Instant.now()).then(Mono.empty());
     }
 
     private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc) {
         ExceptionMapper.ErrorClassification classification = ExceptionMapper.classify(error);
-
-        LOGGER.log(Level.SEVERE, "[{0}] Pipeline error for document {1} (Product: {2}): Code={3}, Message={4}", 
-                new Object[]{implementationName(), doc.getDocumentId(), doc.getProductId(), classification.code(), classification.message()});
-        
-        return Mono.just(buildErrorResponse(classification.code(), classification.message()));
-    }
-
-    private FileUploadResponse buildErrorResponse(String errorCode, String message) {
-        return FileUploadResponse.builder()
+        return Mono.just(FileUploadResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name())
-            .errorCode(errorCode)
-            .message(message)
+            .errorCode(classification.code())
+            .message(classification.message())
             .processedAt(Instant.now())
             .success(false)
-            .build();
+            .build());
     }
 
     private Flux<ProductDocumentHistory> decompress(ProductDocumentHistory file) {
         if (!file.isZip() || file.getFilename() == null || file.getFilename().isBlank()) {
             return Flux.just(file);
         }
-        return ZipDecompressor.decompress(file)
-            .onErrorMap(error -> new ProcessingException(
-                "Failed to decompress ZIP '" + file.getFilename() + "': " + error.getMessage(),
-                ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
-                "unknown",
-                error));
+        return ZipDecompressor.decompress(file);
     }
 
     protected abstract Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId);

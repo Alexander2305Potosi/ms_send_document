@@ -13,6 +13,10 @@ spring:
     url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
     username: sa
     password:
+  master-r2dbc:
+    url: r2dbc:h2:mem:///masterdb;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
   h2:
     console:
       enabled: true
@@ -82,18 +86,3 @@ app:
     soap:
       max-file-size-bytes: 10485760
       filename-pattern: ".*\\.(pdf|docx|txt)$"
-
----
-spring:
-  config:
-    activate:
-      on-profile: s3
-app:
-  aws:
-    s3:
-      bucket-name: documents-bucket
-      region: us-east-1
-      endpoint: http://localhost:4566
-      path-style-access: true
-      retry-attempts: 3
-      retry-backoff-millis: 500

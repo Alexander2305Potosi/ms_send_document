@@ -7,33 +7,36 @@ import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.logging.Level;
 
 /**
- * Use case for processing documents via SOAP.
+ * Use case for processing documents via SOAP. Restored to use ProductRestGateway.
  */
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private final SoapGateway soapGateway;
-    private final RulesBussinesGateway documentValidator;
+    private final HomologationRepository homologationRepository;
 
     public SoapDocumentProcessingUseCase(
             DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
-            RulesBussinesGateway documentValidator) {
+            RulesBussinesGateway documentValidator,
+            HomologationRepository homologationRepository) {
         super(persistencePort, productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
-        this.documentValidator = documentValidator;
+        this.homologationRepository = homologationRepository;
     }
 
     @Override
     protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
-        return Mono.just(FileUploadRequest.from(doc, docId))
-            .flatMap(soapGateway::send)
+        return homologationRepository.resolve(doc.getOrigin(), doc.getPais())
+            .map(h -> FileUploadRequest.from(doc, docId, h))
+            .flatMap(request -> soapGateway.send(request))
             .onErrorResume(e -> {
                 LOGGER.log(Level.SEVERE, "SOAP processing failed for docId {0}: {1}", new Object[]{docId, e.getMessage()});
                 return Mono.just(FileUploadResponse.builder()
