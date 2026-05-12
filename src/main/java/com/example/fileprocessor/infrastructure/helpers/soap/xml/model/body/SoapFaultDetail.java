@@ -13,6 +13,7 @@ import lombok.Setter;
 @XmlRootElement(name = "detail")
 public class SoapFaultDetail {
 
+    // Eliminamos el namespace fijo para que sea compatible con cualquier prefijo (ns3, ns2, etc)
     @XmlElement(name = "systemException")
     private SystemException systemException;
 

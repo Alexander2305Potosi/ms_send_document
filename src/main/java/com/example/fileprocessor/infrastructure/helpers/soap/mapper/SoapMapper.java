@@ -117,7 +117,6 @@ public class SoapMapper {
         try {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
             
-            // INTENTO 1: Deserializar como SoapEnvelope (Caso normal)
             try {
                 SoapEnvelope envelope = (SoapEnvelope) unmarshaller.unmarshal(new StringReader(xml));
                 if (envelope != null && envelope.getBody() != null && envelope.getBody().getAny() != null) {
@@ -127,44 +126,32 @@ public class SoapMapper {
                     }
                     if (bodyAny instanceof Element) {
                         Element element = (Element) bodyAny;
-                        String localName = element.getLocalName() != null ? element.getLocalName() : element.getTagName();
-                        if (localName.toLowerCase().contains("fault")) {
+                        if (getLocalName(element).equalsIgnoreCase("Fault")) {
                             return handleSoapFault(element, unmarshaller, traceId);
                         }
-                        // Si no es fault, intentamos unmarshal a la respuesta esperada
-                        try {
-                            TransmitirDocumentoResponse res = unmarshaller.unmarshal(element, TransmitirDocumentoResponse.class).getValue();
-                            return mapToExternalResponse(res);
-                        } catch (Exception ignored) {}
                     }
                 }
-            } catch (Exception e) {
-                LOGGER.log(Level.FINE, "Standard JAXB unmarshal failed, falling back to DOM parsing for traceId=" + traceId);
-            }
+            } catch (Exception ignored) {}
 
-            // INTENTO 2: Deserializar usando DOM directamente (Caso de errores mal formados o namespaces atípicos)
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
             
-            // Buscar 'Fault' en cualquier parte del documento
             NodeList faults = doc.getElementsByTagNameNS("*", "Fault");
             if (faults.getLength() == 0) faults = doc.getElementsByTagName("Fault");
-            if (faults.getLength() == 0) faults = doc.getElementsByTagNameNS("*", "fault");
             
             if (faults.getLength() > 0) {
                 return handleSoapFault((Element) faults.item(0), unmarshaller, traceId);
             }
 
-            // Si llegamos aquí y no hay nada reconocible
             throw new ProcessingException("Unknown SOAP response structure", ProcessingResultCodes.INVALID_RESPONSE.name());
 
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fatal error parsing SOAP response for traceId=" + traceId, e);
-            throw ProcessingException.withTraceId("Parse failed: " + e.getMessage(), ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
+            throw ProcessingException.withTraceId("Parse failed", ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
         }
     }
 
@@ -183,52 +170,70 @@ public class SoapMapper {
         String errorCode = "SOAP_ERROR";
 
         try {
+            // Buscamos el nodo 'detail' sin importar prefijos
             Node detailNode = findNodeByName(faultElement, "detail");
             if (detailNode != null) {
                 try {
+                    // Forzamos el unmarshalling del nodo a nuestra clase SoapFaultDetail
                     SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailNode, SoapFaultDetail.class).getValue();
                     if (faultDetail != null && faultDetail.getSystemException() != null 
                         && faultDetail.getSystemException().getGenericException() != null) {
+                        
                         var genEx = faultDetail.getSystemException().getGenericException();
                         errorCode = Objects.requireNonNullElse(genEx.getCode(), errorCode);
                         faultString = Objects.requireNonNullElse(genEx.getDescription(), faultString);
                     }
                 } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "Detail unmarshal failed, looking for text content");
-                    faultString = detailNode.getTextContent();
+                    LOGGER.log(Level.WARNING, "SoapFaultDetail mapping failed, checking for direct code/description nodes");
+                    // Fallback a búsqueda directa por nombre de etiqueta si JAXB falla
+                    String directCode = extractTextContent(faultElement, "code");
+                    String directDesc = extractTextContent(faultElement, "description");
+                    if (directCode != null) errorCode = directCode;
+                    if (directDesc != null) faultString = directDesc;
                 }
             }
             
+            // Si después de todo seguimos con el mensaje genérico, usamos faultstring
             if (faultString.equals("SOAP Fault") || faultString.isBlank()) {
-                Node faultStringNode = findNodeByName(faultElement, "faultstring");
-                if (faultStringNode != null) {
-                    faultString = faultStringNode.getTextContent();
-                }
+                Node fsNode = findNodeByName(faultElement, "faultstring");
+                if (fsNode != null) faultString = fsNode.getTextContent();
             }
+            
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error extracting Fault details", e);
         }
 
         return ExternalServiceResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name()) 
-            .message(faultString != null && !faultString.isBlank() ? faultString : "SOAP Fault without description")
+            .message(faultString != null && !faultString.isBlank() ? faultString : "SOAP Fault received")
             .correlationId(errorCode)
             .processedAt(Instant.now())
             .build();
+    }
+
+    private String extractTextContent(Element parent, String localName) {
+        NodeList nodes = parent.getElementsByTagNameNS("*", localName);
+        if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
+        return (nodes.getLength() > 0) ? nodes.item(0).getTextContent() : null;
     }
 
     private Node findNodeByName(Element parent, String localName) {
         NodeList children = parent.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
             Node child = children.item(i);
-            String nodeName = child.getLocalName() != null ? child.getLocalName() : child.getNodeName();
-            if (nodeName.contains(":")) {
-                nodeName = nodeName.substring(nodeName.indexOf(":") + 1);
-            }
+            String nodeName = getLocalName(child);
             if (nodeName.equalsIgnoreCase(localName)) {
                 return child;
             }
         }
         return null;
+    }
+
+    private String getLocalName(Node node) {
+        String name = node.getLocalName() != null ? node.getLocalName() : node.getNodeName();
+        if (name.contains(":")) {
+            name = name.substring(name.indexOf(":") + 1);
+        }
+        return name;
     }
 }
