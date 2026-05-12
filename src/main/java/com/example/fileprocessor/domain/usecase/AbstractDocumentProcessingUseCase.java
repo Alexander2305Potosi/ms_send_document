@@ -9,7 +9,6 @@ import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.util.ExceptionMapper;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,7 +20,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Base use case for document processing. Restored to use ProductRestGateway.
+ * Base use case for document processing.
+ * Clean Architecture compliant: No infrastructure or technical utility dependencies.
  */
 public abstract class AbstractDocumentProcessingUseCase {
 
@@ -56,7 +56,6 @@ public abstract class AbstractDocumentProcessingUseCase {
             .flatMap(rows -> {
                 if (rows == 0) return Mono.empty(); 
                 
-                // RESTAURADO: Se sigue consultando el contenido vía API REST para SOAP/S3
                 return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
                     .map(ProductDocumentHistory::from)
                     .flatMapMany(this::decompress)
@@ -112,11 +111,19 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc) {
-        ExceptionMapper.ErrorClassification classification = ExceptionMapper.classify(error);
+        // En Clean Architecture, el caso de uso solo maneja excepciones de dominio (ProcessingException)
+        // Cualquier otra cosa se trata como un error desconocido a nivel de negocio.
+        String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
+        String message = error.getMessage();
+
+        if (error instanceof ProcessingException pe) {
+            errorCode = pe.getErrorCode();
+        }
+
         return Mono.just(FileUploadResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name())
-            .errorCode(classification.code())
-            .message(classification.message())
+            .errorCode(errorCode)
+            .message(message != null ? message : "Unexpected processing error")
             .processedAt(Instant.now())
             .success(false)
             .build());

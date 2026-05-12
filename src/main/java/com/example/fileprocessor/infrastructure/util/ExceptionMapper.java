@@ -1,4 +1,4 @@
-package com.example.fileprocessor.domain.util;
+package com.example.fileprocessor.infrastructure.util;
 
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
@@ -8,7 +8,7 @@ import java.net.ConnectException;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Utility to centralize exception mapping to domain result codes and messages.
+ * Infrastructure utility to map technical exceptions to domain result codes.
  */
 public final class ExceptionMapper {
 
@@ -16,19 +16,9 @@ public final class ExceptionMapper {
         // Utility class
     }
 
-    /**
-     * Classification result holding the domain error code and a human-readable
-     * message.
-     */
     public record ErrorClassification(String code, String message) {
     }
 
-    /**
-     * Maps any Throwable to a standardized ErrorClassification.
-     *
-     * @param error The exception to map
-     * @return A non-null ErrorClassification
-     */
     public static ErrorClassification classify(Throwable error) {
         String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
