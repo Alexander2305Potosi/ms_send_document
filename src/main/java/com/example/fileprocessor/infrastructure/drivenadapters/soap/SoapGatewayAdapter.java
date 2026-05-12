@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 
 /**
  * Unified and streamlined SOAP gateway adapter.
- * Enhanced to capture and parse detailed error responses (SOAP Faults).
+ * Handles both business Faults and infrastructure errors (Timeout, Connection).
  */
 @Component
 @RequiredArgsConstructor
@@ -73,7 +73,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                     ExternalServiceResponse parsed = mapper.parseResponse(rawBody, traceId);
                     return Mono.just(buildResponse(parsed, traceId));
                 } catch (Exception e) {
-                    LOGGER.log(Level.FINE, "Fault parsing failed", e);
+                    LOGGER.log(Level.FINE, "Failed to parse Fault from HTTP 500 body", e);
                 }
             }
         }
@@ -85,14 +85,12 @@ public class SoapGatewayAdapter implements SoapGateway {
     }
 
     private FileUploadResponse buildResponse(ExternalServiceResponse response, String traceId) {
-        // MAREO CRÍTICO: Si es un error parseado, el correlationId (code) se mueve a errorCode
         String errorCode = !response.isSuccess() ? response.getCorrelationId() : null;
-        
         return FileUploadResponse.builder()
                 .status(response.getStatus())
                 .message(response.getMessage())
                 .correlationId(response.getCorrelationId())
-                .errorCode(errorCode) // <--- ESTO ASEGURA EL CÓDIGO EN BD
+                .errorCode(errorCode)
                 .traceId(traceId)
                 .processedAt(response.getProcessedAt())
                 .externalReference(response.getExternalReference())
@@ -104,15 +102,22 @@ public class SoapGatewayAdapter implements SoapGateway {
         String errorCode = mapErrorCode(error);
         String message = error.getMessage();
 
+        // Limpieza de mensajes para infra:
         if (error instanceof WebClientResponseException wce) {
             message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
+        } else if (error instanceof TimeoutException) {
+            message = "Timeout: El servicio no respondió en " + properties.timeoutSeconds() + " segundos";
+        } else if (error instanceof ConnectException || error.getMessage().contains("Connection refused")) {
+            message = "Error de Conexión: No se pudo alcanzar el servidor destino";
         }
+
+        LOGGER.log(Level.SEVERE, "[SOAP] Error traceId: {0}, code: {1}, msg: {2}", new Object[]{traceId, errorCode, message});
 
         return FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILURE.name())
                 .errorCode(errorCode)
                 .traceId(traceId)
-                .message(message)
+                .message(message != null ? message : "Error desconocido de infraestructura")
                 .processedAt(Instant.now())
                 .success(false)
                 .build();
@@ -121,6 +126,7 @@ public class SoapGatewayAdapter implements SoapGateway {
     private String mapErrorCode(Throwable error) {
         if (error instanceof WebClientResponseException) return ProcessingResultCodes.BAD_GATEWAY.name();
         if (error instanceof TimeoutException) return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+        if (error instanceof ConnectException) return ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
         return ProcessingResultCodes.UNKNOWN_ERROR.name();
     }
 }

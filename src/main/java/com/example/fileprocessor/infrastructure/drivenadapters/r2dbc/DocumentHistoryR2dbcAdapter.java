@@ -21,13 +21,10 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
     @Override
     public Mono<Void> saveHistory(DocumentUpdateCommand command) {
         
-        // Si no hay respuesta (ej: bloqueo inicial), no grabamos historial o grabamos uno genérico.
-        // En este sistema, grabamos historial solo al finalizar (cuando hay response).
         if (command.response() == null) {
             return Mono.empty();
         }
 
-        // Determinamos el resultado por categorías usando el enumerado unificado ProcessingResultCodes
         String resultStatus;
         if (command.response().isSuccess()) {
             resultStatus = ProcessingResultCodes.SUCCESS.name();
@@ -37,7 +34,14 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
             resultStatus = ProcessingResultCodes.ERROR.name();
         }
         
-        // El nombre del archivo en el historial solo se guarda si es un procesamiento de ZIP (o según reglas de negocio)
+        // CONCATENACIÓN SOLICITADA: Adjuntamos el número de intento y el código al mensaje final
+        String enrichedMessage = command.response().getMessage();
+        if (!command.response().isSuccess()) {
+            String attemptInfo = "[INTENTO " + command.nextRetryCount() + "/3] ";
+            String codeInfo = command.response().getErrorCode() != null ? "CÓDIGO: " + command.response().getErrorCode() + " - " : "";
+            enrichedMessage = attemptInfo + codeInfo + enrichedMessage;
+        }
+
         String historyFileName = Boolean.TRUE.equals(command.document().isZip()) ? command.document().getName() : null;
 
         DocumentHistoryEntity entity = DocumentHistoryEntity.builder()
@@ -46,7 +50,7 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
             .operation(command.document().getUseCase())
             .result(resultStatus)
             .errorCode(command.response().getErrorCode())
-            .errorMessage(command.response().getMessage())
+            .errorMessage(enrichedMessage) // <--- Mensaje enriquecido con contexto
             .retry(command.nextRetryCount())
             .startedAt(toLocalDateTime(command.startTime()))
             .completedAt(toLocalDateTime(Instant.now()))
