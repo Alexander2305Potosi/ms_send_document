@@ -93,7 +93,7 @@ public class SoapGatewayAdapter implements SoapGateway {
     }
 
     private FileUploadResponse buildResponse(ExternalServiceResponse response, String traceId) {
-        String errorCode = !response.isSuccess() ? response.getCorrelationId() : null;
+        String errorCode = !response.isSuccess() ? ProcessingResultCodes.SOAP_ERROR.name() : null;
         return FileUploadResponse.builder()
                 .status(response.getStatus())
                 .message(response.getMessage())

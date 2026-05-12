@@ -166,7 +166,7 @@ public class SoapMapper {
 
     private ExternalServiceResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
         String faultString = "SOAP Fault received";
-        String errorCode = "SOAP_ERROR";
+        String errorCode = ProcessingResultCodes.SOAP_ERROR.name();
 
         try {
             // 1. Intento mandatorio: Mapeo a SoapFaultDetail
@@ -187,7 +187,7 @@ public class SoapMapper {
             }
             
             // 2. Fallback manual: Búsqueda agresiva de etiquetas code/description en todo el árbol
-            if (errorCode.equals("SOAP_ERROR")) {
+            if (errorCode.equals(ProcessingResultCodes.SOAP_ERROR.name())) {
                 String directCode = extractTextContentRecursive(faultElement, "code");
                 if (directCode != null) errorCode = directCode;
             }

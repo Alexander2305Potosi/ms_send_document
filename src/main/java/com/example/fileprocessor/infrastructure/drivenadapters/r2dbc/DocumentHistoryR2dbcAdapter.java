@@ -38,7 +38,7 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
         String enrichedMessage = command.response().getMessage();
         if (!command.response().isSuccess()) {
             String attemptInfo = "[INTENTO " + command.nextRetryCount() + "/3] ";
-            String codeInfo = command.response().getErrorCode() != null ? "CÓDIGO: " + command.response().getErrorCode() + " - " : "";
+            String codeInfo = command.response().getCorrelationId() != null ? "CÓDIGO: " + command.response().getCorrelationId() + " - " : "";
             enrichedMessage = attemptInfo + codeInfo + enrichedMessage;
         }
 

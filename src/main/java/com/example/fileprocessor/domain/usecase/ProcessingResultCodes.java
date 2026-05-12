@@ -40,5 +40,6 @@ public enum ProcessingResultCodes {
     MAX_RETRIES_EXCEEDED, // All retry attempts exhausted
     SKIPPED, // Omitted due to business rules
     ERROR, // High-level technical failure
+    SOAP_ERROR, // Specific business fault returned by SOAP gateway
     UNKNOWN_ERROR; // Critical unclassified error
 }
