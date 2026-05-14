@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
+import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
@@ -20,26 +21,34 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
 
     @Override
     public Mono<Void> saveHistory(DocumentUpdateCommand command) {
-        
-        if (command.response() == null) {
-            return Mono.empty();
-        }
-
         String resultStatus;
-        if (command.response().isSuccess()) {
-            resultStatus = ProcessingResultCodes.SUCCESS.name();
-        } else if (isBusinessRule(command.response().getErrorCode())) {
-            resultStatus = ProcessingResultCodes.SKIPPED.name();
+        String enrichedMessage;
+        String errorCode = null;
+
+        if (command.response() == null) {
+            if (ProductState.IN_PROGRESS.equals(command.newState())) {
+                resultStatus = ProcessingResultCodes.IN_PROGRESS.name();
+                enrichedMessage = "Iniciando procesamiento del documento";
+            } else {
+                return Mono.empty();
+            }
         } else {
-            resultStatus = ProcessingResultCodes.ERROR.name();
-        }
-        
-        // CONCATENACIÓN SOLICITADA: Adjuntamos el número de intento y el código al mensaje final
-        String enrichedMessage = command.response().getMessage();
-        if (!command.response().isSuccess()) {
-            String attemptInfo = "[INTENTO " + command.nextRetryCount() + "/3] ";
-            String codeInfo = command.response().getCorrelationId() != null ? "CÓDIGO: " + command.response().getCorrelationId() + " - " : "";
-            enrichedMessage = attemptInfo + codeInfo + enrichedMessage;
+            errorCode = command.response().getErrorCode();
+            if (command.response().isSuccess()) {
+                resultStatus = ProcessingResultCodes.SUCCESS.name();
+            } else if (isBusinessRule(errorCode)) {
+                resultStatus = ProcessingResultCodes.SKIPPED.name();
+            } else {
+                resultStatus = ProcessingResultCodes.ERROR.name();
+            }
+
+            // CONCATENACIÓN SOLICITADA: Adjuntamos el número de intento y el código al mensaje final
+            enrichedMessage = command.response().getMessage();
+            if (!command.response().isSuccess()) {
+                String attemptInfo = "[INTENTO " + command.nextRetryCount() + "/3] ";
+                String codeInfo = command.response().getCorrelationId() != null ? "CÓDIGO: " + command.response().getCorrelationId() + " - " : "";
+                enrichedMessage = attemptInfo + codeInfo + enrichedMessage;
+            }
         }
 
         String historyFileName = Boolean.TRUE.equals(command.document().isZip()) ? command.document().getName() : null;
@@ -49,7 +58,7 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
             .filename(historyFileName)
             .operation(command.document().getUseCase())
             .result(resultStatus)
-            .errorCode(command.response().getErrorCode())
+            .errorCode(errorCode)
             .errorMessage(enrichedMessage) // <--- Mensaje enriquecido con contexto
             .retry(command.nextRetryCount())
             .startedAt(toLocalDateTime(command.startTime()))

@@ -11,6 +11,7 @@ public enum ProcessingResultCodes {
     // ── Result states ──────────────────────────────────────────────────────────
     SUCCESS, // Operation completed successfully
     FAILURE, // Generic failure (use a specific code when possible)
+    IN_PROGRESS, // Operation is currently being processed
 
     // ── Business rule errors (non-retryable) ───────────────────────────────────
     INVALID_BASE64, // File content is not valid Base64

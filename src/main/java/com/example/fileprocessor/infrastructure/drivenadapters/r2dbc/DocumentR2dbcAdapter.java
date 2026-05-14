@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.common.AbstractReactiveAdapterOperation;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;
@@ -30,14 +31,7 @@ public class DocumentR2dbcAdapter
 
     @Override
     public Mono<Long> updateStateAndRetry(com.example.fileprocessor.domain.entity.DocumentUpdateCommand command) {
-        return repository.updateStateAndRetry(
-            command.document().getId(), 
-            command.expectedState(), 
-            command.newState(), 
-            command.nextRetryCount(), 
-            LocalDateTime.now(), 
-            command.getErrorMessage()
-        );
+        return repository.updateStateAndRetry(command);
     }
 
     @Override
@@ -47,6 +41,6 @@ public class DocumentR2dbcAdapter
 
     @Override
     public Mono<Long> resetStaleDocumentsToday(String useCase, LocalDateTime startOfDay, LocalDateTime threshold) {
-        return repository.resetStaleDocumentsToday(useCase, startOfDay, threshold, LocalDateTime.now());
+        return repository.resetStaleDocumentsToday(useCase, startOfDay, threshold);
     }
 }
