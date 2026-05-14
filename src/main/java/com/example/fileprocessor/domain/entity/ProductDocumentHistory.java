@@ -1,27 +1,39 @@
 package com.example.fileprocessor.domain.entity;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+@Getter
+@Setter
 @Builder
-public record ProductDocumentHistory(
-    String productId,
-    boolean isZip,
-    String pais,
-    Long id,
-    String documentId,
-    Boolean active,
-    String docKey,
-    String name,
-    String owner,
-    String path,
-    String status,
-    String versionContract,
-    String state,
-    String errorMessage,
-    String filename,
-    String contentType,
-    Long size,
-    String origin,
-    byte[] content,
-    String parentZipName
-) {}
+@NoArgsConstructor
+@AllArgsConstructor
+public class ProductDocumentHistory {
+    private String productId;
+    private boolean isZip;
+    private String pais;
+    private Long id;
+    private String documentId;
+    private String name;
+    private String filename;
+    private String contentType;
+    private Long size;
+    private String origin;
+    private byte[] content;
+
+    public static ProductDocumentHistory from(ProductDocumentFile file) {
+        return ProductDocumentHistory.builder()
+            .documentId(file.getDocumentId())
+            .filename(file.getFilename())
+            .content(file.getContent())
+            .contentType(file.getContentType())
+            .size(file.getSize())
+            .isZip(file.isZip())
+            .origin(file.getOrigin())
+            .pais(file.getPais())
+            .build();
+    }
+}

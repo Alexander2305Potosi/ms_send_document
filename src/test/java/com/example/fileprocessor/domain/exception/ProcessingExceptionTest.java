@@ -40,7 +40,7 @@ class ProcessingExceptionTest {
 
     @Test
     void constructor_withNullTraceId_defaultsToUnknown() {
-        ProcessingException ex = new ProcessingException("error", "ERR_CODE", null);
+        ProcessingException ex = new ProcessingException("error", "ERR_CODE", (String) null);
 
         assertEquals("unknown", ex.getTraceId());
     }

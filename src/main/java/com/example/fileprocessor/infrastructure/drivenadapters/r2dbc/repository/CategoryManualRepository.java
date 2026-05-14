@@ -1,11 +1,11 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository;
 
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CategoryManualEntity;
-import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
 
-public interface CategoryManualRepository extends R2dbcRepository<CategoryManualEntity, Long> {
-    Mono<CategoryManualEntity> findByCategoriaAndFechaVigenciaGreaterThanEqual(String categoria, LocalDate fechaVigencia);
+public interface CategoryManualRepository extends ReactiveCrudRepository<CategoryManualEntity, Long> {
+    Mono<CategoryManualEntity> findByCategoria(String categoria);
 }

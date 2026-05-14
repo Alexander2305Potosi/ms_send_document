@@ -9,20 +9,22 @@ Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos co
 1. [Arquitectura (Clean Architecture)](#arquitectura-clean-architecture)
 2. [API Endpoints](#api-endpoints)
 3. [Flujo de Datos](#flujo-de-datos)
-4. [Base de Datos](#base-de-datos)
-5. [Descompresion de archivos ZIP](#descompresion-de-archivos-zip)
-6. [Estados de Documentos (ProductState)](#estados-de-documentos-productstate)
-7. [Validacion de Documentos (RulesBussinesService)](#validacion-de-documentos-rulesbussinesservice)
-8. [Escenarios de Procesamiento](#escenarios-de-procesamiento)
-9. [Codigos de Error](#codigos-de-error)
-10. [Trazabilidad de Envios](#trazabilidad-de-envios)
-11. [Template Method Pattern](#template-method-pattern)
-12. [Perfiles de Ejecucion](#perfiles-de-ejecucion)
-13. [Variables de Entorno](#variables-de-entorno)
-14. [Compilacion y Ejecucion](#compilacion-y-ejecucion)
-15. [Ejemplos de curl](#ejemplos-de-curl)
-16. [Excepciones](#excepciones)
-17. [Testing](#testing)
+4. [Diagramas de Secuencia](#diagramas-de-secuencia)
+5. [Base de Datos](#base-de-datos)
+6. [Descompresion de archivos ZIP](#descompresion-de-archivos-zip)
+7. [Estados de Documentos (ProductState)](#estados-de-documentos-productstate)
+8. [Validacion de Documentos (RulesBussinesService)](#validacion-de-documentos-rulesbussinesservice)
+9. [Escenarios de Procesamiento](#escenarios-de-procesamiento)
+10. [Codigos de Error](#codigos-de-error)
+11. [Trazabilidad de Envios](#trazabilidad-de-envios)
+12. [Template Method Pattern](#template-method-pattern)
+13. [Perfiles de Ejecucion](#perfiles-de-ejecucion)
+14. [Variables de Entorno](#variables-de-entorno)
+15. [Compilacion y Ejecucion](#compilacion-y-ejecucion)
+16. [Ejemplos de curl](#ejemplos-de-curl)
+17. [Visualizacion de Escenarios de Data en BD](#visualizacion-de-escenarios-de-data-en-bd)
+18. [Excepciones](#excepciones)
+19. [Testing](#testing)
 
 ---
 
@@ -55,7 +57,8 @@ com.example.fileprocessor/
 │   │   └── RulesBussinesService.java              # Validacion: tamano maximo, patron filename
 │   ├── util/
 │   │   ├── ZipDecompressor.java                   # Descompresion de ZIP con inferencia de contentType
-│   │   └── Base64Utils.java                       # Encoding/decoding seguro de Base64
+│   │   ├── Base64Utils.java                       # Encoding/decoding seguro de Base64
+│   │   └── ExceptionMapper.java                   # Centraliza mapeo de excepciones a códigos y mensajes
 │   ├── port/out/
 │   │   ├── DocumentHistoryRepository.java        # Puerto unificado: CRUD de documentos, consulta por state, trazabilidad
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
@@ -186,68 +189,151 @@ Health check. Expone health, info, metrics, loggers y prometheus.
 
 ### Flujo de Sincronizacion (POST /api/v1/products/sync)
 
-```
-1. Cliente                           2. REST API Externa
-   POST /api/v1/products/sync  ──►   GET {productsPath}  (/api/products)
-   ◄─────────────────────────────────
-         [ProductResponse, ...]
-               │
-               ▼
-3. SyncDocumentsUseCase.execute()
-   ├── productRestGateway.getAllProducts()
-   │     └── Flux<ProductDocumentHistory> (doc plano con productId, sin ProductHistory)
-   │
-   └── Por cada documento:
-       ├── productRestGateway.getDocument(productId, documentId)
-       │     └── GET {productDocumentsPath}/{documentId}
-       │     └── Decodifica Base64 via Base64Utils.decodeSafe()
-       ├── isZip se infiere de la extension del filename en el dominio
-       ├── historyRepository.save()
-           └── INSERT en tabla historico_documentos (estado=SYNCED)
+```mermaid
+graph TD
+    A[Cliente] -->|POST /api/v1/products/sync| B(SyncDocumentsUseCase)
+    B -->|1. getAllProducts| C[REST API Externa]
+    C -->|Retorna lista de productos| B
+    
+    B --> D{Por cada documento}
+    D -->|2. getDocument| C
+    C -->|Retorna Base64| E[Base64Utils.decodeSafe]
+    E --> F[Infiere es_zip por extensión]
+    
+    F --> G[(Base de Datos: tabla documentos)]
+    G -->|INSERT estado=SYNCED| H[Fin del procesamiento asíncrono]
+    
+    B -.->|HTTP 200 Inmediato| A
 ```
 
 ### Flujo de Procesamiento (GET /api/v1/products)
 
-```
-1. Cliente
-   GET /api/v1/products?processor=soap
-        │
-        ▼
-2. ProductHandler.processPendingProducts()
-   ├── Resuelve traceId (header message-id o UUID)
-   ├── Selecciona processor (soap o s3)
-   └── Escribe traceId en contexto reactivo
-        │
-        ▼
-3. AbstractDocumentProcessingUseCase.executePendingDocuments()
-        │
-        ▼
-4. historyRepository.findByState("PENDING")
-   └── Filtra: estado=PENDING en tabla historico_documentos
-        ▼
-5. BD → Flux<DocumentHistory>
-        │
-        ▼
-6. Por cada documento: processDocument(doc)
-   ├── historyRepository.updateState(docId, "IN_PROGRESS", null)
-   ├── productRestGateway.getDocument(doc.productId(), doc.documentId())
-   │     └── GET {productDocumentsPath}/{docId}
-   │     └── Decodifica Base64 via Base64Utils.decodeSafe()
-   ├── Si isZip=true → ZipDecompressor.decompress() expande cada entrada
-   ├── RulesBussinesGateway.validate(doc, true)  [patron nombre + tamano]
-   │     └── Si no pasa → updateState(PROCESSED), skip (no se envia)
-   ├── uploadDocument() → SoapGateway.send() o S3Gateway.send()
-   │     └── Con reintentos automaticos + backoff
-   ├── saveHistory(doc, result) → INSERT en historico_documentos (fila de trazabilidad)
-   │     └── useCase = "SOAP" o "S3"
-   │     └── retry = numero de intento actual
-   └── historyRepository.updateState(docId, result.isSuccess ? "PROCESSED" : "FAILED", errorMessage)
-        │
-        ▼
-7. Flux<FileUploadResult> → NDJSON stream al cliente
+```mermaid
+graph TD
+    A[Cliente] -->|GET ?processor=soap/s3| B(AbstractDocumentProcessingUseCase)
+    B --> C[(Base de Datos)]
+    C -->|SELECT estado=PENDING| D{Flux Documentos}
+    
+    D -->|Por cada doc| E[updateState: IN_PROGRESS]
+    E --> F[REST API Externa: getDocument]
+    F --> G[Decodifica Base64]
+    
+    G --> H{es_zip?}
+    H -->|Sí| I[ZipDecompressor expande archivos]
+    H -->|No| J[RulesBussinesGateway: Validar tamaño y nombre]
+    I --> J
+    
+    J --> K{¿Pasa validación?}
+    K -->|No| L[updateState: PROCESSED / Ignorado]
+    
+    K -->|Sí| M[Subida a Gateway: SOAP o S3]
+    M -->|Intentos automáticos| N{¿Resultado?}
+    
+    N -->|SUCCESS| O[updateState: PROCESSED]
+    N -->|FAILURE| P{¿Agotó reintentos?}
+    P -->|Sí| Q[updateState: FAILED]
+    P -->|No| R[updateState: PENDING para reintento futuro]
+    
+    O --> S[(BD: INSERT en historico_documentos)]
+    Q --> S
+    R --> S
+    L -.->|No inserta en historial| T[Stream NDJSON al cliente]
+    S --> T
 ```
 
 **Nota:** la descompresion ZIP se aplica tanto en procesamiento como en el dominio. La validacion de nombre y tamano solo se aplica en procesamiento.
+
+---
+
+## Diagramas de Secuencia
+
+### Flujo General de Operaciones
+Este diagrama muestra la interacción de alto nivel entre los componentes principales durante el ciclo de vida de un documento.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Cliente
+    participant Service as File Processor Service
+    participant API as API REST Externa
+    participant DB as Base de Datos (R2DBC)
+    participant Gateway as Gateway (SOAP / S3)
+
+    Note over Cliente, Gateway: Proceso de Sincronización (Sync)
+    Cliente->>Service: POST /api/v1/products/sync
+    Service->>API: GET /products
+    API-->>Service: Lista de productos y documentos
+    Service->>DB: INSERT en 'documentos' (estado=SYNCED)
+    Service-->>Cliente: 200 OK (Proceso iniciado asíncronamente)
+
+    Note over Cliente, Gateway: Proceso de Envío (Processing)
+    Cliente->>Service: GET /api/v1/products?processor=soap
+    Service->>DB: SELECT documentos WHERE estado='PENDING'
+    DB-->>Service: Flux<DocumentEntity>
+    
+    loop Por cada documento
+        Service->>API: GET /documentos/{id}
+        API-->>Service: Contenido en Base64
+        Service->>Service: Decodificación y validación de reglas
+        Service->>Gateway: Enviar documento (XML SOAP o binario S3)
+        Gateway-->>Service: Respuesta del servidor externo
+        Service->>DB: UPDATE 'documentos' (estado final)
+        Service->>DB: INSERT en 'historico_documentos' (auditoría)
+    end
+    Service-->>Cliente: Stream NDJSON con resultados
+```
+
+### Detalle de Procesamiento: Caso de Éxito
+Flujo detallado de la lógica interna cuando un documento cumple todas las reglas y el servidor destino responde correctamente.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UC as DocumentProcessingUseCase
+    participant Rules as RulesBusinessService
+    participant Adapter as GatewayAdapter (SOAP/S3)
+    participant Repos as R2DBC Repositories
+
+    UC->>Repos: updateState(id, IN_PROGRESS)
+    UC->>Rules: validate(document)
+    Rules-->>UC: validationSuccess: true
+    
+    UC->>Adapter: upload(document)
+    Adapter-->>UC: FileUploadResult(SUCCESS, correlationId)
+    
+    par Auditoría y Estado
+        UC->>Repos: updateState(id, PROCESSED)
+        UC->>Repos: saveHistory(SUCCESS, gateway)
+    end
+```
+
+### Detalle de Procesamiento: Manejo de Errores y Reintentos
+Muestra el comportamiento ante fallos temporales (reintentos) y fallos definitivos.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UC as DocumentProcessingUseCase
+    participant Adapter as GatewayAdapter (SOAP/S3)
+    participant Repos as R2DBC Repositories
+
+    UC->>Adapter: upload(document)
+    Adapter-->>UC: Error (Timeout / 503 / ConnRefused)
+    
+    Note over UC: Lógica de Reintento (Exponential Backoff)
+    
+    UC->>Adapter: upload(document) [Reintento N]
+    
+    alt Error persiste (Reintentos agotados)
+        Adapter-->>UC: Error persistente
+        UC->>Repos: updateState(id, FAILED, "Reintentos agotados")
+        UC->>Repos: saveHistory(FAILURE, error_code, stack_trace)
+    else Error temporal (Aún hay intentos)
+        Adapter-->>UC: Error temporal
+        UC->>Repos: updateState(id, PENDING, "Error temporal")
+        UC->>Repos: saveHistory(FAILURE, error_code, stack_trace)
+    end
+```
 
 ---
 
@@ -289,31 +375,41 @@ spring:
     password: ${DB_PASSWORD:postgres}
 ```
 
-### Tabla: historico_documentos (unificada)
+### Tabla: documentos
 
-Almacena tanto los metadatos del documento como la trazabilidad completa de cada intento de envio a los servicios externos (SOAP o S3). Las filas de metadatos tienen `caso_uso = NULL` y representan el estado actual del documento. Las filas de trazabilidad tienen `caso_uso` asignado y registran cada intento de procesamiento.
+Almacena los metadatos y el estado actual de cada documento obtenido desde la API REST. Esta tabla representa la fuente de verdad del documento.
 
 | Columna | Tipo | Descripcion |
 |---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `id_documento` | VARCHAR(100) | ID del documento en el sistema externo |
 | `id_producto` | VARCHAR(100) | ID del producto padre |
-| `activo` | BOOLEAN | Si el documento esta activo (default: TRUE) |
-| `clave_documento` | VARCHAR(255) | Clave de documento (nullable) |
 | `nombre` | VARCHAR(255) | Nombre del archivo |
-| `propietario` | VARCHAR(255) | Propietario del documento |
-| `ruta` | TEXT | Ruta del documento (nullable) |
-| `estado` | VARCHAR(100) | Estado del documento: PENDING / IN_PROGRESS / PROCESSED / FAILED / SYNCED |
-| `version_contrato` | VARCHAR(50) | Version de contrato (nullable) |
-| `mensaje_error` | TEXT | Mensaje de error si hubo fallo |
+| `estado` | VARCHAR(100) | Estado actual: PENDING / IN_PROGRESS / PROCESSED / FAILED / SYNCED |
+| `mensaje_error` | TEXT | Mensaje de error si hubo fallo (ultimo error) |
 | `es_zip` | BOOLEAN | Si es un archivo ZIP comprimido |
-| `nombre_zip_padre` | VARCHAR(255) | Si viene de un ZIP, nombre del ZIP padre (nullable) |
-| `caso_uso` | VARCHAR(100) | Caso de uso del envio: SOAP, S3, o NULL para fila de metadatos |
-| `resultado` | VARCHAR(50) | SUCCESS / FAILURE (NULL en fila de metadatos) |
-| `codigo_error` | VARCHAR(50) | Codigo de error categorizado |
-| `reintentos` | INTEGER | Numero de intento actual (default: 0) |
+| `caso_uso` | VARCHAR(100) | Gateway objetivo: SOAP o S3 |
+| `reintentos` | INT | Contador de intentos actuales del documento |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 | `fecha_actualizacion` | TIMESTAMP | Fecha de ultima actualizacion |
+
+### Tabla: historico_documentos
+
+Almacena la auditoria y trazabilidad detallada de cada intento de envio de un documento. Tiene una relacion de clave foranea hacia `documentos`.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `documento_id` | BIGINT (FK) | Referencia al documento en la tabla `documentos` |
+| `nombre_archivo` | VARCHAR(255) | Nombre del archivo en el momento del envio |
+| `operacion` | VARCHAR(50) | Operacion realizada (ej. UPLOAD_SOAP, UPLOAD_S3) |
+| `resultado` | VARCHAR(50) | Resultado del intento: SUCCESS / FAILURE |
+| `codigo_error` | VARCHAR(50) | Codigo de error (si fallo) |
+| `mensaje_error` | TEXT | Detalle del error |
+| `stack_trace` | TEXT | Pila de ejecucion del error |
+| `reintentos` | INT | Numero de intento (0 = primer intento) |
+| `fecha_inicio` | TIMESTAMP | Fecha de inicio de la operacion |
+| `fecha_fin` | TIMESTAMP | Fecha de fin de la operacion |
 
 ### Tabla: categoria_manual
 
@@ -337,17 +433,40 @@ Almacena la homologacion de paises. Se usa para resolver el `pais` de los docume
 | `pais_homologado` | VARCHAR(255) | Nombre homologado del pais (ej: "Argentina", "Chile") |
 | `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
 
+### Tabla: productos
+
+Almacena los productos sincronizados desde la API REST externa.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id_producto` | VARCHAR(255) | ID del producto en el sistema externo |
+| `nombre` | VARCHAR(500) | Nombre del producto |
+| `fecha_carga` | TIMESTAMP | Fecha en que se cargo el producto al sistema |
+| `estado` | VARCHAR(20) | Estado actual (ej. PENDING) |
+| `mensaje_error` | VARCHAR(2000)| Mensaje de error si la carga o sincronizacion fallo |
+
 ### Indices
 
 ```sql
+-- documentos
+CREATE INDEX idx_documentos_estado ON documentos(estado);
+CREATE INDEX idx_documentos_documento_id ON documentos(id_documento);
+CREATE INDEX idx_documentos_producto_id ON documentos(id_producto);
+CREATE INDEX idx_documentos_caso_uso ON documentos(caso_uso);
+
 -- historico_documentos
-CREATE INDEX idx_historico_documento_id ON historico_documentos(id_documento);
-CREATE INDEX idx_historico_estado ON historico_documentos(estado);
-CREATE INDEX idx_historico_producto_id ON historico_documentos(id_producto);
-CREATE INDEX idx_historico_documento_caso_uso ON historico_documentos(id_documento, caso_uso);
+CREATE INDEX idx_historico_documento_id ON historico_documentos(documento_id);
+CREATE INDEX idx_historico_doc_operacion ON historico_documentos(documento_id, operacion, fecha_inicio DESC);
+
+-- productos
+CREATE INDEX idx_prod_estado       ON productos(estado);
+CREATE INDEX idx_prod_fecha_carga  ON productos(fecha_carga);
+CREATE INDEX idx_prod_producto_id  ON productos(id_producto);
+CREATE INDEX idx_prod_carga_estado ON productos(fecha_carga, estado);
 
 -- categoria_manual
-CREATE INDEX idx_cat_manual_categoria ON categoria_manual(categoria);
+CREATE INDEX idx_cat_categoria_vigencia ON categoria_manual (categoria, fecha_vigencia);
 
 -- pais_homologado
 CREATE INDEX idx_pais_codigo ON pais_homologado(pais);
@@ -357,37 +476,67 @@ CREATE INDEX idx_pais_codigo ON pais_homologado(pais);
 
 ```sql
 -- ============================================================================
--- Tabla: historico_documentos (unificada)
--- Almacena metadatos de documentos y trazabilidad de envios en una sola tabla.
--- Filas de metadatos: caso_uso IS NULL (representan el estado actual del documento).
--- Filas de trazabilidad: caso_uso IS NOT NULL (registran cada intento de envio).
+-- Tabla: documentos
+-- Almacena metadatos de documentos obtenidos.
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS historico_documentos (
-    id                  BIGSERIAL       PRIMARY KEY,
-    id_documento        VARCHAR(100)    NOT NULL,
-    id_producto         VARCHAR(100)    NOT NULL,
-    activo              BOOLEAN         DEFAULT TRUE,
-    clave_documento     VARCHAR(255),
-    nombre              VARCHAR(255),
-    propietario         VARCHAR(255),
-    ruta                TEXT,
-    estado              VARCHAR(100)    NOT NULL,
-    version_contrato    VARCHAR(50),
-    mensaje_error       TEXT,
-    es_zip              BOOLEAN         DEFAULT FALSE,
-    nombre_zip_padre    VARCHAR(255),
-    caso_uso            VARCHAR(100),
-    resultado           VARCHAR(50),
-    codigo_error        VARCHAR(50),
-    reintentos          INTEGER         NOT NULL DEFAULT 0,
-    fecha_creacion      TIMESTAMP       NOT NULL DEFAULT NOW(),
-    fecha_actualizacion TIMESTAMP       NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS documentos (
+    id BIGSERIAL PRIMARY KEY,
+    id_documento VARCHAR(100) NOT NULL,
+    id_producto VARCHAR(100) NOT NULL,
+    nombre VARCHAR(255),
+    estado VARCHAR(100) NOT NULL,
+    mensaje_error TEXT,
+    es_zip BOOLEAN DEFAULT FALSE,
+    caso_uso VARCHAR(100),
+    reintentos INT DEFAULT 0,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(id_documento);
-CREATE INDEX IF NOT EXISTS idx_historico_estado ON historico_documentos(estado);
-CREATE INDEX IF NOT EXISTS idx_historico_producto_id ON historico_documentos(id_producto);
-CREATE INDEX IF NOT EXISTS idx_historico_documento_caso_uso ON historico_documentos(id_documento, caso_uso);
+CREATE INDEX IF NOT EXISTS idx_documentos_estado ON documentos(estado);
+CREATE INDEX IF NOT EXISTS idx_documentos_documento_id ON documentos(id_documento);
+CREATE INDEX IF NOT EXISTS idx_documentos_producto_id ON documentos(id_producto);
+CREATE INDEX IF NOT EXISTS idx_documentos_caso_uso ON documentos(caso_uso);
+
+-- ============================================================================
+-- Tabla: historico_documentos
+-- Almacena auditoria y trazabilidad de cada intento de envio.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS historico_documentos (
+    id BIGSERIAL PRIMARY KEY,
+    documento_id BIGINT NOT NULL,
+    nombre_archivo VARCHAR(255),
+    operacion VARCHAR(50),
+    resultado VARCHAR(50),
+    codigo_error VARCHAR(50),
+    mensaje_error TEXT,
+    stack_trace TEXT,
+    reintentos INT NOT NULL DEFAULT 0,
+    fecha_inicio TIMESTAMP,
+    fecha_fin TIMESTAMP,
+    FOREIGN KEY (documento_id) REFERENCES documentos(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(documento_id);
+CREATE INDEX IF NOT EXISTS idx_historico_doc_operacion ON historico_documentos(documento_id, operacion, fecha_inicio DESC);
+
+-- ============================================================================
+-- Tabla: productos
+-- Almacena productos sincronizados desde la API REST externa.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS productos (
+    id              BIGSERIAL       PRIMARY KEY,
+    id_producto     VARCHAR(255)    NOT NULL,
+    nombre          VARCHAR(500)    NOT NULL,
+    fecha_carga     TIMESTAMP       NOT NULL DEFAULT NOW(),
+    estado          VARCHAR(20)     NOT NULL DEFAULT 'PENDING',
+    mensaje_error   VARCHAR(2000)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prod_estado       ON productos (estado);
+CREATE INDEX IF NOT EXISTS idx_prod_fecha_carga  ON productos (fecha_carga);
+CREATE INDEX IF NOT EXISTS idx_prod_producto_id  ON productos (id_producto);
+CREATE INDEX IF NOT EXISTS idx_prod_carga_estado ON productos (fecha_carga, estado);
 
 -- ============================================================================
 -- Tabla: categoria_manual
@@ -401,7 +550,7 @@ CREATE TABLE IF NOT EXISTS categoria_manual (
     fecha_creacion      TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_cat_manual_categoria ON categoria_manual(categoria);
+CREATE INDEX IF NOT EXISTS idx_cat_categoria_vigencia ON categoria_manual(categoria, fecha_vigencia);
 
 -- ============================================================================
 -- Tabla: pais_homologado
@@ -694,6 +843,114 @@ documento no se guarda / no se procesa
 
 ---
 
+## Visualizacion de Escenarios de Data en BD
+
+Para entender como se registran los eventos en la base de datos, a continuacion se muestran ejemplos visuales de los datos guardados bajo distintos escenarios. El diseño se compone de dos tablas separadas: `documentos` (estado actual) e `historico_documentos` (trazabilidad y auditoria).
+
+### 1. Escenario Exitoso (Primer intento)
+El documento `doc-1` se envia correctamente a SOAP en su primer intento.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 1  | doc-1        | PROCESSED | SOAP  |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 1  | 1            | UPLOAD_SOAP | SUCCESS   | *NULL*       | 0          |
+
+### 2. Escenario de Fallo Temporal (Reintento en progreso)
+El documento `doc-2` fallo por un timeout en el gateway S3. Su estado en `documentos` vuelve a `PENDING` para ser reintentado.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 2  | doc-2        | PENDING   | S3       |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 2  | 2            | UPLOAD_S3 | FAILURE   | GATEWAY_TIMEOUT | 0       |
+
+### 3. Escenario de Fallo Permanente (Reintentos agotados)
+El documento `doc-3` fallo repetidamente al enviarse por SOAP. Despues de llegar al limite de reintentos (ej. 3 intentos = reintento 0, 1 y 2), el estado final es `FAILED` permanente.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 3  | doc-3        | FAILED    | SOAP     |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 3  | 3            | UPLOAD_SOAP | FAILURE   | BAD_GATEWAY  | 0          |
+| 4  | 3            | UPLOAD_SOAP | FAILURE   | BAD_GATEWAY  | 1          |
+| 5  | 3            | UPLOAD_SOAP | FAILURE   | BAD_GATEWAY  | 2          |
+
+### 4. Escenario ZIP (Descompresion parcial)
+Un archivo ZIP `docs.zip` contiene `a.pdf` y `b.csv`. `a.pdf` se procesa correctamente, pero `b.csv` falla permanentemente.
+
+**Tabla: `documentos`**
+
+| id | id_documento | es_zip | estado | caso_uso |
+|----|--------------|--------|--------|----------|
+| 4  | docs.zip     | true   | SYNCED | *NULL*   |
+| 5  | doc-4/a.pdf  | false  | PROCESSED | SOAP |
+| 6  | doc-4/b.csv  | false  | FAILED | SOAP     |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 6  | 5            | UPLOAD_SOAP | SUCCESS   | *NULL*       | 0          |
+| 7  | 6            | UPLOAD_SOAP | FAILURE   | INVALID_FILE | 0          |
+
+### 5. Escenario de Sincronización Inicial (Recién Obtenido)
+El documento `doc-5` acaba de ser obtenido mediante el endpoint de `sync`. Se registra con estado `SYNCED` y aún no ha sido procesado por ningún gateway.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 7  | doc-5        | SYNCED    | *NULL*   |
+
+*(No hay registros en `historico_documentos` para este documento todavía)*
+
+### 6. Escenario Ignorado (Validación Fallida)
+El documento `doc-6` supera el límite de tamaño permitido. El sistema marca el metadato como `PROCESSED` (para no reprocesarlo iterativamente).
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 8  | doc-6        | PROCESSED | *NULL*   |
+
+*(No hay registros en `historico_documentos` ya que no se intentó enviar al Gateway)*
+
+### 7. Escenario de Error Crítico Interno (Ej. Base64 inválido)
+El documento `doc-7` se obtiene correctamente, pero su contenido Base64 es corrupto o no se puede decodificar. Se deja el registro de fallo en la BD.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 9  | doc-7        | FAILED    | SOAP     |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 8  | 9            | UPLOAD_SOAP | FAILURE   | INVALID_BASE64| 0         |
+
+---
+
 ## Codigos de Error
 
 ### Errores de Dominio (ProcessingResultCodes)
@@ -707,6 +964,7 @@ Definidos en `domain/usecase/ProcessingResultCodes.java`:
 | `INVALID_RESPONSE` | Respuesta SOAP invalida o malformada |
 | `INVALID_ZIP` | Archivo ZIP corrupto o invalido |
 | `UNKNOWN_ERROR` | Error no categorizado |
+| `SSL_ERROR` | Error de certificado SSL/TLS |
 
 ### Errores de Gateway SOAP (SoapErrorCodes)
 

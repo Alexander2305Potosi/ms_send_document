@@ -13,6 +13,10 @@ spring:
     url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
     username: sa
     password:
+  master-r2dbc:
+    url: r2dbc:h2:mem:///masterdb;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
   h2:
     console:
       enabled: true
@@ -36,9 +40,27 @@ logging:
 
 app:
   soap:
-    endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
-    timeout-seconds: 30
-    retry-attempts: 3
+    v2:
+      endpoint: ${SOAP_V2_ENDPOINT:http://localhost:9000/soap/adminDocs}
+      system-id: ${SOAP_V2_SYSTEM_ID:123}
+      user-name: ${SOAP_V2_USER_NAME:775757775}
+      header-namespace: ${SOAP_V2_HEADER_NS:http://prueba.com/ents/SOI/MessageFormat/V2.1}
+      body-namespace: ${SOAP_V2_BODY_NS:http://prueba.com/intf/factory/adminDocs/V1.0}
+      soap-namespace: ${SOAP_V2_NAMESPACE:http://schemas.xmlsoap.org/soap/envelope/}
+      user-token: ${SOAP_V2_USER_TOKEN:}
+      destination-name: ${SOAP_V2_DEST_NAME:bussinesdocs}
+      destination-namespace: ${SOAP_V2_DEST_NS:http://prueba.com/intf/factory/adminDocs/Enlace/V1.0}
+      destination-operation: ${SOAP_V2_DEST_OP:senddocs}
+      soap-action: ${SOAP_V2_SOAP_ACTION:}
+      classification: ${SOAP_V2_CLASSIFICATION:http://prueba.com/clas/AppsUpdated}
+      message-context:
+        key01: "value01"
+        key02: "value02"
+      meta-data:
+        xIdentificadorFisico: "65464904"
+        xFilial: "prueba"
+      timeout-seconds: 30
+      retry-attempts: 3
   document-rest:
     endpoint: ${DOCUMENT_REST_ENDPOINT:http://localhost:3001}
     products-path: /api/products
@@ -64,18 +86,3 @@ app:
     soap:
       max-file-size-bytes: 10485760
       filename-pattern: ".*\\.(pdf|docx|txt)$"
-
----
-spring:
-  config:
-    activate:
-      on-profile: s3
-app:
-  aws:
-    s3:
-      bucket-name: documents-bucket
-      region: us-east-1
-      endpoint: http://localhost:4566
-      path-style-access: true
-      retry-attempts: 3
-      retry-backoff-millis: 500

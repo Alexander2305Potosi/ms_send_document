@@ -14,7 +14,6 @@ class FileUploadRequestTest {
             .filename("test.pdf")
             .contentType("application/pdf")
             .fileSize(3L)
-            .origin("origin")
             .build();
 
         assertEquals("doc-1", request.getDocumentId());
@@ -22,7 +21,6 @@ class FileUploadRequestTest {
         assertEquals("test.pdf", request.getFilename());
         assertEquals("application/pdf", request.getContentType());
         assertEquals(3L, request.getFileSize());
-        assertEquals("origin", request.getOrigin());
     }
 
     @Test

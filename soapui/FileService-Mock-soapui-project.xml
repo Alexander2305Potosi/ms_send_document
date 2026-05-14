@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<con:soapui-project id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" activeEnvironment="Default" name="FileService SOAP Mock" resourceRoot="" soapui-version="5.7.0" abortOnError="false" runType="SEQUENTIAL" xmlns:con="http://eviware.com/soapui/config">
+<con:soapui-project id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" activeEnvironment="Default" name="FileService SOAP Mock" resourceRoot="" soapui-version="5.9.1" abortOnError="false" runType="SEQUENTIAL" xmlns:con="http://eviware.com/soapui/config">
   <con:settings/>
   <con:properties>
     <con:property>
@@ -8,12 +8,7 @@
     </con:property>
   </con:properties>
 
-  <con:interface xsi:type="con:WsdlInterface" id="interface-1" wsaVersion="NONE"
-                 name="FileServiceSoapBinding" type="wsdl"
-                 bindingName="{http://example.com/fileservice}FileServiceSoapBinding"
-                 soapVersion="1_1" anonymous="optional"
-                 definition=""
-                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <con:interface xsi:type="con:WsdlInterface" id="interface-1" wsaVersion="NONE" name="FileServiceSoapBinding" type="wsdl" bindingName="{http://example.com/fileservice}FileServiceSoapBinding" soapVersion="1_1" anonymous="optional" definition="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <con:settings/>
 
     <con:definitionCache type="TEXT" rootPart="FileService.wsdl">
@@ -99,43 +94,32 @@
       <con:endpoint>http://localhost:9000/soap/fileservice</con:endpoint>
     </con:endpoints>
 
-    <con:operation id="operation-1" isOneWay="false"
-                   action="http://example.com/fileservice/UploadFile"
-                   name="UploadFile" bindingOperationName="UploadFile"
-                   type="Request-Response" outputName="UploadFileResponse"
-                   inputName="UploadFileRequest"
-                   receivesAttachments="false" sendsAttachments="false"
-                   anonymous="optional">
+    <con:operation id="operation-1" isOneWay="false" action="http://example.com/fileservice/UploadFile" name="UploadFile" bindingOperationName="UploadFile" type="Request-Response" outputName="UploadFileResponse" inputName="UploadFileRequest" receivesAttachments="false" sendsAttachments="false" anonymous="optional">
       <con:settings/>
     </con:operation>
   </con:interface>
 
-  <con:mockService id="mockservice-1" port="9000" path="/soap/fileservice"
-                   host="127.0.0.1" name="FileService Mock"
-                   bindToHostOnly="true" docroot="">
+  <con:mockService id="mockservice-1" port="9000" path="/soap/fileservice" host="127.0.0.1" name="FileService Mock" bindToHostOnly="true" docroot="">
     <con:settings>
       <con:setting id="com.eviware.soapui.impl.wsdl.mock.WsdlMockService@require-soap-action">false</con:setting>
       <con:setting id="com.eviware.soapui.impl.wsdl.mock.WsdlMockService@dispatch-response">1</con:setting>
     </con:settings>
 
-    <con:mockOperation name="UploadFile" id="mockoperation-1"
-                       interface="FileServiceSoapBinding"
-                       operation="UploadFile">
+    <con:properties/><con:mockOperation name="UploadFile" id="mockoperation-1" interface="FileServiceSoapBinding" operation="UploadFile">
       <con:settings/>
       <con:dispatchStyle>SCRIPT</con:dispatchStyle>
       <con:dispatchConfig/>
-      <con:dispatchPath><![CDATA[
+      <con:dispatchPath>
 def responses = ["Success Response", "Server Error 500", "Service Unavailable 503", "Gateway Timeout 504", "Slow Response", "Bad Request 400"]
 def counter = mockOperation.mockService.getPropertyValue("responseCounter")
 if (counter == null || counter.isEmpty()) counter = "0"
 def idx = Integer.parseInt(counter) % responses.size()
 mockOperation.mockService.setPropertyValue("responseCounter", String.valueOf(Integer.parseInt(counter) + 1))
 return responses[idx]
-]]></con:dispatchPath>
+</con:dispatchPath>
       <con:dispatchType>Groovy</con:dispatchType>
 
-      <con:mockResponse id="mockresponse-1" name="Success Response"
-                        encoding="UTF-8" httpResponseStatus="200">
+      <con:mockResponse id="mockresponse-1" name="Success Response" encoding="UTF-8" httpResponseStatus="200">
         <con:settings/>
         <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
    <soap:Header/>
@@ -155,8 +139,7 @@ return responses[idx]
         <con:delay>100</con:delay>
       </con:mockResponse>
 
-      <con:mockResponse id="mockresponse-2" name="Server Error 500"
-                        encoding="UTF-8" httpResponseStatus="500">
+      <con:mockResponse id="mockresponse-2" name="Server Error 500" encoding="UTF-8" httpResponseStatus="500">
         <con:settings/>
         <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
    <soap:Header/>
@@ -173,8 +156,7 @@ return responses[idx]
         <con:delay>100</con:delay>
       </con:mockResponse>
 
-      <con:mockResponse id="mockresponse-3" name="Service Unavailable 503"
-                        encoding="UTF-8" httpResponseStatus="503">
+      <con:mockResponse id="mockresponse-3" name="Service Unavailable 503" encoding="UTF-8" httpResponseStatus="503">
         <con:settings/>
         <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
    <soap:Header/>
@@ -192,8 +174,7 @@ return responses[idx]
         <con:delay>100</con:delay>
       </con:mockResponse>
 
-      <con:mockResponse id="mockresponse-4" name="Gateway Timeout 504"
-                        encoding="UTF-8" httpResponseStatus="504">
+      <con:mockResponse id="mockresponse-4" name="Gateway Timeout 504" encoding="UTF-8" httpResponseStatus="504">
         <con:settings/>
         <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
    <soap:Header/>
@@ -210,8 +191,7 @@ return responses[idx]
         <con:delay>100</con:delay>
       </con:mockResponse>
 
-      <con:mockResponse id="mockresponse-5" name="Slow Response"
-                        encoding="UTF-8" httpResponseStatus="200">
+      <con:mockResponse id="mockresponse-5" name="Slow Response" encoding="UTF-8" httpResponseStatus="200">
         <con:settings/>
         <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
    <soap:Header/>
@@ -231,8 +211,7 @@ return responses[idx]
         <con:delay>30000</con:delay>
       </con:mockResponse>
 
-      <con:mockResponse id="mockresponse-6" name="Bad Request 400"
-                        encoding="UTF-8" httpResponseStatus="400">
+      <con:mockResponse id="mockresponse-6" name="Bad Request 400" encoding="UTF-8" httpResponseStatus="400">
         <con:settings/>
         <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
    <soap:Header/>
@@ -249,8 +228,7 @@ return responses[idx]
         <con:delay>100</con:delay>
       </con:mockResponse>
 
-      <con:mockResponse id="mockresponse-default" name="Default"
-                        encoding="UTF-8" httpResponseStatus="200">
+      <con:mockResponse id="mockresponse-default" name="Default" encoding="UTF-8" httpResponseStatus="200">
         <con:settings/>
         <con:responseContent><![CDATA[<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:file="http://example.com/fileservice">
    <soap:Header/>
@@ -273,5 +251,5 @@ return responses[idx]
     </con:mockOperation>
   </con:mockService>
 
-  <con:reporting/>
+  <con:wssContainer/><con:oAuth2ProfileContainer/><con:oAuth1ProfileContainer/><con:reporting/>
 </con:soapui-project>

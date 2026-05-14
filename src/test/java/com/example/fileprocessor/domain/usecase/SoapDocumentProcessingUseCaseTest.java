@@ -1,15 +1,14 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.DocumentStatus;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.HomologationResult;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.HomologationRepository;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,7 +27,7 @@ import static org.mockito.Mockito.*;
 class SoapDocumentProcessingUseCaseTest {
 
     @Mock
-    private DocumentHistoryRepository historyRepository;
+    private DocumentPersistenceGateway persistencePort;
 
     @Mock
     private ProductRestGateway productRestGateway;
@@ -37,24 +36,31 @@ class SoapDocumentProcessingUseCaseTest {
     private SoapGateway soapGateway;
 
     @Mock
-    private HomologationRepository homologationRepository;
+    private RulesBussinesGateway documentValidator;
 
     @Mock
-    private RulesBussinesGateway documentValidator;
+    private HomologationRepository homologationRepository;
 
     private SoapDocumentProcessingUseCase useCase;
 
     @BeforeEach
     void setUp() {
         useCase = new SoapDocumentProcessingUseCase(
-            historyRepository,
+            persistencePort,
             productRestGateway,
             soapGateway,
-            homologationRepository,
-            documentValidator
+            documentValidator,
+            homologationRepository
         );
-        lenient().when(historyRepository.save(any())).thenReturn(Mono.empty());
-        lenient().when(historyRepository.updateState(anyString(), anyString(), any())).thenReturn(Mono.empty());
+
+        lenient().when(homologationRepository.resolve(anyString(), anyString()))
+            .thenReturn(Mono.just(new HomologationResult("homo-origin", "homo-pais")));
+            
+        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
+            .thenAnswer(invocation -> {
+                com.example.fileprocessor.domain.entity.DocumentUpdateCommand cmd = invocation.getArgument(0);
+                return Mono.just(cmd.response());
+            });
     }
 
     private static ProductDocumentHistory doc() {
@@ -79,11 +85,8 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenSuccess_returnsSuccessResult() {
-        HomologationResult homologationResult = new HomologationResult("Manual de Origin", "Argentina");
-        when(homologationRepository.resolve("origin", "AR")).thenReturn(Mono.just(homologationResult));
-
-        FileUploadResult successResult = FileUploadResult.builder()
-            .status(DocumentStatus.SUCCESS.name())
+        FileUploadResponse successResult = FileUploadResponse.builder()
+            .status(ProcessingResultCodes.SUCCESS.name())
             .success(true)
             .correlationId("corr-456")
             .processedAt(Instant.now())
@@ -92,7 +95,7 @@ class SoapDocumentProcessingUseCaseTest {
         when(soapGateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.just(successResult));
 
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1"))
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertTrue(result.isSuccess());
                 assertEquals("corr-456", result.getCorrelationId());
@@ -102,15 +105,33 @@ class SoapDocumentProcessingUseCaseTest {
 
     @Test
     void uploadDocument_whenError_returnsFailureResult() {
-        HomologationResult homologationResult = new HomologationResult("Manual de Origin", "Argentina");
-        when(homologationRepository.resolve("origin", "AR")).thenReturn(Mono.just(homologationResult));
         when(soapGateway.send(any(FileUploadRequest.class)))
             .thenReturn(Mono.error(new RuntimeException("SOAP error")));
 
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1"))
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(DocumentStatus.FAILURE.name(), result.getStatus());
+                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void uploadDocument_whenGatewayReturnsFailureStatus_propagatesFailure() {
+        FileUploadResponse failureResult = FileUploadResponse.builder()
+            .status(ProcessingResultCodes.FAILURE.name())
+            .success(false)
+            .errorCode(ProcessingResultCodes.BAD_GATEWAY.name())
+            .message("SOAP gateway error")
+            .build();
+
+        when(soapGateway.send(any(FileUploadRequest.class)))
+            .thenReturn(Mono.just(failureResult));
+
+        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(ProcessingResultCodes.BAD_GATEWAY.name(), result.getErrorCode());
             })
             .verifyComplete();
     }

@@ -1,32 +1,59 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.util.logging.Level;
+
+/**
+ * Use case for processing documents via S3. Restored to use ProductRestGateway.
+ */
 public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private final S3Gateway s3Gateway;
 
     public S3DocumentProcessingUseCase(
-            DocumentHistoryRepository historyRepository,
+            DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
             RulesBussinesGateway documentValidator) {
-        super(historyRepository, productRestGateway, documentValidator);
+        super(persistencePort, productRestGateway, documentValidator);
         this.s3Gateway = s3Gateway;
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId) {
-        FileUploadRequest request = buildFileUploadRequest(doc, doc.origin());
-        return s3Gateway.send(request)
-            .onErrorResume(this::handleUploadError);
+    protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
+        return Mono.fromCallable(() -> FileUploadRequest.from(doc, docId, null))
+            .flatMap(request -> s3Gateway.send(request))
+            .map(response -> {
+                if (response.isSuccess()) {
+                    return FileUploadResponse.builder()
+                        .success(true)
+                        .status(ProcessingResultCodes.SUCCESS.name())
+                        .message("Documento procesado correctamente en S3")
+                        .processedAt(Instant.now())
+                        .correlationId(response.getCorrelationId())
+                        .externalReference(response.getExternalReference())
+                        .build();
+                }
+                return response;
+            })
+            .onErrorResume(e -> {
+                LOGGER.log(Level.SEVERE, "S3 processing failed for docId {0}: {1}", new Object[]{docId, e.getMessage()});
+                return Mono.just(FileUploadResponse.builder()
+                    .status(ProcessingResultCodes.FAILURE.name())
+                    .success(false)
+                    .message(e.getMessage())
+                    .processedAt(Instant.now())
+                    .build());
+            });
     }
 
     @Override

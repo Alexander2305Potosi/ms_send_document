@@ -1,6 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -9,73 +11,49 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
-@Entity
+/**
+ * R2DBC entity for the 'historico_documentos' table.
+ * Removed: message_id (no external broker defined), fecha_creacion (redundant with fecha_inicio).
+ */
+@Table("historico_documentos")
 @Getter
 @Setter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Table(name = "historico_documentos")
 public class DocumentHistoryEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column("id")
     private Long id;
 
-    @Column(name = "id_documento", nullable = false)
-    private String documentId;
+    @Column("documento_id")
+    private Long documentId;
 
-    @Column(name = "id_producto", nullable = false)
-    private String productId;
+    @Column("nombre_archivo")
+    private String filename;
 
-    @Builder.Default
-    @Column(name = "activo")
-    private Boolean active = true;
+    @Column("operacion")
+    private String operation;
 
-    @Column(name = "clave_documento")
-    private String docKey;
+    @Column("resultado")
+    private String result;
 
-    @Column(name = "nombre")
-    private String name;
-
-    @Column(name = "propietario")
-    private String owner;
-
-    @Column(name = "ruta")
-    private String path;
-
-    @Column(name = "estado", nullable = false)
-    private String state;
-
-    @Column(name = "version_contrato")
-    private String versionContract;
-
-    @Column(name = "mensaje_error")
-    private String errorMessage;
-
-    @Builder.Default
-    @Column(name = "es_zip")
-    private Boolean isZip = false;
-
-    @Column(name = "nombre_zip_padre")
-    private String parentZipName;
-
-    @Column(name = "caso_uso")
-    private String useCase;
-
-    @Column(name = "resultado")
-    private String status;
-
-    @Column(name = "codigo_error")
+    @Column("codigo_error")
     private String errorCode;
 
-    @Builder.Default
-    @Column(name = "reintentos")
-    private Integer retry = 0;
+    @Column("mensaje_error")
+    private String errorMessage;
 
-    @Column(name = "fecha_creacion", nullable = false)
-    private LocalDateTime createdAt;
+    @Column("stack_trace")
+    private String stackTrace;
 
-    @Column(name = "fecha_actualizacion", nullable = false)
-    private LocalDateTime updatedAt;
+    @Column("reintentos")
+    private Integer retry;
+
+    @Column("fecha_inicio")
+    private LocalDateTime startedAt;
+
+    @Column("fecha_fin")
+    private LocalDateTime completedAt;
 }

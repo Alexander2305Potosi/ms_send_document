@@ -1,54 +1,60 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
-import com.example.fileprocessor.domain.port.out.HomologationRepository;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.util.logging.Level;
+
+/**
+ * Use case for processing documents via SOAP.
+ * Clean Architecture compliant: No infrastructure dependencies.
+ */
 public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private final SoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
 
     public SoapDocumentProcessingUseCase(
-            DocumentHistoryRepository historyRepository,
+            DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
-            HomologationRepository homologationRepository,
-            RulesBussinesGateway documentValidator) {
-        super(historyRepository, productRestGateway, documentValidator);
+            RulesBussinesGateway documentValidator,
+            HomologationRepository homologationRepository) {
+        super(persistencePort, productRestGateway, documentValidator);
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
     }
 
     @Override
-    protected Mono<FileUploadResult> uploadDocument(ProductDocumentHistory doc, String productId) {
-        return homologationRepository.resolve(doc.origin(), doc.pais())
-            .flatMap(result ->
-                soapGateway.send(buildFileUploadRequest(doc, result.origin(), result.paisHomologado()))
-                    .onErrorResume(this::handleUploadError)
-            );
+    protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
+        return homologationRepository.resolve(doc.getOrigin(), doc.getPais())
+            .map(h -> FileUploadRequest.from(doc, docId, h))
+            .flatMap(request -> soapGateway.send(request))
+            .onErrorResume(e -> {
+                // El Gateway ya debe devolver un FileUploadResponse con error mapeado, 
+                // o capturamos excepciones de dominio puras aquí.
+                LOGGER.log(Level.SEVERE, "SOAP fatal failure for docId {0}: {1}", new Object[]{docId, e.getMessage()});
+                
+                return Mono.just(FileUploadResponse.builder()
+                    .status(ProcessingResultCodes.FAILURE.name())
+                    .errorCode(ProcessingResultCodes.UNKNOWN_ERROR.name())
+                    .message(e.getMessage())
+                    .success(false)
+                    .processedAt(Instant.now())
+                    .build());
+            });
     }
 
     @Override
     protected String implementationName() {
         return "SOAP";
-    }
-
-    private FileUploadRequest buildFileUploadRequest(ProductDocumentHistory doc, String origin, String paisHomologado) {
-        return FileUploadRequest.builder()
-            .documentId(doc.documentId())
-            .content(doc.content() != null ? doc.content() : new byte[0])
-            .filename(doc.filename())
-            .contentType(doc.contentType())
-            .fileSize(doc.size())
-            .origin(origin)
-            .paisHomologado(paisHomologado)
-            .build();
     }
 }

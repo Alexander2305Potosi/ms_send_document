@@ -1,13 +1,14 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.DocumentHistory;
-import reactor.core.publisher.Flux;
+import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import reactor.core.publisher.Mono;
 
+/**
+ * Port for persisting document processing history.
+ */
 public interface DocumentHistoryRepository {
-    Mono<Void> save(DocumentHistory history);
-    Flux<DocumentHistory> findByDocumentId(String documentId);
-    Flux<DocumentHistory> findByState(String state);
-    Mono<Void> updateState(String documentId, String state, String errorMessage);
-    Mono<Integer> getRetryCount(String documentId, String useCase);
+    /**
+     * Records the outcome of a document processing attempt.
+     */
+    Mono<Void> saveHistory(DocumentUpdateCommand command);
 }

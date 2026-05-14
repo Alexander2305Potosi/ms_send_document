@@ -4,18 +4,35 @@ import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.infrastructure.helpers.soap.SoapConstants;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileRequest;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.UploadFileResponse;
+import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelope;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.SoapFaultDetail;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.TransmitirDocumentoResponse;
+import jakarta.annotation.PostConstruct;
 import jakarta.xml.bind.JAXBContext;
-import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
+import jakarta.xml.bind.Unmarshaller;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.io.StringReader;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -23,84 +40,207 @@ import java.util.logging.Logger;
 @Component
 public class SoapMapper {
 
-    private static final Logger log = Logger.getLogger(SoapMapper.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SoapMapper.class.getName());
 
-    private static final String DEFAULT_STATUS = "UNKNOWN";
-    private static final String DEFAULT_MESSAGE = "No message received";
-    private static final String DEFAULT_CORRELATION_ID = "N/A";
-
-    private final SoapEnvelopeWrapper envelopeWrapper;
     private final JAXBContext jaxbContext;
+    private final SoapProperties props;
+    private final ResourceLoader resourceLoader;
+    private String xmlTemplate;
 
-    public SoapMapper(SoapEnvelopeWrapper envelopeWrapper) {
-        this.envelopeWrapper = envelopeWrapper;
-        this.jaxbContext = envelopeWrapper.getJaxbContext();
+    public SoapMapper(JAXBContext jaxbContext, SoapProperties props, ResourceLoader resourceLoader) {
+        this.jaxbContext = jaxbContext;
+        this.props = props;
+        this.resourceLoader = resourceLoader;
     }
 
-    public String toSoapXml(FileUploadRequest fileUploadRequest) {
-        String base64Content = fileUploadRequest.getContent() != null
-            ? Base64.getEncoder().encodeToString(fileUploadRequest.getContent())
-            : "";
-
-        UploadFileRequest uploadRequest = new UploadFileRequest(
-                base64Content,
-                fileUploadRequest.getFilename(),
-                fileUploadRequest.getContentType(),
-                fileUploadRequest.getFileSize(),
-                Instant.now().toString(),
-                ".",
-                "."
-        );
-
-        return marshalRequest(uploadRequest);
-    }
-
-    public String toFullSoapMessage(FileUploadRequest fileUploadRequest) {
-        String soapBody = toSoapXml(fileUploadRequest);
-        return SoapConstants.HEADER_PREFIX
-            + SoapConstants.ENVELOPE_START + SoapConstants.SOAP_ENVELOPE + "\"\n"
-            + "               xmlns:file=\"" + SoapConstants.FILE_SERVICE + "\">\n"
-            + SoapConstants.ENVELOPE_END
-            + soapBody
-            + SoapConstants.FOOTER_ENVELOPE_END;
-    }
-
-    private String marshalRequest(UploadFileRequest request) {
+    @PostConstruct
+    public void init() {
         try {
-            Marshaller marshaller = jaxbContext.createMarshaller();
-            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
-            marshaller.setProperty(Marshaller.JAXB_FRAGMENT, true);
-
-            StringWriter writer = new StringWriter();
-            marshaller.marshal(request, writer);
-            return writer.toString();
-        } catch (JAXBException e) {
-            log.log(Level.SEVERE, "Error marshalling SOAP request: {0}", new Object[]{e.getMessage()});
-            throw ProcessingException.withTraceId("Failed to marshal SOAP request", ProcessingResultCodes.UNKNOWN_ERROR, "", e);
-        }
-    }
-
-    public ExternalServiceResponse fromSoapXml(String xml) {
-        try {
-            UploadFileResponse response = envelopeWrapper.unwrapResponse(xml, UploadFileResponse.class);
-
-            Instant processedAt = response.getProcessedAt() != null
-                ? Instant.parse(response.getProcessedAt())
-                : Instant.now();
-
-            return ExternalServiceResponse.builder()
-                .status(Objects.requireNonNullElse(response.getStatus(), DEFAULT_STATUS))
-                .message(Objects.requireNonNullElse(response.getMessage(), DEFAULT_MESSAGE))
-                .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), DEFAULT_CORRELATION_ID))
-                .processedAt(processedAt)
-                .externalReference(response.getExternalReference())
-                .build();
+            Resource resource = resourceLoader.getResource("classpath:templates/soap-envelope.xml");
+            try (InputStream is = resource.getInputStream()) {
+                String rawTemplate = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                this.xmlTemplate = rawTemplate
+                    .replace(SoapConstants.T_NS_STD, props.soapNamespace())
+                    .replace(SoapConstants.T_NS_BODY, props.bodyNamespace())
+                    .replace(SoapConstants.T_NS_ENV, props.headerNamespace())
+                    .replace(SoapConstants.T_SYSTEM_ID, props.systemId())
+                    .replace(SoapConstants.T_USER_NAME, Objects.requireNonNullElse(props.userName(), ""))
+                    .replace(SoapConstants.T_USER_TOKEN, Objects.requireNonNullElse(props.userToken(), ""))
+                    .replace(SoapConstants.T_DEST_NAME, Objects.requireNonNullElse(props.destinationName(), ""))
+                    .replace(SoapConstants.T_DEST_NS, Objects.requireNonNullElse(props.destinationNamespace(), ""))
+                    .replace(SoapConstants.T_DEST_OP, Objects.requireNonNullElse(props.destinationOperation(), ""))
+                    .replace(SoapConstants.T_CLASS, Objects.requireNonNullElse(props.classification(), ""));
+                LOGGER.info("SOAP Template loaded successfully");
+            }
         } catch (Exception e) {
-            if (e instanceof ProcessingException pe) throw pe;
-            log.log(Level.SEVERE, "Error parsing SOAP response: {0}", new Object[]{e.getMessage()});
-            throw ProcessingException.withTraceId(
-                "Failed to parse SOAP response: " + e.getMessage(),
-                ProcessingResultCodes.INVALID_RESPONSE, "", e);
+            LOGGER.log(Level.SEVERE, "Failed to load SOAP Template", e);
+            throw new RuntimeException("SOAP Initialization Failure", e);
         }
+    }
+
+    public String buildEnvelope(FileUploadRequest request, SoapProperties properties, String traceId) {
+        try {
+            String base64Content = request.getContent() != null ? Base64.getEncoder().encodeToString(request.getContent()) : "";
+            String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
+            String safeOrigin = escapeXml(request.getOrigin());
+
+            return this.xmlTemplate
+                .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
+                .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
+                .replace(SoapConstants.T_SUBTYPE, safeOrigin)
+                .replace(SoapConstants.T_FILENAME, safeFilename)
+                .replace(SoapConstants.T_CONTENT, base64Content)
+                .replace(SoapConstants.T_METADATA, !props.metaData().isEmpty() ? generateMetadataXml(props.metaData()) : "");
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error building SOAP envelope", e);
+            throw ProcessingException.withTraceId("Build failed", ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId, e);
+        }
+    }
+
+    private String generateMetadataXml(Map<String, String> metaData) throws Exception {
+        MetaDataWrapper wrapper = new MetaDataWrapper(
+            metaData.entrySet().stream().map(e -> new MetaDataEntry(e.getKey(), e.getValue())).toList()
+        );
+        StringWriter sw = new StringWriter();
+        Marshaller marshaller = jaxbContext.createMarshaller();
+        marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.TRUE);
+        marshaller.marshal(wrapper, sw);
+        return sw.toString();
+    }
+
+    private String escapeXml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
+    }
+
+    public ExternalServiceResponse parseResponse(String xml, String traceId) {
+        try {
+            Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
+            
+            try {
+                SoapEnvelope envelope = (SoapEnvelope) unmarshaller.unmarshal(new StringReader(xml));
+                if (envelope != null && envelope.getBody() != null && envelope.getBody().getAny() != null) {
+                    Object bodyAny = envelope.getBody().getAny();
+                    if (bodyAny instanceof TransmitirDocumentoResponse) {
+                        return mapToExternalResponse((TransmitirDocumentoResponse) bodyAny);
+                    }
+                    if (bodyAny instanceof Element) {
+                        return handleSoapFault((Element) bodyAny, unmarshaller, traceId);
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Standard JAXB unmarshal failed for response parsing: {0}", e.getMessage());
+            }
+
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+            
+            NodeList faults = doc.getElementsByTagNameNS("*", "Fault");
+            if (faults.getLength() == 0) faults = doc.getElementsByTagName("Fault");
+            
+            if (faults.getLength() > 0) {
+                return handleSoapFault((Element) faults.item(0), unmarshaller, traceId);
+            }
+
+            throw new ProcessingException("Unknown SOAP response structure", ProcessingResultCodes.INVALID_RESPONSE.name());
+
+        } catch (ProcessingException e) {
+            throw e;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Fatal error parsing SOAP response for traceId=" + traceId, e);
+            throw ProcessingException.withTraceId("Parse failed", ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
+        }
+    }
+
+    private ExternalServiceResponse mapToExternalResponse(TransmitirDocumentoResponse response) {
+        return ExternalServiceResponse.builder()
+            .status(Objects.requireNonNullElse(response.getStatus(), ProcessingResultCodes.SUCCESS.name()))
+            .message(Objects.requireNonNullElse(response.getMessage(), "Success"))
+            .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), "N/A"))
+            .processedAt(response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now())
+            .externalReference(response.getExternalReference())
+            .build();
+    }
+
+    private ExternalServiceResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
+        String faultString = "SOAP Fault received";
+        String errorCode = ProcessingResultCodes.SOAP_ERROR.name();
+
+        try {
+            // 1. Intento mandatorio: Mapeo a SoapFaultDetail
+            Node detailNode = findNodeRecursive(faultElement, "detail");
+            if (detailNode != null) {
+                try {
+                    SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailNode, SoapFaultDetail.class).getValue();
+                    if (faultDetail != null && faultDetail.getSystemException() != null 
+                        && faultDetail.getSystemException().getGenericException() != null) {
+                        
+                        var genEx = faultDetail.getSystemException().getGenericException();
+                        if (genEx.getCode() != null) errorCode = genEx.getCode();
+                        if (genEx.getDescription() != null) faultString = genEx.getDescription();
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.FINE, "SoapFaultDetail unmarshal failed, falling back to manual extraction");
+                }
+            }
+            
+            // 2. Fallback manual: Búsqueda agresiva de etiquetas code/description en todo el árbol
+            if (errorCode.equals(ProcessingResultCodes.SOAP_ERROR.name())) {
+                String directCode = extractTextContentRecursive(faultElement, "code");
+                if (directCode != null) errorCode = directCode;
+            }
+            
+            if (faultString.equals("SOAP Fault received") || faultString.isBlank()) {
+                String directDesc = extractTextContentRecursive(faultElement, "description");
+                if (directDesc != null) {
+                    faultString = directDesc;
+                } else {
+                    String faultStringStandard = extractTextContentRecursive(faultElement, "faultstring");
+                    if (faultStringStandard != null) faultString = faultStringStandard;
+                }
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error during Fault extraction for traceId=" + traceId, e);
+        }
+
+        return ExternalServiceResponse.builder()
+            .status(ProcessingResultCodes.FAILURE.name()) 
+            .message(faultString)
+            .correlationId(errorCode)
+            .processedAt(Instant.now())
+            .build();
+    }
+
+    /**
+     * Busca recursivamente el contenido de texto de una etiqueta por su nombre local en cualquier nivel.
+     */
+    private String extractTextContentRecursive(Element parent, String localName) {
+        NodeList nodes = parent.getElementsByTagNameNS("*", localName);
+        if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
+        
+        if (nodes.getLength() > 0) {
+            return nodes.item(0).getTextContent();
+        }
+        return null;
+    }
+
+    /**
+     * Busca recursivamente un nodo por su nombre local.
+     */
+    private Node findNodeRecursive(Element parent, String localName) {
+        NodeList nodes = parent.getElementsByTagNameNS("*", localName);
+        if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
+        return (nodes.getLength() > 0) ? nodes.item(0) : null;
+    }
+
+    private String getLocalName(Node node) {
+        String name = node.getLocalName() != null ? node.getLocalName() : node.getNodeName();
+        if (name != null && name.contains(":")) {
+            name = name.substring(name.indexOf(":") + 1);
+        }
+        return name;
     }
 }

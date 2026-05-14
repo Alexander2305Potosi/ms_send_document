@@ -7,79 +7,70 @@ import reactor.core.publisher.Flux;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
  * Utility class for decompressing ZIP archives into individual ProductDocument instances.
+ * Refactored to process entries as a stream (Flux) to avoid memory exhaustion (OOM).
+ * This class is now pure domain logic and depends on MimeTypeUtil.
  */
 public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
+    /**
+     * Decompresses a ZIP file into individual documents.
+     * @param zipDoc The ZIP document to decompress.
+     * @return A Flux of decompressed documents.
+     */
     public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc) {
-        if (!zipDoc.isZip()) {
+        if (!zipDoc.isZip() || zipDoc.getContent() == null) {
             return Flux.just(zipDoc);
         }
 
-        List<ProductDocumentHistory> entries = readZipEntries(zipDoc);
-        if (entries.isEmpty()) {
-            return Flux.empty();
-        }
-        return Flux.fromIterable(entries);
-    }
-
-    private static List<ProductDocumentHistory> readZipEntries(ProductDocumentHistory zipDoc) {
-        List<ProductDocumentHistory> entries = new ArrayList<>();
-        try (ZipInputStream zis = new ZipInputStream(
-                new ByteArrayInputStream(zipDoc.content()))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
-                    byte[] decompressed = zis.readAllBytes();
-                    ProductDocumentHistory expanded = buildProductDocument(entry.getName(), decompressed, zipDoc);
-                    entries.add(expanded);
+        return Flux.generate(
+            () -> new ZipInputStream(new ByteArrayInputStream(zipDoc.getContent())),
+            (zis, sink) -> {
+                try {
+                    ZipEntry entry;
+                    while ((entry = zis.getNextEntry()) != null) {
+                        if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
+                            byte[] decompressed = zis.readAllBytes();
+                            sink.next(buildProductDocument(entry.getName(), decompressed, zipDoc));
+                            return zis; // Emit one entry and wait for next request
+                        }
+                    }
+                    sink.complete();
+                } catch (IOException e) {
+                    sink.error(new ProcessingException(
+                        ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
+                        "Failed to decompress ZIP '" + zipDoc.getFilename() + "': " + e.getMessage(),
+                        e));
+                }
+                return zis;
+            },
+            zis -> {
+                try {
+                    zis.close();
+                } catch (IOException e) {
+                    // Silent close
                 }
             }
-        } catch (IOException e) {
-            throw ProcessingException.withTraceId(
-                "Failed to decompress ZIP: " + zipDoc.documentId(),
-                ProcessingResultCodes.INVALID_ZIP, zipDoc.documentId());
-        }
-        return entries;
+        );
     }
 
-    private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, ProductDocumentHistory original) {
+    private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, 
+                                                             ProductDocumentHistory original) {
         return ProductDocumentHistory.builder()
-            .productId(original.productId())
-            .documentId(original.documentId() + "/" + filename)
+            .productId(original.getProductId())
+            .documentId(original.getDocumentId() + "/" + filename)
             .filename(filename)
-            .contentType(inferContentType(filename))
+            .contentType(MimeTypeUtil.getMimeType(filename))
             .size((long) content.length)
             .isZip(false)
-            .pais(original.pais())
-            .parentZipName(original.filename())
+            .pais(original.getPais())
+            .content(content)
             .build();
-    }
-
-    private static String inferContentType(String filename) {
-        if (filename.endsWith(".pdf")) {
-            return "application/pdf";
-        }
-        if (filename.endsWith(".csv")) {
-            return "text/csv";
-        }
-        if (filename.endsWith(".txt")) {
-            return "text/plain";
-        }
-        if (filename.endsWith(".docx")) {
-            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        }
-        if (filename.endsWith(".xlsx")) {
-            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-        }
-        return "application/octet-stream";
     }
 }
