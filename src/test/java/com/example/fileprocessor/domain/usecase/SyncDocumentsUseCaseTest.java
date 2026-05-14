@@ -72,7 +72,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_whenNoProducts_returnsCompletionMessage() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.empty());
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.empty());
 
         StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
@@ -83,7 +83,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_whenProductsExist_processesEachDocument() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
         when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
@@ -105,7 +105,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_withZipDocument_parentZipNameIsNull() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", true)));
         when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
@@ -124,7 +124,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_withMultipleProducts_processesAll() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product("p1"), product("p2")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1"), product("p2")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)))
             .thenReturn(Flux.just(doc("p2", "doc2", false)));
@@ -142,7 +142,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_whenRepositoryFails_propagatesError() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.error(new RuntimeException("DB error")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.error(new RuntimeException("DB error")));
 
         StepVerifier.create(useCase.execute("retention"))
             .expectErrorMatches(error -> error instanceof RuntimeException
@@ -152,7 +152,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_whenGatewayFails_ignoresErrorAndContinues() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.error(new RuntimeException("Gateway error")));
 
@@ -165,7 +165,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_usesUseCaseFromParameter() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
         when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
@@ -183,7 +183,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_whenDocumentAlreadyExists_savesAsDuplicated() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
         when(documentRepository.existsByProductIdAndDocumentId("p1", "doc1")).thenReturn(Mono.just(true));
@@ -207,7 +207,7 @@ class SyncDocumentsUseCaseTest {
 
     @Test
     void execute_mixedNewAndDuplicateDocuments_savesCorrectly() {
-        when(productRestGateway.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(
                 doc("p1", "doc1", false),

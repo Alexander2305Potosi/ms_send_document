@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
 import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -19,14 +18,11 @@ public interface DocumentRepository {
     Flux<Document> findByStateAndUseCaseToday(String state, String useCase, LocalDateTime startOfDay);
 
     /**
-     * Updates document state using a command object.
+     * Updates document state and retry count.
+     * @param doc The document with new values.
+     * @param expectedState The previous state required for the update to succeed.
      */
-    Mono<Long> updateStateAndRetry(DocumentUpdateCommand command);
-
-    /**
-     * Resets stale IN_PROGRESS documents from today back to PENDING.
-     */
-    Mono<Long> resetStaleDocumentsToday(String useCase, LocalDateTime startOfDay, LocalDateTime threshold);
+    Mono<Long> updateStateAndRetry(Document doc, String expectedState);
 
     /**
      * Checks if a document with the given productId and documentId already exists.

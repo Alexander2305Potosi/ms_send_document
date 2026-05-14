@@ -1,8 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters;
 
 import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
+import com.example.fileprocessor.domain.entity.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
@@ -24,32 +23,37 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     private final TransactionalOperator transactionalOperator;
 
     @Override
-    public Mono<Long> resetStaleDocumentsToday(String useCase, LocalDateTime startOfDay, LocalDateTime threshold) {
-        return documentRepository.resetStaleDocumentsToday(useCase, startOfDay, threshold);
-    }
-
-    @Override
     public Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay) {
         return documentRepository.findByStateAndUseCaseToday(ProductState.PENDING, useCase, startOfDay);
     }
 
     @Override
     public Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount) {
-        // We use the ID directly here, but we could wrap it in a placeholder Document if needed.
-        // For simplicity, let's just create a minimal command here.
-        DocumentUpdateCommand lockCommand = new DocumentUpdateCommand(
-            Document.builder().id(docId).build(),
-            ProductState.PENDING, ProductState.IN_PROGRESS, currentRetryCount, null, null
-        );
-        return documentRepository.updateStateAndRetry(lockCommand);
+        Document doc = Document.builder()
+            .id(docId)
+            .state(ProductState.PENDING)
+            .retryCount(currentRetryCount)
+            .build();
+        
+        // Final state after lock
+        doc.setState(ProductState.IN_PROGRESS);
+
+        DocumentHistoryDTO lockAudit = DocumentHistoryDTO.builder()
+            .errorMessage("Iniciando procesamiento del documento")
+            .startedAt(java.time.Instant.now())
+            .completedAt(java.time.Instant.now())
+            .build();
+
+        return historyRepository.saveHistory(doc, lockAudit)
+                .then(documentRepository.updateStateAndRetry(doc, ProductState.PENDING))
+                .as(transactionalOperator::transactional);
     }
 
     @Override
-    public Mono<FileUploadResponse> finalizeProcessingAtomically(DocumentUpdateCommand command) {
-        Mono<FileUploadResponse> combinedOperation = historyRepository.saveHistory(command)
-                .then(documentRepository.updateStateAndRetry(command))
-                .thenReturn(command.response());
-
-        return combinedOperation.as(transactionalOperator::transactional);
+    public Mono<Void> finalizeProcessingAtomically(Document doc, DocumentHistoryDTO history) {
+        return historyRepository.saveHistory(doc, history)
+                .then(documentRepository.updateStateAndRetry(doc, ProductState.IN_PROGRESS))
+                .as(transactionalOperator::transactional)
+                .then();
     }
 }

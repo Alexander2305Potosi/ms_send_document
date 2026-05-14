@@ -53,4 +53,31 @@ public enum ProcessingResultCodes {
     public String value() {
         return value;
     }
+
+    public static boolean isBusinessRule(String code) {
+        if (code == null) return false;
+        try {
+            ProcessingResultCodes res = valueOf(code);
+            return switch (res) {
+                case INVALID_BASE64, EMPTY_CONTENT, DECOMPRESSION_ERROR, 
+                     SIZE_EXCEEDED, PATTERN_MISMATCH, HOMOLOGATION_FAILED, SKIPPED -> true;
+                default -> false;
+            };
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public static boolean isTransient(String code) {
+        if (code == null) return false;
+        try {
+            ProcessingResultCodes res = valueOf(code);
+            return switch (res) {
+                case BAD_GATEWAY, GATEWAY_TIMEOUT, SERVICE_UNAVAILABLE, UNKNOWN_ERROR -> true;
+                default -> false;
+            };
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 }

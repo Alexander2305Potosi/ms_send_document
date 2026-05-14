@@ -1,8 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
+import com.example.fileprocessor.domain.entity.DocumentHistoryDTO;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository;
 import org.junit.jupiter.api.Test;
@@ -39,19 +38,20 @@ class DocumentHistoryR2dbcAdapterTest {
             .name("test.pdf")
             .useCase("SOAP")
             .isZip(false)
+            .retryCount(1)
+            .state("PROCESSED")
             .build();
 
-        FileUploadResponse response = FileUploadResponse.builder()
-            .success(true)
+        DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
             .errorCode(null)
-            .message("Success message")
+            .errorMessage("Success message")
+            .startedAt(Instant.now())
+            .completedAt(Instant.now())
             .build();
-
-        DocumentUpdateCommand command = DocumentUpdateCommand.finalize(doc, response, "PROCESSED", 1, Instant.now());
 
         when(springDataRepository.save(any(DocumentHistoryEntity.class))).thenReturn(Mono.just(new DocumentHistoryEntity()));
 
-        StepVerifier.create(adapter.saveHistory(command))
+        StepVerifier.create(adapter.saveHistory(doc, historyDTO))
             .verifyComplete();
 
         ArgumentCaptor<DocumentHistoryEntity> captor = ArgumentCaptor.forClass(DocumentHistoryEntity.class);

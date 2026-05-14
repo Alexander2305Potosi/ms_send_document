@@ -52,17 +52,11 @@ class S3DocumentProcessingUseCaseTest {
             documentValidator
         );
 
-        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
-            .thenAnswer(invocation -> {
-                com.example.fileprocessor.domain.entity.DocumentUpdateCommand cmd = invocation.getArgument(0);
-                return Mono.just(cmd.response());
-            });
+        lenient().when(persistencePort.finalizeProcessingAtomically(any(), any()))
+            .thenReturn(Mono.empty());
 
         lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
             .thenReturn(Mono.just(1L));
-            
-        lenient().when(persistencePort.resetStaleDocumentsToday(anyString(), any(), any()))
-            .thenReturn(Mono.just(0L));
     }
 
     private static ProductDocumentHistory doc() {

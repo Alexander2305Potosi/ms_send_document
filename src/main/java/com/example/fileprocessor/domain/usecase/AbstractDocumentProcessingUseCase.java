@@ -1,8 +1,8 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -41,10 +41,8 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(15);
 
-        return persistencePort.resetStaleDocumentsToday(implementationName(), startOfDay, threshold)
-            .thenMany(persistencePort.findPendingDocumentsToday(implementationName(), startOfDay))
+        return persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
             .concatMap(this::processWithTracking);
     }
 
@@ -69,34 +67,37 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> finalizeProcessing(Document doc, FileUploadResponse response, Instant startTime) {
-        String finalState;
-        int nextRetryCount = doc.getRetryCountSafe();
+        // Business logic for state transitions and retries
+        final int MAX_RETRIES = 3;
+        final int currentRetry = doc.getRetryCountSafe();
+        final boolean isRetryable = ProcessingResultCodes.isTransient(response.getErrorCode()) && currentRetry < MAX_RETRIES;
 
+        String nextState;
         if (response.isSuccess()) {
-            finalState = ProductState.PROCESSED;
-        } else if (isTransientError(response.getErrorCode()) && nextRetryCount < 3) {
-            finalState = ProductState.PENDING;
-            nextRetryCount++;
+            nextState = ProductState.PROCESSED;
+        } else if (isRetryable) {
+            nextState = ProductState.PENDING;
+            doc.setRetryCount(currentRetry + 1);
         } else {
-            finalState = ProductState.FAILED;
+            nextState = ProductState.FAILED;
         }
 
-        DocumentUpdateCommand command = DocumentUpdateCommand.finalize(
-            doc, response, finalState, nextRetryCount, startTime
-        );
+        // Update the main aggregate state
+        doc.setState(nextState);
+        doc.setErrorMessage(response.getMessage());
 
-        return persistencePort.finalizeProcessingAtomically(command);
+        // Create the Audit DTO
+        DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
+            .errorCode(response.getErrorCode())
+            .errorMessage(response.getMessage())
+            .startedAt(startTime)
+            .completedAt(Instant.now())
+            .build();
+
+        return persistencePort.finalizeProcessingAtomically(doc, historyDTO)
+            .thenReturn(response);
     }
 
-    private boolean isTransientError(String errorCode) {
-        if(errorCode == null) return false;
-        return java.util.Set.of(
-            ProcessingResultCodes.BAD_GATEWAY.name(),
-            ProcessingResultCodes.GATEWAY_TIMEOUT.name(),
-            ProcessingResultCodes.SERVICE_UNAVAILABLE.name(),
-            ProcessingResultCodes.UNKNOWN_ERROR.name()
-        ).contains(errorCode);
-    }
 
     private Mono<ProductDocumentHistory> handleBusinessRuleSkip(Document doc, ProcessingException e) {
         FileUploadResponse skipResponse = FileUploadResponse.builder()

@@ -1,17 +1,14 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.DocumentUpdateCommand;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
+import com.example.fileprocessor.infrastructure.util.DateMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 @Component
 @RequiredArgsConstructor
@@ -20,68 +17,42 @@ public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
     private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository springDataRepository;
 
     @Override
-    public Mono<Void> saveHistory(DocumentUpdateCommand command) {
+    public Mono<Void> saveHistory(com.example.fileprocessor.domain.entity.Document doc, com.example.fileprocessor.domain.entity.DocumentHistoryDTO historyDTO) {
         String resultStatus;
         String enrichedMessage;
-        String errorCode = null;
 
-        if (command.response() == null) {
-            if (ProductState.IN_PROGRESS.equals(command.newState())) {
-                resultStatus = ProcessingResultCodes.IN_PROGRESS.name();
-                enrichedMessage = "Iniciando procesamiento del documento";
-            } else {
-                return Mono.empty();
-            }
+        if (ProductState.IN_PROGRESS.equals(doc.getState())) {
+            resultStatus = ProcessingResultCodes.IN_PROGRESS.name();
+            enrichedMessage = historyDTO.getErrorMessage();
         } else {
-            errorCode = command.response().getErrorCode();
-            if (command.response().isSuccess()) {
-                resultStatus = ProcessingResultCodes.SUCCESS.name();
-            } else if (isBusinessRule(errorCode)) {
+            resultStatus = ProductState.PROCESSED.equals(doc.getState()) ? 
+                          ProcessingResultCodes.SUCCESS.name() : ProcessingResultCodes.ERROR.name();
+            
+            // Re-apply business rule classification if needed
+            if (ProcessingResultCodes.isBusinessRule(historyDTO.getErrorCode())) {
                 resultStatus = ProcessingResultCodes.SKIPPED.name();
-            } else {
-                resultStatus = ProcessingResultCodes.ERROR.name();
             }
 
-            // CONCATENACIÓN SOLICITADA: Adjuntamos el número de intento y el código al mensaje final
-            enrichedMessage = command.response().getMessage();
-            if (!command.response().isSuccess()) {
-                String attemptInfo = "[INTENTO " + command.nextRetryCount() + "/3] ";
-                String codeInfo = command.response().getCorrelationId() != null ? "CÓDIGO: " + command.response().getCorrelationId() + " - " : "";
-                enrichedMessage = attemptInfo + codeInfo + enrichedMessage;
-            }
+            // ENRIQUECIMIENTO SOLICITADO: Intento + Código + Mensaje
+            String attemptInfo = "[INTENTO " + doc.getRetryCountSafe() + "/3] ";
+            String message = historyDTO.getErrorMessage();
+            enrichedMessage = attemptInfo + message;
         }
 
-        String historyFileName = Boolean.TRUE.equals(command.document().isZip()) ? command.document().getName() : null;
-
         DocumentHistoryEntity entity = DocumentHistoryEntity.builder()
-            .documentId(command.document().getId())
-            .filename(historyFileName)
-            .operation(command.document().getUseCase())
+            .documentId(doc.getId())
+            .filename(Boolean.TRUE.equals(doc.isZip()) ? doc.getName() : null)
+            .operation(doc.getUseCase())
             .result(resultStatus)
-            .errorCode(errorCode)
-            .errorMessage(enrichedMessage) // <--- Mensaje enriquecido con contexto
-            .retry(command.nextRetryCount())
-            .startedAt(toLocalDateTime(command.startTime()))
-            .completedAt(toLocalDateTime(Instant.now()))
+            .errorCode(historyDTO.getErrorCode())
+            .errorMessage(enrichedMessage)
+            .retry(doc.getRetryCountSafe())
+            .startedAt(DateMapper.toLocalDateTime(historyDTO.getStartedAt()))
+            .completedAt(DateMapper.toLocalDateTime(historyDTO.getCompletedAt()))
+            .stackTrace(historyDTO.getStackTrace())
             .build();
 
         return springDataRepository.save(entity).then();
     }
 
-    private boolean isBusinessRule(String errorCode) {
-        if (errorCode == null) return false;
-        return java.util.Set.of(
-            ProcessingResultCodes.SIZE_EXCEEDED.name(),
-            ProcessingResultCodes.PATTERN_MISMATCH.name(),
-            ProcessingResultCodes.INVALID_BASE64.name(),
-            ProcessingResultCodes.EMPTY_CONTENT.name(),
-            ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
-            ProcessingResultCodes.HOMOLOGATION_FAILED.name()
-        ).contains(errorCode);
-    }
-
-    private LocalDateTime toLocalDateTime(Instant instant) {
-        if (instant == null) return null;
-        return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
-    }
 }

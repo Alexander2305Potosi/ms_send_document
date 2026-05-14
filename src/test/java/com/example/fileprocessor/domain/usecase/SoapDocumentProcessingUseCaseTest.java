@@ -56,11 +56,8 @@ class SoapDocumentProcessingUseCaseTest {
         lenient().when(homologationRepository.resolve(anyString(), anyString()))
             .thenReturn(Mono.just(new HomologationResult("homo-origin", "homo-pais")));
             
-        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
-            .thenAnswer(invocation -> {
-                com.example.fileprocessor.domain.entity.DocumentUpdateCommand cmd = invocation.getArgument(0);
-                return Mono.just(cmd.response());
-            });
+        lenient().when(persistencePort.finalizeProcessingAtomically(any(), any()))
+            .thenReturn(Mono.empty());
     }
 
     private static ProductDocumentHistory doc() {
