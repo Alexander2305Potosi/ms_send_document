@@ -32,6 +32,19 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
         return Mono.fromCallable(() -> FileUploadRequest.from(doc, docId, null))
             .flatMap(request -> s3Gateway.send(request))
+            .map(response -> {
+                if (response.isSuccess()) {
+                    return FileUploadResponse.builder()
+                        .success(true)
+                        .status(ProcessingResultCodes.SUCCESS.name())
+                        .message("Documento procesado correctamente en S3")
+                        .processedAt(Instant.now())
+                        .correlationId(response.getCorrelationId())
+                        .externalReference(response.getExternalReference())
+                        .build();
+                }
+                return response;
+            })
             .onErrorResume(e -> {
                 LOGGER.log(Level.SEVERE, "S3 processing failed for docId {0}: {1}", new Object[]{docId, e.getMessage()});
                 return Mono.just(FileUploadResponse.builder()

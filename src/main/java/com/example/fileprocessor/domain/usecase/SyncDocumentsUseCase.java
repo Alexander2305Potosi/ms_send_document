@@ -1,6 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
@@ -56,23 +57,32 @@ public class SyncDocumentsUseCase {
             .doOnError(e -> LOGGER.log(Level.SEVERE, "Orchestrated sync failed: " + e.getMessage()));
     }
 
-    private Mono<Void> saveDocument(com.example.fileprocessor.domain.entity.ProductDocumentHistory doc, String useCase) {
+    private Mono<Void> saveDocument(ProductDocumentHistory doc, String useCase) {
         return documentRepository.existsByProductIdAndDocumentId(doc.getProductId(), doc.getDocumentId())
-            .flatMap(exists -> {
-                if (Boolean.TRUE.equals(exists)) {
-                    return Mono.empty();
-                }
+                .flatMap(exists -> {
 
-                Document document = Document.builder()
-                    .documentId(doc.getDocumentId())
-                    .productId(doc.getProductId())
-                    .name(doc.getFilename())
-                    .useCase(useCase)
-                    .state(ProductState.PENDING)
-                    .isZip(doc.isZip())
-                    .createdAt(LocalDateTime.now())
-                    .build();
-                return documentRepository.save(document).then(Mono.empty());
-            });
+                    Document document = Document.builder()
+                            .documentId(doc.getDocumentId())
+                            .productId(doc.getProductId())
+                            .name(doc.getFilename())
+                            .useCase(useCase)
+                            .state(ProductState.ERR_DUPLICATED_DOC)
+                            .errorMessage("Documento duplicado detectado para productId=" + doc.getProductId() + " y documentId=" + doc.getDocumentId())
+                            .isZip(doc.isZip())
+                            .createdAt(LocalDateTime.now())
+                            .build();
+
+                    if (Boolean.TRUE.equals(exists)) {
+                        LOGGER.log(Level.INFO, "Duplicate document detected for productId={0}, documentId={1}. Marking as ERR_DUPLICATED_DOC.",
+                                new Object[]{doc.getProductId(), doc.getDocumentId()});
+
+                        document.setState(ProductState.ERR_DUPLICATED_DOC);
+                        document.setErrorMessage("Documento duplicado detectado para productId=" + doc.getProductId() + " y documentId=" + doc.getDocumentId());
+                    } else {
+                        document.setState(ProductState.PENDING);
+                    }
+
+                    return documentRepository.save(document).then(Mono.empty());
+                });
     }
 }
