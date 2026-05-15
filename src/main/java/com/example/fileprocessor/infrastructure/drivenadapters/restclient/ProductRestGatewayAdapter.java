@@ -44,7 +44,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     @Override
     public Flux<Document> getDocumentsByProduct(ProductMaestro product) {
         return Flux.deferContextual(ctx -> {
-            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown-trace");
             LOGGER.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
                     new Object[] { product.getProductId(), traceId });
 
@@ -65,7 +65,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     @Override
     public Mono<ProductDocumentFile> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
-            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown-trace");
             LOGGER.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
                     new Object[] { documentId, productId, traceId });
 

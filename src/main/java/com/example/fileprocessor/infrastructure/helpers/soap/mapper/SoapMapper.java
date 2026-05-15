@@ -126,8 +126,14 @@ public class SoapMapper {
                     if (bodyAny instanceof TransmitirDocumentoResponse) {
                         return mapToExternalResponse((TransmitirDocumentoResponse) bodyAny);
                     }
-                    if (bodyAny instanceof Element) {
-                        return handleSoapFault((Element) bodyAny, unmarshaller, traceId);
+                    if (bodyAny instanceof Element el) {
+                        if (el.getLocalName().contains("Fault")) {
+                            return handleSoapFault(el, unmarshaller, traceId);
+                        }
+                        // Try manual mapping if it's our response but JAXB didn't bind it
+                        if (el.getLocalName().equals(SoapConstants.EL_TRANSMITIR_DOCUMENTO_RESPONSE)) {
+                            return mapFromElement(el);
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -154,6 +160,25 @@ public class SoapMapper {
             LOGGER.log(Level.SEVERE, "Fatal error parsing SOAP response for traceId=" + traceId, e);
             throw ProcessingException.withTraceId("Parse failed", ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
         }
+    }
+
+    private FileUploadResponse mapFromElement(Element el) {
+        String status = extractTextContentRecursive(el, "status");
+        String message = extractTextContentRecursive(el, "message");
+        String correlationId = extractTextContentRecursive(el, "correlationId");
+        String processedAt = extractTextContentRecursive(el, "processedAt");
+        String externalReference = extractTextContentRecursive(el, "externalReference");
+
+        boolean isSuccess = "OK".equalsIgnoreCase(status) || "SUCCESS".equalsIgnoreCase(status);
+
+        return FileUploadResponse.builder()
+                .status(status != null ? status : "SUCCESS")
+                .message(message != null ? message : "Success")
+                .correlationId(correlationId != null ? correlationId : "N/A")
+                .processedAt(processedAt != null ? Instant.parse(processedAt) : Instant.now())
+                .externalReference(externalReference)
+                .success(isSuccess)
+                .build();
     }
 
     private FileUploadResponse mapToExternalResponse(TransmitirDocumentoResponse response) {
