@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
-import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
@@ -113,7 +113,7 @@ public class SoapMapper {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
     }
 
-    public ExternalServiceResponse parseResponse(String xml, String traceId) {
+    public FileUploadResponse parseResponse(String xml, String traceId) {
         try {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
             
@@ -154,17 +154,21 @@ public class SoapMapper {
         }
     }
 
-    private ExternalServiceResponse mapToExternalResponse(TransmitirDocumentoResponse response) {
-        return ExternalServiceResponse.builder()
-            .status(Objects.requireNonNullElse(response.getStatus(), ProcessingResultCodes.SUCCESS.name()))
+    private FileUploadResponse mapToExternalResponse(TransmitirDocumentoResponse response) {
+        String status = Objects.requireNonNullElse(response.getStatus(), "SUCCESS");
+        boolean isSuccess = "OK".equalsIgnoreCase(status) || "SUCCESS".equalsIgnoreCase(status);
+        
+        return FileUploadResponse.builder()
+            .status(status)
             .message(Objects.requireNonNullElse(response.getMessage(), "Success"))
             .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), "N/A"))
             .processedAt(response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now())
             .externalReference(response.getExternalReference())
+            .success(isSuccess)
             .build();
     }
 
-    private ExternalServiceResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
+    private FileUploadResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
         String faultString = "SOAP Fault received";
         String errorCode = ProcessingResultCodes.SOAP_ERROR.name();
 
@@ -206,11 +210,14 @@ public class SoapMapper {
             LOGGER.log(Level.WARNING, "Error during Fault extraction for traceId=" + traceId, e);
         }
 
-        return ExternalServiceResponse.builder()
-            .status(ProcessingResultCodes.FAILURE.name()) 
+        return FileUploadResponse.builder()
+            .status(ProcessingResultCodes.FAILURE.name())
             .message(faultString)
             .correlationId(errorCode)
             .processedAt(Instant.now())
+            .success(false)
+            .errorCode(ProcessingResultCodes.SOAP_ERROR.name())
+            .traceId(traceId)
             .build();
     }
 

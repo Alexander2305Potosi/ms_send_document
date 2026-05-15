@@ -1,8 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
-import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
-import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
@@ -52,7 +51,6 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .retryWhen(Retry.backoff(properties.retryAttempts(), Duration.ofMillis(500))
                     .filter(this::isRetryable))
                 .map(xml -> mapper.parseResponse(xml, traceId))
-                .map(res -> buildResponse(res, traceId))
                 .onErrorResume(error -> {
                     // DESENVOLVER CAUSA: Si Reactor agotó reintentos, sacamos la causa real
                     Throwable realError = error;
@@ -78,8 +76,7 @@ public class SoapGatewayAdapter implements SoapGateway {
             String rawBody = wce.getResponseBodyAsString();
             if (isXml(rawBody)) {
                 try {
-                    ExternalServiceResponse parsed = mapper.parseResponse(rawBody, traceId);
-                    return Mono.just(buildResponse(parsed, traceId));
+                    return Mono.just(mapper.parseResponse(rawBody, traceId));
                 } catch (Exception e) {
                     LOGGER.log(Level.FINE, "Failed to parse Fault from error body", e);
                 }
@@ -92,19 +89,6 @@ public class SoapGatewayAdapter implements SoapGateway {
         return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
     }
 
-    private FileUploadResponse buildResponse(ExternalServiceResponse response, String traceId) {
-        String errorCode = !response.isSuccess() ? ProcessingResultCodes.SOAP_ERROR.name() : null;
-        return FileUploadResponse.builder()
-                .status(response.getStatus())
-                .message(response.getMessage())
-                .correlationId(response.getCorrelationId())
-                .errorCode(errorCode)
-                .traceId(traceId)
-                .processedAt(response.getProcessedAt())
-                .externalReference(response.getExternalReference())
-                .success(response.isSuccess())
-                .build();
-    }
 
     private FileUploadResponse buildErrorResult(Throwable error, String traceId) {
         String errorCode = mapErrorCode(error);

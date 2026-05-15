@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
 
-import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapBody;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelope;
@@ -61,7 +61,7 @@ class SoapMapperTest {
             """;
 
         // WHEN: Procesamos la respuesta
-        ExternalServiceResponse response = soapMapper.parseResponse(xml, "smoke-test-id");
+        FileUploadResponse response = soapMapper.parseResponse(xml, "smoke-test-id");
 
         // DIAGNÓSTICO
         System.out.println("DEBUG - Status: " + response.getStatus());

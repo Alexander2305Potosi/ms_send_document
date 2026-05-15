@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 
-import com.example.fileprocessor.domain.entity.ExternalServiceResponse;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
@@ -60,7 +60,7 @@ class SoapGatewayAdapterTest {
         when(soapWebClient.post()).thenReturn(bodyUriSpec);
         when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
         when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
-        when(bodyUriSpec.bodyValue(any())).thenReturn(headersSpec);
+        doReturn(headersSpec).when(bodyUriSpec).bodyValue(any());
         when(headersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just(responseBody));
     }
@@ -69,8 +69,9 @@ class SoapGatewayAdapterTest {
     void send_whenSuccessful_returnsSuccessResult() {
         when(mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soap>request</soap>");
         when(mapper.parseResponse(anyString(), anyString())).thenReturn(
-            ExternalServiceResponse.builder()
+            FileUploadResponse.builder()
                 .status("OK")
+                .success(true)
                 .correlationId("corr-123")
                 .processedAt(Instant.now())
                 .build()
@@ -96,7 +97,7 @@ class SoapGatewayAdapterTest {
         when(soapWebClient.post()).thenReturn(bodyUriSpec);
         when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
         when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
-        when(bodyUriSpec.bodyValue(any())).thenReturn(headersSpec);
+        doReturn(headersSpec).when(bodyUriSpec).bodyValue(any());
         when(headersSpec.retrieve()).thenReturn(responseSpec);
         
         WebClientResponseException ex = mock(WebClientResponseException.class);
