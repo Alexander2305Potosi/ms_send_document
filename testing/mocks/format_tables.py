@@ -3,20 +3,16 @@ import sys
 
 def get_ordered_keys(data, table_name):
     if not data: return []
-    # Normalize keys to uppercase for matching
     all_keys = set().union(*(d.keys() for d in data))
     
-    # Define preferred order matching *Entity.java fields exactly
     preferred_orders = {
         "DOCUMENTOS": [
             "ID", "ID_DOCUMENTO", "ID_PRODUCTO", "NOMBRE", "ESTADO", 
-            "MENSAJE_ERROR", "ES_ZIP", "CASO_USO", "REINTENTOS", 
-            "FECHA_CREACION", "FECHA_ACTUALIZACION"
+            "ES_ZIP", "CASO_USO", "REINTENTOS", "MENSAJE_ERROR", "FECHA_CREACION", "FECHA_ACTUALIZACION"
         ],
         "HISTORICO_DOCUMENTOS": [
             "ID", "DOCUMENTO_ID", "NOMBRE_ARCHIVO", "OPERACION", "RESULTADO", 
-            "CODIGO_ERROR", "MENSAJE_ERROR", "STACK_TRACE", "REINTENTOS", 
-            "FECHA_INICIO", "FECHA_FIN"
+            "CODIGO_ERROR", "REINTENTOS", "MENSAJE_ERROR", "FECHA_INICIO", "FECHA_FIN"
         ],
         "PRODUCTOS_MAESTROS": [
             "ID", "ID_PRODUCTO", "NOMBRE", "ESTADO", "FECHA_CARGUE"
@@ -24,9 +20,7 @@ def get_ordered_keys(data, table_name):
     }
     
     order = preferred_orders.get(table_name, [])
-    # Filter keys that actually exist in the data
     ordered_keys = [k for k in order if k in all_keys]
-    # Add any extra keys found
     remaining_keys = sorted([k for k in all_keys if k not in order])
     
     return ordered_keys + remaining_keys
@@ -43,7 +37,7 @@ def print_table(title, data, table_key):
     for row in data:
         for k in keys:
             val = str(row.get(k, "") or "")
-            if len(val) > 30: val = val[:27] + "..."
+            if len(val) > 25: val = val[:22] + "..."
             widths[k] = max(widths[k], len(val))
 
     # Print Header
@@ -57,7 +51,7 @@ def print_table(title, data, table_key):
         parts = []
         for k in keys:
             val = str(row.get(k, "") or "").replace("\n", " ")
-            if len(val) > 30: val = val[:27] + "..."
+            if len(val) > 25: val = val[:22] + "..."
             parts.append(val.ljust(widths[k]))
         print(" | ".join(parts))
 
@@ -70,8 +64,13 @@ if __name__ == "__main__":
             
         full_dump = json.loads(raw_data)
         
+        # 1. Documentos
         print_table("TABLE: DOCUMENTOS", full_dump.get("documentos", []), "DOCUMENTOS")
+        
+        # 2. Historico Documentos
         print_table("TABLE: HISTORICO_DOCUMENTOS", full_dump.get("historico_documentos", []), "HISTORICO_DOCUMENTOS")
+        
+        # 3. Master Products
         print_table("TABLE: PRODUCTOS_MAESTROS", full_dump.get("productos_maestros", []), "PRODUCTOS_MAESTROS")
         
     except Exception as e:

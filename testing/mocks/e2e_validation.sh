@@ -50,7 +50,7 @@ echo "   Sync completed!"
 echo "4. Processing Documents (GET /products)..."
 curl -s "$MS_URL/api/v1/products?processor=soap" > /dev/null
 echo "   Processing triggered. Waiting for all tasks to finish (including retries)..."
-sleep 120
+sleep 150
 
 echo ""
 echo "===================================================="
@@ -91,12 +91,16 @@ echo "           DETAILED DATABASE TABLES                 "
 echo "===================================================="
 echo "Fetching and formatting table data..."
 
-# Fetch data and pipe to our formatting script
-curl -s "$MS_URL/api/v1/debug/db/dump" | python3 "$SCRIPT_DIR/format_tables.py" >> "$SCRIPT_DIR/ms.log"
+# Fetch data to a temporary file
+curl -s "$MS_URL/api/v1/debug/db/dump" > "$SCRIPT_DIR/db_dump.json"
+
+# Cleanup to stop the microservice from logging concurrently
+cleanup
+
+# Format tables and append cleanly
+cat "$SCRIPT_DIR/db_dump.json" | python3 "$SCRIPT_DIR/format_tables.py" >> "$SCRIPT_DIR/ms.log"
+rm -f "$SCRIPT_DIR/db_dump.json"
 
 echo "Detailed tables with ALL FIELDS have been added to: testing/mocks/ms.log"
 echo "You can view them by opening the file or using 'cat testing/mocks/ms.log'"
 echo "===================================================="
-
-# Cleanup
-cleanup

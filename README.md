@@ -1299,6 +1299,35 @@ Los tests siguen la misma estructura de paquetes que `src/main`, bajo `src/test/
 ./gradlew jacocoTestReport
 ```
 
+### Validación E2E Local (Mocks)
+
+El proyecto incluye un script de pruebas End-to-End (`testing/mocks/e2e_validation.sh`) que automatiza el levantamiento del microservicio, simula las APIs externas y valida el procesamiento completo bajo múltiples escenarios.
+
+#### ¿Cómo funciona?
+El proceso de validación sigue estos pasos de manera secuencial y desatendida:
+
+1. **Inicia Servidores Simulados (Mocks):** Ejecuta en segundo plano `mocks.py` para levantar un servidor REST local (puerto 3001) que simula la API externa de productos, y un servidor SOAP local (puerto 9000) que simula el Gateway receptor.
+2. **Levanta el Microservicio:** Inicia el File Processor Service bajo el perfil de desarrollo (`dev`), de forma que quede conectado a los servidores locales.
+3. **Fase de Sincronización:** Se dispara una petición a `POST /api/v1/products/sync`. Esto fuerza al microservicio a consumir los más de 20 escenarios preparados en el mock (documentos exitosos, pesados, extensiones no permitidas, errores en base64, archivos ZIP, etc.).
+4. **Fase de Procesamiento Masivo:** Llama a `GET /api/v1/products?processor=soap` para que el sistema empiece a procesar la cola. El script espera pacientemente **2.5 minutos (150 segundos)** para dar tiempo a que ocurran todos los reintentos asíncronos programados por *exponential backoff* en aquellos casos donde el mock SOAP forzó fallos temporales (HTTP 500, 503, 504, 429).
+5. **Generación de Reportes Visuales:** Al culminar el tiempo de espera, se extrae el volcado completo de la base de datos H2 en memoria mediante un endpoint de debug. Luego, utiliza `format_tables.py` para formatear los resultados en tablas de consola fáciles de leer, las cuales son agregadas al final del archivo `testing/mocks/ms.log`.
+6. **Limpieza (Cleanup):** Finalmente, destruye todos los procesos locales (el microservicio y los mocks) de forma segura.
+
+#### Ejecución en Windows
+
+Dado que es un script Bash (`.sh`), Windows no puede ejecutarlo directamente desde CMD o PowerShell clásico. Debes usar:
+
+1. **Git Bash (Recomendado):** Haz clic derecho en la carpeta raíz del proyecto, selecciona "Open Git Bash here" y ejecuta: 
+   ```bash
+   ./testing/mocks/e2e_validation.sh
+   ```
+2. **WSL (Windows Subsystem for Linux):** Abre tu terminal WSL, navega a la carpeta del proyecto y ejecuta: 
+   ```bash
+   ./testing/mocks/e2e_validation.sh
+   ```
+
+*Nota:* Es requisito indispensable tener **Python 3** instalado en Windows (y agregado a las variables de entorno PATH) ya que el script utiliza `mocks.py` y `format_tables.py`. Al finalizar la prueba, puedes abrir el archivo `testing/mocks/ms.log` para ver el reporte detallado.
+
 ---
 
 ## Stack Tecnologico
