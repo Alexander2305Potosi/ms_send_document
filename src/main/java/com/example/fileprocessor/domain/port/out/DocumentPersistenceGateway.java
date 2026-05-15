@@ -13,8 +13,6 @@ import java.time.LocalDateTime;
 public interface DocumentPersistenceGateway {
     Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay);
     
-    Mono<Document> save(Document doc);
-
     Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount);
 
     Mono<Void> finalizeProcessingAtomically(Document doc, DocumentHistoryDTO history);

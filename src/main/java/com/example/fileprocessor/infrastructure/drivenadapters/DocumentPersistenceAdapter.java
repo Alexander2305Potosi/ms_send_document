@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import org.springframework.transaction.reactive.TransactionalOperator;
+
 import java.time.LocalDateTime;
 
 @Component
@@ -19,18 +21,11 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
 
     private final DocumentR2dbcAdapter documentRepository;
     private final DocumentHistoryR2dbcAdapter historyRepository;
+    private final TransactionalOperator transactionalOperator;
 
     @Override
     public Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay) {
         return documentRepository.findByStateAndUseCaseToday(ProcessingResultCodes.PENDING.name(), useCase, startOfDay);
-    }
-
-    @Override
-    public Mono<Document> save(Document doc) {
-        if (doc.getState() == null) {
-            doc.setState(ProcessingResultCodes.PENDING.name());
-        }
-        return documentRepository.save(doc);
     }
 
     @Override
@@ -48,6 +43,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
         
         return documentRepository.updateStateAndRetry(doc, initialState)
                 .then(historyRepository.saveHistory(doc, history))
+                .as(transactionalOperator::transactional)
                 .then();
     }
 }

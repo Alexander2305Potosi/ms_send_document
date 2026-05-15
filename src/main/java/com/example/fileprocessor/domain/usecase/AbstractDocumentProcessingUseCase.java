@@ -72,7 +72,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             )
             .flatMap(unused -> fetchAndValidate(history))
             .flatMap(h -> uploadDocument(h, doc.getId()))
-            .onErrorResume(error -> handleGlobalError(error, doc, traceId))
+            .onErrorResume(this::handleGlobalError)
             .flatMap(response -> finalizeProcessing(doc, history, response, traceId));
     }
 
@@ -144,7 +144,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return ProcessingResultCodes.FAILED.name();
     }
 
-    private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc, String traceId) {
+    private Mono<FileUploadResponse> handleGlobalError(Throwable error) {
         String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
 
