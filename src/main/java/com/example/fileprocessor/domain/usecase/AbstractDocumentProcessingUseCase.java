@@ -12,6 +12,7 @@ import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.ContextView;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -20,11 +21,14 @@ import java.util.logging.Logger;
 
 /**
  * Base use case for document processing.
- * Clean Architecture compliant: No infrastructure or technical utility dependencies.
+ * Clean Architecture compliant: Decoupled orchestration and state management.
  */
 public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger LOGGER = Logger.getLogger(getClass().getName());
+    private static final int MAX_RETRIES = 3;
+    private static final String DEFAULT_TRACE = "unknown-trace";
+    private static final String TRACE_KEY = ProcessingException.HEADER_TRACE_ID;
 
     private final DocumentPersistenceGateway persistencePort;
     private final ProductRestGateway productRestGateway;
@@ -42,51 +46,52 @@ public abstract class AbstractDocumentProcessingUseCase {
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
-        return persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
-            .concatMap(this::processWithTracking);
+        return Mono.deferContextual(ctx -> {
+            String traceId = extractTraceId(ctx);
+            LOGGER.info(String.format("[TraceID: %s] Starting execution for: %s", traceId, implementationName()));
+            return Mono.just(traceId);
+        }).flatMapMany(traceId -> 
+            persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
+                .concatMap(doc -> processWithTracking(doc, traceId))
+        );
     }
 
-    private Mono<FileUploadResponse> processWithTracking(Document doc) {
+    private Mono<FileUploadResponse> processWithTracking(Document doc, String traceId) {
         final Instant startTime = Instant.now();
         
         return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
-            .flatMap(rows -> {
-                if (rows == 0) return Mono.empty(); 
-                
-                return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
-                    .map(ProductDocumentHistory::from)
-                    .flatMapMany(this::decompress)
-                    .concatMap(file -> documentValidator.validate(file, true)
-                        .onErrorResume(ProcessingException.class, e -> handleBusinessRuleSkip(doc, e))
-                        .flatMap(v -> uploadDocument(v, doc.getProductId(), doc.getId()))
-                    )
-                    .next()
-                    .onErrorResume(error -> handleGlobalError(error, doc))
-                    .flatMap(response -> finalizeProcessing(doc, response, startTime));
+            .filter(rows -> rows > 0)
+            .flatMap(unused -> fetchAndValidate(doc))
+            .flatMap(file -> uploadDocument(file, doc.getProductId(), doc.getId()))
+            .onErrorResume(error -> handleGlobalError(error, doc, traceId))
+            .flatMap(response -> finalizeProcessing(doc, response, startTime, traceId));
+    }
+
+    private Mono<ProductDocumentHistory> fetchAndValidate(Document doc) {
+        return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
+            .map(ProductDocumentHistory::from)
+            .flatMapMany(this::decompress)
+            .concatMap(file -> documentValidator.validate(file, true))
+            .next()
+            .onErrorResume(ProcessingException.class, e -> {
+                if (ProcessingResultCodes.isBusinessRule(e.getErrorCode())) {
+                    return Mono.error(e);
+                }
+                return Mono.error(new ProcessingException(e.getErrorCode(), "Validation failed: " + e.getMessage(), e));
             });
     }
 
-    private Mono<FileUploadResponse> finalizeProcessing(Document doc, FileUploadResponse response, Instant startTime) {
-        // Business logic for state transitions and retries
-        final int MAX_RETRIES = 3;
-        final int currentRetry = doc.getRetryCountSafe();
-        final boolean isRetryable = ProcessingResultCodes.isTransient(response.getErrorCode()) && currentRetry < MAX_RETRIES;
+    private Mono<FileUploadResponse> finalizeProcessing(Document doc, FileUploadResponse response, Instant startTime, String traceId) {
+        String nextState = calculateNextState(doc, response);
+        String logPrefix = response.isSuccess() ? ProcessingResultCodes.SUCCESS.name() : 
+                          (ProductState.PENDING.equals(nextState) ? "RETRYABLE_ERROR" : ProcessingResultCodes.FAILURE.name());
 
-        String nextState;
-        if (response.isSuccess()) {
-            nextState = ProductState.PROCESSED;
-        } else if (isRetryable) {
-            nextState = ProductState.PENDING;
-            doc.setRetryCount(currentRetry + 1);
-        } else {
-            nextState = ProductState.FAILED;
-        }
-
-        // Update the main aggregate state
         doc.setState(nextState);
         doc.setErrorMessage(response.getMessage());
 
-        // Create the Audit DTO
+        LOGGER.info(String.format("[TraceID: %s] [%s] Document %s (Product: %s) -> %s. Message: %s",
+                traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState, response.getMessage()));
+
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
             .errorCode(response.getErrorCode())
             .errorMessage(response.getMessage())
@@ -98,21 +103,23 @@ public abstract class AbstractDocumentProcessingUseCase {
             .thenReturn(response);
     }
 
+    private String calculateNextState(Document doc, FileUploadResponse response) {
+        if (response.isSuccess()) {
+            return ProductState.PROCESSED;
+        }
+        
+        int currentRetry = doc.getRetryCountSafe();
+        boolean isRetryable = ProcessingResultCodes.isTransient(response.getErrorCode()) && currentRetry < MAX_RETRIES;
 
-    private Mono<ProductDocumentHistory> handleBusinessRuleSkip(Document doc, ProcessingException e) {
-        FileUploadResponse skipResponse = FileUploadResponse.builder()
-            .status(ProcessingResultCodes.FAILURE.name())
-            .errorCode(e.getErrorCode())
-            .message("Business Rule: " + e.getMessage())
-            .processedAt(Instant.now())
-            .success(false)
-            .build();
-        return finalizeProcessing(doc, skipResponse, Instant.now()).then(Mono.empty());
+        if (isRetryable) {
+            doc.setRetryCount(currentRetry + 1);
+            return ProductState.PENDING;
+        }
+        
+        return ProductState.FAILED;
     }
 
-    private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc) {
-        // En Clean Architecture, el caso de uso solo maneja excepciones de dominio (ProcessingException)
-        // Cualquier otra cosa se trata como un error desconocido a nivel de negocio.
+    private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc, String traceId) {
         String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
 
@@ -134,6 +141,10 @@ public abstract class AbstractDocumentProcessingUseCase {
             return Flux.just(file);
         }
         return ZipDecompressor.decompress(file);
+    }
+
+    private String extractTraceId(ContextView ctx) {
+        return ctx.getOrDefault(TRACE_KEY, DEFAULT_TRACE);
     }
 
     protected abstract Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId);

@@ -74,7 +74,8 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString()))
             .thenReturn(Mono.error(new ProcessingException(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), "Timeout error", (Throwable) null)));
 
-        StepVerifier.create(useCase.executePendingDocuments())
+        StepVerifier.create(useCase.executePendingDocuments()
+                .contextWrite(ctx -> ctx.put("message-id", "test-trace-tech-error")))
             .assertNext(result -> {
                 assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getErrorCode());
             })
@@ -103,7 +104,8 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString()))
             .thenReturn(Mono.error(new ProcessingException(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), "Final timeout", (Throwable) null)));
 
-        StepVerifier.create(useCase.executePendingDocuments())
+        StepVerifier.create(useCase.executePendingDocuments()
+                .contextWrite(ctx -> ctx.put("message-id", "test-trace-max-retries")))
             .expectNextCount(1)
             .verifyComplete();
 
@@ -132,7 +134,8 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString()))
             .thenReturn(Mono.error(new ProcessingException(ProcessingResultCodes.INVALID_BASE64.name(), "Formato inválido", (Throwable) null)));
 
-        StepVerifier.create(useCase.executePendingDocuments())
+        StepVerifier.create(useCase.executePendingDocuments()
+                .contextWrite(ctx -> ctx.put("message-id", "test-trace-business-error")))
             .expectNextCount(1)
             .verifyComplete();
 
@@ -169,7 +172,8 @@ class AbstractDocumentProcessingUseCaseTest {
                 .documentId("doc-1")
                 .build()));
 
-        StepVerifier.create(useCase.executePendingDocuments())
+        StepVerifier.create(useCase.executePendingDocuments()
+                .contextWrite(ctx -> ctx.put("message-id", "test-trace-success")))
             .expectNextCount(1)
             .verifyComplete();
 
