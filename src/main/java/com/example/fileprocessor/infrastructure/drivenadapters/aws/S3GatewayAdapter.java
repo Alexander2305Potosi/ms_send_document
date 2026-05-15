@@ -6,6 +6,7 @@ import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import com.example.fileprocessor.domain.util.ExceptionUtils;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
@@ -14,8 +15,6 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -113,7 +112,7 @@ public class S3GatewayAdapter implements S3Gateway {
             .errorCode(errorCode)
             .traceId(traceId)
             .message(actualError.getMessage())
-            .stackTrace(getStackTraceAsString(actualError))
+            .stackTrace(ExceptionUtils.getStackTraceAsString(actualError))
             .processedAt(Instant.now())
             .success(false)
             .build());
@@ -146,12 +145,5 @@ public class S3GatewayAdapter implements S3Gateway {
     String sanitizeFilename(String filename) {
         if (filename == null || filename.isBlank()) return "unnamed";
         return filename.replaceAll("[^a-zA-Z0-9._-]", "");
-    }
-
-    private String getStackTraceAsString(Throwable throwable) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        throwable.printStackTrace(pw);
-        return sw.toString();
     }
 }

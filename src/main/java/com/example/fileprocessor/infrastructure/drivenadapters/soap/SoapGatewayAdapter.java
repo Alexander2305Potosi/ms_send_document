@@ -3,6 +3,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.soap;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
@@ -12,7 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import com.example.fileprocessor.domain.util.ExceptionUtils;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -112,7 +113,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .errorCode(errorCode)
                 .traceId(traceId)
                 .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
-                .stackTrace(getStackTraceAsString(error))
+                .stackTrace(ExceptionUtils.getStackTraceAsString(error))
                 .processedAt(Instant.now())
                 .success(false)
                 .build();
@@ -124,12 +125,5 @@ public class SoapGatewayAdapter implements SoapGateway {
         if (error instanceof TimeoutException)
             return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
         return ProcessingResultCodes.UNKNOWN_ERROR.name();
-    }
-
-    private String getStackTraceAsString(Throwable throwable) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        throwable.printStackTrace(pw);
-        return sw.toString();
     }
 }

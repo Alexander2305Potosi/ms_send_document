@@ -11,6 +11,8 @@ import reactor.core.publisher.Mono;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import com.example.fileprocessor.domain.util.ExceptionUtils;
+
 import java.time.Instant;
 import java.util.logging.Level;
 
@@ -30,6 +32,13 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
         this.s3Gateway = s3Gateway;
     }
 
+    /**
+     * Uploads the document to the AWS S3 destination.
+     *
+     * @param history the document metadata and content.
+     * @param docId the database ID of the document.
+     * @return a Mono of FileUploadResponse containing the S3 upload result.
+     */
     @Override
     protected Mono<FileUploadResponse> uploadDocument(DocumentHistory history, Long docId) {
         return Mono.fromCallable(() -> FileUploadRequest.from(history, docId, null))
@@ -53,19 +62,17 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
                     .status(ProcessingResultCodes.FAILURE.name())
                     .success(false)
                     .message(e.getMessage())
-                    .stackTrace(getStackTraceAsString(e))
+                    .stackTrace(ExceptionUtils.getStackTraceAsString(e))
                     .processedAt(Instant.now())
                     .build());
             });
     }
 
-    private String getStackTraceAsString(Throwable throwable) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        throwable.printStackTrace(pw);
-        return sw.toString();
-    }
-
+    /**
+     * Returns the name of this implementation.
+     *
+     * @return "S3"
+     */
     @Override
     protected String implementationName() {
         return "S3";

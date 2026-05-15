@@ -8,6 +8,7 @@ import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
+import com.example.fileprocessor.domain.util.ExceptionUtils;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -48,6 +49,12 @@ public abstract class AbstractDocumentProcessingUseCase {
      * Executes the processing of all pending documents.
      * Uses concatMap to ensure one-by-one sequential processing.
      */
+    /**
+     * Executes the processing of all pending documents for the specific implementation.
+     * Documents are processed sequentially to prevent overloading external systems.
+     *
+     * @return a Flux of FileUploadResponse containing the result of each processed document.
+     */
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
@@ -57,11 +64,18 @@ public abstract class AbstractDocumentProcessingUseCase {
             return Mono.just(traceId);
         }).flatMapMany(traceId -> 
             persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
-                // concatMap is used instead of flatMap to ensure synchronous/sequential behavior (one by one)
                 .concatMap(doc -> processWithTracking(doc, traceId))
         );
     }
 
+    /**
+     * Orchestrates the tracking and processing of a single document.
+     * Locks the document, executes the upload, and finalizes the state.
+     *
+     * @param doc the document to process.
+     * @param traceId the trace identifier for logging.
+     * @return a Mono of FileUploadResponse.
+     */
     private Mono<FileUploadResponse> processWithTracking(Document doc, String traceId) {
         final DocumentHistory history = DocumentHistory.fromDocument(doc);
         
@@ -76,6 +90,13 @@ public abstract class AbstractDocumentProcessingUseCase {
             .flatMap(response -> finalizeProcessing(doc, history, response, traceId));
     }
 
+    /**
+     * Fetches the document content from the source REST API and performs business validations.
+     * Supports ZIP decompression if applicable.
+     *
+     * @param history the document history object carrying the metadata.
+     * @return a Mono containing the validated document history with content.
+     */
     private Mono<DocumentHistory> fetchAndValidate(DocumentHistory history) {
         return productRestGateway.getDocument(history.getProductId(), history.getBusinessDocumentId())
             .map(file -> {
@@ -98,6 +119,15 @@ public abstract class AbstractDocumentProcessingUseCase {
             });
     }
 
+    /**
+     * Finalizes the processing of a document by updating its state and saving the audit history.
+     *
+     * @param doc the document being processed.
+     * @param history the document metadata.
+     * @param response the result of the upload operation.
+     * @param traceId the trace identifier for logging.
+     * @return a Mono of FileUploadResponse.
+     */
     private Mono<FileUploadResponse> finalizeProcessing(Document doc, DocumentHistory history, FileUploadResponse response, String traceId) {
         String nextState = calculateNextState(doc, response);
         String logPrefix;
@@ -128,6 +158,13 @@ public abstract class AbstractDocumentProcessingUseCase {
             .thenReturn(response);
     }
 
+    /**
+     * Determines the next state of the document based on the upload result and retry logic.
+     *
+     * @param doc the current document entity.
+     * @param response the upload response.
+     * @return the name of the next state (PROCESSED, PENDING, or FAILED).
+     */
     private String calculateNextState(Document doc, FileUploadResponse response) {
         if (response.isSuccess()) {
             return ProcessingResultCodes.PROCESSED.name();
@@ -144,6 +181,12 @@ public abstract class AbstractDocumentProcessingUseCase {
         return ProcessingResultCodes.FAILED.name();
     }
 
+    /**
+     * Maps unexpected exceptions to a standard FileUploadResponse.
+     *
+     * @param error the throwable to handle.
+     * @return a Mono of FileUploadResponse representing the failure.
+     */
     private Mono<FileUploadResponse> handleGlobalError(Throwable error) {
         String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
@@ -156,19 +199,20 @@ public abstract class AbstractDocumentProcessingUseCase {
             .status(ProcessingResultCodes.FAILURE.name())
             .errorCode(errorCode)
             .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
-            .stackTrace(getStackTraceAsString(error))
+            .stackTrace(ExceptionUtils.getStackTraceAsString(error))
             .processedAt(Instant.now())
             .success(false)
             .build());
     }
 
-    private String getStackTraceAsString(Throwable throwable) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        throwable.printStackTrace(pw);
-        return sw.toString();
-    }
 
+
+    /**
+     * Decompresses ZIP files into individual document history objects.
+     *
+     * @param history the source document (potentially a ZIP).
+     * @return a Flux of DocumentHistory (one for each file inside the ZIP, or the original if not a ZIP).
+     */
     private Flux<DocumentHistory> decompress(DocumentHistory history) {
         if (!history.isZip() || history.getFilename() == null || history.getFilename().isBlank()) {
             return Flux.just(history);
@@ -176,11 +220,29 @@ public abstract class AbstractDocumentProcessingUseCase {
         return ZipDecompressor.decompress(history);
     }
 
+    /**
+     * Extracts the trace ID from the Reactor Context.
+     *
+     * @param ctx the context view.
+     * @return the trace ID or a default value if not found.
+     */
     private String extractTraceId(ContextView ctx) {
         return ctx.getOrDefault(TRACE_KEY, DEFAULT_TRACE);
     }
 
+    /**
+     * Abstract method to be implemented by specific providers (S3, SOAP, etc.) to handle the actual upload.
+     *
+     * @param history the document metadata and content.
+     * @param docId the database ID of the document.
+     * @return a Mono of FileUploadResponse.
+     */
     protected abstract Mono<FileUploadResponse> uploadDocument(DocumentHistory history, Long docId);
 
+    /**
+     * Provides the name of the implementation for logging and persistence purposes.
+     *
+     * @return the implementation name (e.g., "S3", "SOAP").
+     */
     protected abstract String implementationName();
 }

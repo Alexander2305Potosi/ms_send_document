@@ -12,6 +12,8 @@ import reactor.core.publisher.Mono;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import com.example.fileprocessor.domain.util.ExceptionUtils;
+
 import java.time.Instant;
 import java.util.logging.Level;
 
@@ -34,32 +36,39 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
         this.homologationRepository = homologationRepository;
     }
 
+    /**
+     * Uploads the document to the SOAP destination.
+     * Resolves origin/country homologation before sending.
+     *
+     * @param history the document metadata and content.
+     * @param docId   the database ID of the document.
+     * @return a Mono of FileUploadResponse containing the SOAP transmission result.
+     */
     @Override
     protected Mono<FileUploadResponse> uploadDocument(DocumentHistory history, Long docId) {
         return homologationRepository.resolve(history.getOrigin(), history.getPais())
-            .map(h -> FileUploadRequest.from(history, docId, h))
-            .flatMap(request -> soapGateway.send(request))
-            .onErrorResume(e -> {
-                LOGGER.log(Level.SEVERE, "SOAP fatal failure for docId {0}: {1}", new Object[]{docId, e.getMessage()});
-                
-                return Mono.just(FileUploadResponse.builder()
-                    .status(ProcessingResultCodes.FAILURE.name())
-                    .errorCode(ProcessingResultCodes.UNKNOWN_ERROR.name())
-                    .message(e.getMessage())
-                    .stackTrace(getStackTraceAsString(e))
-                    .success(false)
-                    .processedAt(Instant.now())
-                    .build());
-            });
+                .map(h -> FileUploadRequest.from(history, docId, h))
+                .flatMap(request -> soapGateway.send(request))
+                .onErrorResume(e -> {
+                    LOGGER.log(Level.SEVERE, "SOAP fatal failure for docId {0}: {1}",
+                            new Object[] { docId, e.getMessage() });
+
+                    return Mono.just(FileUploadResponse.builder()
+                            .status(ProcessingResultCodes.FAILURE.name())
+                            .errorCode(ProcessingResultCodes.UNKNOWN_ERROR.name())
+                            .message(e.getMessage())
+                            .stackTrace(ExceptionUtils.getStackTraceAsString(e))
+                            .success(false)
+                            .processedAt(Instant.now())
+                            .build());
+                });
     }
 
-    private String getStackTraceAsString(Throwable throwable) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        throwable.printStackTrace(pw);
-        return sw.toString();
-    }
-
+    /**
+     * Returns the name of this implementation.
+     *
+     * @return "SOAP"
+     */
     @Override
     protected String implementationName() {
         return "SOAP";
