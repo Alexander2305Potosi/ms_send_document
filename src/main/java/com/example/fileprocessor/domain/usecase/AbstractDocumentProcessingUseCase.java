@@ -86,8 +86,15 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     private Mono<FileUploadResponse> finalizeProcessing(Document doc, FileUploadResponse response, Instant startTime, String traceId) {
         String nextState = calculateNextState(doc, response);
-        String logPrefix = response.isSuccess() ? ProcessingResultCodes.SUCCESS.name() : 
-                          (ProductState.PENDING.equals(nextState) ? "RETRYABLE_ERROR" : ProcessingResultCodes.FAILURE.name());
+        String logPrefix;
+
+        if (response.isSuccess()) {
+            logPrefix = ProcessingResultCodes.SUCCESS.name();
+        } else if (ProductState.PENDING.equals(nextState)) {
+            logPrefix = "RETRYABLE_ERROR";
+        } else {
+            logPrefix = ProcessingResultCodes.FAILURE.name();
+        }
 
         doc.setState(nextState);
         doc.setErrorMessage(response.getMessage());
