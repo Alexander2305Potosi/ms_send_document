@@ -1,10 +1,9 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.entity.ProductState;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -21,7 +20,8 @@ import java.util.logging.Logger;
 
 /**
  * Base use case for document processing.
- * Clean Architecture compliant: Decoupled orchestration and state management.
+ * Refactored: DocumentHistory is now the main information carrier.
+ * Processing is STRICTLY SEQUENTIAL to protect external endpoints (like SOAP).
  */
 public abstract class AbstractDocumentProcessingUseCase {
 
@@ -43,38 +43,51 @@ public abstract class AbstractDocumentProcessingUseCase {
         this.documentValidator = documentValidator;
     }
 
+    /**
+     * Executes the processing of all pending documents.
+     * Uses concatMap to ensure one-by-one sequential processing.
+     */
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
         return Mono.deferContextual(ctx -> {
             String traceId = extractTraceId(ctx);
-            LOGGER.info(() -> String.format("[TraceID: %s] Starting execution for: %s", traceId, implementationName()));
+            LOGGER.info(() -> String.format("[TraceID: %s] Starting SEQUENTIAL execution for: %s", traceId, implementationName()));
             return Mono.just(traceId);
         }).flatMapMany(traceId -> 
             persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
+                // concatMap is used instead of flatMap to ensure synchronous/sequential behavior (one by one)
                 .concatMap(doc -> processWithTracking(doc, traceId))
         );
     }
 
     private Mono<FileUploadResponse> processWithTracking(Document doc, String traceId) {
-        final Instant startTime = Instant.now();
+        final DocumentHistory history = DocumentHistory.fromDocument(doc);
         
         return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
             .filter(rows -> rows > 0)
             .doOnDiscard(Long.class, unused -> 
                 LOGGER.warning(() -> String.format("[TraceID: %s] Document %s is already being processed or locked.", traceId, doc.getDocumentId()))
             )
-            .flatMap(unused -> fetchAndValidate(doc))
-            .flatMap(file -> uploadDocument(file, doc.getProductId(), doc.getId()))
+            .flatMap(unused -> fetchAndValidate(history))
+            .flatMap(h -> uploadDocument(h, doc.getId()))
             .onErrorResume(error -> handleGlobalError(error, doc, traceId))
-            .flatMap(response -> finalizeProcessing(doc, response, startTime, traceId));
+            .flatMap(response -> finalizeProcessing(doc, history, response, traceId));
     }
 
-    private Mono<ProductDocumentHistory> fetchAndValidate(Document doc) {
-        return productRestGateway.getDocument(doc.getProductId(), doc.getDocumentId())
-            .map(ProductDocumentHistory::from)
+    private Mono<DocumentHistory> fetchAndValidate(DocumentHistory history) {
+        return productRestGateway.getDocument(history.getProductId(), history.getBusinessDocumentId())
+            .map(file -> {
+                history.setContent(file.getContent());
+                history.setSize(file.getSize());
+                history.setContentType(file.getContentType());
+                history.setFilename(file.getFilename());
+                history.setOrigin(file.getOrigin());
+                history.setPais(file.getPais());
+                return history;
+            })
             .flatMapMany(this::decompress)
-            .concatMap(file -> documentValidator.validate(file, true))
+            .concatMap(h -> documentValidator.validate(h, true))
             .next()
             .onErrorResume(ProcessingException.class, e -> {
                 if (ProcessingResultCodes.isBusinessRule(e.getErrorCode())) {
@@ -84,14 +97,14 @@ public abstract class AbstractDocumentProcessingUseCase {
             });
     }
 
-    private Mono<FileUploadResponse> finalizeProcessing(Document doc, FileUploadResponse response, Instant startTime, String traceId) {
+    private Mono<FileUploadResponse> finalizeProcessing(Document doc, DocumentHistory history, FileUploadResponse response, String traceId) {
         String nextState = calculateNextState(doc, response);
         String logPrefix;
 
         if (response.isSuccess()) {
             logPrefix = ProcessingResultCodes.SUCCESS.name();
-        } else if (ProductState.PENDING.equals(nextState)) {
-            logPrefix = "RETRYABLE_ERROR";
+        } else if (ProcessingResultCodes.PENDING.name().equals(nextState)) {
+            logPrefix = ProcessingResultCodes.RETRYABLE_ERROR.name();
         } else {
             logPrefix = ProcessingResultCodes.FAILURE.name();
         }
@@ -105,7 +118,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
             .errorCode(response.getErrorCode())
             .errorMessage(response.getMessage())
-            .startedAt(startTime)
+            .startedAt(history.getStartedAt())
             .completedAt(Instant.now())
             .build();
 
@@ -115,7 +128,7 @@ public abstract class AbstractDocumentProcessingUseCase {
 
     private String calculateNextState(Document doc, FileUploadResponse response) {
         if (response.isSuccess()) {
-            return ProductState.PROCESSED;
+            return ProcessingResultCodes.PROCESSED.name();
         }
         
         int currentRetry = doc.getRetryCountSafe();
@@ -123,10 +136,10 @@ public abstract class AbstractDocumentProcessingUseCase {
 
         if (isRetryable) {
             doc.setRetryCount(currentRetry + 1);
-            return ProductState.PENDING;
+            return ProcessingResultCodes.PENDING.name();
         }
         
-        return ProductState.FAILED;
+        return ProcessingResultCodes.FAILED.name();
     }
 
     private Mono<FileUploadResponse> handleGlobalError(Throwable error, Document doc, String traceId) {
@@ -140,24 +153,24 @@ public abstract class AbstractDocumentProcessingUseCase {
         return Mono.just(FileUploadResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name())
             .errorCode(errorCode)
-            .message(message != null ? message : "Unexpected processing error")
+            .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
             .processedAt(Instant.now())
             .success(false)
             .build());
     }
 
-    private Flux<ProductDocumentHistory> decompress(ProductDocumentHistory file) {
-        if (!file.isZip() || file.getFilename() == null || file.getFilename().isBlank()) {
-            return Flux.just(file);
+    private Flux<DocumentHistory> decompress(DocumentHistory history) {
+        if (!history.isZip() || history.getFilename() == null || history.getFilename().isBlank()) {
+            return Flux.just(history);
         }
-        return ZipDecompressor.decompress(file);
+        return ZipDecompressor.decompress(history);
     }
 
     private String extractTraceId(ContextView ctx) {
         return ctx.getOrDefault(TRACE_KEY, DEFAULT_TRACE);
     }
 
-    protected abstract Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId);
+    protected abstract Mono<FileUploadResponse> uploadDocument(DocumentHistory history, Long docId);
 
     protected abstract String implementationName();
 }

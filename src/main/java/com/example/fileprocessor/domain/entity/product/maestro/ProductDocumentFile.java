@@ -1,4 +1,4 @@
-package com.example.fileprocessor.domain.entity;
+package com.example.fileprocessor.domain.entity.product.maestro;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

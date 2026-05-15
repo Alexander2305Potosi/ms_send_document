@@ -9,11 +9,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * R2DBC entity for the 'historico_documentos' table.
- * Removed: message_id (no external broker defined), fecha_creacion (redundant with fecha_inicio).
  */
 @Table("historico_documentos")
 @Getter
@@ -52,8 +51,8 @@ public class DocumentHistoryEntity {
     private Integer retry;
 
     @Column("fecha_inicio")
-    private LocalDateTime startedAt;
+    private Instant startedAt;
 
     @Column("fecha_fin")
-    private LocalDateTime completedAt;
+    private Instant completedAt;
 }

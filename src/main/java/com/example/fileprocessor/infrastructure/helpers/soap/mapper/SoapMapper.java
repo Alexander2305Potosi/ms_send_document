@@ -235,12 +235,4 @@ public class SoapMapper {
         if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
         return (nodes.getLength() > 0) ? nodes.item(0) : null;
     }
-
-    private String getLocalName(Node node) {
-        String name = node.getLocalName() != null ? node.getLocalName() : node.getNodeName();
-        if (name != null && name.contains(":")) {
-            name = name.substring(name.indexOf(":") + 1);
-        }
-        return name;
-    }
 }

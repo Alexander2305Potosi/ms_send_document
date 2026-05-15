@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.common.AbstractReactiveAdapterOperation;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;

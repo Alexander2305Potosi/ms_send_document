@@ -29,7 +29,6 @@ public final class SoapConstants {
     
     // Marcadores especiales
     public static final String T_METADATA    = "{{METADATA_BLOCK}}";
-    public static final String T_CONTEXT     = "{{CONTEXT_BLOCK}}";
 
     // Elementos XML (Solo los necesarios para el Envelope y Response)
     public static final String EL_ENVELOPE = "Envelope";

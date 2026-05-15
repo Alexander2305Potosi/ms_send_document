@@ -1,5 +1,7 @@
 package com.example.fileprocessor.domain.entity;
 
+import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
+import com.example.fileprocessor.domain.entity.product.DocumentHistory;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -20,16 +22,15 @@ public class FileUploadRequest {
     private String paisHomologado;
     private Long docId;
 
-    public static FileUploadRequest from(ProductDocumentHistory doc, Long docId, HomologationResult h) {
+    public static FileUploadRequest from(DocumentHistory history, Long docId, HomologationResult h) {
         return FileUploadRequest.builder()
-            .documentId(doc.getDocumentId())
-            .content(doc.getContent() != null ? doc.getContent() : new byte[0])
-            .filename(doc.getFilename())
-            .contentType(doc.getContentType())
-            .fileSize(doc.getSize())
-            // Si h es nulo (caso S3), usamos los valores originales del documento
-            .origin(h != null ? h.origin() : doc.getOrigin())
-            .paisHomologado(h != null ? h.paisHomologado() : doc.getPais())
+            .documentId(history.getBusinessDocumentId())
+            .content(history.getContent() != null ? history.getContent() : new byte[0])
+            .filename(history.getFilename())
+            .contentType(history.getContentType())
+            .fileSize(history.getSize() != null ? history.getSize() : 0)
+            .origin(h != null ? h.origin() : history.getOrigin())
+            .paisHomologado(h != null ? h.paisHomologado() : history.getPais())
             .docId(docId)
             .build();
     }

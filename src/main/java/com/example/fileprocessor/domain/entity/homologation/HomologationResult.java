@@ -1,4 +1,4 @@
-package com.example.fileprocessor.domain.entity;
+package com.example.fileprocessor.domain.entity.homologation;
 
 /**
  * Result of homologation resolution for a document.

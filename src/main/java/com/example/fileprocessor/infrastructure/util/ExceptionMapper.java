@@ -30,10 +30,10 @@ public final class ExceptionMapper {
             message = "API Error: " + wcre.getStatusCode() + " - " + wcre.getResponseBodyAsString();
         } else if (isTimeout(error)) {
             errorCode = ProcessingResultCodes.GATEWAY_TIMEOUT.name();
-            message = "Connection timeout reaching external service";
+            message = ProcessingResultCodes.GATEWAY_TIMEOUT.value();
         } else if (isConnectionError(error)) {
             errorCode = ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
-            message = "Connection refused reaching external service";
+            message = ProcessingResultCodes.SERVICE_UNAVAILABLE.value();
         }
 
         if (message == null || message.isBlank()) {

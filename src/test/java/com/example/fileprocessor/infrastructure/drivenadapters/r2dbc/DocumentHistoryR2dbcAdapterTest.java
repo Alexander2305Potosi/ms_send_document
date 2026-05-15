@@ -1,7 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,7 @@ class DocumentHistoryR2dbcAdapterTest {
             .useCase("SOAP")
             .isZip(false)
             .retryCount(1)
-            .state("PROCESSED")
+            .state(ProcessingResultCodes.PROCESSED.name())
             .build();
 
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
@@ -52,6 +53,7 @@ class DocumentHistoryR2dbcAdapterTest {
         when(springDataRepository.save(any(DocumentHistoryEntity.class))).thenReturn(Mono.just(new DocumentHistoryEntity()));
 
         StepVerifier.create(adapter.saveHistory(doc, historyDTO))
+            .expectNextCount(1)
             .verifyComplete();
 
         ArgumentCaptor<DocumentHistoryEntity> captor = ArgumentCaptor.forClass(DocumentHistoryEntity.class);
@@ -59,7 +61,7 @@ class DocumentHistoryR2dbcAdapterTest {
 
         DocumentHistoryEntity saved = captor.getValue();
         assertEquals(1L, saved.getDocumentId());
-        assertEquals("SUCCESS", saved.getResult());
+        assertEquals(ProcessingResultCodes.SUCCESS.name(), saved.getResult());
         assertEquals(1, saved.getRetry());
         assertEquals("SOAP", saved.getOperation());
     }

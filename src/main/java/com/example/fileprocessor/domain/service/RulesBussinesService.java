@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.service;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
@@ -11,10 +11,6 @@ import java.util.regex.Pattern;
 
 /**
  * Default implementation of document validation gateway.
- * Applies validation rules to incoming documents based on configuration.
- *
- * <p>During sync (API_V1_PRODUCTS_SYNC): only name pattern validation is applied.
- * During processing (API_V1_PRODUCTS): size and name validations are both applied.
  */
 public class RulesBussinesService implements RulesBussinesGateway {
 
@@ -31,25 +27,26 @@ public class RulesBussinesService implements RulesBussinesGateway {
     }
 
     @Override
-    public Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc) {
-        return validate(doc, false);
+    public Mono<DocumentHistory> validate(DocumentHistory history) {
+        return validate(history, false);
     }
 
-    public Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc, boolean includeSizeCheck) {
+    @Override
+    public Mono<DocumentHistory> validate(DocumentHistory history, boolean includeSizeCheck) {
         return Mono.defer(() -> {
-            if (includeSizeCheck && maxFileSizeBytes != null && doc.getSize() != null && doc.getSize() > maxFileSizeBytes) {
+            if (includeSizeCheck && maxFileSizeBytes != null && history.getSize() != null && history.getSize() > maxFileSizeBytes) {
                 return Mono.error(new ProcessingException(
                     ProcessingResultCodes.SIZE_EXCEEDED.name(),
                     String.format("Size %,d bytes exceeds max %,d bytes for file '%s'",
-                        doc.getSize(), maxFileSizeBytes, doc.getFilename())));
+                        history.getSize(), maxFileSizeBytes, history.getFilename())));
             }
-            if (filenamePattern != null && !filenamePattern.matcher(doc.getFilename()).matches()) {
+            if (filenamePattern != null && history.getFilename() != null && !filenamePattern.matcher(history.getFilename()).matches()) {
                 return Mono.error(new ProcessingException(
                     ProcessingResultCodes.PATTERN_MISMATCH.name(),
                     String.format("Filename '%s' does not match pattern '%s'",
-                        doc.getFilename(), filenamePattern.pattern())));
+                        history.getFilename(), filenamePattern.pattern())));
             }
-            return Mono.just(doc);
+            return Mono.just(history);
         });
     }
 }

@@ -1,58 +1,46 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.ProductState;
-import com.example.fileprocessor.domain.port.out.DocumentHistoryRepository;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
-import com.example.fileprocessor.infrastructure.util.DateMapper;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 
-
-@Component
+@Repository
 @RequiredArgsConstructor
-public class DocumentHistoryR2dbcAdapter implements DocumentHistoryRepository {
+public class DocumentHistoryR2dbcAdapter {
 
-    private final com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentHistoryRepository springDataRepository;
+    private final DocumentHistoryRepository springDataRepository;
 
-    @Override
-    public Mono<Void> saveHistory(com.example.fileprocessor.domain.entity.Document doc, com.example.fileprocessor.domain.entity.DocumentHistoryDTO historyDTO) {
+    public Mono<DocumentHistoryEntity> saveHistory(Document doc, DocumentHistoryDTO historyDTO) {
         String resultStatus;
-        String enrichedMessage;
-
-        if (ProductState.IN_PROGRESS.equals(doc.getState())) {
+        
+        if (ProcessingResultCodes.IN_PROGRESS.name().equals(doc.getState())) {
             resultStatus = ProcessingResultCodes.IN_PROGRESS.name();
-            enrichedMessage = historyDTO.getErrorMessage();
         } else {
-            resultStatus = ProductState.PROCESSED.equals(doc.getState()) ? 
+            resultStatus = ProcessingResultCodes.PROCESSED.name().equals(doc.getState()) ? 
                           ProcessingResultCodes.SUCCESS.name() : ProcessingResultCodes.ERROR.name();
             
-            // Re-apply business rule classification if needed
-            if (ProcessingResultCodes.isBusinessRule(historyDTO.getErrorCode())) {
+            if (ProcessingResultCodes.ERR_DUPLICATED_DOC.name().equals(doc.getState())) {
                 resultStatus = ProcessingResultCodes.SKIPPED.name();
             }
-
-            // ENRIQUECIMIENTO SOLICITADO: Intento + Código + Mensaje
-            String attemptInfo = "[INTENTO " + doc.getRetryCountSafe() + "/3] ";
-            String message = historyDTO.getErrorMessage();
-            enrichedMessage = attemptInfo + message;
         }
 
         DocumentHistoryEntity entity = DocumentHistoryEntity.builder()
-            .documentId(doc.getId())
-            .filename(Boolean.TRUE.equals(doc.isZip()) ? doc.getName() : null)
-            .operation(doc.getUseCase())
-            .result(resultStatus)
-            .errorCode(historyDTO.getErrorCode())
-            .errorMessage(enrichedMessage)
-            .retry(doc.getRetryCountSafe())
-            .startedAt(DateMapper.toLocalDateTime(historyDTO.getStartedAt()))
-            .completedAt(DateMapper.toLocalDateTime(historyDTO.getCompletedAt()))
-            .stackTrace(historyDTO.getStackTrace())
-            .build();
+                .documentId(doc.getId())
+                .operation(doc.getUseCase())
+                .result(resultStatus)
+                .errorCode(historyDTO.getErrorCode())
+                .errorMessage(historyDTO.getErrorMessage())
+                .retry(doc.getRetryCountSafe())
+                .startedAt(historyDTO.getStartedAt())
+                .completedAt(historyDTO.getCompletedAt())
+                .filename(doc.getName())
+                .build();
 
-        return springDataRepository.save(entity).then();
+        return springDataRepository.save(entity);
     }
-
 }

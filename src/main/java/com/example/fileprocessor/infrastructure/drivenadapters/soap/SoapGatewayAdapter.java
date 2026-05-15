@@ -120,7 +120,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .status(ProcessingResultCodes.FAILURE.name())
                 .errorCode(errorCode)
                 .traceId(traceId)
-                .message(message != null ? message : "Error desconocido")
+                .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
                 .processedAt(Instant.now())
                 .success(false)
                 .build();

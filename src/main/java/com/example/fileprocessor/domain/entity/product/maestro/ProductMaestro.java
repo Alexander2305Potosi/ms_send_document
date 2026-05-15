@@ -1,4 +1,4 @@
-package com.example.fileprocessor.domain.entity;
+package com.example.fileprocessor.domain.entity.product.maestro;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ProductHistory {
+public class ProductMaestro {
     private Long id;
     private String productId;
     private String name;

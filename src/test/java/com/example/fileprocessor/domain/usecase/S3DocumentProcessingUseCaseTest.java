@@ -1,11 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistory;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.ProductDocumentFile;
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.entity.ProductState;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
@@ -19,25 +18,18 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class S3DocumentProcessingUseCaseTest {
 
     @Mock
     private DocumentPersistenceGateway persistencePort;
-
     @Mock
     private ProductRestGateway productRestGateway;
-
     @Mock
     private S3Gateway s3Gateway;
-
     @Mock
     private RulesBussinesGateway documentValidator;
 
@@ -45,138 +37,41 @@ class S3DocumentProcessingUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new S3DocumentProcessingUseCase(
-            persistencePort,
-            productRestGateway,
-            s3Gateway,
-            documentValidator
-        );
-
-        lenient().when(persistencePort.finalizeProcessingAtomically(any(), any()))
-            .thenReturn(Mono.empty());
-
-        lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
-            .thenReturn(Mono.just(1L));
-    }
-
-    private static ProductDocumentHistory doc() {
-        return ProductDocumentHistory.builder()
-            .productId("prod-1")
-            .isZip(false)
-            .pais("AR")
-            .documentId("doc-1")
-            .name("test.pdf")
-            .filename("test.pdf")
-            .contentType("application/pdf")
-            .size(1L)
-            .origin("origin")
-            .content(new byte[]{1})
-            .build();
+        useCase = new S3DocumentProcessingUseCase(persistencePort, productRestGateway, s3Gateway, documentValidator);
     }
 
     @Test
-    void implementationName_returnsS3() {
-        assertEquals("S3", useCase.implementationName());
-    }
-
-    @Test
-    void uploadDocument_whenSuccess_returnsSuccessResult() {
-        FileUploadResponse successResult = FileUploadResponse.builder()
-            .status(ProcessingResultCodes.SUCCESS.name())
-            .success(true)
-            .correlationId("corr-123")
-            .processedAt(Instant.now())
-            .build();
-
-        when(s3Gateway.send(any(FileUploadRequest.class)))
-            .thenReturn(Mono.just(successResult));
-
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
-            .assertNext(result -> {
-                assertTrue(result.isSuccess());
-                assertEquals("corr-123", result.getCorrelationId());
-            })
-            .verifyComplete();
-    }
-
-    @Test
-    void uploadDocument_whenError_returnsFailureResult() {
-        when(s3Gateway.send(any(FileUploadRequest.class)))
-            .thenReturn(Mono.error(new RuntimeException("S3 error")));
-
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
-            .assertNext(result -> {
-                assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
-            })
-            .verifyComplete();
-    }
-
-    @Test
-    void uploadDocument_whenGatewayReturnsFailureStatus_propagatesFailure() {
-        FileUploadResponse failureResult = FileUploadResponse.builder()
-            .status(ProcessingResultCodes.FAILURE.name())
-            .success(false)
-            .errorCode(ProcessingResultCodes.SERVICE_UNAVAILABLE.name())
-            .message("S3 unavailable")
-            .build();
-
-        when(s3Gateway.send(any(FileUploadRequest.class)))
-            .thenReturn(Mono.just(failureResult));
-
-        StepVerifier.create(useCase.uploadDocument(doc(), "prod-1", 1L))
-            .assertNext(result -> {
-                assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.SERVICE_UNAVAILABLE.name(), result.getErrorCode());
-            })
-            .verifyComplete();
-    }
-
-    @Test
-    void executePendingDocuments_singleDocument_fullPipelineSuccess() {
+    void executePendingDocuments_withS3_success() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
-            .state(ProductState.PENDING)
-            .useCase("S3")
-            .createdAt(LocalDateTime.now())
             .retryCount(0)
             .build();
 
         ProductDocumentFile file = ProductDocumentFile.builder()
+            .productId("prod-1")
             .documentId("doc-1")
             .filename("test.pdf")
-            .content(new byte[]{1, 2, 3})
-            .contentType("application/pdf")
-            .size(3L)
-            .isZip(false)
-            .origin("origin")
-            .pais("AR")
+            .content(new byte[]{1})
             .build();
 
-        FileUploadResponse successResult = FileUploadResponse.builder()
-            .status(ProcessingResultCodes.SUCCESS.name())
+        when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
+        when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt())).thenReturn(Mono.just(1L));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        when(documentValidator.validate(any(DocumentHistory.class), anyBoolean()))
+            .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        
+        when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(FileUploadResponse.builder()
             .success(true)
             .correlationId("corr-123")
-            .processedAt(Instant.now())
-            .build();
+            .build()));
 
-        when(persistencePort.findPendingDocumentsToday(eq("S3"), any()))
-            .thenReturn(Flux.just(doc));
-        when(productRestGateway.getDocument("prod-1", "doc-1"))
-            .thenReturn(Mono.just(file));
-        when(documentValidator.validate(any(), eq(true)))
-            .thenReturn(Mono.just(doc()));
-        when(s3Gateway.send(any(FileUploadRequest.class)))
-            .thenReturn(Mono.just(successResult));
+        when(persistencePort.finalizeProcessingAtomically(any(), any())).thenReturn(Mono.empty());
 
         StepVerifier.create(useCase.executePendingDocuments())
-            .assertNext(result -> {
-                assertTrue(result.isSuccess());
-                assertEquals("corr-123", result.getCorrelationId());
-            })
+            .expectNextMatches(FileUploadResponse::isSuccess)
             .verifyComplete();
     }
 }

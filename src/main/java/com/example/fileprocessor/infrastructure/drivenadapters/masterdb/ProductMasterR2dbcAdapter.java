@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.masterdb;
 
-import com.example.fileprocessor.domain.entity.ProductHistory;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,10 +20,10 @@ public class ProductMasterR2dbcAdapter implements ProductMasterRepository {
     private final DatabaseClient masterDatabaseClient;
 
     @Override
-    public Flux<ProductHistory> getAllProducts() {
+    public Flux<ProductMaestro> getAllProducts() {
         LOGGER.info("Fetching master products from EXTERNAL DATABASE");
         return masterDatabaseClient.sql("SELECT id, id_producto, nombre, fecha_cargue, estado FROM productos_maestros")
-            .map((row, metadata) -> ProductHistory.builder()
+            .map((row, metadata) -> ProductMaestro.builder()
                 .id(row.get("id", Long.class))
                 .productId(row.get("id_producto", String.class))
                 .name(row.get("nombre", String.class))

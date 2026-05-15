@@ -1,9 +1,9 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.HomologationResult;
+import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
-import com.example.fileprocessor.domain.entity.CategoryManual;
-import com.example.fileprocessor.domain.entity.PaisHomologado;
+import com.example.fileprocessor.domain.entity.homologation.CategoryManual;
+import com.example.fileprocessor.domain.entity.homologation.PaisHomologado;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CategoryManualEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.PaisHomologadoEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository;

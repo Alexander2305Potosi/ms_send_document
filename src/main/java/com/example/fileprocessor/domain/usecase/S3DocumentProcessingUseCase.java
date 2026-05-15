@@ -1,8 +1,8 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.product.DocumentHistory;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
@@ -13,7 +13,7 @@ import java.time.Instant;
 import java.util.logging.Level;
 
 /**
- * Use case for processing documents via S3. Restored to use ProductRestGateway.
+ * Use case for processing documents via S3.
  */
 public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
@@ -29,8 +29,8 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     }
 
     @Override
-    protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
-        return Mono.fromCallable(() -> FileUploadRequest.from(doc, docId, null))
+    protected Mono<FileUploadResponse> uploadDocument(DocumentHistory history, Long docId) {
+        return Mono.fromCallable(() -> FileUploadRequest.from(history, docId, null))
             .flatMap(request -> s3Gateway.send(request))
             .map(response -> {
                 if (response.isSuccess()) {

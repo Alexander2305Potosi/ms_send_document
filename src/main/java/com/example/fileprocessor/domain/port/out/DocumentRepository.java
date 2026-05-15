@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.product.Document;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

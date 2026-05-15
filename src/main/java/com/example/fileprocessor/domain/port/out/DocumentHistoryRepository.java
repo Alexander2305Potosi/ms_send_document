@@ -1,7 +1,7 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import reactor.core.publisher.Mono;
 
 /**

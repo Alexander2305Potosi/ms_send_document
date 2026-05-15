@@ -49,7 +49,7 @@ public class S3GatewayAdapter implements S3Gateway {
                     .status(ProcessingResultCodes.FAILURE.name())
                     .errorCode(ProcessingResultCodes.EMPTY_CONTENT.name())
                     .traceId(traceId)
-                    .message("Cannot upload empty content to S3")
+                    .message(ProcessingResultCodes.EMPTY_CONTENT.value())
                     .processedAt(Instant.now())
                     .success(false)
                     .build());

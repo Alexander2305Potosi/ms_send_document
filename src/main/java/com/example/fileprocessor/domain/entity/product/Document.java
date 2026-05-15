@@ -1,4 +1,4 @@
-package com.example.fileprocessor.domain.entity;
+package com.example.fileprocessor.domain.entity.product;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,8 +9,8 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * Main domain entity representing a document in the processing pipeline.
- * Redundant fields (active, owner, path, updatedAt) have been removed.
+ * Main domain entity representing the 'documentos' table.
+ * Acts as a state machine for the document lifecycle.
  */
 @Getter
 @Setter

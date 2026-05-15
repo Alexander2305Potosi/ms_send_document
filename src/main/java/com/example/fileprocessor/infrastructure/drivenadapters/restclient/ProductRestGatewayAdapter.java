@@ -1,8 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.entity.ProductDocumentFile;
-import com.example.fileprocessor.domain.entity.ProductHistory;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
@@ -42,7 +42,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    public Flux<ProductHistory> getAllProducts() {
+    public Flux<ProductMaestro> getAllProducts() {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
             LOGGER.log(Level.INFO, "Fetching all products from REST API, traceId: {0}", traceId);
@@ -53,7 +53,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .header(ApiConstants.HEADER_TRACE_ID, traceId)
                 .retrieve()
                 .bodyToFlux(com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse.class)
-                .map(resp -> ProductHistory.builder()
+                .map(resp -> ProductMaestro.builder()
                     .productId(resp.getProductId())
                     .name(resp.getName())
                     .build())
@@ -63,7 +63,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     }
 
     @Override
-    public Flux<ProductDocumentHistory> getDocumentsByProduct(ProductHistory product) {
+    public Flux<Document> getDocumentsByProduct(ProductMaestro product) {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             LOGGER.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
@@ -77,7 +77,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .bodyToFlux(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .map(doc -> mapToProductDocument(product.getProductId(), doc))
+                .map(doc -> mapToDocument(product.getProductId(), doc))
                 .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
                     new Object[]{doc.getProductId(), doc.getDocumentId()}));
         });
@@ -98,62 +98,48 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .bodyToMono(ProductDocumentResponse.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .map(response -> {
-                    ProductDocumentHistory doc = mapToProductDocument(productId, response);
-                    return ProductDocumentFile.builder()
-                        .productId(productId)
-                        .documentId(doc.getDocumentId())
-                        .filename(doc.getFilename())
-                        .content(doc.getContent())
-                        .contentType(doc.getContentType())
-                        .size(doc.getSize())
-                        .isZip(doc.isZip())
-                        .origin(doc.getOrigin())
-                        .pais(doc.getPais())
-                        .build();
-                })
+                .map(response -> mapToProductDocumentFile(productId, response))
                 .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
                     new Object[]{documentId, productId}));
         });
     }
 
-
-    ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
-        String contentBase64 = json.getContent();
-        String filename = json.getFilename();
-        String documentId = json.getDocumentId();
-
-        byte[] content;
-        if (contentBase64 != null && !contentBase64.isBlank()) {
-            try {
-                content = Base64Utils.decodeSafe(contentBase64, filename, documentId);
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "Failed to decode Base64 for document {0} ({1}): {2}",
-                    new Object[]{documentId, filename, e.getMessage()});
-                throw new ProcessingException(
-                    "Base64 decode failed for document: " + documentId,
-                    ProcessingResultCodes.INVALID_BASE64.name(), documentId);
-            }
-        } else {
-            content = null;
-        }
-
+    private ProductDocumentFile mapToProductDocumentFile(String productId, ProductDocumentResponse json) {
+        byte[] content = decodeBase64(json);
         long size = json.getSize() != null ? json.getSize() : (content != null ? content.length : 0);
-
-        // Validate isZip based on filename extension
-        boolean isZip = filename != null && filename.toLowerCase().endsWith(".zip");
-
-        return ProductDocumentHistory.builder()
+        
+        return ProductDocumentFile.builder()
             .productId(productId)
-            .documentId(documentId)
-            .name(filename)
-            .filename(filename)
+            .documentId(json.getDocumentId())
+            .filename(json.getFilename())
+            .content(content)
             .contentType(json.getContentType())
             .size(size)
-            .isZip(isZip)
+            .isZip(json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip"))
             .origin(json.getOrigin())
             .pais(json.getPais())
-            .content(content)
             .build();
+    }
+
+    private Document mapToDocument(String productId, ProductDocumentResponse json) {
+        return Document.builder()
+            .productId(productId)
+            .documentId(json.getDocumentId())
+            .name(json.getFilename())
+            .isZip(json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip"))
+            .build();
+    }
+
+    private byte[] decodeBase64(ProductDocumentResponse json) {
+        String contentBase64 = json.getContent();
+        if (contentBase64 == null || contentBase64.isBlank()) return null;
+        
+        try {
+            return Base64Utils.decodeSafe(contentBase64, json.getFilename(), json.getDocumentId());
+        } catch (Exception e) {
+            throw new ProcessingException(
+                "Base64 decode failed for document: " + json.getDocumentId(),
+                ProcessingResultCodes.INVALID_BASE64.name(), json.getDocumentId());
+        }
     }
 }

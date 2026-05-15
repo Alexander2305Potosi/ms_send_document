@@ -1,8 +1,7 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.Document;
-import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -13,6 +12,8 @@ import java.time.LocalDateTime;
  */
 public interface DocumentPersistenceGateway {
     Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay);
+    
+    Mono<Document> save(Document doc);
 
     Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount);
 

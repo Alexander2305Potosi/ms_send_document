@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.service;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistory;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.junit.jupiter.api.Test;
@@ -8,13 +8,12 @@ import reactor.test.StepVerifier;
 
 class DocumentValidatorTest {
 
-    private static ProductDocumentHistory doc(String documentId, String name, String contentType, long size) {
-        return ProductDocumentHistory.builder()
+    private static DocumentHistory doc(String documentId, String name, String contentType, long size) {
+        return DocumentHistory.builder()
             .productId("prod-1")
             .isZip(false)
             .pais("AR")
-            .documentId(documentId)
-            .name(name)
+            .businessDocumentId(documentId)
             .filename(name)
             .contentType(contentType)
             .size(size)

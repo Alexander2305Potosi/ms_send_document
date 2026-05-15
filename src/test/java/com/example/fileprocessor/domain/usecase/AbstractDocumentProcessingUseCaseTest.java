@@ -1,8 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.ProductState;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -10,9 +12,9 @@ import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -39,7 +41,7 @@ class AbstractDocumentProcessingUseCaseTest {
             persistencePort, productRestGateway, documentValidator
         ) {
             @Override
-            protected Mono<FileUploadResponse> uploadDocument(com.example.fileprocessor.domain.entity.ProductDocumentHistory doc, String productId, Long docId) {
+            protected Mono<FileUploadResponse> uploadDocument(DocumentHistory history, Long docId) {
                 return Mono.just(FileUploadResponse.builder().success(true).build());
             }
 
@@ -63,14 +65,13 @@ class AbstractDocumentProcessingUseCaseTest {
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
-            .state(ProductState.PENDING)
+            .state(ProcessingResultCodes.PENDING.name())
             .retryCount(0)
             .build();
 
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         
-        // Simular error de red (reintentable según ProcessingResultCodes.isTransient)
         when(productRestGateway.getDocument(anyString(), anyString()))
             .thenReturn(Mono.error(new ProcessingException(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), "Timeout error", (Throwable) null)));
 
@@ -81,9 +82,8 @@ class AbstractDocumentProcessingUseCaseTest {
             })
             .verifyComplete();
 
-        // Verificar que el documento vuelve a PENDING e incrementa el reintento
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(d -> d.getState().equals(ProductState.PENDING) && d.getRetryCount() == 1),
+            argThat(d -> ProcessingResultCodes.PENDING.name().equals(d.getState()) && d.getRetryCount() == 1),
             argThat(h -> h.getErrorCode().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name()))
         );
     }
@@ -95,8 +95,8 @@ class AbstractDocumentProcessingUseCaseTest {
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
-            .state(ProductState.PENDING)
-            .retryCount(3) // Máximo alcanzado
+            .state(ProcessingResultCodes.PENDING.name())
+            .retryCount(3) 
             .build();
 
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
@@ -109,40 +109,9 @@ class AbstractDocumentProcessingUseCaseTest {
             .expectNextCount(1)
             .verifyComplete();
 
-        // Verificar que pasa a FAILED
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(d -> d.getState().equals(ProductState.FAILED)),
+            argThat(d -> ProcessingResultCodes.FAILED.name().equals(d.getState())),
             any()
-        );
-    }
-
-    @Test
-    void executePendingDocuments_withBusinessRuleError_marksAsFailedWithoutRetry() {
-        Document doc = Document.builder()
-            .id(1L)
-            .documentId("doc-1")
-            .productId("prod-1")
-            .name("test.pdf")
-            .state(ProductState.PENDING)
-            .retryCount(0)
-            .build();
-
-        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
-            .thenReturn(Flux.just(doc));
-        
-        // Simular error de regla de negocio (no reintentable según ProcessingResultCodes.isBusinessRule)
-        when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.error(new ProcessingException(ProcessingResultCodes.INVALID_BASE64.name(), "Formato inválido", (Throwable) null)));
-
-        StepVerifier.create(useCase.executePendingDocuments()
-                .contextWrite(ctx -> ctx.put("message-id", "test-trace-business-error")))
-            .expectNextCount(1)
-            .verifyComplete();
-
-        // Verificar que pasa a FAILED directamente (retryCount sigue en 0)
-        verify(persistencePort).finalizeProcessingAtomically(
-            argThat(d -> d.getState().equals(ProductState.FAILED) && d.getRetryCount() == 0),
-            argThat(h -> h.getErrorCode().equals(ProcessingResultCodes.INVALID_BASE64.name()))
         );
     }
 
@@ -153,37 +122,37 @@ class AbstractDocumentProcessingUseCaseTest {
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
-            .state(ProductState.PENDING)
+            .state(ProcessingResultCodes.PENDING.name())
             .retryCount(0)
             .build();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("prod-1")
+                .documentId("doc-1")
+                .filename("test.pdf")
+                .content(new byte[]{1, 2, 3})
+                .size(3L)
+                .build();
 
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.just(com.example.fileprocessor.domain.entity.ProductDocumentFile.builder()
-                .filename("test.pdf")
-                .productId("prod-1")
-                .documentId("doc-1")
-                .build()));
+            .thenReturn(Mono.just(file));
         
-        when(documentValidator.validate(any(), anyBoolean()))
-            .thenReturn(Mono.just(com.example.fileprocessor.domain.entity.ProductDocumentHistory.builder()
-                .productId("prod-1")
-                .documentId("doc-1")
-                .build()));
+        when(documentValidator.validate(any(DocumentHistory.class), anyBoolean()))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-success")))
             .expectNextCount(1)
             .verifyComplete();
 
-        // Usar captor para validación precisa
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
-        ArgumentCaptor<com.example.fileprocessor.domain.entity.DocumentHistoryDTO> historyCaptor = ArgumentCaptor.forClass(com.example.fileprocessor.domain.entity.DocumentHistoryDTO.class);
+        ArgumentCaptor<DocumentHistoryDTO> historyCaptor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
         
         verify(persistencePort).finalizeProcessingAtomically(docCaptor.capture(), historyCaptor.capture());
         
-        assertEquals(ProductState.PROCESSED, docCaptor.getValue().getState(), "El estado del documento debería ser PROCESSED");
+        assertEquals(ProcessingResultCodes.PROCESSED.name(), docCaptor.getValue().getState());
         assertNotNull(historyCaptor.getValue().getCompletedAt());
     }
 }

@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.HomologationResult;
+import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
 import reactor.core.publisher.Mono;
 
 public interface HomologationRepository {
