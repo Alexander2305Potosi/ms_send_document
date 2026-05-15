@@ -10,7 +10,7 @@ import java.time.Instant;
  * This is returned by the use case to avoid dependency on infrastructure DTOs.
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class FileUploadResponse {
     private final String status;
     private final String message;
@@ -19,6 +19,7 @@ public class FileUploadResponse {
     private final Instant processedAt;
     private final String externalReference;
     private final boolean success;
+    private final String filename;
     private final String errorCode;
     private final String stackTrace;
     private final int attemptCount;

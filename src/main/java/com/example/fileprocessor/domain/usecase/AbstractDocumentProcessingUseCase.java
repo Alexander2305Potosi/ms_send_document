@@ -82,7 +82,8 @@ public abstract class AbstractDocumentProcessingUseCase {
                                 () -> String.format("[TraceID: %s] Document %s is already being processed or locked.",
                                         traceId, doc.getDocumentId())))
                 .flatMap(unused -> fetchAndValidate(history))
-                .flatMap(h -> uploadDocument(h, doc.getId()))
+                .flatMap(h -> uploadDocument(h, doc.getId())
+                        .map(resp -> resp.getFilename() == null ? resp.toBuilder().filename(h.getFilename()).build() : resp))
                 .onErrorResume(this::handleGlobalError)
                 .flatMap(response -> finalizeProcessing(doc, history, response, traceId));
     }
@@ -108,7 +109,13 @@ public abstract class AbstractDocumentProcessingUseCase {
                     return history;
                 })
                 .flatMapMany(this::decompress)
-                .concatMap(h -> documentValidator.validate(h, true))
+                .concatMap(h -> documentValidator.validate(h, true)
+                    .onErrorMap(e -> {
+                        if (e instanceof ProcessingException pe) {
+                            pe.setFilename(h.getFilename());
+                        }
+                        return e;
+                    }))
                 .next()
                 .onErrorResume(ProcessingException.class, e -> {
                     if (ProcessingResultCodes.isBusinessRule(e.getErrorCode())) {
@@ -148,8 +155,11 @@ public abstract class AbstractDocumentProcessingUseCase {
         LOGGER.info(() -> String.format("[TraceID: %s] [%s] Document %s (Product: %s) -> %s. Message: %s",
                 traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState, response.getMessage()));
 
+        String actualFilename = response.getFilename() != null ? response.getFilename() : 
+                        (doc.isZip() ? history.getFilename() : null);
+
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
-                .filename(doc.isZip() ? history.getFilename() : null)
+                .filename(actualFilename)
                 .errorCode(response.getErrorCode())
                 .errorMessage(response.getMessage())
                 .stackTrace(response.getStackTrace())
@@ -194,9 +204,11 @@ public abstract class AbstractDocumentProcessingUseCase {
     private Mono<FileUploadResponse> handleGlobalError(Throwable error) {
         String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
+        String filename = null;
 
         if (error instanceof ProcessingException pe) {
             errorCode = pe.getErrorCode();
+            filename = pe.getFilename();
         }
 
         return Mono.just(FileUploadResponse.builder()
@@ -205,6 +217,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
                 .stackTrace(ExceptionUtils.getStackTraceAsString(error))
                 .processedAt(Instant.now())
+                .filename(filename)
                 .success(false)
                 .build());
     }

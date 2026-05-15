@@ -14,6 +14,15 @@ public class ProcessingException extends DomainException {
 
     private final String traceId;
     private final String documentId;
+    private String filename;
+
+    public void setFilename(String filename) {
+        this.filename = filename;
+    }
+
+    public String getFilename() {
+        return filename;
+    }
 
     public ProcessingException(String message, String errorCode, String traceId) {
         super(message, errorCode);

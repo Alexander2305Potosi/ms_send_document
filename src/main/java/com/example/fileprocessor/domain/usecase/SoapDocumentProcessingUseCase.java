@@ -59,6 +59,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                             .message(e.getMessage())
                             .stackTrace(ExceptionUtils.getStackTraceAsString(e))
                             .success(false)
+                            .filename(history.getFilename())
                             .processedAt(Instant.now())
                             .build());
                 });
