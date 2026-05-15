@@ -7,12 +7,12 @@ def get_ordered_keys(data, table_name):
     
     preferred_orders = {
         "DOCUMENTOS": [
-            "ID", "ID_DOCUMENTO", "ID_PRODUCTO", "NOMBRE", "ESTADO", 
-            "ES_ZIP", "CASO_USO", "REINTENTOS", "MENSAJE_ERROR", "FECHA_CREACION", "FECHA_ACTUALIZACION"
+            "ID", "ID_DOCUMENTO", "ID_PRODUCTO", "NOMBRE_DOCUMENTO", "ESTADO", 
+            "ES_ZIP", "CASO_USO", "REINTENTOS", "MENSAJE_ERROR", "FECHA_CARGA", "FECHA_CARGA_ACTUALIZACION"
         ],
         "HISTORICO_DOCUMENTOS": [
-            "ID", "DOCUMENTO_ID", "NOMBRE_ARCHIVO", "OPERACION", "RESULTADO", 
-            "CODIGO_ERROR", "REINTENTOS", "MENSAJE_ERROR", "FECHA_INICIO", "FECHA_FIN"
+            "ID", "ID_DOCUMENTOS", "NOMBRE_DOCUMENTO", "CASO_USO", "RESULTADO", 
+            "CODIGO_ERROR", "REINTENTOS", "MENSAJE_ERROR", "FECHA_INICIO_PROCESAMIENTO", "FECHA_FIN_PROCESAMIENTO"
         ],
         "PRODUCTOS_MAESTROS": [
             "ID", "ID_PRODUCTO", "NOMBRE", "ESTADO", "FECHA_CARGUE"
@@ -36,8 +36,9 @@ def print_table(title, data, table_key):
     widths = {k: len(k) for k in keys}
     for row in data:
         for k in keys:
-            val = str(row.get(k, "") or "")
-            if len(val) > 25: val = val[:22] + "..."
+            raw_val = row.get(k)
+            val = str(raw_val if raw_val is not None else "")
+            # if len(val) > 25: val = val[:22] + "..."
             widths[k] = max(widths[k], len(val))
 
     # Print Header
@@ -50,8 +51,9 @@ def print_table(title, data, table_key):
     for row in data:
         parts = []
         for k in keys:
-            val = str(row.get(k, "") or "").replace("\n", " ")
-            if len(val) > 25: val = val[:22] + "..."
+            raw_val = row.get(k)
+            val = str(raw_val if raw_val is not None else "").replace("\n", " ")
+            # if len(val) > 25: val = val[:22] + "..."
             parts.append(val.ljust(widths[k]))
         print(" | ".join(parts))
 

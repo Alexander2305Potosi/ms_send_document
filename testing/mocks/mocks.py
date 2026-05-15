@@ -63,7 +63,17 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
             doc_id = path_parts[-1]
             content = "U09BUCB0ZXN0IGNvbnRlbnQ=" 
             size = 100
-            filename = f"{doc_id}.pdf"
+            # Use the filenames defined in scenarios to trigger SOAP mock failures
+            filename_map = {
+                "DOC-RT-01": "retry_timeout.pdf", "DOC-RT-02": "retry_500.pdf",
+                "DOC-RT-03": "retry_503.pdf", "DOC-RT-04": "retry_429.pdf", "DOC-RT-05": "retry_504.pdf",
+                "DOC-TE-01": "soap_fault.pdf", "DOC-TE-02": "malformed.pdf", "DOC-TE-03": "empty_resp.pdf",
+                "DOC-TE-04": "unauthorized.pdf", "DOC-TE-05": "forbidden.pdf", "DOC-TE-06": "bad_request.pdf",
+                "DOC-TE-07": "corrupted.pdf", "DOC-BR-02": "virus.exe", "DOC-BR-03": "script.sh",
+                "DOC-BR-04": "WRONG_NAME.pdf", "DOC-OK-01": "manual.pdf", "DOC-OK-02": "large_valid.pdf",
+                "DOC-OK-03": "guide.docx", "DOC-OK-04": "notes.txt", "DOC-OK-05": "bundle.zip"
+            }
+            filename = filename_map.get(doc_id, f"{doc_id}.pdf")
 
             if "DOC-OK-05" in doc_id:
                 content = create_mock_zip({"f1.pdf": b"c1", "f2.pdf": b"c2", "f3.pdf": b"c3"})
@@ -95,26 +105,34 @@ class SoapHandler(http.server.BaseHTTPRequestHandler):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8', errors='ignore')
         
-        match = re.search(r'<nombreArchivo>(.*?)</nombreArchivo>', post_data)
+        # Flexible regex to find nombreArchivo even with namespaces
+        match = re.search(r'<(?:.*:)?nombreArchivo>(.*?)</(?:.*:)?nombreArchivo>', post_data)
         doc_key = match.group(1) if match else "unknown"
         
         with retry_lock:
             retry_counts[doc_key] = retry_counts.get(doc_key, 0) + 1
             attempt = retry_counts[doc_key]
         
-        print(f"[SOAP] Request for {doc_key} - Attempt {attempt}")
+        print(f"[SOAP] Request received for: {doc_key} (Attempt: {attempt})", flush=True)
+        if doc_key == "unknown":
+            print(f"   [DEBUG] Raw Body Snippet: {post_data[:200]}...", flush=True)
 
         # Transient Failure Scenarios (Fail 1st and 2nd attempt)
         if attempt <= 2:
             if "retry_timeout" in doc_key:
+                print(f"   -> Simulating TIMEOUT (8s sleep) for {doc_key}", flush=True)
                 time.sleep(8); return
             if "retry_500" in doc_key:
+                print(f"   -> Simulating HTTP 500 for {doc_key}", flush=True)
                 self.send_response(500); self.end_headers(); self.wfile.write(b"Server Error"); return
             if "retry_503" in doc_key:
+                print(f"   -> Simulating HTTP 503 for {doc_key}", flush=True)
                 self.send_response(503); self.end_headers(); self.wfile.write(b"Service Unavailable"); return
             if "retry_429" in doc_key:
+                print(f"   -> Simulating HTTP 429 for {doc_key}", flush=True)
                 self.send_response(429); self.end_headers(); self.wfile.write(b"Rate Limited"); return
             if "retry_504" in doc_key:
+                print(f"   -> Simulating HTTP 504 for {doc_key}", flush=True)
                 self.send_response(504); self.end_headers(); self.wfile.write(b"Gateway Timeout"); return
 
         # Final Technical Failure Scenarios

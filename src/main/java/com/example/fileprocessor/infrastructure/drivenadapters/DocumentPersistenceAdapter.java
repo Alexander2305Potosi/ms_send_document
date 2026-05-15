@@ -38,12 +38,24 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     }
 
     @Override
-    public Mono<Void> finalizeProcessingAtomically(Document doc, DocumentHistoryDTO history) {
+    public Mono<Void> finalizeProcessingAtomically(DocumentHistoryDTO history, int businessRetryCount) {
         String initialState = ProcessingResultCodes.IN_PROGRESS.name();
         
+        Document doc = Document.builder()
+                .id(history.getDocumentId())
+                .state(history.getState())
+                .retryCount(businessRetryCount)
+                .errorMessage(history.getErrorMessage())
+                .build();
+
         return documentRepository.updateStateAndRetry(doc, initialState)
-                .then(historyRepository.saveHistory(doc, history))
+                .then(historyRepository.saveHistory(history))
                 .as(transactionalOperator::transactional)
                 .then();
+    }
+
+    @Override
+    public Mono<Void> saveHistory(DocumentHistoryDTO history) {
+        return historyRepository.saveHistory(history).then();
     }
 }

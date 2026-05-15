@@ -55,7 +55,7 @@ class AbstractDocumentProcessingUseCaseTest {
         lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
             .thenReturn(Mono.just(1L));
 
-        lenient().when(persistencePort.finalizeProcessingAtomically(any(), any()))
+        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
             .thenReturn(Mono.empty());
     }
 
@@ -85,8 +85,8 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(d -> ProcessingResultCodes.PENDING.name().equals(d.getState()) && d.getRetryCount() == 1),
-            argThat(h -> h.getErrorCode().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name()))
+            argThat(h -> ProcessingResultCodes.PENDING.name().equals(h.getState()) && h.getRetryCount() == 1 
+                    && h.getErrorCode().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name()))
         );
     }
 
@@ -113,8 +113,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(d -> ProcessingResultCodes.FAILED.name().equals(d.getState())),
-            any()
+            argThat(h -> ProcessingResultCodes.FAILED.name().equals(h.getState()))
         );
     }
 
@@ -151,12 +150,11 @@ class AbstractDocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(10));
 
-        ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         ArgumentCaptor<DocumentHistoryDTO> historyCaptor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
         
-        verify(persistencePort).finalizeProcessingAtomically(docCaptor.capture(), historyCaptor.capture());
+        verify(persistencePort).finalizeProcessingAtomically(historyCaptor.capture());
         
-        assertEquals(ProcessingResultCodes.PROCESSED.name(), docCaptor.getValue().getState());
+        assertEquals(ProcessingResultCodes.PROCESSED.name(), historyCaptor.getValue().getState());
         assertNotNull(historyCaptor.getValue().getCompletedAt());
     }
 
@@ -179,6 +177,6 @@ class AbstractDocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(10));
 
-        verify(persistencePort, times(2)).finalizeProcessingAtomically(any(), any());
+        verify(persistencePort, times(2)).finalizeProcessingAtomically(any());
     }
 }

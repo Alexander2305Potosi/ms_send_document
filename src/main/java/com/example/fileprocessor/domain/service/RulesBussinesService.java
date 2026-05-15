@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.service;
 
-import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 import java.util.regex.Pattern;
 
 /**
- * Default implementation of document validation gateway.
+ * Default implementation of document validation gateway using DTO.
  */
 public class RulesBussinesService implements RulesBussinesGateway {
 
@@ -27,24 +27,24 @@ public class RulesBussinesService implements RulesBussinesGateway {
     }
 
     @Override
-    public Mono<DocumentHistory> validate(DocumentHistory history) {
+    public Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history) {
         return validate(history, false);
     }
 
     @Override
-    public Mono<DocumentHistory> validate(DocumentHistory history, boolean includeSizeCheck) {
+    public Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history, boolean includeSizeCheck) {
         return Mono.defer(() -> {
             if (includeSizeCheck && maxFileSizeBytes != null && history.getSize() != null && history.getSize() > maxFileSizeBytes) {
                 return Mono.error(new ProcessingException(
-                    ProcessingResultCodes.SIZE_EXCEEDED.name(),
                     String.format("Size %,d bytes exceeds max %,d bytes for file '%s'",
-                        history.getSize(), maxFileSizeBytes, history.getFilename())));
+                        history.getSize(), maxFileSizeBytes, history.getFilename()),
+                    ProcessingResultCodes.SIZE_EXCEEDED.name()));
             }
             if (filenamePattern != null && history.getFilename() != null && !filenamePattern.matcher(history.getFilename()).matches()) {
                 return Mono.error(new ProcessingException(
-                    ProcessingResultCodes.PATTERN_MISMATCH.name(),
                     String.format("Filename '%s' does not match pattern '%s'",
-                        history.getFilename(), filenamePattern.pattern())));
+                        history.getFilename(), filenamePattern.pattern()),
+                    ProcessingResultCodes.PATTERN_MISMATCH.name()));
             }
             return Mono.just(history);
         });

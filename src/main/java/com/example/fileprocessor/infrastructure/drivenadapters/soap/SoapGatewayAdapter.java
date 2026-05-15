@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import com.example.fileprocessor.domain.util.ExceptionUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -45,31 +46,44 @@ public class SoapGatewayAdapter implements SoapGateway {
     }
 
     @Override
-    public Mono<FileUploadResponse> send(FileUploadRequest request) {
-        return Mono.deferContextual(ctx -> {
+    public Flux<FileUploadResponse> send(FileUploadRequest request) {
+        return Flux.deferContextual(ctx -> {
             final String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
-
-            return soapWebClient.post()
-                    .contentType(MediaType.TEXT_XML)
-                    .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
-                    .bodyValue(mapper.buildEnvelope(request, properties, traceId))
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                    .retryWhen(Retry.backoff(properties.retryAttempts(), Duration.ofMillis(500))
-                            .filter(this::isRetryable))
-                    .map(xml -> mapper.parseResponse(xml, traceId))
-                    .onErrorResume(error -> {
-                        // DESENVOLVER CAUSA: Si Reactor agotó reintentos, sacamos la causa real
-                        Throwable realError = error;
-                        if (error.getClass().getSimpleName().contains("RetryExhausted") && error.getCause() != null) {
-                            realError = error.getCause();
-                            LOGGER.log(Level.FINE, "Unwrapped RetryExhaustedException to: {0}",
-                                    realError.getClass().getName());
-                        }
-                        return handleFinalError(realError, traceId);
-                    });
+            return sendWithRetry(request, traceId, 1);
         });
+    }
+
+    private Flux<FileUploadResponse> sendWithRetry(FileUploadRequest request, String traceId, int attempt) {
+        return soapWebClient.post()
+                .contentType(MediaType.TEXT_XML)
+                .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
+                .bodyValue(mapper.buildEnvelope(request, properties, traceId))
+                .retrieve()
+                .bodyToMono(String.class)
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .switchIfEmpty(Mono.error(new com.example.fileprocessor.domain.exception.ProcessingException(
+                        ProcessingResultCodes.INVALID_RESPONSE.value(),
+                        ProcessingResultCodes.INVALID_RESPONSE.name(), traceId)))
+                .map(xml -> mapper.parseResponse(xml, traceId).toBuilder()
+                        .attemptCount(attempt)
+                        .build())
+                .onErrorResume(error -> handleFinalError(error, traceId)
+                        .map(errorResp -> errorResp.toBuilder().attemptCount(attempt).build()))
+                .flatMapMany(response -> {
+                    boolean isRetryable = !response.isSuccess() && 
+                                         ProcessingResultCodes.isTransient(response.getErrorCode()) && 
+                                         attempt <= properties.retryAttempts();
+
+                    if (isRetryable) {
+                        LOGGER.log(Level.INFO, "[TraceID: {0}] Technical retry {1}/{2} due to: {3}", 
+                                new Object[]{traceId, attempt, properties.retryAttempts(), response.getMessage()});
+                        
+                        return Flux.just(response.toBuilder().technicalRetry(true).build())
+                                .concatWith(Mono.delay(Duration.ofMillis(500))
+                                        .flatMapMany(unused -> sendWithRetry(request, traceId, attempt + 1)));
+                    }
+                    return Flux.just(response.toBuilder().technicalRetry(false).build());
+                });
     }
 
     private boolean isRetryable(Throwable throwable) {
@@ -91,32 +105,28 @@ public class SoapGatewayAdapter implements SoapGateway {
                 }
             }
         }
-        return Mono.just(buildErrorResult(error, traceId));
-    }
 
-    private boolean isXml(String body) {
-        return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
-    }
-
-    private FileUploadResponse buildErrorResult(Throwable error, String traceId) {
         String errorCode = mapErrorCode(error);
         String message = error.getMessage();
 
         if (error instanceof WebClientResponseException wce) {
             message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
-        } else if (error instanceof TimeoutException) {
+        } else if (error instanceof java.util.concurrent.TimeoutException) {
             message = "Timeout: El servicio no respondió en " + properties.timeoutSeconds() + " segundos";
         }
 
-        return FileUploadResponse.builder()
-                .status(ProcessingResultCodes.FAILURE.name())
+        return Mono.just(FileUploadResponse.builder()
+                .status(ProcessingResultCodes.FAILED.name())
+                .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
                 .errorCode(errorCode)
                 .traceId(traceId)
-                .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
-                .stackTrace(ExceptionUtils.getStackTraceAsString(error))
                 .processedAt(Instant.now())
                 .success(false)
-                .build();
+                .build());
+    }
+
+    private boolean isXml(String body) {
+        return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
     }
 
     private String mapErrorCode(Throwable error) {

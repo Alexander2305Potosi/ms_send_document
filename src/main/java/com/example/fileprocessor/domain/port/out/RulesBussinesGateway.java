@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import reactor.core.publisher.Mono;
 
 /**
@@ -8,9 +8,9 @@ import reactor.core.publisher.Mono;
  */
 public interface RulesBussinesGateway {
 
-    Mono<DocumentHistory> validate(DocumentHistory history);
+    Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history);
 
-    default Mono<DocumentHistory> validate(DocumentHistory history, boolean includeSizeCheck) {
+    default Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history, boolean includeSizeCheck) {
         return validate(history);
     }
 }

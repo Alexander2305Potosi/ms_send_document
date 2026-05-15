@@ -4,12 +4,11 @@ import reactor.util.context.ContextView;
 
 /**
  * Unified exception for all gateway communication errors (SOAP, S3, REST).
- * Replaces CommunicationException and SoapCommunicationException.
+ * Standardized parameter order: (message, errorCode, ...) to match DomainException.
  */
 public class ProcessingException extends DomainException {
 
     private static final String DEFAULT_TRACE_ID = "unknown";
-
     public static final String HEADER_TRACE_ID = "message-id";
 
     private final String traceId;
@@ -42,17 +41,19 @@ public class ProcessingException extends DomainException {
         this.documentId = null;
     }
 
-    public ProcessingException(String errorCode, String message) {
+    public ProcessingException(String message, String errorCode, Throwable cause) {
+        super(message, errorCode, cause);
+        this.traceId = DEFAULT_TRACE_ID;
+        this.documentId = null;
+    }
+
+    public ProcessingException(String message, String errorCode) {
         super(message, errorCode);
         this.traceId = DEFAULT_TRACE_ID;
         this.documentId = null;
     }
 
-    public ProcessingException(String errorCode, String message, Throwable cause) {
-        super(message, errorCode, cause);
-        this.traceId = DEFAULT_TRACE_ID;
-        this.documentId = null;
-    }
+
 
     public String getTraceId() {
         return traceId;

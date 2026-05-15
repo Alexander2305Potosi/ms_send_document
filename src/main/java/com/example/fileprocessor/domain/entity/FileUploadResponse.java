@@ -21,8 +21,9 @@ public class FileUploadResponse {
     private final boolean success;
     private final String filename;
     private final String errorCode;
-    private final String stackTrace;
     private final int attemptCount;
+    private final boolean technicalRetry;
+
     // Helper method to check success status
     public boolean isSuccess() {
         return success;

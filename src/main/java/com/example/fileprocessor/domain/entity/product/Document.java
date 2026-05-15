@@ -24,12 +24,16 @@ public class Document {
     private String name;
     private String state;
     private String errorMessage;
-    private boolean isZip;
+    private Boolean isZip;
     private String useCase;
     private LocalDateTime createdAt;
     private Integer retryCount;
 
     public int getRetryCountSafe() {
         return retryCount != null ? retryCount : 0;
+    }
+
+    public boolean isZipSafe() {
+        return isZip != null && isZip;
     }
 }

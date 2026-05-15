@@ -26,14 +26,14 @@ public class DocumentHistoryEntity {
     @Column("id")
     private Long id;
 
-    @Column("documento_id")
+    @Column("id_documentos")
     private Long documentId;
 
-    @Column("nombre_archivo")
+    @Column("nombre_documento")
     private String filename;
 
-    @Column("operacion")
-    private String operation;
+    @Column("caso_uso")
+    private String useCase;
 
     @Column("resultado")
     private String result;
@@ -44,15 +44,12 @@ public class DocumentHistoryEntity {
     @Column("mensaje_error")
     private String errorMessage;
 
-    @Column("stack_trace")
-    private String stackTrace;
-
     @Column("reintentos")
     private Integer retry;
 
-    @Column("fecha_inicio")
+    @Column("fecha_inicio_procesamiento")
     private Instant startedAt;
 
-    @Column("fecha_fin")
+    @Column("fecha_fin_procesamiento")
     private Instant completedAt;
 }

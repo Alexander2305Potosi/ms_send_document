@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.util;
 
-import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import reactor.core.publisher.Flux;
@@ -11,14 +11,14 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Utility class for decompressing ZIP archives into individual DocumentHistory instances.
+ * Utility class for decompressing ZIP archives into individual DocumentHistoryDTO instances.
  */
 public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
-    public static Flux<DocumentHistory> decompress(DocumentHistory zipHistory) {
-        if (!zipHistory.isZip() || zipHistory.getContent() == null) {
+    public static Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO zipHistory) {
+        if (!Boolean.TRUE.equals(zipHistory.getIsZip()) || zipHistory.getContent() == null) {
             return Flux.just(zipHistory);
         }
 
@@ -37,8 +37,8 @@ public final class ZipDecompressor {
                     sink.complete();
                 } catch (IOException e) {
                     sink.error(new ProcessingException(
-                        ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
                         "Failed to decompress ZIP '" + zipHistory.getFilename() + "': " + e.getMessage(),
+                        ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
                         e));
                 }
                 return zis;
@@ -53,20 +53,14 @@ public final class ZipDecompressor {
         );
     }
 
-    private static DocumentHistory buildHistoryEntry(String filename, byte[] content, DocumentHistory original) {
-        return DocumentHistory.builder()
-            .documentId(original.getDocumentId())
+    private static DocumentHistoryDTO buildHistoryEntry(String filename, byte[] content, DocumentHistoryDTO original) {
+        return original.toBuilder()
             .businessDocumentId(original.getBusinessDocumentId() + "/" + filename)
-            .productId(original.getProductId())
             .filename(filename)
             .contentType(MimeTypeUtil.getMimeType(filename))
             .size((long) content.length)
             .isZip(false)
-            .pais(original.getPais())
             .content(content)
-            .origin(original.getOrigin())
-            .startedAt(original.getStartedAt())
-            .retry(original.getRetry())
             .build();
     }
 }

@@ -33,7 +33,7 @@ public class DocumentEntity {
     @Column("id_producto")
     private String productId;
 
-    @Column("nombre")
+    @Column("nombre_documento")
     private String name;
 
     @Column("estado")
@@ -51,9 +51,9 @@ public class DocumentEntity {
     @Column("reintentos")
     private Integer retryCount;
 
-    @Column("fecha_creacion")
+    @Column("fecha_carga")
     private LocalDateTime createdAt;
 
-    @Column("fecha_actualizacion")
+    @Column("fecha_carga_actualizacion")
     private LocalDateTime updatedAt;
 }

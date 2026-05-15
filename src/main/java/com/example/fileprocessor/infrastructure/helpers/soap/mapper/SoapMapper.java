@@ -245,7 +245,6 @@ public class SoapMapper {
             .success(false)
             .errorCode(ProcessingResultCodes.SOAP_ERROR.name())
             .traceId(traceId)
-            .stackTrace(faultElement.getTextContent())
             .build();
     }
 

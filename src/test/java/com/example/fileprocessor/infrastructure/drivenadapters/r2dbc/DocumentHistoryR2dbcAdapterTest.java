@@ -32,18 +32,12 @@ class DocumentHistoryR2dbcAdapterTest {
 
     @Test
     void saveHistory_withSuccessfulResponse_savesCorrectEntity() {
-        Document doc = Document.builder()
-            .id(1L)
-            .documentId("DOC1")
-            .productId("PROD1")
-            .name("test.pdf")
-            .useCase("SOAP")
-            .isZip(false)
-            .retryCount(1)
-            .state(ProcessingResultCodes.PROCESSED.name())
-            .build();
-
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
+            .documentId(1L)
+            .state(ProcessingResultCodes.PROCESSED.name())
+            .useCase("SOAP")
+            .retryCount(1)
+            .filename("test.pdf")
             .errorCode(null)
             .errorMessage("Success message")
             .startedAt(Instant.now())
@@ -52,7 +46,7 @@ class DocumentHistoryR2dbcAdapterTest {
 
         when(springDataRepository.save(any(DocumentHistoryEntity.class))).thenReturn(Mono.just(new DocumentHistoryEntity()));
 
-        StepVerifier.create(adapter.saveHistory(doc, historyDTO))
+        StepVerifier.create(adapter.saveHistory(historyDTO))
             .expectNextCount(1)
             .verifyComplete();
 
@@ -64,5 +58,6 @@ class DocumentHistoryR2dbcAdapterTest {
         assertEquals(ProcessingResultCodes.SUCCESS.name(), saved.getResult());
         assertEquals(1, saved.getRetry());
         assertEquals("SOAP", saved.getOperation());
+        assertEquals("test.pdf", saved.getFilename());
     }
 }

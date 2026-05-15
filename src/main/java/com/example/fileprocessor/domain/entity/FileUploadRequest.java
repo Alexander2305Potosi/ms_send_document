@@ -1,13 +1,14 @@
 package com.example.fileprocessor.domain.entity;
 
 import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
-import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
 /**
  * Request object for file upload operations with optional homologation support.
+ * Uses DocumentHistoryDTO to extract transient processing metadata.
  */
 @Getter
 @Setter
@@ -22,7 +23,7 @@ public class FileUploadRequest {
     private String paisHomologado;
     private Long docId;
 
-    public static FileUploadRequest from(DocumentHistory history, Long docId, HomologationResult h) {
+    public static FileUploadRequest from(DocumentHistoryDTO history, Long docId, HomologationResult h) {
         return FileUploadRequest.builder()
             .documentId(history.getBusinessDocumentId())
             .content(history.getContent() != null ? history.getContent() : new byte[0])

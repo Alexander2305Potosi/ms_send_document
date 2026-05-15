@@ -15,5 +15,7 @@ public interface DocumentPersistenceGateway {
     
     Mono<Long> lockDocumentForProcessing(Long docId, int currentRetryCount);
 
-    Mono<Void> finalizeProcessingAtomically(Document doc, DocumentHistoryDTO history);
+    Mono<Void> finalizeProcessingAtomically(DocumentHistoryDTO history, int businessRetryCount);
+    
+    Mono<Void> saveHistory(DocumentHistoryDTO history);
 }

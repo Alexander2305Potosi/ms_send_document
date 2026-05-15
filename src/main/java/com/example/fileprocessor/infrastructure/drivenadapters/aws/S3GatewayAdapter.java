@@ -112,7 +112,6 @@ public class S3GatewayAdapter implements S3Gateway {
             .errorCode(errorCode)
             .traceId(traceId)
             .message(actualError.getMessage())
-            .stackTrace(ExceptionUtils.getStackTraceAsString(actualError))
             .processedAt(Instant.now())
             .success(false)
             .build());

@@ -15,28 +15,27 @@ public class DocumentHistoryR2dbcAdapter {
 
     private final DocumentHistoryRepository springDataRepository;
 
-    public Mono<DocumentHistoryEntity> saveHistory(Document doc, DocumentHistoryDTO historyDTO) {
+    public Mono<DocumentHistoryEntity> saveHistory(DocumentHistoryDTO historyDTO) {
         String resultStatus;
         
-        if (ProcessingResultCodes.IN_PROGRESS.name().equals(doc.getState())) {
+        if (ProcessingResultCodes.IN_PROGRESS.name().equals(historyDTO.getState())) {
             resultStatus = ProcessingResultCodes.IN_PROGRESS.name();
         } else {
-            resultStatus = ProcessingResultCodes.PROCESSED.name().equals(doc.getState()) ? 
+            resultStatus = ProcessingResultCodes.PROCESSED.name().equals(historyDTO.getState()) ? 
                           ProcessingResultCodes.SUCCESS.name() : ProcessingResultCodes.ERROR.name();
             
-            if (ProcessingResultCodes.ERR_DUPLICATED_DOC.name().equals(doc.getState())) {
+            if (ProcessingResultCodes.ERR_DUPLICATED_DOC.name().equals(historyDTO.getState())) {
                 resultStatus = ProcessingResultCodes.SKIPPED.name();
             }
         }
 
         DocumentHistoryEntity entity = DocumentHistoryEntity.builder()
-                .documentId(doc.getId())
-                .operation(doc.getUseCase())
+                .documentId(historyDTO.getDocumentId())
+                .useCase(historyDTO.getUseCase())
                 .result(resultStatus)
                 .errorCode(historyDTO.getErrorCode())
                 .errorMessage(historyDTO.getErrorMessage())
-                .stackTrace(historyDTO.getStackTrace())
-                .retry(doc.getRetryCountSafe())
+                .retry(historyDTO.getRetryCount() != null ? historyDTO.getRetryCount() : 0)
                 .startedAt(historyDTO.getStartedAt())
                 .completedAt(historyDTO.getCompletedAt())
                 .filename(historyDTO.getFilename())

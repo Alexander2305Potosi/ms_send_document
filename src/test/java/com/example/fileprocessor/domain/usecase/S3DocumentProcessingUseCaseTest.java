@@ -69,7 +69,7 @@ class S3DocumentProcessingUseCaseTest {
             .correlationId("corr-123")
             .build()));
 
-        when(persistencePort.finalizeProcessingAtomically(any(), any())).thenReturn(Mono.empty());
+        when(persistencePort.finalizeProcessingAtomically(any())).thenReturn(Mono.empty());
 
         StepVerifier.create(useCase.executePendingDocuments())
             .expectNextMatches(FileUploadResponse::isSuccess)
