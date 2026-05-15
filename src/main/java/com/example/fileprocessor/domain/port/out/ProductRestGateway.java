@@ -10,7 +10,6 @@ import reactor.core.publisher.Mono;
  * Port for fetching products from external REST API.
  */
 public interface ProductRestGateway {
-    Flux<ProductMaestro> getAllProducts();
     Flux<Document> getDocumentsByProduct(ProductMaestro product);
     Mono<ProductDocumentFile> getDocument(String productId, String documentId);
 }

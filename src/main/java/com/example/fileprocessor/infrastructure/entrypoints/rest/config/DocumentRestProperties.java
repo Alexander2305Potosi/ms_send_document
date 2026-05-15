@@ -13,7 +13,6 @@ public record DocumentRestProperties(
     String endpoint,
 
     @NotBlank
-    String productsPath,
 
     @NotBlank
     String productDocumentsPath,

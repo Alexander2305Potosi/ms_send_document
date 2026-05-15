@@ -27,7 +27,6 @@ import java.util.logging.Logger;
  * Fixed to unwrap RetryExhaustedException and capture the underlying SOAP Fault.
  */
 @Component
-@RequiredArgsConstructor
 public class SoapGatewayAdapter implements SoapGateway {
 
     private static final Logger LOGGER = Logger.getLogger(SoapGatewayAdapter.class.getName());

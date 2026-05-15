@@ -18,7 +18,6 @@ import java.time.Instant;
 public class DocumentHistoryDTO {
     private String errorCode;
     private String errorMessage;
-    private String stackTrace;
     private Instant startedAt;
     private Instant completedAt;
 }

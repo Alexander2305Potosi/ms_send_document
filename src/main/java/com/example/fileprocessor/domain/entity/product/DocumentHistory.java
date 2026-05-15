@@ -26,7 +26,6 @@ public class DocumentHistory {
     private String result;
     private String errorCode;
     private String errorMessage;
-    private String stackTrace;
     private Integer retry;
     private Instant startedAt;
     private Instant completedAt;

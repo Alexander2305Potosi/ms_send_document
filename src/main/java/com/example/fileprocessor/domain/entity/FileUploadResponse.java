@@ -20,5 +20,4 @@ public class FileUploadResponse {
     private final String externalReference;
     private final boolean success;
     private final String errorCode;
-    private final int attemptCount;
 }
