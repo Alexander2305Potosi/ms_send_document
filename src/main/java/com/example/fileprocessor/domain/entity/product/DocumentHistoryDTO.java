@@ -16,6 +16,7 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DocumentHistoryDTO {
+    private String filename;
     private String errorCode;
     private String errorMessage;
     private String stackTrace;

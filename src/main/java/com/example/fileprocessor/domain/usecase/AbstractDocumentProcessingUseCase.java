@@ -104,6 +104,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                     history.setFilename(file.getFilename());
                     history.setOrigin(file.getOrigin());
                     history.setPais(file.getPais());
+                    history.setZip(file.isZip());
                     return history;
                 })
                 .flatMapMany(this::decompress)
@@ -148,6 +149,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState, response.getMessage()));
 
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
+                .filename(doc.isZip() ? history.getFilename() : null)
                 .errorCode(response.getErrorCode())
                 .errorMessage(response.getMessage())
                 .stackTrace(response.getStackTrace())

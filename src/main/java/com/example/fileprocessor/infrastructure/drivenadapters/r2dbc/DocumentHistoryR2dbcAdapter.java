@@ -39,7 +39,7 @@ public class DocumentHistoryR2dbcAdapter {
                 .retry(doc.getRetryCountSafe())
                 .startedAt(historyDTO.getStartedAt())
                 .completedAt(historyDTO.getCompletedAt())
-                .filename(doc.getName())
+                .filename(historyDTO.getFilename())
                 .build();
 
         return springDataRepository.save(entity);
