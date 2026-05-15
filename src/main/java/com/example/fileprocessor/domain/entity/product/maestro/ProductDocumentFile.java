@@ -18,7 +18,7 @@ public class ProductDocumentFile {
     private byte[] content;
     private String contentType;
     private long size;
-    private boolean isZip;
+    private Boolean isZip;
     private String origin;
     private String pais;
 }

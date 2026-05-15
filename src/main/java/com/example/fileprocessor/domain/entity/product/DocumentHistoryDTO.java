@@ -48,7 +48,7 @@ public class DocumentHistoryDTO {
                 .filename(doc.getName())
                 .useCase(doc.getUseCase())
                 .retryCount(doc.getRetryCountSafe())
-                .isZip(doc.isZip())
+                .isZip(doc.getIsZip())
                 .startedAt(Instant.now())
                 .build();
     }
