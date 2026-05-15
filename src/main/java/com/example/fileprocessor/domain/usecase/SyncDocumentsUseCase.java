@@ -30,6 +30,8 @@ public class SyncDocumentsUseCase {
 
     public Mono<String> execute(String useCase) {
         return productMasterRepository.getAllProducts()
+                .collectList()
+                .flatMapMany(Flux::fromIterable)
                 .flatMap(product -> syncDocumentsForProduct(product, useCase))
                 .then(Mono.just("Document sync completed"));
     }

@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -80,7 +81,8 @@ class AbstractDocumentProcessingUseCaseTest {
             .assertNext(result -> {
                 assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getErrorCode());
             })
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
             argThat(d -> ProcessingResultCodes.PENDING.name().equals(d.getState()) && d.getRetryCount() == 1),
@@ -107,7 +109,8 @@ class AbstractDocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-max-retries")))
             .expectNextCount(1)
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
             argThat(d -> ProcessingResultCodes.FAILED.name().equals(d.getState())),
@@ -145,7 +148,8 @@ class AbstractDocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-success")))
             .expectNextCount(1)
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         ArgumentCaptor<DocumentHistoryDTO> historyCaptor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
@@ -154,5 +158,27 @@ class AbstractDocumentProcessingUseCaseTest {
         
         assertEquals(ProcessingResultCodes.PROCESSED.name(), docCaptor.getValue().getState());
         assertNotNull(historyCaptor.getValue().getCompletedAt());
+    }
+
+    @Test
+    void executePendingDocuments_withMultipleDocuments_processesAllSequentially() {
+        Document doc1 = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").build();
+        Document doc2 = Document.builder().id(2L).documentId("doc-2").productId("p2").state("PENDING").build();
+
+        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
+            .thenReturn(Flux.just(doc1, doc2));
+        
+        when(productRestGateway.getDocument(anyString(), anyString()))
+            .thenReturn(Mono.just(ProductDocumentFile.builder().build()));
+        
+        when(documentValidator.validate(any(), anyBoolean()))
+            .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .expectNextCount(2)
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+
+        verify(persistencePort, times(2)).finalizeProcessingAtomically(any(), any());
     }
 }

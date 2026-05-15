@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -70,7 +71,8 @@ class SyncDocumentsUseCaseTest {
 
         StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         verify(documentRepository, never()).save(any());
     }
@@ -86,7 +88,8 @@ class SyncDocumentsUseCaseTest {
 
         StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(docCaptor.capture());
@@ -108,7 +111,8 @@ class SyncDocumentsUseCaseTest {
 
         StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(docCaptor.capture());
@@ -129,7 +133,8 @@ class SyncDocumentsUseCaseTest {
 
         StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         verify(documentRepository, times(2)).save(any());
     }
@@ -141,7 +146,7 @@ class SyncDocumentsUseCaseTest {
         StepVerifier.create(useCase.execute("retention"))
             .expectErrorMatches(error -> error instanceof RuntimeException
                 && "DB error".equals(error.getMessage()))
-            .verify();
+            .verify(Duration.ofSeconds(10));
     }
 
     @Test
@@ -152,7 +157,8 @@ class SyncDocumentsUseCaseTest {
 
         StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         verify(documentRepository, never()).save(any());
     }
@@ -168,7 +174,8 @@ class SyncDocumentsUseCaseTest {
 
         StepVerifier.create(useCase.execute("extract"))
             .assertNext(result -> assertEquals("Document sync completed", result))
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -186,7 +193,8 @@ class SyncDocumentsUseCaseTest {
 
         StepVerifier.create(useCase.execute("retention"))
             .assertNext(result -> assertEquals("Document sync completed", result))
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
 
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(docCaptor.capture());

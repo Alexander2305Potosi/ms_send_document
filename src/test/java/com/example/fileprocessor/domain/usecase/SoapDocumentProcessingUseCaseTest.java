@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import java.time.Duration;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
@@ -81,6 +82,7 @@ class SoapDocumentProcessingUseCaseTest {
 
         StepVerifier.create(useCase.executePendingDocuments())
             .expectNextMatches(FileUploadResponse::isSuccess)
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
     }
 }

@@ -10,7 +10,8 @@ import java.time.Instant;
 
 /**
  * Domain entity representing the 'historico_documentos' table.
- * Now acts as the main carrier for processing information throughout the use case.
+ * Now acts as the main carrier for processing information throughout the use
+ * case.
  */
 @Getter
 @Setter
@@ -46,13 +47,13 @@ public class DocumentHistory {
      */
     public static DocumentHistory fromDocument(Document doc) {
         return DocumentHistory.builder()
-            .documentId(doc.getId())
-            .businessDocumentId(doc.getDocumentId())
-            .productId(doc.getProductId())
-            .filename(doc.getName())
-            .retry(doc.getRetryCountSafe())
-            .isZip(doc.isZip())
-            .startedAt(Instant.now())
-            .build();
+                .documentId(doc.getId())
+                .businessDocumentId(doc.getDocumentId())
+                .productId(doc.getProductId())
+                .filename(doc.getName())
+                .retry(doc.getRetryCountSafe())
+                .isZip(doc.isZip())
+                .startedAt(Instant.now())
+                .build();
     }
 }

@@ -1,3 +1,4 @@
+import java.math.BigDecimal
 plugins {
     java
     application
