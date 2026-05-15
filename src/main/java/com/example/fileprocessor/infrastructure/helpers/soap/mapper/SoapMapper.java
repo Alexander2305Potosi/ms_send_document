@@ -25,6 +25,8 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.StringReader;
@@ -218,6 +220,7 @@ public class SoapMapper {
             .success(false)
             .errorCode(ProcessingResultCodes.SOAP_ERROR.name())
             .traceId(traceId)
+            .stackTrace(faultElement.getTextContent())
             .build();
     }
 

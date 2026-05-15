@@ -10,6 +10,8 @@ import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import reactor.core.publisher.Mono;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.time.Instant;
 import java.util.logging.Level;
 
@@ -44,10 +46,18 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                     .status(ProcessingResultCodes.FAILURE.name())
                     .errorCode(ProcessingResultCodes.UNKNOWN_ERROR.name())
                     .message(e.getMessage())
+                    .stackTrace(getStackTraceAsString(e))
                     .success(false)
                     .processedAt(Instant.now())
                     .build());
             });
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        throwable.printStackTrace(pw);
+        return sw.toString();
     }
 
     @Override

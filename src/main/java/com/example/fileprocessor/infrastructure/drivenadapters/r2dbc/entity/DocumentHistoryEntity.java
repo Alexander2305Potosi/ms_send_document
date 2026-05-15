@@ -45,6 +45,7 @@ public class DocumentHistoryEntity {
     private String errorMessage;
 
     @Column("stack_trace")
+    private String stackTrace;
 
     @Column("reintentos")
     private Integer retry;

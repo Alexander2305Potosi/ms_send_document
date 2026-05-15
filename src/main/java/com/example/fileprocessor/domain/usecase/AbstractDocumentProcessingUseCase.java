@@ -12,7 +12,8 @@ import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.context.ContextView;
-
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -118,6 +119,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
             .errorCode(response.getErrorCode())
             .errorMessage(response.getMessage())
+            .stackTrace(response.getStackTrace())
             .startedAt(history.getStartedAt())
             .completedAt(Instant.now())
             .build();
@@ -154,9 +156,17 @@ public abstract class AbstractDocumentProcessingUseCase {
             .status(ProcessingResultCodes.FAILURE.name())
             .errorCode(errorCode)
             .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+            .stackTrace(getStackTraceAsString(error))
             .processedAt(Instant.now())
             .success(false)
             .build());
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        throwable.printStackTrace(pw);
+        return sw.toString();
     }
 
     private Flux<DocumentHistory> decompress(DocumentHistory history) {

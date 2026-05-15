@@ -31,35 +31,14 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     private final DocumentRestProperties properties;
 
     public ProductRestGatewayAdapter(WebClient.Builder webClientBuilder,
-                                     DocumentRestProperties properties) {
+            DocumentRestProperties properties) {
         this.properties = properties;
         HttpClient httpClient = HttpClient.create()
-            .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
+                .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
         this.webClient = webClientBuilder
-            .baseUrl(properties.endpoint())
-            .clientConnector(new ReactorClientHttpConnector(httpClient))
-            .build();
-    }
-
-    @Override
-    public Flux<ProductMaestro> getAllProducts() {
-        return Flux.deferContextual(ctx -> {
-            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
-            LOGGER.log(Level.INFO, "Fetching all products from REST API, traceId: {0}", traceId);
-
-            return webClient.get()
-                .uri(properties.productsPath())
-                .accept(MediaType.APPLICATION_JSON)
-                .header(ApiConstants.HEADER_TRACE_ID, traceId)
-                .retrieve()
-                .bodyToFlux(com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse.class)
-                .map(resp -> ProductMaestro.builder()
-                    .productId(resp.getProductId())
-                    .name(resp.getName())
-                    .build())
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .doOnError(e -> LOGGER.log(Level.SEVERE, "Failed to fetch products: " + e.getMessage()));
-        });
+                .baseUrl(properties.endpoint())
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
     }
 
     @Override
@@ -67,19 +46,19 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         return Flux.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             LOGGER.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
-                new Object[]{product.getProductId(), traceId});
+                    new Object[] { product.getProductId(), traceId });
 
             return webClient.get()
-                .uri(properties.productDocumentsPath(), product.getProductId())
-                .accept(MediaType.APPLICATION_JSON)
-                .header(ApiConstants.HEADER_TRACE_ID, traceId)
-                .retrieve()
-                .bodyToFlux(ProductDocumentResponse.class)
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .map(doc -> mapToDocument(product.getProductId(), doc))
-                .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
-                    new Object[]{doc.getProductId(), doc.getDocumentId()}));
+                    .uri(properties.productDocumentsPath(), product.getProductId())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                    .retrieve()
+                    .bodyToFlux(ProductDocumentResponse.class)
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .map(doc -> mapToDocument(product.getProductId(), doc))
+                    .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
+                            new Object[] { doc.getProductId(), doc.getDocumentId() }));
         });
     }
 
@@ -88,58 +67,59 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
             LOGGER.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
-                new Object[]{documentId, productId, traceId});
+                    new Object[] { documentId, productId, traceId });
 
             return webClient.get()
-                .uri(properties.productDocumentsPath() + "/{documentId}", productId, documentId)
-                .accept(MediaType.APPLICATION_JSON)
-                .header(ApiConstants.HEADER_TRACE_ID, traceId)
-                .retrieve()
-                .bodyToMono(ProductDocumentResponse.class)
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .map(response -> mapToProductDocumentFile(productId, response))
-                .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
-                    new Object[]{documentId, productId}));
+                    .uri(properties.productDocumentsPath() + "/{documentId}", productId, documentId)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                    .retrieve()
+                    .bodyToMono(ProductDocumentResponse.class)
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .map(response -> mapToProductDocumentFile(productId, response))
+                    .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
+                            new Object[] { documentId, productId }));
         });
     }
 
     private ProductDocumentFile mapToProductDocumentFile(String productId, ProductDocumentResponse json) {
         byte[] content = decodeBase64(json);
         long size = json.getSize() != null ? json.getSize() : (content != null ? content.length : 0);
-        
+
         return ProductDocumentFile.builder()
-            .productId(productId)
-            .documentId(json.getDocumentId())
-            .filename(json.getFilename())
-            .content(content)
-            .contentType(json.getContentType())
-            .size(size)
-            .isZip(json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip"))
-            .origin(json.getOrigin())
-            .pais(json.getPais())
-            .build();
+                .productId(productId)
+                .documentId(json.getDocumentId())
+                .filename(json.getFilename())
+                .content(content)
+                .contentType(json.getContentType())
+                .size(size)
+                .isZip(json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip"))
+                .origin(json.getOrigin())
+                .pais(json.getPais())
+                .build();
     }
 
     private Document mapToDocument(String productId, ProductDocumentResponse json) {
         return Document.builder()
-            .productId(productId)
-            .documentId(json.getDocumentId())
-            .name(json.getFilename())
-            .isZip(json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip"))
-            .build();
+                .productId(productId)
+                .documentId(json.getDocumentId())
+                .name(json.getFilename())
+                .isZip(json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip"))
+                .build();
     }
 
     private byte[] decodeBase64(ProductDocumentResponse json) {
         String contentBase64 = json.getContent();
-        if (contentBase64 == null || contentBase64.isBlank()) return null;
-        
+        if (contentBase64 == null || contentBase64.isBlank())
+            return null;
+
         try {
             return Base64Utils.decodeSafe(contentBase64, json.getFilename(), json.getDocumentId());
         } catch (Exception e) {
             throw new ProcessingException(
-                "Base64 decode failed for document: " + json.getDocumentId(),
-                ProcessingResultCodes.INVALID_BASE64.name(), json.getDocumentId());
+                    "Base64 decode failed for document: " + json.getDocumentId(),
+                    ProcessingResultCodes.INVALID_BASE64.name(), json.getDocumentId());
         }
     }
 }

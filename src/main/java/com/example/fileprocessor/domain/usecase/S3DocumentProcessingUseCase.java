@@ -9,6 +9,8 @@ import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import reactor.core.publisher.Mono;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.time.Instant;
 import java.util.logging.Level;
 
@@ -51,9 +53,17 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
                     .status(ProcessingResultCodes.FAILURE.name())
                     .success(false)
                     .message(e.getMessage())
+                    .stackTrace(getStackTraceAsString(e))
                     .processedAt(Instant.now())
                     .build());
             });
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        throwable.printStackTrace(pw);
+        return sw.toString();
     }
 
     @Override

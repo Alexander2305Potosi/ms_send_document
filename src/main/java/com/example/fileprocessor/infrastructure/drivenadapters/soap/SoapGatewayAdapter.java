@@ -6,7 +6,8 @@ import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
-import lombok.RequiredArgsConstructor;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -24,7 +25,8 @@ import java.util.logging.Logger;
 
 /**
  * Unified and streamlined SOAP gateway adapter.
- * Fixed to unwrap RetryExhaustedException and capture the underlying SOAP Fault.
+ * Fixed to unwrap RetryExhaustedException and capture the underlying SOAP
+ * Fault.
  */
 @Component
 public class SoapGatewayAdapter implements SoapGateway {
@@ -35,30 +37,37 @@ public class SoapGatewayAdapter implements SoapGateway {
     private final SoapProperties properties;
     private final SoapMapper mapper;
 
+    public SoapGatewayAdapter(WebClient soapWebClient, SoapProperties properties, SoapMapper mapper) {
+        this.soapWebClient = soapWebClient;
+        this.properties = properties;
+        this.mapper = mapper;
+    }
+
     @Override
     public Mono<FileUploadResponse> send(FileUploadRequest request) {
         return Mono.deferContextual(ctx -> {
             final String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
 
             return soapWebClient.post()
-                .contentType(MediaType.TEXT_XML)
-                .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
-                .bodyValue(mapper.buildEnvelope(request, properties, traceId))
-                .retrieve()
-                .bodyToMono(String.class)
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .retryWhen(Retry.backoff(properties.retryAttempts(), Duration.ofMillis(500))
-                    .filter(this::isRetryable))
-                .map(xml -> mapper.parseResponse(xml, traceId))
-                .onErrorResume(error -> {
-                    // DESENVOLVER CAUSA: Si Reactor agotó reintentos, sacamos la causa real
-                    Throwable realError = error;
-                    if (error.getClass().getSimpleName().contains("RetryExhausted") && error.getCause() != null) {
-                        realError = error.getCause();
-                        LOGGER.log(Level.FINE, "Unwrapped RetryExhaustedException to: {0}", realError.getClass().getName());
-                    }
-                    return handleFinalError(realError, traceId);
-                });
+                    .contentType(MediaType.TEXT_XML)
+                    .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
+                    .bodyValue(mapper.buildEnvelope(request, properties, traceId))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .retryWhen(Retry.backoff(properties.retryAttempts(), Duration.ofMillis(500))
+                            .filter(this::isRetryable))
+                    .map(xml -> mapper.parseResponse(xml, traceId))
+                    .onErrorResume(error -> {
+                        // DESENVOLVER CAUSA: Si Reactor agotó reintentos, sacamos la causa real
+                        Throwable realError = error;
+                        if (error.getClass().getSimpleName().contains("RetryExhausted") && error.getCause() != null) {
+                            realError = error.getCause();
+                            LOGGER.log(Level.FINE, "Unwrapped RetryExhaustedException to: {0}",
+                                    realError.getClass().getName());
+                        }
+                        return handleFinalError(realError, traceId);
+                    });
         });
     }
 
@@ -88,7 +97,6 @@ public class SoapGatewayAdapter implements SoapGateway {
         return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
     }
 
-
     private FileUploadResponse buildErrorResult(Throwable error, String traceId) {
         String errorCode = mapErrorCode(error);
         String message = error.getMessage();
@@ -104,14 +112,24 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .errorCode(errorCode)
                 .traceId(traceId)
                 .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .stackTrace(getStackTraceAsString(error))
                 .processedAt(Instant.now())
                 .success(false)
                 .build();
     }
 
     private String mapErrorCode(Throwable error) {
-        if (error instanceof WebClientResponseException) return ProcessingResultCodes.BAD_GATEWAY.name();
-        if (error instanceof TimeoutException) return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+        if (error instanceof WebClientResponseException)
+            return ProcessingResultCodes.BAD_GATEWAY.name();
+        if (error instanceof TimeoutException)
+            return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
         return ProcessingResultCodes.UNKNOWN_ERROR.name();
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        throwable.printStackTrace(pw);
+        return sw.toString();
     }
 }

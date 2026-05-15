@@ -20,4 +20,10 @@ public class FileUploadResponse {
     private final String externalReference;
     private final boolean success;
     private final String errorCode;
+    private final String stackTrace;
+    private final int attemptCount;
+    // Helper method to check success status
+    public boolean isSuccess() {
+        return success;
+    }
 }

@@ -35,6 +35,7 @@ public class DocumentHistoryR2dbcAdapter {
                 .result(resultStatus)
                 .errorCode(historyDTO.getErrorCode())
                 .errorMessage(historyDTO.getErrorMessage())
+                .stackTrace(historyDTO.getStackTrace())
                 .retry(doc.getRetryCountSafe())
                 .startedAt(historyDTO.getStartedAt())
                 .completedAt(historyDTO.getCompletedAt())
