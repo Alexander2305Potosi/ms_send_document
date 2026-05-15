@@ -48,7 +48,7 @@ public abstract class AbstractDocumentProcessingUseCase {
 
         return Mono.deferContextual(ctx -> {
             String traceId = extractTraceId(ctx);
-            LOGGER.info(String.format("[TraceID: %s] Starting execution for: %s", traceId, implementationName()));
+            LOGGER.info(() -> String.format("[TraceID: %s] Starting execution for: %s", traceId, implementationName()));
             return Mono.just(traceId);
         }).flatMapMany(traceId -> 
             persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
@@ -61,6 +61,9 @@ public abstract class AbstractDocumentProcessingUseCase {
         
         return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
             .filter(rows -> rows > 0)
+            .doOnDiscard(Long.class, unused -> 
+                LOGGER.warning(() -> String.format("[TraceID: %s] Document %s is already being processed or locked.", traceId, doc.getDocumentId()))
+            )
             .flatMap(unused -> fetchAndValidate(doc))
             .flatMap(file -> uploadDocument(file, doc.getProductId(), doc.getId()))
             .onErrorResume(error -> handleGlobalError(error, doc, traceId))
@@ -89,7 +92,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         doc.setState(nextState);
         doc.setErrorMessage(response.getMessage());
 
-        LOGGER.info(String.format("[TraceID: %s] [%s] Document %s (Product: %s) -> %s. Message: %s",
+        LOGGER.info(() -> String.format("[TraceID: %s] [%s] Document %s (Product: %s) -> %s. Message: %s",
                 traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState, response.getMessage()));
 
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
