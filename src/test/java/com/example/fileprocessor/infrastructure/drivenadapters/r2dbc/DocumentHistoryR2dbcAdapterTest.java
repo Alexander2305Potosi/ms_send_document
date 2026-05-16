@@ -39,7 +39,7 @@ class DocumentHistoryR2dbcAdapterTest {
             .retryCount(1)
             .filename("test.pdf")
             .errorCode(null)
-            .errorMessage("Success message")
+            .syncMessage("Success message")
             .startedAt(Instant.now())
             .completedAt(Instant.now())
             .build();

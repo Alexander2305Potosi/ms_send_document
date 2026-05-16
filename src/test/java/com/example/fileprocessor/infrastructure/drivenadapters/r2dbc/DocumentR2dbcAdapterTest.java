@@ -74,7 +74,7 @@ class DocumentR2dbcAdapterTest {
             .id(1L)
             .state("PROCESSED")
             .retryCount(1)
-            .errorMessage("Success")
+            .syncMessage("Success")
             .build();
             
         DocumentEntity entity = DocumentEntity.builder()
@@ -92,7 +92,7 @@ class DocumentR2dbcAdapterTest {
         verify(springDataRepository).findById(1L);
         verify(springDataRepository).save(argThat(e -> 
             "PROCESSED".equals(e.getState()) && 
-            "Success".equals(e.getErrorMessage())
+            "Success".equals(e.getSyncMessage())
         ));
     }
 

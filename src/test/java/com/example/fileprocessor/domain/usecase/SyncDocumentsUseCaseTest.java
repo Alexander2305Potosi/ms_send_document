@@ -202,8 +202,8 @@ class SyncDocumentsUseCaseTest {
         assertEquals("doc1", savedDoc.getDocumentId());
         assertEquals("p1", savedDoc.getProductId());
         assertEquals(ProcessingResultCodes.ERR_DUPLICATED_DOC.name(), savedDoc.getState());
-        assertNotNull(savedDoc.getErrorMessage());
-        assertEquals(ProcessingResultCodes.ERR_DUPLICATED_DOC.value(), savedDoc.getErrorMessage());
+        assertNotNull(savedDoc.getSyncMessage());
+        assertEquals(ProcessingResultCodes.ERR_DUPLICATED_DOC.value(), savedDoc.getSyncMessage());
         assertEquals("retention", savedDoc.getUseCase());
     }
 }
