@@ -20,19 +20,19 @@ public final class ExceptionMapper {
     }
 
     public static ErrorClassification classify(Throwable error) {
-        String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
+        String syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
 
         if (error instanceof ProcessingException pe) {
-            errorCode = pe.getErrorCode();
+            syncStatus = pe.getErrorCode();
         } else if (error instanceof WebClientResponseException wcre) {
-            errorCode = mapHttpStatusCode(wcre.getStatusCode().value());
+            syncStatus = mapHttpStatusCode(wcre.getStatusCode().value());
             message = "API Error: " + wcre.getStatusCode() + " - " + wcre.getResponseBodyAsString();
         } else if (isTimeout(error)) {
-            errorCode = ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+            syncStatus = ProcessingResultCodes.GATEWAY_TIMEOUT.name();
             message = ProcessingResultCodes.GATEWAY_TIMEOUT.value();
         } else if (isConnectionError(error)) {
-            errorCode = ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
+            syncStatus = ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
             message = ProcessingResultCodes.SERVICE_UNAVAILABLE.value();
         }
 
@@ -40,7 +40,7 @@ public final class ExceptionMapper {
             message = error.getClass().getSimpleName();
         }
 
-        return new ErrorClassification(errorCode, message);
+        return new ErrorClassification(syncStatus, message);
     }
 
     private static String mapHttpStatusCode(int statusCode) {

@@ -44,7 +44,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
                     return Flux.just(FileUploadResponse.builder()
                             .status(ProcessingResultCodes.FAILURE.name())
-                            .errorCode(ProcessingResultCodes.UNKNOWN_ERROR.name())
+                            .syncStatus(ProcessingResultCodes.UNKNOWN_ERROR.name())
                             .message(e.getMessage())
                             .success(false)
                             .filename(history.getFilename())

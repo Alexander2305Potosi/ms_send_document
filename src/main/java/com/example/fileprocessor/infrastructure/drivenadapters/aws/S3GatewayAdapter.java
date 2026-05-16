@@ -6,7 +6,6 @@ import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.aws.config.S3Properties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import com.example.fileprocessor.domain.util.ExceptionUtils;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
@@ -48,7 +47,7 @@ public class S3GatewayAdapter implements S3Gateway {
                 LOGGER.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
                 return Mono.just(FileUploadResponse.builder()
                     .status(ProcessingResultCodes.FAILURE.name())
-                    .errorCode(ProcessingResultCodes.EMPTY_CONTENT.name())
+                    .syncStatus(ProcessingResultCodes.EMPTY_CONTENT.name())
                     .traceId(traceId)
                     .message(ProcessingResultCodes.EMPTY_CONTENT.value())
                     .processedAt(Instant.now())
@@ -106,10 +105,10 @@ public class S3GatewayAdapter implements S3Gateway {
 
         LOGGER.log(Level.SEVERE, "S3 upload failed for documentId {0}: {1}", new Object[]{documentId, actualError.getMessage()});
 
-        String errorCode = categorizeS3Error(actualError);
+        String syncStatus = categorizeS3Error(actualError);
         return Mono.just(FileUploadResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name())
-            .errorCode(errorCode)
+            .syncStatus(syncStatus)
             .traceId(traceId)
             .message(actualError.getMessage())
             .processedAt(Instant.now())

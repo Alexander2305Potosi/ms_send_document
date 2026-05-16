@@ -147,7 +147,7 @@ class SoapMapperTest {
         assertEquals("FAILURE", response.getStatus());
         assertEquals("1421", response.getCorrelationId());
         assertEquals("El parámetro archivo es obligatorio.", response.getMessage());
-        assertEquals(ProcessingResultCodes.SOAP_ERROR.name(), response.getErrorCode());
+        assertEquals(ProcessingResultCodes.SOAP_ERROR.name(), response.getSyncStatus());
     }
 
     @Test

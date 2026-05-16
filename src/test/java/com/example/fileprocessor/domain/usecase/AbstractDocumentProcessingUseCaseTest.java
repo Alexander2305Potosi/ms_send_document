@@ -82,14 +82,14 @@ class AbstractDocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-tech-error")))
             .assertNext(result -> {
-                assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getErrorCode());
+                assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
             argThat(h -> ProcessingResultCodes.PENDING.name().equals(h.getState()) && h.getRetryCount() == 0 
-                    && h.getErrorCode().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name())),
+                    && h.getSyncStatus().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name())),
             eq(1)
         );
     }

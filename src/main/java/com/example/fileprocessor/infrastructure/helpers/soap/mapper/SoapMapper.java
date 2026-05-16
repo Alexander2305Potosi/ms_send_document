@@ -25,8 +25,6 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.StringReader;
@@ -197,7 +195,7 @@ public class SoapMapper {
 
     private FileUploadResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
         String faultString = "SOAP Fault received";
-        String errorCode = ProcessingResultCodes.SOAP_ERROR.name();
+        String syncStatus = ProcessingResultCodes.SOAP_ERROR.name();
 
         try {
             // 1. Intento mandatorio: Mapeo a SoapFaultDetail
@@ -209,7 +207,7 @@ public class SoapMapper {
                         && faultDetail.getSystemException().getGenericException() != null) {
                         
                         var genEx = faultDetail.getSystemException().getGenericException();
-                        if (genEx.getCode() != null) errorCode = genEx.getCode();
+                        if (genEx.getCode() != null) syncStatus = genEx.getCode();
                         if (genEx.getDescription() != null) faultString = genEx.getDescription();
                     }
                 } catch (Exception e) {
@@ -218,9 +216,9 @@ public class SoapMapper {
             }
             
             // 2. Fallback manual: Búsqueda agresiva de etiquetas code/description en todo el árbol
-            if (errorCode.equals(ProcessingResultCodes.SOAP_ERROR.name())) {
+            if (syncStatus.equals(ProcessingResultCodes.SOAP_ERROR.name())) {
                 String directCode = extractTextContentRecursive(faultElement, "code");
-                if (directCode != null) errorCode = directCode;
+                if (directCode != null) syncStatus = directCode;
             }
             
             if (faultString.equals("SOAP Fault received") || faultString.isBlank()) {
@@ -240,10 +238,10 @@ public class SoapMapper {
         return FileUploadResponse.builder()
             .status(ProcessingResultCodes.FAILURE.name())
             .message(faultString)
-            .correlationId(errorCode)
+            .correlationId(syncStatus)
             .processedAt(Instant.now())
             .success(false)
-            .errorCode(ProcessingResultCodes.SOAP_ERROR.name())
+            .syncStatus(ProcessingResultCodes.SOAP_ERROR.name())
             .traceId(traceId)
             .build();
     }

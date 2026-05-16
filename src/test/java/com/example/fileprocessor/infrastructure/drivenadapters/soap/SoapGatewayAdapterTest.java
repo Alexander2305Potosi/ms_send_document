@@ -111,7 +111,7 @@ class SoapGatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getErrorCode());
+                assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getSyncStatus());
                 assertTrue(result.getMessage().contains("Timeout"));
             })
             .expectComplete()
@@ -154,7 +154,7 @@ class SoapGatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), result.getErrorCode());
+                assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), result.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(10));

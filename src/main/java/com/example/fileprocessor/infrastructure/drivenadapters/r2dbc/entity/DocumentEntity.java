@@ -36,7 +36,7 @@ public class DocumentEntity {
     @Column("nombre_documento")
     private String name;
 
-    @Column("estado")
+    @Column("estado_sincronizacion")
     private String state;
 
     @Column("mensaje_sincronizacion")

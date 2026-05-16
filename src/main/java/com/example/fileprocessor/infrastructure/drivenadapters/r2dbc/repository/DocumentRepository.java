@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @Repository
 public interface DocumentRepository extends R2dbcRepository<DocumentEntity, Long> {
 
-    @Query("SELECT * FROM documentos WHERE estado = $1 AND caso_uso = $2 AND fecha_carga >= $3")
+    @Query("SELECT * FROM documentos WHERE estado_sincronizacion = $1 AND caso_uso = $2 AND fecha_carga >= $3")
     Flux<DocumentEntity> findByStateAndUseCaseToday(String estado, String casoUso, LocalDateTime startOfDay);
 
     @Query("SELECT COUNT(*) > 0 FROM documentos WHERE id_producto = $1 AND id_documento = $2")

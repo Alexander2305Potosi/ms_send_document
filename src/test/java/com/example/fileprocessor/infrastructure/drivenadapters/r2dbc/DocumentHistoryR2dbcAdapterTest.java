@@ -38,7 +38,7 @@ class DocumentHistoryR2dbcAdapterTest {
             .useCase("SOAP")
             .retryCount(1)
             .filename("test.pdf")
-            .errorCode(null)
+            .syncStatus(null)
             .syncMessage("Success message")
             .startedAt(Instant.now())
             .completedAt(Instant.now())

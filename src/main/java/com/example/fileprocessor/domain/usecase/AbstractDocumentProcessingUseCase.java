@@ -128,7 +128,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         LOGGER.log(Level.INFO, "[TraceID: {0}] [{1}] Document {2} (Product: {3}) -> {4}. Message: {5}",
                 new Object[]{traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState, response.getMessage()});
 
-        return persistencePort.finalizeProcessingAtomically(syncHistoryDTO(doc, history, response, nextState, businessRetryCount), doc.getRetryCountSafe())
+        return persistencePort.finalizeProcessingAtomically(syncHistoryDTO(doc, history, response, nextState, businessRetryCount))
                 .thenReturn(response);
     }
 
@@ -144,8 +144,8 @@ public abstract class AbstractDocumentProcessingUseCase {
         String actualFilename = response.getFilename() != null ? response.getFilename() : 
                         (Boolean.TRUE.equals(doc.getIsZip()) ? history.getFilename() : null);
 
-        String finalMessage = (response.getErrorCode() != null && !response.getErrorCode().isBlank())
-                ? String.format("[%s] %s", response.getErrorCode(), response.getMessage())
+        String finalMessage = (response.getSyncStatus() != null && !response.getSyncStatus().isBlank())
+                ? String.format("[%s] %s", response.getSyncStatus(), response.getMessage())
                 : response.getMessage();
 
         int realRetries = businessRetryCount + (response.getAttemptCount() > 0 ? response.getAttemptCount() - 1 : 0);
@@ -156,7 +156,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .useCase(doc.getUseCase())
                 .retryCount(realRetries)
                 .filename(actualFilename)
-                .errorCode(response.getErrorCode())
+                .syncStatus(response.getSyncStatus())
                 .syncMessage(finalMessage)
                 .completedAt(Instant.now())
                 .build();
@@ -168,7 +168,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         }
 
         int currentRetry = doc.getRetryCountSafe();
-        boolean isRetryable = ProcessingResultCodes.isTransient(response.getErrorCode()) && currentRetry < MAX_RETRIES;
+        boolean isRetryable = ProcessingResultCodes.isTransient(response.getSyncStatus()) && currentRetry < MAX_RETRIES;
 
         if (isRetryable) {
             doc.setRetryCount(currentRetry + 1);
@@ -179,18 +179,18 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> handleGlobalError(Throwable error) {
-        String errorCode = ProcessingResultCodes.UNKNOWN_ERROR.name();
+        String syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
         String filename = null;
 
         if (error instanceof ProcessingException pe) {
-            errorCode = pe.getErrorCode();
+            syncStatus = pe.getErrorCode();
             filename = pe.getFilename();
         }
 
         return Mono.just(FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILURE.name())
-                .errorCode(errorCode)
+                .syncStatus(syncStatus)
                 .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
                 .processedAt(Instant.now())
                 .filename(filename)

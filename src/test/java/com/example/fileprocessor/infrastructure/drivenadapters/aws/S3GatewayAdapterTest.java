@@ -98,7 +98,7 @@ class S3GatewayAdapterTest {
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
-                assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), result.getErrorCode());
+                assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), result.getSyncStatus());
             })
             .verifyComplete();
 
@@ -138,7 +138,7 @@ class S3GatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.DEST_UNAUTHORIZED.name(), result.getErrorCode());
+                assertEquals(ProcessingResultCodes.DEST_UNAUTHORIZED.name(), result.getSyncStatus());
             })
             .verifyComplete();
     }

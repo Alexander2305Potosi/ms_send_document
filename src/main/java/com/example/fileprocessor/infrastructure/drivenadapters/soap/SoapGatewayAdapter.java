@@ -7,16 +7,12 @@ import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import com.example.fileprocessor.domain.util.ExceptionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.retry.Retry;
 
 import java.net.ConnectException;
 import java.time.Duration;
@@ -71,7 +67,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                         .map(errorResp -> errorResp.toBuilder().attemptCount(attempt).build()))
                 .flatMapMany(response -> {
                     boolean isRetryable = !response.isSuccess() && 
-                                         ProcessingResultCodes.isTransient(response.getErrorCode()) && 
+                                         ProcessingResultCodes.isTransient(response.getSyncStatus()) && 
                                          attempt <= properties.retryAttempts();
 
                     if (isRetryable) {
@@ -86,13 +82,6 @@ public class SoapGatewayAdapter implements SoapGateway {
                 });
     }
 
-    private boolean isRetryable(Throwable throwable) {
-        if (throwable instanceof WebClientResponseException wce) {
-            int code = wce.getStatusCode().value();
-            return code == 500 || code == 503 || code == 504 || code == 429;
-        }
-        return throwable instanceof TimeoutException || throwable instanceof ConnectException;
-    }
 
     private Mono<FileUploadResponse> handleFinalError(Throwable error, String traceId) {
         if (error instanceof WebClientResponseException wce) {
@@ -106,7 +95,7 @@ public class SoapGatewayAdapter implements SoapGateway {
             }
         }
 
-        String errorCode = mapErrorCode(error);
+        String syncStatus = mapErrorCode(error);
         String message = error.getMessage();
 
         if (error instanceof WebClientResponseException wce) {
@@ -118,7 +107,7 @@ public class SoapGatewayAdapter implements SoapGateway {
         return Mono.just(FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILED.name())
                 .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
-                .errorCode(errorCode)
+                .syncStatus(syncStatus)
                 .traceId(traceId)
                 .processedAt(Instant.now())
                 .success(false)

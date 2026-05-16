@@ -33,7 +33,7 @@ public class DocumentHistoryR2dbcAdapter {
                 .documentId(historyDTO.getDocumentId())
                 .useCase(historyDTO.getUseCase())
                 .result(resultStatus)
-                .errorCode(historyDTO.getErrorCode())
+                .syncStatus(historyDTO.getSyncStatus())
                 .syncMessage(historyDTO.getSyncMessage())
                 .retry(historyDTO.getRetryCount() != null ? historyDTO.getRetryCount() : 0)
                 .startedAt(historyDTO.getStartedAt())

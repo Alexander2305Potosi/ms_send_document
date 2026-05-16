@@ -38,8 +38,8 @@ public class DocumentHistoryEntity {
     @Column("resultado")
     private String result;
 
-    @Column("codigo_error")
-    private String errorCode;
+    @Column("estado_sincronizacion")
+    private String syncStatus;
 
     @Column("mensaje_sincronizacion")
     private String syncMessage;

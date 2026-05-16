@@ -20,7 +20,7 @@ public class FileUploadResponse {
     private final String externalReference;
     private final boolean success;
     private final String filename;
-    private final String errorCode;
+    private final String syncStatus;
     private final int attemptCount;
     private final boolean technicalRetry;
 

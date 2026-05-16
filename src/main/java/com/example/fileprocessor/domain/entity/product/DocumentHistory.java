@@ -23,7 +23,7 @@ public class DocumentHistory {
     private String filename;
     private String useCase;
     private String result;
-    private String errorCode;
+    private String syncStatus;
     private String syncMessage;
     private Integer retry;
     private Instant startedAt;

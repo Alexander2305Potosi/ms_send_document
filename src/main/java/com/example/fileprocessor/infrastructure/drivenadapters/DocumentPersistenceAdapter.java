@@ -38,13 +38,13 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     }
 
     @Override
-    public Mono<Void> finalizeProcessingAtomically(DocumentHistoryDTO history, int businessRetryCount) {
+    public Mono<Void> finalizeProcessingAtomically(DocumentHistoryDTO history) {
         String initialState = ProcessingResultCodes.IN_PROGRESS.name();
         
         Document doc = Document.builder()
                 .id(history.getDocumentId())
                 .state(history.getState())
-                .retryCount(businessRetryCount)
+                .retryCount(history.getRetryCount())
                 .syncMessage(history.getSyncMessage())
                 .build();
 
