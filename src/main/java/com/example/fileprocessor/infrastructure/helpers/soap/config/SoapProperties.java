@@ -34,6 +34,6 @@ public record SoapProperties(
         if (messageContext == null) messageContext = Map.of();
         if (metaData == null) metaData = Map.of();
         if (timeoutSeconds <= 0) timeoutSeconds = 30;
-        if (retryAttempts <= 0) retryAttempts = 1;
+        if (retryAttempts < 0) retryAttempts = 0;
     }
 }

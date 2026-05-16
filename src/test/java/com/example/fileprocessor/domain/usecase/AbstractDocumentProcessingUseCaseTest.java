@@ -1,7 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.product.Document;
-import com.example.fileprocessor.domain.entity.product.DocumentHistory;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
@@ -42,8 +41,8 @@ class AbstractDocumentProcessingUseCaseTest {
             persistencePort, productRestGateway, documentValidator
         ) {
             @Override
-            protected Mono<FileUploadResponse> uploadDocument(DocumentHistory history, Long docId) {
-                return Mono.just(FileUploadResponse.builder().success(true).build());
+            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
+                return Flux.just(FileUploadResponse.builder().success(true).build());
             }
 
             @Override
@@ -55,7 +54,10 @@ class AbstractDocumentProcessingUseCaseTest {
         lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
             .thenReturn(Mono.just(1L));
 
-        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
+        lenient().when(persistencePort.finalizeProcessingAtomically(any(), anyInt()))
+            .thenReturn(Mono.empty());
+            
+        lenient().when(persistencePort.saveHistory(any()))
             .thenReturn(Mono.empty());
     }
 
@@ -68,13 +70,14 @@ class AbstractDocumentProcessingUseCaseTest {
             .name("test.pdf")
             .state(ProcessingResultCodes.PENDING.name())
             .retryCount(0)
+            .isZip(false)
             .build();
 
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.error(new ProcessingException(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), "Timeout error", (Throwable) null)));
+            .thenReturn(Mono.error(new ProcessingException("Timeout error", ProcessingResultCodes.GATEWAY_TIMEOUT.name(), (Throwable) null)));
 
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-tech-error")))
@@ -85,8 +88,9 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(h -> ProcessingResultCodes.PENDING.name().equals(h.getState()) && h.getRetryCount() == 1 
-                    && h.getErrorCode().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name()))
+            argThat(h -> ProcessingResultCodes.PENDING.name().equals(h.getState()) && h.getRetryCount() == 0 
+                    && h.getErrorCode().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name())),
+            eq(1)
         );
     }
 
@@ -99,12 +103,13 @@ class AbstractDocumentProcessingUseCaseTest {
             .name("test.pdf")
             .state(ProcessingResultCodes.PENDING.name())
             .retryCount(3) 
+            .isZip(false)
             .build();
 
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.error(new ProcessingException(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), "Final timeout", (Throwable) null)));
+            .thenReturn(Mono.error(new ProcessingException("Final timeout", ProcessingResultCodes.GATEWAY_TIMEOUT.name(), (Throwable) null)));
 
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-max-retries")))
@@ -113,7 +118,8 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(h -> ProcessingResultCodes.FAILED.name().equals(h.getState()))
+            argThat(h -> ProcessingResultCodes.FAILED.name().equals(h.getState()) && h.getRetryCount() == 3),
+            eq(3)
         );
     }
 
@@ -126,6 +132,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .name("test.pdf")
             .state(ProcessingResultCodes.PENDING.name())
             .retryCount(0)
+            .isZip(false)
             .build();
 
         ProductDocumentFile file = ProductDocumentFile.builder()
@@ -134,6 +141,7 @@ class AbstractDocumentProcessingUseCaseTest {
                 .filename("test.pdf")
                 .content(new byte[]{1, 2, 3})
                 .size(3L)
+                .isZip(false)
                 .build();
 
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
@@ -141,7 +149,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString()))
             .thenReturn(Mono.just(file));
         
-        when(documentValidator.validate(any(DocumentHistory.class), anyBoolean()))
+        when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
         StepVerifier.create(useCase.executePendingDocuments()
@@ -152,7 +160,7 @@ class AbstractDocumentProcessingUseCaseTest {
 
         ArgumentCaptor<DocumentHistoryDTO> historyCaptor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
         
-        verify(persistencePort).finalizeProcessingAtomically(historyCaptor.capture());
+        verify(persistencePort).finalizeProcessingAtomically(historyCaptor.capture(), anyInt());
         
         assertEquals(ProcessingResultCodes.PROCESSED.name(), historyCaptor.getValue().getState());
         assertNotNull(historyCaptor.getValue().getCompletedAt());
@@ -160,14 +168,14 @@ class AbstractDocumentProcessingUseCaseTest {
 
     @Test
     void executePendingDocuments_withMultipleDocuments_processesAllSequentially() {
-        Document doc1 = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").build();
-        Document doc2 = Document.builder().id(2L).documentId("doc-2").productId("p2").state("PENDING").build();
+        Document doc1 = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").isZip(false).build();
+        Document doc2 = Document.builder().id(2L).documentId("doc-2").productId("p2").state("PENDING").isZip(false).build();
 
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc1, doc2));
         
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.just(ProductDocumentFile.builder().build()));
+            .thenReturn(Mono.just(ProductDocumentFile.builder().isZip(false).build()));
         
         when(documentValidator.validate(any(), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
@@ -177,6 +185,6 @@ class AbstractDocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(10));
 
-        verify(persistencePort, times(2)).finalizeProcessingAtomically(any());
+        verify(persistencePort, times(2)).finalizeProcessingAtomically(any(), anyInt());
     }
 }

@@ -57,7 +57,7 @@ class DocumentHistoryR2dbcAdapterTest {
         assertEquals(1L, saved.getDocumentId());
         assertEquals(ProcessingResultCodes.SUCCESS.name(), saved.getResult());
         assertEquals(1, saved.getRetry());
-        assertEquals("SOAP", saved.getOperation());
+        assertEquals("SOAP", saved.getUseCase());
         assertEquals("test.pdf", saved.getFilename());
     }
 }

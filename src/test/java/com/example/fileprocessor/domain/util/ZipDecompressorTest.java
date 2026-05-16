@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.util;
 
-import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -16,7 +16,7 @@ class ZipDecompressorTest {
 
     @Test
     void decompress_nonZip_returnsSameDocument() {
-        DocumentHistory history = DocumentHistory.builder()
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder()
             .productId("prod-1")
             .isZip(false)
             .pais("AR")
@@ -32,7 +32,7 @@ class ZipDecompressorTest {
             .expectNextMatches(result ->
                 result.getBusinessDocumentId().equals("doc-1") &&
                 result.getFilename().equals("test.pdf") &&
-                !result.isZip())
+                !Boolean.TRUE.equals(result.getIsZip()))
             .verifyComplete();
     }
 
@@ -40,7 +40,7 @@ class ZipDecompressorTest {
     void decompress_zipWithTwoFiles_expandsToTwoDocuments() throws IOException {
         byte[] zipContent = createZip("test.pdf", new byte[]{1}, "data.csv", new byte[]{2});
 
-        DocumentHistory zipHistory = DocumentHistory.builder()
+        DocumentHistoryDTO zipHistory = DocumentHistoryDTO.builder()
             .productId("prod-1")
             .isZip(true)
             .pais("AR")
@@ -52,19 +52,19 @@ class ZipDecompressorTest {
             .content(zipContent)
             .build();
 
-        Flux<DocumentHistory> result = ZipDecompressor.decompress(zipHistory);
+        Flux<DocumentHistoryDTO> result = ZipDecompressor.decompress(zipHistory);
 
         StepVerifier.create(result)
             .assertNext(doc -> {
                 assertTrue(doc.getFilename().endsWith("test.pdf"));
                 assertEquals("doc-1/test.pdf", doc.getBusinessDocumentId());
-                assertFalse(doc.isZip());
+                assertFalse(Boolean.TRUE.equals(doc.getIsZip()));
                 assertEquals("AR", doc.getPais());
             })
             .assertNext(doc -> {
                 assertTrue(doc.getFilename().endsWith("data.csv"));
                 assertEquals("doc-1/data.csv", doc.getBusinessDocumentId());
-                assertFalse(doc.isZip());
+                assertFalse(Boolean.TRUE.equals(doc.getIsZip()));
                 assertEquals("AR", doc.getPais());
             })
             .verifyComplete();
@@ -74,7 +74,7 @@ class ZipDecompressorTest {
     void decompress_emptyZip_returnsEmptyFlux() throws IOException {
         byte[] emptyZip = createEmptyZip();
 
-        DocumentHistory zipHistory = DocumentHistory.builder()
+        DocumentHistoryDTO zipHistory = DocumentHistoryDTO.builder()
             .productId("prod-1")
             .isZip(true)
             .pais("AR")

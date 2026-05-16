@@ -53,7 +53,7 @@ class SoapGatewayAdapterTest {
         properties = new SoapProperties(
             "http://localhost:8080/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
             "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
-            Map.of(), Map.of(), 5, 1 // Short timeout and 1 retry
+            Map.of(), Map.of(), 5, 0 // Short timeout and NO retries
         );
         adapter = new SoapGatewayAdapter(soapWebClient, properties, mapper);
     }

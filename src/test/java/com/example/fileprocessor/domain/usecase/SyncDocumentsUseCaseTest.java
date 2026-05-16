@@ -117,7 +117,7 @@ class SyncDocumentsUseCaseTest {
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(docCaptor.capture());
         Document saved = docCaptor.getValue();
-        assertTrue(saved.isZip());
+        assertTrue(Boolean.TRUE.equals(saved.getIsZip()));
     }
 
     @Test

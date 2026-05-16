@@ -1,7 +1,7 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.product.Document;
-import com.example.fileprocessor.domain.entity.product.DocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
@@ -53,6 +53,7 @@ class SoapDocumentProcessingUseCaseTest {
             .productId("prod-1")
             .name("test.pdf")
             .retryCount(0)
+            .isZip(false)
             .build();
 
         ProductDocumentFile file = ProductDocumentFile.builder()
@@ -62,23 +63,24 @@ class SoapDocumentProcessingUseCaseTest {
             .content(new byte[]{1})
             .origin("origin")
             .pais("AR")
+            .isZip(false)
             .build();
 
         when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
         when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt())).thenReturn(Mono.just(1L));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
-        when(documentValidator.validate(any(DocumentHistory.class), anyBoolean()))
+        when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         
         when(homologationRepository.resolve(anyString(), anyString()))
             .thenReturn(Mono.just(new HomologationResult("homo-origin", "homo-pais")));
 
-        when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Mono.just(FileUploadResponse.builder()
+        when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Flux.just(FileUploadResponse.builder()
             .success(true)
             .correlationId("soap-corr-123")
             .build()));
 
-        when(persistencePort.finalizeProcessingAtomically(any())).thenReturn(Mono.empty());
+        when(persistencePort.finalizeProcessingAtomically(any(), anyInt())).thenReturn(Mono.empty());
 
         StepVerifier.create(useCase.executePendingDocuments())
             .expectNextMatches(FileUploadResponse::isSuccess)
