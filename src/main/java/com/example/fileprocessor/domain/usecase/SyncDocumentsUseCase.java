@@ -43,7 +43,7 @@ public class SyncDocumentsUseCase {
                             doc.setUseCase(useCase);
                             if (exists) {
                                 doc.setState(ProcessingResultCodes.ERR_DUPLICATED_DOC.name());
-                                doc.setErrorMessage(ProcessingResultCodes.ERR_DUPLICATED_DOC.value());
+                                doc.setSyncMessage(ProcessingResultCodes.ERR_DUPLICATED_DOC.value());
                             } else {
                                 doc.setState(ProcessingResultCodes.PENDING.name());
                             }

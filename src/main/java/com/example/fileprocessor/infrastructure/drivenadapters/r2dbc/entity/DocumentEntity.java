@@ -39,8 +39,8 @@ public class DocumentEntity {
     @Column("estado")
     private String state;
 
-    @Column("mensaje_error")
-    private String errorMessage;
+    @Column("mensaje_sincronizacion")
+    private String syncMessage;
 
     @Column("es_zip")
     private Boolean isZip;

@@ -24,7 +24,7 @@ public class DocumentHistory {
     private String useCase;
     private String result;
     private String errorCode;
-    private String errorMessage;
+    private String syncMessage;
     private Integer retry;
     private Instant startedAt;
     private Instant completedAt;

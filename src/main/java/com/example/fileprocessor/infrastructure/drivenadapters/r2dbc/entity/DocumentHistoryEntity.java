@@ -41,8 +41,8 @@ public class DocumentHistoryEntity {
     @Column("codigo_error")
     private String errorCode;
 
-    @Column("mensaje_error")
-    private String errorMessage;
+    @Column("mensaje_sincronizacion")
+    private String syncMessage;
 
     @Column("reintentos")
     private Integer retry;

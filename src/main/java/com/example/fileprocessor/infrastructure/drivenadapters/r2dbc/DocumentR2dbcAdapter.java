@@ -45,7 +45,7 @@ public class DocumentR2dbcAdapter
                 entity.setState(doc.getState());
                 entity.setRetryCount(doc.getRetryCountSafe());
                 entity.setUpdatedAt(LocalDateTime.now());
-                entity.setErrorMessage(doc.getErrorMessage());
+                entity.setSyncMessage(doc.getSyncMessage());
 
                 return repository.save(entity).thenReturn(1L);
             });

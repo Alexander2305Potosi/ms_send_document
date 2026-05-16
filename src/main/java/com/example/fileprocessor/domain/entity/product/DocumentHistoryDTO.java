@@ -23,7 +23,7 @@ public class DocumentHistoryDTO {
     private Integer retryCount;
     private String filename;
     private String errorCode;
-    private String errorMessage;
+    private String syncMessage;
     private Instant startedAt;
     private Instant completedAt;
 

@@ -123,7 +123,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                          (ProcessingResultCodes.PENDING.name().equals(nextState) ? ProcessingResultCodes.RETRYABLE_ERROR.name() : ProcessingResultCodes.FAILURE.name());
 
         doc.setState(nextState);
-        doc.setErrorMessage(response.getMessage());
+        doc.setSyncMessage(response.getMessage());
 
         LOGGER.log(Level.INFO, "[TraceID: {0}] [{1}] Document {2} (Product: {3}) -> {4}. Message: {5}",
                 new Object[]{traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState, response.getMessage()});
@@ -157,7 +157,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .retryCount(realRetries)
                 .filename(actualFilename)
                 .errorCode(response.getErrorCode())
-                .errorMessage(finalMessage)
+                .syncMessage(finalMessage)
                 .completedAt(Instant.now())
                 .build();
     }

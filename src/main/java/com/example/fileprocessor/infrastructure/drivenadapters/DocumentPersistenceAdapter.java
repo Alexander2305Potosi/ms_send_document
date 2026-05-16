@@ -45,7 +45,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
                 .id(history.getDocumentId())
                 .state(history.getState())
                 .retryCount(businessRetryCount)
-                .errorMessage(history.getErrorMessage())
+                .syncMessage(history.getSyncMessage())
                 .build();
 
         return documentRepository.updateStateAndRetry(doc, initialState)

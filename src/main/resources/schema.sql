@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS documentos (
     id_producto VARCHAR(100),
     nombre_documento VARCHAR(255),
     estado VARCHAR(50),
-    mensaje_error CLOB,
+    mensaje_sincronizacion CLOB,
     es_zip BOOLEAN DEFAULT FALSE,
     caso_uso VARCHAR(50),
     reintentos INT DEFAULT 0,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS historico_documentos (
     caso_uso VARCHAR(50),
     resultado VARCHAR(50),
     codigo_error VARCHAR(100),
-    mensaje_error CLOB,
+    mensaje_sincronizacion CLOB,
     reintentos INT DEFAULT 0,
     fecha_inicio_procesamiento TIMESTAMP,
     fecha_fin_procesamiento TIMESTAMP

@@ -23,7 +23,7 @@ public class Document {
     private String productId;
     private String name;
     private String state;
-    private String errorMessage;
+    private String syncMessage;
     private Boolean isZip;
     private String useCase;
     private LocalDateTime createdAt;
