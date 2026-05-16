@@ -40,7 +40,9 @@ class SoapMapperTest {
             SoapHeader.class,
             SoapBody.class,
             TransmitirDocumentoResponse.class,
-            SoapFaultDetail.class
+            SoapFaultDetail.class,
+            com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper.class,
+            com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry.class
         );
         props = Mockito.mock(SoapProperties.class);
         resourceLoader = Mockito.mock(ResourceLoader.class);
@@ -179,5 +181,69 @@ class SoapMapperTest {
         assertThrows(ProcessingException.class, () -> 
             soapMapper.parseResponse(xml, "trace-fail")
         );
+    }
+
+    @Test
+    @DisplayName("Debe generar el bloque de metadatos correctamente")
+    void buildEnvelope_withMetadata_generatesMetadataBlock() {
+        when(props.metaData()).thenReturn(Map.of("KEY1", "VAL1", "KEY2", "VAL2"));
+        FileUploadRequest request = FileUploadRequest.builder().filename("test.pdf").content("".getBytes()).build();
+
+        String xml = soapMapper.buildEnvelope(request, props, "trace-meta");
+
+        assertTrue(xml.contains("<tiposMetaData>"), "Debe contener etiquetas tiposMetaData");
+        assertTrue(xml.contains("<nombre>KEY1</nombre>"), "Debe contener el nombre de la clave 1");
+        assertTrue(xml.contains("<valor>VAL1</valor>"), "Debe contener el valor 1");
+    }
+
+    @Test
+    @DisplayName("Debe mappear manualmente si JAXB falla pero el elemento es el correcto")
+    void parseResponse_withManualMapping_returnsResponse() {
+        String xml = """
+            <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+               <S:Body>
+                  <transmitirDocumentoResponse>
+                     <status>SUCCESS</status>
+                     <message>Manual mapping works</message>
+                     <correlationId>MANUAL-1</correlationId>
+                     <externalReference>REF-1</externalReference>
+                  </transmitirDocumentoResponse>
+               </S:Body>
+            </S:Envelope>
+            """;
+
+        // This triggers the manual mapping branch when JAXB might not be aware of namespaces
+        FileUploadResponse response = soapMapper.parseResponse(xml, "trace-manual");
+
+        assertNotNull(response);
+        assertEquals("SUCCESS", response.getStatus());
+        assertEquals("Manual mapping works", response.getMessage());
+        assertEquals("MANUAL-1", response.getCorrelationId());
+        assertEquals("REF-1", response.getExternalReference());
+    }
+
+    @Test
+    @DisplayName("Debe manejar respuestas con cuerpo inesperado")
+    void parseResponse_withUnexpectedBody_throwsException() {
+        String xml = """
+            <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+               <S:Body>
+                  <unexpectedElement>Oops</unexpectedElement>
+               </S:Body>
+            </S:Envelope>
+            """;
+
+        assertThrows(ProcessingException.class, () -> 
+            soapMapper.parseResponse(xml, "trace-unexpected")
+        );
+    }
+
+    @Test
+    @DisplayName("Debe manejar errores de inicialización del template")
+    void init_withInvalidResource_throwsRuntimeException() {
+        when(resourceLoader.getResource(anyString())).thenReturn(null);
+        SoapMapper mapper = new SoapMapper(jaxbContext, props, resourceLoader);
+        
+        assertThrows(RuntimeException.class, mapper::init);
     }
 }

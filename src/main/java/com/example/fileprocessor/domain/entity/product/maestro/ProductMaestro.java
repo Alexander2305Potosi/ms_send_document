@@ -19,4 +19,6 @@ public class ProductMaestro {
     private String name;
     private LocalDateTime loadDate;
     private String state;
+    private String originFolder;
+    private String originCountry;
 }

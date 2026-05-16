@@ -35,7 +35,7 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
 
     @Override
     protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
-        return homologationRepository.resolve(history.getOrigin(), history.getPais())
+        return homologationRepository.resolve(history)
                 .map(h -> FileUploadRequest.from(history, docId, h))
                 .flatMapMany(request -> soapGateway.send(request))
                 .onErrorResume(e -> {

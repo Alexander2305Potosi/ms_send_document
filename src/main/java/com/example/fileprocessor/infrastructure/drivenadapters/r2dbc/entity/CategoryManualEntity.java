@@ -22,12 +22,10 @@ public class CategoryManualEntity {
     @Id
     private Long id;
 
-    @Column("categoria")
-    private String categoria;
+    @Column("prefijo")
+    private String prefijo;
 
-    @Column("descripcion_manual")
-    private String descripcionManual;
+    @Column("categoria_documento")
+    private String categoriaDocumento;
 
-    @Column("fecha_creacion")
-    private LocalDateTime createdAt;
 }

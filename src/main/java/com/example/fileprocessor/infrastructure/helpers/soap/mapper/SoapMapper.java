@@ -82,7 +82,7 @@ public class SoapMapper {
         try {
             String base64Content = request.getContent() != null ? Base64.getEncoder().encodeToString(request.getContent()) : "";
             String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
-            String safeOrigin = escapeXml(request.getOrigin());
+            String safeOrigin = escapeXml(request.getOriginFolder());
 
             return this.xmlTemplate
                 .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))

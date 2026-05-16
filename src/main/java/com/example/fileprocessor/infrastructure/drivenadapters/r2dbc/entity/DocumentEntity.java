@@ -48,6 +48,12 @@ public class DocumentEntity {
     @Column("caso_uso")
     private String useCase;
 
+    @Column("carpeta_origen")
+    private String originFolder;
+
+    @Column("pais_origen")
+    private String originCountry;
+
     @Column("reintentos")
     private Integer retryCount;
 

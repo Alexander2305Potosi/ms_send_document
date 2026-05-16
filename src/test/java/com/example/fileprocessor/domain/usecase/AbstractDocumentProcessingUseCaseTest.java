@@ -185,4 +185,68 @@ class AbstractDocumentProcessingUseCaseTest {
 
         verify(persistencePort, times(2)).finalizeProcessingAtomically(any());
     }
+
+    @Test
+    void executePendingDocuments_withTechnicalRetry_savesAuditOnly() {
+        Document doc = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").isZip(false).retryCount(0).build();
+        
+        when(persistencePort.findPendingDocumentsToday(anyString(), any()))
+            .thenReturn(Flux.just(doc));
+        
+        when(productRestGateway.getDocument(anyString(), anyString()))
+            .thenReturn(Mono.just(ProductDocumentFile.builder().isZip(false).build()));
+        
+        when(documentValidator.validate(any(), anyBoolean()))
+            .thenReturn(Mono.just(DocumentHistoryDTO.builder().build()));
+
+        // We need to override uploadDocument to return a technical retry response
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+            @Override
+            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
+                return Flux.just(FileUploadResponse.builder()
+                        .success(false)
+                        .technicalRetry(true)
+                        .attemptCount(1)
+                        .syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name())
+                        .message("Technical error")
+                        .build());
+            }
+            @Override protected String implementationName() { return "TEST"; }
+        };
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .expectNextCount(1)
+            .expectComplete()
+            .verify(Duration.ofSeconds(5));
+
+        verify(persistencePort).saveHistory(any());
+        verify(persistencePort, never()).finalizeProcessingAtomically(any());
+    }
+
+    @Test
+    void executePendingDocuments_withValidationError_marksAsFailed() {
+        Document doc = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").isZip(false).build();
+        
+        when(persistencePort.findPendingDocumentsToday(anyString(), any()))
+            .thenReturn(Flux.just(doc));
+        
+        when(productRestGateway.getDocument(anyString(), anyString()))
+            .thenReturn(Mono.just(ProductDocumentFile.builder().isZip(false).build()));
+        
+        when(documentValidator.validate(any(), anyBoolean()))
+            .thenReturn(Mono.error(new ProcessingException("Rules failed", ProcessingResultCodes.PATTERN_MISMATCH.name())));
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(resp -> {
+                assertFalse(resp.isSuccess());
+                assertEquals(ProcessingResultCodes.PATTERN_MISMATCH.name(), resp.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(5));
+
+        verify(persistencePort).finalizeProcessingAtomically(argThat(h -> 
+            ProcessingResultCodes.FAILED.name().equals(h.getState()) &&
+            ProcessingResultCodes.PATTERN_MISMATCH.name().equals(h.getSyncStatus())
+        ));
+    }
 }

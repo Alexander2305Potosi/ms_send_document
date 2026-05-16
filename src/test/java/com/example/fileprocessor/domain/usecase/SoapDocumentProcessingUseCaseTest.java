@@ -72,8 +72,14 @@ class SoapDocumentProcessingUseCaseTest {
         when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         
-        when(homologationRepository.resolve(anyString(), anyString()))
-            .thenReturn(Mono.just(new HomologationResult("homo-origin", "homo-pais")));
+        when(homologationRepository.resolve(any()))
+            .thenReturn(Mono.just(HomologationResult.builder()
+                .categoriaDocument("mocked-categoria")
+                .homologationCountry(com.example.fileprocessor.domain.entity.homologation.HomologationCountry.builder()
+                    .homologationFolder("homo-folder")
+                    .homologationCountry("homo-country")
+                    .build())
+                .build()));
 
         when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Flux.just(FileUploadResponse.builder()
             .success(true)

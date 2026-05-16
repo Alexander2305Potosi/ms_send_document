@@ -32,8 +32,8 @@ public class DocumentHistoryDTO {
     private String businessDocumentId; // The String ID (id_documento)
     private String contentType;
     private Long size;
-    private String origin;
-    private String pais;
+    private String originFolder;
+    private String originCountry;
     private byte[] content;
     private Boolean isZip;
 

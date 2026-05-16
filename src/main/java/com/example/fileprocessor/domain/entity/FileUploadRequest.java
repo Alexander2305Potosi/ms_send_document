@@ -19,8 +19,10 @@ public class FileUploadRequest {
     private String filename;
     private String contentType;
     private long fileSize;
-    private String origin;
-    private String paisHomologado;
+    private String originFolder;
+    private String categoriaDocument;
+    private String homologationFolder;
+    private String homologationCountry;
     private Long docId;
 
     public static FileUploadRequest from(DocumentHistoryDTO history, Long docId, HomologationResult h) {
@@ -30,8 +32,10 @@ public class FileUploadRequest {
             .filename(history.getFilename())
             .contentType(history.getContentType())
             .fileSize(history.getSize() != null ? history.getSize() : 0)
-            .origin(h != null ? h.origin() : history.getOrigin())
-            .paisHomologado(h != null ? h.paisHomologado() : history.getPais())
+            .originFolder(history.getOriginFolder())
+            .categoriaDocument(h != null ? h.categoriaDocument() : history.getBusinessDocumentId())
+            .homologationFolder(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationFolder() : history.getOriginFolder())
+            .homologationCountry(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationCountry() : history.getOriginCountry())
             .docId(docId)
             .build();
     }

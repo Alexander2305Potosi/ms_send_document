@@ -25,8 +25,8 @@ public class ProductDocumentResponse {
     private Long size;
     @JsonProperty("isZip")
     private boolean isZip;
-    @JsonProperty("origin")
-    private String origin;
+    @JsonProperty("carpeta_origen")
+    private String originFolder;
     @JsonProperty("pais")
-    private String pais;
+    private String originCountry;
 }

@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS documentos (
     mensaje_sincronizacion CLOB,
     es_zip BOOLEAN DEFAULT FALSE,
     caso_uso VARCHAR(50),
+    carpeta_origen VARCHAR(255),
+    pais_origen VARCHAR(10),
     reintentos INT DEFAULT 0,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_carga_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -28,15 +30,33 @@ CREATE TABLE IF NOT EXISTS historico_documentos (
 
 CREATE TABLE IF NOT EXISTS pais_homologado (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    codigo_pais VARCHAR(10) UNIQUE,
-    nombre VARCHAR(100)
+    carpeta_origen VARCHAR(255),
+    pais_origen VARCHAR(10),
+    carpeta_homologada VARCHAR(255),
+    pais_homologado VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS categoria_manual (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(100) UNIQUE
+    prefijo VARCHAR(100) UNIQUE,
+    categoria_documento VARCHAR(100)
 );
 
 -- Data for Local DB
-MERGE INTO pais_homologado (codigo_pais, nombre) KEY (codigo_pais) VALUES ('AR', 'Argentina');
-MERGE INTO pais_homologado (codigo_pais, nombre) KEY (codigo_pais) VALUES ('CO', 'Colombia');
+-- 10 Scenarios for pais_homologado
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/standard', 'CO', 'STANDARD_DOCS', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/large', 'CO', 'LARGE_DOCS', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/word', 'CO', 'WORD_DOCS', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/text', 'CO', 'TEXT_DOCS', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/zip', 'CO', 'ZIP_DOCS', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/network/retry', 'AR', 'RETRY_DOCS', 'Argentina');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/var/data/invalid', 'CO', 'INVALID_DOCS', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/opt/tech/errors', 'AR', 'ERROR_DOCS', 'Argentina');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/other', 'PE', 'OTHER_DOCS', 'Peru');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/images', 'CL', 'IMAGE_DOCS', 'Chile');
+
+-- Scenarios for categoria_manual
+INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('SC-', 'electrodomestico');
+INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('DOC-', 'ropa');
+INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('TXT-', 'aseo');
+INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('ZIP-', 'zapatos');

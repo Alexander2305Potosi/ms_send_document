@@ -70,7 +70,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .onErrorResume(error -> handleGlobalError(error).flux())
                 .concatMap(response -> {
                     if (response.isTechnicalRetry()) {
-                        return saveAuditOnly(doc, historyDto, response, traceId).then(Mono.empty());
+                        return saveAuditOnly(doc, historyDto, response, traceId).thenReturn(response);
                     } else {
                         return finalizeProcessing(doc, historyDto, response, traceId);
                     }
@@ -85,8 +85,8 @@ public abstract class AbstractDocumentProcessingUseCase {
                         .size(file.getSize())
                         .contentType(file.getContentType())
                         .filename(file.getFilename())
-                        .origin(file.getOrigin())
-                        .pais(file.getPais())
+                        .originFolder(file.getOriginFolder())
+                        .originCountry(file.getOriginCountry())
                         .isZip(file.getIsZip())
                         .build())
                 .flatMapMany(this::decompress)

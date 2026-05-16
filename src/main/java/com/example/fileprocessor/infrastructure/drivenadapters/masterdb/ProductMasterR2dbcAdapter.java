@@ -22,13 +22,15 @@ public class ProductMasterR2dbcAdapter implements ProductMasterRepository {
     @Override
     public Flux<ProductMaestro> getAllProducts() {
         LOGGER.info("Fetching master products from EXTERNAL DATABASE");
-        return masterDatabaseClient.sql("SELECT id, id_producto, nombre, fecha_cargue, estado FROM productos_maestros")
+        return masterDatabaseClient.sql("SELECT id, id_producto, nombre, fecha_cargue, estado, carpeta_origen, pais_origen FROM productos_maestros")
             .map((row, metadata) -> ProductMaestro.builder()
                 .id(row.get("id", Long.class))
                 .productId(row.get("id_producto", String.class))
                 .name(row.get("nombre", String.class))
                 .loadDate(row.get("fecha_cargue", java.time.LocalDateTime.class))
                 .state(row.get("estado", String.class))
+                .originFolder(row.get("carpeta_origen", String.class))
+                .originCountry(row.get("pais_origen", String.class))
                 .build())
             .all();
     }

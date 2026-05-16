@@ -41,6 +41,8 @@ public class SyncDocumentsUseCase {
                 .flatMap(doc -> documentRepository.existsByProductIdAndDocumentId(doc.getProductId(), doc.getDocumentId())
                         .flatMap(exists -> {
                             doc.setUseCase(useCase);
+                            doc.setOriginFolder(product.getOriginFolder());
+                            doc.setOriginCountry(product.getOriginCountry());
                             if (exists) {
                                 doc.setState(ProcessingResultCodes.ERR_DUPLICATED_DOC.name());
                                 doc.setSyncMessage(ProcessingResultCodes.ERR_DUPLICATED_DOC.value());

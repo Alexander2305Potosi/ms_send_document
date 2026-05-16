@@ -26,6 +26,8 @@ public class Document {
     private String syncMessage;
     private Boolean isZip;
     private String useCase;
+    private String originFolder;
+    private String originCountry;
     private LocalDateTime createdAt;
     private Integer retryCount;
 

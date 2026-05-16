@@ -95,8 +95,8 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .contentType(json.getContentType())
                 .size(size)
                 .isZip(json.isZip() || (json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip")))
-                .origin(json.getOrigin())
-                .pais(json.getPais())
+                .originFolder(json.getOriginFolder())
+                .originCountry(json.getOriginCountry())
                 .build();
     }
 

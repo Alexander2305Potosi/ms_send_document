@@ -19,6 +19,6 @@ public class ProductDocumentFile {
     private String contentType;
     private long size;
     private Boolean isZip;
-    private String origin;
-    private String pais;
+    private String originFolder;
+    private String originCountry;
 }
