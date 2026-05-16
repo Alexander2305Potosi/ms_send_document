@@ -54,7 +54,7 @@ class AbstractDocumentProcessingUseCaseTest {
         lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
             .thenReturn(Mono.just(1L));
 
-        lenient().when(persistencePort.finalizeProcessingAtomically(any(), anyInt()))
+        lenient().when(persistencePort.finalizeProcessingAtomically(any()))
             .thenReturn(Mono.empty());
             
         lenient().when(persistencePort.saveHistory(any()))
@@ -89,8 +89,7 @@ class AbstractDocumentProcessingUseCaseTest {
 
         verify(persistencePort).finalizeProcessingAtomically(
             argThat(h -> ProcessingResultCodes.PENDING.name().equals(h.getState()) && h.getRetryCount() == 0 
-                    && h.getSyncStatus().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name())),
-            eq(1)
+                    && h.getSyncStatus().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name()))
         );
     }
 
@@ -118,8 +117,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(h -> ProcessingResultCodes.FAILED.name().equals(h.getState()) && h.getRetryCount() == 3),
-            eq(3)
+            argThat(h -> ProcessingResultCodes.FAILED.name().equals(h.getState()) && h.getRetryCount() == 3)
         );
     }
 
@@ -160,7 +158,7 @@ class AbstractDocumentProcessingUseCaseTest {
 
         ArgumentCaptor<DocumentHistoryDTO> historyCaptor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
         
-        verify(persistencePort).finalizeProcessingAtomically(historyCaptor.capture(), anyInt());
+        verify(persistencePort).finalizeProcessingAtomically(historyCaptor.capture());
         
         assertEquals(ProcessingResultCodes.PROCESSED.name(), historyCaptor.getValue().getState());
         assertNotNull(historyCaptor.getValue().getCompletedAt());
@@ -185,6 +183,6 @@ class AbstractDocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(10));
 
-        verify(persistencePort, times(2)).finalizeProcessingAtomically(any(), anyInt());
+        verify(persistencePort, times(2)).finalizeProcessingAtomically(any());
     }
 }

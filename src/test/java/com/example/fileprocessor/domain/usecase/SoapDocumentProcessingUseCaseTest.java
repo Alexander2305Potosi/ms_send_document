@@ -80,7 +80,7 @@ class SoapDocumentProcessingUseCaseTest {
             .correlationId("soap-corr-123")
             .build()));
 
-        when(persistencePort.finalizeProcessingAtomically(any(), anyInt())).thenReturn(Mono.empty());
+        when(persistencePort.finalizeProcessingAtomically(any())).thenReturn(Mono.empty());
 
         StepVerifier.create(useCase.executePendingDocuments())
             .expectNextMatches(FileUploadResponse::isSuccess)
