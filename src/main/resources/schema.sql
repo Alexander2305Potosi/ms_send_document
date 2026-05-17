@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS documentos (
     es_zip BOOLEAN DEFAULT FALSE,
     caso_uso VARCHAR(50),
     carpeta_origen VARCHAR(255),
-    pais_origen VARCHAR(10),
+    pais_origen VARCHAR(100),
     reintentos INT DEFAULT 0,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_carga_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -31,9 +31,10 @@ CREATE TABLE IF NOT EXISTS historico_documentos (
 CREATE TABLE IF NOT EXISTS pais_homologado (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     carpeta_origen VARCHAR(255),
-    pais_origen VARCHAR(10),
+    pais_origen VARCHAR(100),
     carpeta_homologada VARCHAR(255),
-    pais_homologado VARCHAR(100)
+    pais_homologado VARCHAR(100),
+    aplica_filtro_pais BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS categoria_manual (
@@ -43,19 +44,34 @@ CREATE TABLE IF NOT EXISTS categoria_manual (
 );
 
 -- Data for Local DB
--- 10 Scenarios for pais_homologado
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/standard', 'CO', 'STANDARD_DOCS', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/large', 'CO', 'LARGE_DOCS', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/word', 'CO', 'WORD_DOCS', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/text', 'CO', 'TEXT_DOCS', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/zip', 'CO', 'ZIP_DOCS', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/network/retry', 'AR', 'RETRY_DOCS', 'Argentina');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/var/data/invalid', 'CO', 'INVALID_DOCS', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/opt/tech/errors', 'AR', 'ERROR_DOCS', 'Argentina');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/other', 'PE', 'OTHER_DOCS', 'Peru');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('/mnt/shared/docs/images', 'CL', 'IMAGE_DOCS', 'Chile');
+-- 22 Scenarios for pais_homologado
+DELETE FROM pais_homologado;
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('garantia,oficina', 'colomb,co', 'Manuales Garantía', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('user,usuario', 'mex,mx', 'Manuales de Usuario', 'México');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('tech,tecnico', 'braz,bras,br', 'Manuales Técnicos y Mantenimiento', 'Brasil');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('instal,setup', 'arg', 'Guías de Instalación', 'Argentina');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('seguridad,safe', 'chile,cl', 'Manuales de Seguridad', 'Chile');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('calidad,qa', 'peru,pe', 'Certificados de Calidad', 'Perú');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('garant', 'mex,mx', 'Manuales Garantía', 'México');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('uso,manual', 'colomb,co', 'Manuales de Usuario', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('mantenimiento,maint', 'arg', 'Manuales Técnicos y Mantenimiento', 'Argentina');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('guia,guide', 'braz,bras,br', 'Guías de Instalación', 'Brasil');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('prevencion', 'chile,cl', 'Manuales de Seguridad', 'Chile');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('certificado,cert', 'peru,pe', 'Certificados de Calidad', 'Perú');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('soporte', 'colomb,co', 'Manuales Técnicos y Mantenimiento', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('operacion,ops', 'mex,mx', 'Manuales de Usuario', 'México');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('industrial', 'braz,bras,br', 'Manuales de Seguridad', 'Brasil');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('procesos', 'arg', 'Certificados de Calidad', 'Argentina');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('directrices', 'chile,cl', 'Manuales de Usuario', 'Chile');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('normas,rules', 'peru,pe', 'Manuales de Seguridad', 'Perú');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('fabrica,factory', 'colomb,co', 'Manuales Técnicos y Mantenimiento', 'Colombia');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('comercial', 'mex,mx', 'Manuales de Usuario', 'México');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('cliente', 'braz,bras,br', 'Manuales de Usuario', 'Brasil');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('auditoria', 'arg', 'Certificados de Calidad', 'Argentina');
+INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado, aplica_filtro_pais) VALUES ('*', '*', 'Otros / No Catalogado', 'Internacional / Sin Asignar', FALSE);
 
 -- Scenarios for categoria_manual
+DELETE FROM categoria_manual;
 INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('SC-', 'electrodomestico');
 INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('DOC-', 'ropa');
 INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('TXT-', 'aseo');

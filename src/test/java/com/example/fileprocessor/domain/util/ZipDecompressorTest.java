@@ -19,12 +19,12 @@ class ZipDecompressorTest {
         DocumentHistoryDTO history = DocumentHistoryDTO.builder()
             .productId("prod-1")
             .isZip(false)
-            .pais("AR")
+            .originCountry("AR")
             .businessDocumentId("doc-1")
             .filename("test.pdf")
             .contentType("application/pdf")
             .size(1L)
-            .origin("origin")
+            .originFolder("origin")
             .content(new byte[]{1})
             .build();
 
@@ -43,12 +43,12 @@ class ZipDecompressorTest {
         DocumentHistoryDTO zipHistory = DocumentHistoryDTO.builder()
             .productId("prod-1")
             .isZip(true)
-            .pais("AR")
+            .originCountry("AR")
             .businessDocumentId("doc-1")
             .filename("docs.zip")
             .contentType("application/zip")
             .size((long) zipContent.length)
-            .origin("origin")
+            .originFolder("origin")
             .content(zipContent)
             .build();
 
@@ -59,13 +59,13 @@ class ZipDecompressorTest {
                 assertTrue(doc.getFilename().endsWith("test.pdf"));
                 assertEquals("doc-1/test.pdf", doc.getBusinessDocumentId());
                 assertFalse(Boolean.TRUE.equals(doc.getIsZip()));
-                assertEquals("AR", doc.getPais());
+                assertEquals("AR", doc.getOriginCountry());
             })
             .assertNext(doc -> {
                 assertTrue(doc.getFilename().endsWith("data.csv"));
                 assertEquals("doc-1/data.csv", doc.getBusinessDocumentId());
                 assertFalse(Boolean.TRUE.equals(doc.getIsZip()));
-                assertEquals("AR", doc.getPais());
+                assertEquals("AR", doc.getOriginCountry());
             })
             .verifyComplete();
     }
@@ -77,12 +77,12 @@ class ZipDecompressorTest {
         DocumentHistoryDTO zipHistory = DocumentHistoryDTO.builder()
             .productId("prod-1")
             .isZip(true)
-            .pais("AR")
+            .originCountry("AR")
             .businessDocumentId("doc-1")
             .filename("empty.zip")
             .contentType("application/zip")
             .size((long) emptyZip.length)
-            .origin("origin")
+            .originFolder("origin")
             .content(emptyZip)
             .build();
 

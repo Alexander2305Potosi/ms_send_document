@@ -71,7 +71,7 @@ class SoapMapperTest {
         FileUploadRequest request = FileUploadRequest.builder()
             .filename("test.pdf")
             .content("hello".getBytes())
-            .origin("PORTAL")
+            .originFolder("PORTAL")
             .build();
 
         String xml = soapMapper.buildEnvelope(request, props, "trace-123");
@@ -88,7 +88,7 @@ class SoapMapperTest {
         FileUploadRequest request = FileUploadRequest.builder()
             .filename("test & demo < >.pdf")
             .content("".getBytes())
-            .origin("OR'IGIN")
+            .originFolder("OR'IGIN")
             .build();
 
         String xml = soapMapper.buildEnvelope(request, props, "trace-123");

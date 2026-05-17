@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS productos_maestros (
     nombre VARCHAR(255),
     estado VARCHAR(50),
     carpeta_origen VARCHAR(255),
-    pais_origen VARCHAR(10),
+    pais_origen VARCHAR(100),
     fecha_cargue TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

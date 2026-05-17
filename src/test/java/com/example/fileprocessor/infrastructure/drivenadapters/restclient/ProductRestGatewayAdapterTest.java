@@ -46,7 +46,7 @@ class ProductRestGatewayAdapterTest {
     @Test
     void getDocument_returnsMappedProductDocumentFile() {
         String responseJson = """
-            {"documentId":"doc-1","filename":"test.pdf","content":"VGVzdENvbnRlbnQ=","contentType":"application/pdf","size":12,"isZip":false,"origin":"origin","pais":"AR"}""";
+            {"documentId":"doc-1","filename":"test.pdf","content":"VGVzdENvbnRlbnQ=","contentType":"application/pdf","size":12,"isZip":false,"originFolder":"origin","originCountry":"AR"}""";
 
         mockWebServer.enqueue(new MockResponse()
             .setBody(responseJson)
@@ -59,8 +59,8 @@ class ProductRestGatewayAdapterTest {
                 assertEquals("doc-1", file.getDocumentId());
                 assertEquals("test.pdf", file.getFilename());
                 assertNotNull(file.getContent());
-                assertEquals("origin", file.getOrigin());
-                assertEquals("AR", file.getPais());
+                assertEquals("origin", file.getOriginFolder());
+                assertEquals("AR", file.getOriginCountry());
             })
             .verifyComplete();
     }
@@ -68,7 +68,7 @@ class ProductRestGatewayAdapterTest {
     @Test
     void getDocumentsByProduct_returnsMappedDocuments() {
         String responseJson = """
-            [{"documentId":"doc-1","filename":"test.pdf","content":"VGVzdENvbnRlbnQ=","contentType":"application/pdf","size":12,"isZip":false,"origin":"origin","pais":"AR"}]""";
+            [{"documentId":"doc-1","filename":"test.pdf","content":"VGVzdENvbnRlbnQ=","contentType":"application/pdf","size":12,"isZip":false,"originFolder":"origin","originCountry":"AR"}]""";
 
         mockWebServer.enqueue(new MockResponse()
             .setBody(responseJson)

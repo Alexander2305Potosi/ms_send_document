@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonAlias;
 
 @Getter
 @Setter
@@ -19,6 +20,10 @@ public class ProductDocumentFile {
     private String contentType;
     private long size;
     private Boolean isZip;
+
+    @JsonAlias({"origin", "originFolder"})
     private String originFolder;
+
+    @JsonAlias({"pais", "originCountry"})
     private String originCountry;
 }

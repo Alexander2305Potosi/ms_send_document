@@ -12,12 +12,12 @@ class DocumentValidatorTest {
         return DocumentHistoryDTO.builder()
             .productId("prod-1")
             .isZip(false)
-            .pais("AR")
+            .originCountry("AR")
             .businessDocumentId(documentId)
             .filename(name)
             .contentType(contentType)
             .size(size)
-            .origin("origin")
+            .originFolder("origin")
             .content(new byte[0])
             .build();
     }

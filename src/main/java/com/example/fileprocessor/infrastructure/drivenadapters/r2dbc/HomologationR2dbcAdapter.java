@@ -42,8 +42,8 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
 
     private Mono<HomologationResult> resolveFromCache(DocumentHistoryDTO history) {
         String documentId = history.getBusinessDocumentId() != null ? history.getBusinessDocumentId() : "";
-        String originFolder = history.getOriginFolder();
-        String originCountry = history.getOriginCountry();
+        String originFolder = normalizeText(history.getOriginFolder());
+        String originCountry = normalizeText(history.getOriginCountry());
 
         // 1. Resolve Category by prefix
         String categoriaDocument = documentId; // default to documentId or empty
@@ -54,30 +54,60 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             }
         }
 
-        // 2. Resolve Country and Folder
-        String resolvedHomologationFolder = originFolder;
-        String resolvedHomologationCountry = originCountry;
+        // 2. Resolve Country and Folder by iterating the DB rules
+        String homologationFolder = history.getOriginFolder();
+        String homologationCountry = history.getOriginCountry();
 
         for (PaisHomologado p : paisCache) {
-            boolean folderMatch = (originFolder != null && originFolder.equals(p.originFolder())) || (originFolder == null && p.originFolder() == null);
-            boolean countryMatch = (originCountry != null && originCountry.equals(p.originCountry())) || (originCountry == null && p.originCountry() == null);
+            List<String> folderKeywords = parseKeywords(p.originFolder());
+            List<String> countryKeywords = parseKeywords(p.originCountry());
+
+            boolean folderMatch = containsAny(originFolder, folderKeywords);
+            boolean countryMatch = Boolean.FALSE.equals(p.aplicaFiltroPais()) || containsAny(originCountry, countryKeywords);
 
             if (folderMatch && countryMatch) {
-                resolvedHomologationFolder = p.homologationFolder();
-                resolvedHomologationCountry = p.homologationCountry();
-                break;
+                homologationFolder = p.homologationFolder();
+                homologationCountry = p.homologationCountry();
+                break; // Cortocircuito (Evaluación secuencial)
             }
         }
 
         HomologationCountry hc = HomologationCountry.builder()
-            .homologationFolder(resolvedHomologationFolder)
-            .homologationCountry(resolvedHomologationCountry)
+            .homologationFolder(homologationFolder)
+            .homologationCountry(homologationCountry)
             .build();
 
         return Mono.just(HomologationResult.builder()
             .categoriaDocument(categoriaDocument)
             .homologationCountry(hc)
             .build());
+    }
+
+    private List<String> parseKeywords(String dbValue) {
+        if (dbValue == null || dbValue.isBlank()) return List.of();
+        return java.util.Arrays.stream(dbValue.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
+    }
+
+    private String normalizeText(String text) {
+        if (text == null) return "";
+        return java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase();
+    }
+
+    private boolean containsAny(String text, List<String> keywords) {
+        if (keywords.isEmpty()) return false;
+        if (keywords.size() == 1 && "*".equals(keywords.get(0))) return true;
+        if (text == null || text.isEmpty()) return false;
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Mono<Void> loadCache() {
@@ -94,8 +124,16 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             .then();
 
         Mono<Void> loadPais = paisRepository.findAll()
-            .map(entity -> new PaisHomologado(entity.getOriginFolder(), entity.getOriginCountry(), entity.getHomologationFolder(), entity.getHomologationCountry()))
-            .collectList()
+            .collectSortedList(java.util.Comparator.comparing(PaisHomologadoEntity::getId))
+            .map(list -> list.stream()
+                .map(entity -> new PaisHomologado(
+                    entity.getOriginFolder(),
+                    entity.getOriginCountry(),
+                    entity.getHomologationFolder(),
+                    entity.getHomologationCountry(),
+                    entity.getAplicaFiltroPais()
+                )).toList()
+            )
             .doOnNext(list -> {
                 paisCache.clear();
                 paisCache.addAll(list);

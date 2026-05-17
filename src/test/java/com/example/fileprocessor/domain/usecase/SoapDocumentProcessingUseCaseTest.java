@@ -61,8 +61,8 @@ class SoapDocumentProcessingUseCaseTest {
             .documentId("doc-1")
             .filename("test.pdf")
             .content(new byte[]{1})
-            .origin("origin")
-            .pais("AR")
+            .originFolder("origin")
+            .originCountry("AR")
             .isZip(false)
             .build();
 

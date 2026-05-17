@@ -34,4 +34,7 @@ public class PaisHomologadoEntity {
     @Column("pais_homologado")
     private String homologationCountry;
 
+    @Column("aplica_filtro_pais")
+    private Boolean aplicaFiltroPais;
+
 }
