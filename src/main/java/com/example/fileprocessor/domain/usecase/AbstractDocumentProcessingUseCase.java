@@ -159,6 +159,9 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .syncStatus(response.getSyncStatus())
                 .syncMessage(finalMessage)
                 .completedAt(Instant.now())
+                .homologationFolder(response.getHomologationFolder())
+                .homologationCountry(response.getHomologationCountry())
+                .categoriaHomologada(response.getCategoriaHomologada())
                 .build();
     }
 

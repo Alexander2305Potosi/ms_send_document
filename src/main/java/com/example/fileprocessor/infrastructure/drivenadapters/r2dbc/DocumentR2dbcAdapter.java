@@ -46,6 +46,9 @@ public class DocumentR2dbcAdapter
                 entity.setRetryCount(doc.getRetryCountSafe());
                 entity.setUpdatedAt(LocalDateTime.now());
                 entity.setSyncMessage(doc.getSyncMessage());
+                entity.setHomologationFolder(doc.getHomologationFolder());
+                entity.setHomologationCountry(doc.getHomologationCountry());
+                entity.setCategoriaHomologada(doc.getCategoriaHomologada());
 
                 return repository.save(entity).thenReturn(1L);
             });

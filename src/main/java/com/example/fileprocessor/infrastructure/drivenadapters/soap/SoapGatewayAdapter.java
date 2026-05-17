@@ -53,7 +53,7 @@ public class SoapGatewayAdapter implements SoapGateway {
         return soapWebClient.post()
                 .contentType(MediaType.TEXT_XML)
                 .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
-                .bodyValue(mapper.buildEnvelope(request, properties, traceId))
+                .bodyValue(mapper.buildEnvelope(request, traceId))
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))

@@ -28,6 +28,9 @@ public class Document {
     private String useCase;
     private String originFolder;
     private String originCountry;
+    private String homologationFolder;
+    private String homologationCountry;
+    private String categoriaHomologada;
     private LocalDateTime createdAt;
     private Integer retryCount;
 

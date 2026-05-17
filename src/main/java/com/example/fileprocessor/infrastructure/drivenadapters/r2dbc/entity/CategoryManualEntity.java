@@ -25,7 +25,7 @@ public class CategoryManualEntity {
     @Column("prefijo")
     private String prefijo;
 
-    @Column("categoria_documento")
-    private String categoriaDocumento;
+    @Column("categoria_homologado")
+    private String categoriaHomologado;
 
 }

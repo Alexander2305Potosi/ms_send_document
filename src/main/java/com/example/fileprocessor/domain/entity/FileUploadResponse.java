@@ -23,6 +23,9 @@ public class FileUploadResponse {
     private final String syncStatus;
     private final int attemptCount;
     private final boolean technicalRetry;
+    private final String homologationFolder;
+    private final String homologationCountry;
+    private final String categoriaHomologada;
 
     // Helper method to check success status
     public boolean isSuccess() {

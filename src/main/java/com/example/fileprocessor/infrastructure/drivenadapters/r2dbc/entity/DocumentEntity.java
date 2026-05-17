@@ -54,6 +54,15 @@ public class DocumentEntity {
     @Column("pais_origen")
     private String originCountry;
 
+    @Column("carpeta_homologada")
+    private String homologationFolder;
+
+    @Column("pais_homologado")
+    private String homologationCountry;
+
+    @Column("categoria_homologado")
+    private String categoriaHomologada;
+
     @Column("reintentos")
     private Integer retryCount;
 

@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS documentos (
     caso_uso VARCHAR(50),
     carpeta_origen VARCHAR(255),
     pais_origen VARCHAR(100),
+    carpeta_homologada VARCHAR(255),
+    pais_homologado VARCHAR(100),
+    categoria_homologado VARCHAR(100),
     reintentos INT DEFAULT 0,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_carga_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -40,7 +43,7 @@ CREATE TABLE IF NOT EXISTS pais_homologado (
 CREATE TABLE IF NOT EXISTS categoria_manual (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     prefijo VARCHAR(100) UNIQUE,
-    categoria_documento VARCHAR(100)
+    categoria_homologado VARCHAR(100)
 );
 
 -- Data for Local DB
@@ -72,7 +75,7 @@ INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pa
 
 -- Scenarios for categoria_manual
 DELETE FROM categoria_manual;
-INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('SC-', 'electrodomestico');
-INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('DOC-', 'ropa');
-INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('TXT-', 'aseo');
-INSERT INTO categoria_manual (prefijo, categoria_documento) VALUES ('ZIP-', 'zapatos');
+INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('SC-', 'electrodomestico');
+INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('DOC-', 'ropa');
+INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('TXT-', 'aseo');
+INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('ZIP-', 'zapatos');

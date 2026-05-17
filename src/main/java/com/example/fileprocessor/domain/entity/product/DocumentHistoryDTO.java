@@ -26,6 +26,9 @@ public class DocumentHistoryDTO {
     private String syncMessage;
     private Instant startedAt;
     private Instant completedAt;
+    private String homologationFolder;
+    private String homologationCountry;
+    private String categoriaHomologada;
 
     // Extra information for processing and validations
     private String productId;
@@ -50,6 +53,9 @@ public class DocumentHistoryDTO {
                 .retryCount(doc.getRetryCountSafe())
                 .isZip(doc.getIsZip())
                 .startedAt(Instant.now())
+                .homologationFolder(doc.getHomologationFolder())
+                .homologationCountry(doc.getHomologationCountry())
+                .categoriaHomologada(doc.getCategoriaHomologada())
                 .build();
     }
 }

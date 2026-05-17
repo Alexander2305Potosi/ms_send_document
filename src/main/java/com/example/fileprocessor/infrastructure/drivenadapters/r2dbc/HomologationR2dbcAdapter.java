@@ -49,7 +49,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         String categoriaDocument = documentId; // default to documentId or empty
         for (CategoryManual category : categoryCache) {
             if (documentId.startsWith(category.prefijo())) {
-                categoriaDocument = category.categoriaDocumento();
+                categoriaDocument = category.categoriaHomologado();
                 break;
             }
         }
@@ -114,7 +114,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         log.log(Level.INFO, "Loading homologation cache from database");
 
         Mono<Void> loadCategories = categoryRepository.findAll()
-            .map(entity -> new CategoryManual(entity.getPrefijo(), entity.getCategoriaDocumento()))
+            .map(entity -> new CategoryManual(entity.getPrefijo(), entity.getCategoriaHomologado()))
             .collectList()
             .doOnNext(list -> {
                 categoryCache.clear();

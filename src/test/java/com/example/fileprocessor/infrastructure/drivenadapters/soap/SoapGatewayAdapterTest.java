@@ -78,7 +78,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void send_whenSuccessful_returnsSuccessResult() {
-        when(mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         when(mapper.parseResponse(anyString(), anyString())).thenReturn(
             FileUploadResponse.builder()
                 .status("OK")
@@ -104,7 +104,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void send_whenTimeout_returnsGatewayTimeout() {
-        when(mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         mockWebClientError(new TimeoutException("Read timeout"));
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
@@ -120,7 +120,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void send_whenHttp500WithSoapFault_parsesFaultFromBody() {
-        when(mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         
         WebClientResponseException ex = WebClientResponseException.create(
             500, "Internal Server Error", null, "<Fault>Error</Fault>".getBytes(), null
@@ -147,7 +147,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void send_whenGenericError_returnsUnknownError() {
-        when(mapper.buildEnvelope(any(), any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         mockWebClientError(new RuntimeException("Fatal failure"));
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())

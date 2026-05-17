@@ -7,10 +7,10 @@ import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelope;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.SoapFaultDetail;
 import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.TransmitirDocumentoResponse;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry;
+import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Marshaller;
@@ -60,16 +60,16 @@ public class SoapMapper {
             try (InputStream is = resource.getInputStream()) {
                 String rawTemplate = new String(is.readAllBytes(), StandardCharsets.UTF_8);
                 this.xmlTemplate = rawTemplate
-                    .replace(SoapConstants.T_NS_STD, props.soapNamespace())
-                    .replace(SoapConstants.T_NS_BODY, props.bodyNamespace())
-                    .replace(SoapConstants.T_NS_ENV, props.headerNamespace())
-                    .replace(SoapConstants.T_SYSTEM_ID, props.systemId())
-                    .replace(SoapConstants.T_USER_NAME, Objects.requireNonNullElse(props.userName(), ""))
-                    .replace(SoapConstants.T_USER_TOKEN, Objects.requireNonNullElse(props.userToken(), ""))
-                    .replace(SoapConstants.T_DEST_NAME, Objects.requireNonNullElse(props.destinationName(), ""))
-                    .replace(SoapConstants.T_DEST_NS, Objects.requireNonNullElse(props.destinationNamespace(), ""))
-                    .replace(SoapConstants.T_DEST_OP, Objects.requireNonNullElse(props.destinationOperation(), ""))
-                    .replace(SoapConstants.T_CLASS, Objects.requireNonNullElse(props.classification(), ""));
+                        .replace(SoapConstants.T_NS_STD, props.soapNamespace())
+                        .replace(SoapConstants.T_NS_BODY, props.bodyNamespace())
+                        .replace(SoapConstants.T_NS_ENV, props.headerNamespace())
+                        .replace(SoapConstants.T_SYSTEM_ID, props.systemId())
+                        .replace(SoapConstants.T_USER_NAME, Objects.requireNonNullElse(props.userName(), ""))
+                        .replace(SoapConstants.T_USER_TOKEN, Objects.requireNonNullElse(props.userToken(), ""))
+                        .replace(SoapConstants.T_DEST_NAME, Objects.requireNonNullElse(props.destinationName(), ""))
+                        .replace(SoapConstants.T_DEST_NS, Objects.requireNonNullElse(props.destinationNamespace(), ""))
+                        .replace(SoapConstants.T_DEST_OP, Objects.requireNonNullElse(props.destinationOperation(), ""))
+                        .replace(SoapConstants.T_CLASS, Objects.requireNonNullElse(props.classification(), ""));
                 LOGGER.info("SOAP Template loaded successfully");
             }
         } catch (Exception e) {
@@ -78,29 +78,45 @@ public class SoapMapper {
         }
     }
 
-    public String buildEnvelope(FileUploadRequest request, SoapProperties properties, String traceId) {
+    public String buildEnvelope(FileUploadRequest request, String traceId) {
         try {
-            String base64Content = request.getContent() != null ? Base64.getEncoder().encodeToString(request.getContent()) : "";
+            String base64Content = request.getContent() != null
+                    ? Base64.getEncoder().encodeToString(request.getContent())
+                    : "";
             String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
-            String safeOrigin = escapeXml(request.getOriginFolder());
+            String subTipo = request.getHomologationFolder() != null ? request.getHomologationFolder()
+                    : request.getOriginFolder();
+            String safeSubtype = escapeXml(subTipo);
+
+            java.util.Map<String, String> dynamicMetadata = new java.util.HashMap<>(props.metaData());
+            if (request.getCategoriaDocument() != null) {
+                dynamicMetadata.put("categoriaHomologada", request.getCategoriaDocument());
+            }
+            if (request.getHomologationCountry() != null) {
+                dynamicMetadata.put("paisHomologado", request.getHomologationCountry());
+            }
+            if (request.getHomologationFolder() != null) {
+                dynamicMetadata.put("carpetaHomologada", request.getHomologationFolder());
+            }
 
             return this.xmlTemplate
-                .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
-                .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
-                .replace(SoapConstants.T_SUBTYPE, safeOrigin)
-                .replace(SoapConstants.T_FILENAME, safeFilename)
-                .replace(SoapConstants.T_CONTENT, base64Content)
-                .replace(SoapConstants.T_METADATA, !props.metaData().isEmpty() ? generateMetadataXml(props.metaData()) : "");
+                    .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
+                    .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
+                    .replace(SoapConstants.T_SUBTYPE, safeSubtype)
+                    .replace(SoapConstants.T_FILENAME, safeFilename)
+                    .replace(SoapConstants.T_CONTENT, base64Content)
+                    .replace(SoapConstants.T_METADATA,
+                            !dynamicMetadata.isEmpty() ? generateMetadataXml(dynamicMetadata) : "");
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error building SOAP envelope", e);
-            throw ProcessingException.withTraceId("Build failed", ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId, e);
+            throw ProcessingException.withTraceId("Build failed", ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId,
+                    e);
         }
     }
 
     private String generateMetadataXml(Map<String, String> metaData) throws Exception {
         MetaDataWrapper wrapper = new MetaDataWrapper(
-            metaData.entrySet().stream().map(e -> new MetaDataEntry(e.getKey(), e.getValue())).toList()
-        );
+                metaData.entrySet().stream().map(e -> new MetaDataEntry(e.getKey(), e.getValue())).toList());
         StringWriter sw = new StringWriter();
         Marshaller marshaller = jaxbContext.createMarshaller();
         marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.TRUE);
@@ -109,14 +125,16 @@ public class SoapMapper {
     }
 
     private String escapeXml(String value) {
-        if (value == null) return "";
-        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
+        if (value == null)
+            return "";
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 
     public FileUploadResponse parseResponse(String xml, String traceId) {
         try {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
-            
+
             try {
                 SoapEnvelope envelope = (SoapEnvelope) unmarshaller.unmarshal(new StringReader(xml));
                 if (envelope != null && envelope.getBody() != null && envelope.getBody().getAny() != null) {
@@ -142,21 +160,24 @@ public class SoapMapper {
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
-            
+
             NodeList faults = doc.getElementsByTagNameNS("*", "Fault");
-            if (faults.getLength() == 0) faults = doc.getElementsByTagName("Fault");
-            
+            if (faults.getLength() == 0)
+                faults = doc.getElementsByTagName("Fault");
+
             if (faults.getLength() > 0) {
                 return handleSoapFault((Element) faults.item(0), unmarshaller, traceId);
             }
 
-            throw new ProcessingException("Unknown SOAP response structure", ProcessingResultCodes.INVALID_RESPONSE.name());
+            throw new ProcessingException("Unknown SOAP response structure",
+                    ProcessingResultCodes.INVALID_RESPONSE.name());
 
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fatal error parsing SOAP response for traceId=" + traceId, e);
-            throw ProcessingException.withTraceId("Parse failed", ProcessingResultCodes.INVALID_RESPONSE.name(), traceId, e);
+            throw ProcessingException.withTraceId("Parse failed", ProcessingResultCodes.INVALID_RESPONSE.name(),
+                    traceId, e);
         }
     }
 
@@ -182,15 +203,16 @@ public class SoapMapper {
     private FileUploadResponse mapToExternalResponse(TransmitirDocumentoResponse response) {
         String status = Objects.requireNonNullElse(response.getStatus(), "SUCCESS");
         boolean isSuccess = "OK".equalsIgnoreCase(status) || "SUCCESS".equalsIgnoreCase(status);
-        
+
         return FileUploadResponse.builder()
-            .status(status)
-            .message(Objects.requireNonNullElse(response.getMessage(), "Success"))
-            .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), "N/A"))
-            .processedAt(response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now())
-            .externalReference(response.getExternalReference())
-            .success(isSuccess)
-            .build();
+                .status(status)
+                .message(Objects.requireNonNullElse(response.getMessage(), "Success"))
+                .correlationId(Objects.requireNonNullElse(response.getCorrelationId(), "N/A"))
+                .processedAt(
+                        response.getProcessedAt() != null ? Instant.parse(response.getProcessedAt()) : Instant.now())
+                .externalReference(response.getExternalReference())
+                .success(isSuccess)
+                .build();
     }
 
     private FileUploadResponse handleSoapFault(Element faultElement, Unmarshaller unmarshaller, String traceId) {
@@ -203,56 +225,63 @@ public class SoapMapper {
             if (detailNode != null) {
                 try {
                     SoapFaultDetail faultDetail = unmarshaller.unmarshal(detailNode, SoapFaultDetail.class).getValue();
-                    if (faultDetail != null && faultDetail.getSystemException() != null 
-                        && faultDetail.getSystemException().getGenericException() != null) {
-                        
+                    if (faultDetail != null && faultDetail.getSystemException() != null
+                            && faultDetail.getSystemException().getGenericException() != null) {
+
                         var genEx = faultDetail.getSystemException().getGenericException();
-                        if (genEx.getCode() != null) syncStatus = genEx.getCode();
-                        if (genEx.getDescription() != null) faultString = genEx.getDescription();
+                        if (genEx.getCode() != null)
+                            syncStatus = genEx.getCode();
+                        if (genEx.getDescription() != null)
+                            faultString = genEx.getDescription();
                     }
                 } catch (Exception e) {
                     LOGGER.log(Level.FINE, "SoapFaultDetail unmarshal failed, falling back to manual extraction");
                 }
             }
-            
-            // 2. Fallback manual: Búsqueda agresiva de etiquetas code/description en todo el árbol
+
+            // 2. Fallback manual: Búsqueda agresiva de etiquetas code/description en todo
+            // el árbol
             if (syncStatus.equals(ProcessingResultCodes.SOAP_ERROR.name())) {
                 String directCode = extractTextContentRecursive(faultElement, "code");
-                if (directCode != null) syncStatus = directCode;
+                if (directCode != null)
+                    syncStatus = directCode;
             }
-            
+
             if (faultString.equals("SOAP Fault received") || faultString.isBlank()) {
                 String directDesc = extractTextContentRecursive(faultElement, "description");
                 if (directDesc != null) {
                     faultString = directDesc;
                 } else {
                     String faultStringStandard = extractTextContentRecursive(faultElement, "faultstring");
-                    if (faultStringStandard != null) faultString = faultStringStandard;
+                    if (faultStringStandard != null)
+                        faultString = faultStringStandard;
                 }
             }
-            
+
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error during Fault extraction for traceId=" + traceId, e);
         }
 
         return FileUploadResponse.builder()
-            .status(ProcessingResultCodes.FAILURE.name())
-            .message(faultString)
-            .correlationId(syncStatus)
-            .processedAt(Instant.now())
-            .success(false)
-            .syncStatus(ProcessingResultCodes.SOAP_ERROR.name())
-            .traceId(traceId)
-            .build();
+                .status(ProcessingResultCodes.FAILURE.name())
+                .message(faultString)
+                .correlationId(syncStatus)
+                .processedAt(Instant.now())
+                .success(false)
+                .syncStatus(ProcessingResultCodes.SOAP_ERROR.name())
+                .traceId(traceId)
+                .build();
     }
 
     /**
-     * Busca recursivamente el contenido de texto de una etiqueta por su nombre local en cualquier nivel.
+     * Busca recursivamente el contenido de texto de una etiqueta por su nombre
+     * local en cualquier nivel.
      */
     private String extractTextContentRecursive(Element parent, String localName) {
         NodeList nodes = parent.getElementsByTagNameNS("*", localName);
-        if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
-        
+        if (nodes.getLength() == 0)
+            nodes = parent.getElementsByTagName(localName);
+
         if (nodes.getLength() > 0) {
             return nodes.item(0).getTextContent();
         }
@@ -264,7 +293,8 @@ public class SoapMapper {
      */
     private Node findNodeRecursive(Element parent, String localName) {
         NodeList nodes = parent.getElementsByTagNameNS("*", localName);
-        if (nodes.getLength() == 0) nodes = parent.getElementsByTagName(localName);
+        if (nodes.getLength() == 0)
+            nodes = parent.getElementsByTagName(localName);
         return (nodes.getLength() > 0) ? nodes.item(0) : null;
     }
 }

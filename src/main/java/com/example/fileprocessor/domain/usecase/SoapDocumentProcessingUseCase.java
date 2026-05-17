@@ -36,8 +36,15 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     @Override
     protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
         return homologationRepository.resolve(history)
-                .map(h -> FileUploadRequest.from(history, docId, h))
-                .flatMapMany(request -> soapGateway.send(request))
+                .flatMapMany(h -> {
+                    FileUploadRequest request = FileUploadRequest.from(history, docId, h);
+                    return soapGateway.send(request)
+                            .map(resp -> resp.toBuilder()
+                                    .homologationFolder(h.homologationCountry() != null ? h.homologationCountry().homologationFolder() : null)
+                                    .homologationCountry(h.homologationCountry() != null ? h.homologationCountry().homologationCountry() : null)
+                                    .categoriaHomologada(h.categoriaDocument())
+                                    .build());
+                })
                 .onErrorResume(e -> {
                     LOGGER.log(Level.SEVERE, "SOAP fatal failure for docId {0}: {1}",
                             new Object[] { docId, e.getMessage() });

@@ -46,6 +46,9 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
                 .state(history.getState())
                 .retryCount(history.getRetryCount())
                 .syncMessage(history.getSyncMessage())
+                .homologationFolder(history.getHomologationFolder())
+                .homologationCountry(history.getHomologationCountry())
+                .categoriaHomologada(history.getCategoriaHomologada())
                 .build();
 
         return documentRepository.updateStateAndRetry(doc, initialState)

@@ -74,7 +74,7 @@ class SoapMapperTest {
             .originFolder("PORTAL")
             .build();
 
-        String xml = soapMapper.buildEnvelope(request, props, "trace-123");
+        String xml = soapMapper.buildEnvelope(request, "trace-123");
 
         assertNotNull(xml);
         assertTrue(xml.contains("trace-123"), "Debe contener el traceId");
@@ -91,7 +91,7 @@ class SoapMapperTest {
             .originFolder("OR'IGIN")
             .build();
 
-        String xml = soapMapper.buildEnvelope(request, props, "trace-123");
+        String xml = soapMapper.buildEnvelope(request, "trace-123");
 
         assertTrue(xml.contains("test &amp; demo &lt; &gt;.pdf"), "Debe escapar caracteres especiales en el nombre");
         assertTrue(xml.contains("OR&apos;IGIN"), "Debe escapar comillas");
@@ -189,7 +189,7 @@ class SoapMapperTest {
         when(props.metaData()).thenReturn(Map.of("KEY1", "VAL1", "KEY2", "VAL2"));
         FileUploadRequest request = FileUploadRequest.builder().filename("test.pdf").content("".getBytes()).build();
 
-        String xml = soapMapper.buildEnvelope(request, props, "trace-meta");
+        String xml = soapMapper.buildEnvelope(request, "trace-meta");
 
         assertTrue(xml.contains("<tiposMetaData>"), "Debe contener etiquetas tiposMetaData");
         assertTrue(xml.contains("<nombre>KEY1</nombre>"), "Debe contener el nombre de la clave 1");
