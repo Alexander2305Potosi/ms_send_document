@@ -25,7 +25,19 @@
             <subTipoDocumental>{{subTipo}}</subTipoDocumental>
             <nombreArchivo>{{filename}}</nombreArchivo>
             <archivo>{{base64Content}}</archivo>
-            {{METADATA_BLOCK}}
+            <categoriaHomologada>{{categoriaHomologada}}</categoriaHomologada>
+            <paisHomologado>{{paisHomologado}}</paisHomologado>
+            <carpetaHomologada>{{carpetaHomologada}}</carpetaHomologada>
+            <metaData>
+                <tiposMetaData>
+                    <nombre>{{metaNameFecha}}</nombre>
+                    <valor>{{fecha}}</valor>
+                </tiposMetaData>
+                <tiposMetaData>
+                    <nombre>{{metaNameComentario}}</nombre>
+                    <valor>{{comentario}}</valor>
+                </tiposMetaData>
+            </metaData>
         </v1:transmitirDocumentoRequest>
     </soapenv:Body>
 </soapenv:Envelope>
