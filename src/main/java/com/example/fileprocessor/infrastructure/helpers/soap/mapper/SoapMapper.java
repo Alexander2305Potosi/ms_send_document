@@ -133,7 +133,7 @@ public class SoapMapper {
                 responseNodes = doc.getElementsByTagName(SoapConstants.EL_TRANSMITIR_DOCUMENTO_RESPONSE);
             }
             if (responseNodes.getLength() > 0) {
-                return mapFromElement((Element) responseNodes.item(0));
+                return mapFromElement(doc.getDocumentElement());
             }
 
             throw new ProcessingException("Unknown SOAP response structure",
@@ -149,21 +149,52 @@ public class SoapMapper {
     }
 
     private FileUploadResponse mapFromElement(Element el) {
-        String status = extractTextContentRecursive(el, "status");
-        String message = extractTextContentRecursive(el, "message");
-        String correlationId = extractTextContentRecursive(el, "correlationId");
-        String processedAt = extractTextContentRecursive(el, "processedAt");
-        String externalReference = extractTextContentRecursive(el, "externalReference");
+        String status = extractTextContentRecursive(el, SoapConstants.EL_STATUS);
+        if (status == null) {
+            status = extractTextContentRecursive(el, SoapConstants.EL_STATUS_CODE);
+        }
 
-        boolean isSuccess = "OK".equalsIgnoreCase(status) || "SUCCESS".equalsIgnoreCase(status);
+        String message = extractTextContentRecursive(el, SoapConstants.EL_MESSAGE);
+
+        String correlationId = extractTextContentRecursive(el, SoapConstants.EL_CORRELATION_ID);
+        if (correlationId == null) {
+            correlationId = extractTextContentRecursive(el, SoapConstants.EL_MESSAGE_ID);
+        }
+
+        String processedAt = extractTextContentRecursive(el, SoapConstants.EL_PROCESSED_AT);
+
+        String externalReference = extractTextContentRecursive(el, SoapConstants.EL_EXTERNAL_REFERENCE);
+        if (externalReference == null) {
+            externalReference = extractTextContentRecursive(el, SoapConstants.EL_ID_DOCUMENTO);
+        }
+
+        boolean isSuccess = SoapConstants.STATUS_OK.equalsIgnoreCase(status) || ProcessingResultCodes.SUCCESS.name().equalsIgnoreCase(status);
+
+        String finalStatus = status != null ? status : ProcessingResultCodes.SUCCESS.name();
+        String finalCorrelationId = correlationId != null ? correlationId : "N/A";
+        String finalExternalReference = externalReference != null ? externalReference : "N/A";
+
+        String finalMessage;
+        if (isSuccess) {
+            if (message != null && !message.isBlank()) {
+                finalMessage = String.format("statusCode: %s, messageId: %s, idDocumento: %s | message: %s",
+                        finalStatus, finalCorrelationId, finalExternalReference, message);
+            } else {
+                finalMessage = String.format("statusCode: %s, messageId: %s, idDocumento: %s",
+                        finalStatus, finalCorrelationId, finalExternalReference);
+            }
+        } else {
+            finalMessage = message != null ? message : ProcessingResultCodes.FAILURE.name();
+        }
 
         return FileUploadResponse.builder()
-                .status(status != null ? status : "SUCCESS")
-                .message(message != null ? message : "Success")
-                .correlationId(correlationId != null ? correlationId : "N/A")
+                .status(finalStatus)
+                .message(finalMessage)
+                .correlationId(finalCorrelationId)
                 .processedAt(processedAt != null ? Instant.parse(processedAt) : Instant.now())
                 .externalReference(externalReference)
                 .success(isSuccess)
+                .syncStatus(finalStatus)
                 .build();
     }
 

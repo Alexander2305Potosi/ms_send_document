@@ -45,6 +45,15 @@ public final class SoapConstants {
     public static final String EL_HEADER = "Header";
     public static final String EL_BODY = "Body";
     public static final String EL_TRANSMITIR_DOCUMENTO_RESPONSE = "transmitirDocumentoResponse";
+    public static final String EL_STATUS = "status";
+    public static final String EL_STATUS_CODE = "statusCode";
+    public static final String EL_MESSAGE = "message";
+    public static final String EL_CORRELATION_ID = "correlationId";
+    public static final String EL_MESSAGE_ID = "messageId";
+    public static final String EL_PROCESSED_AT = "processedAt";
+    public static final String EL_EXTERNAL_REFERENCE = "externalReference";
+    public static final String EL_ID_DOCUMENTO = "idDocumento";
+    public static final String STATUS_OK = "OK";
 
     // Namespaces para JAXB (Utilizados en parseo de respuesta)
     public static final String PREFIX_SOAPENV = "soapenv";

@@ -102,7 +102,37 @@ class SoapMapperTest {
         assertNotNull(response);
         assertTrue(response.isSuccess(), "Debe ser exitosa");
         assertEquals("CORR-1", response.getCorrelationId());
-        assertEquals("Procesado", response.getMessage());
+        assertEquals("statusCode: OK, messageId: CORR-1, idDocumento: N/A | message: Procesado", response.getMessage());
+    }
+
+    @Test
+    @DisplayName("Debe parsear la respuesta exitosa real")
+    void parseResponse_withRealSuccessXml_returnsResponse() {
+        String xml = """
+            <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
+               <S:Header>
+                  <ns2:responseHeader xmlns:ns2="fsdfds" xmlns:ns3="dfsfdsf">
+                     <systemId>fdsfdsfds</systemId>
+                     <messageId>fdsfsdf</messageId>
+                     <responseStatus>
+                        <statusCode>Success</statusCode>
+                     </responseStatus>
+                  </ns2:responseHeader>
+               </S:Header>
+               <S:Body>
+                  <ns3:transmitirDocumentoResponse xmlns:ns2="fsdfds" xmlns:ns3="dfsfdsf">
+                     <idDocumento>fsdfds-ffsdfds</idDocumento>
+                  </ns3:transmitirDocumentoResponse>
+               </S:Body>
+            </S:Envelope>
+            """;
+
+        FileUploadResponse response = soapMapper.parseResponse(xml, "trace-1");
+
+        assertNotNull(response);
+        assertTrue(response.isSuccess(), "Debe marcar success=true");
+        assertEquals("fsdfds-ffsdfds", response.getExternalReference());
+        assertEquals("statusCode: Success, messageId: fdsfsdf, idDocumento: fsdfds-ffsdfds", response.getMessage());
     }
 
     @Test
@@ -199,7 +229,7 @@ class SoapMapperTest {
 
         assertNotNull(response);
         assertEquals("SUCCESS", response.getStatus());
-        assertEquals("Manual mapping works", response.getMessage());
+        assertEquals("statusCode: SUCCESS, messageId: MANUAL-1, idDocumento: REF-1 | message: Manual mapping works", response.getMessage());
         assertEquals("MANUAL-1", response.getCorrelationId());
         assertEquals("REF-1", response.getExternalReference());
     }
