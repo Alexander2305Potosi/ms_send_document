@@ -47,10 +47,16 @@ until grep -q "Document sync completed" "$SCRIPT_DIR/ms.log"; do
 done
 echo "   Sync completed!"
 
-echo "4. Processing Documents (GET /products)..."
+echo "4. Processing Documents - FIRST RUN (GET /products)..."
 curl -s "$MS_URL/api/v1/products?processor=soap" > /dev/null
-echo "   Processing triggered. Waiting for all tasks to finish (including retries)..."
-sleep 150
+echo "   First run completed! Waiting 5s before next run..."
+sleep 5
+
+echo "--- SECOND RUN LOGS START HERE ---" >> "$SCRIPT_DIR/ms.log"
+
+echo "5. Processing Documents - SECOND RUN (GET /products)..."
+curl -s "$MS_URL/api/v1/products?processor=soap" > /dev/null
+echo "   Second run completed!"
 
 echo ""
 echo "===================================================="

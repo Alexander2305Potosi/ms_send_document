@@ -155,6 +155,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .state(state)
                 .useCase(doc.getUseCase())
                 .retryCount(realRetries)
+                .businessRetryCount(doc.getRetryCountSafe())
                 .filename(actualFilename)
                 .syncStatus(response.getSyncStatus())
                 .syncMessage(finalMessage)

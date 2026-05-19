@@ -21,6 +21,7 @@ public class DocumentHistoryDTO {
     private String state;
     private String useCase;
     private Integer retryCount;
+    private Integer businessRetryCount;
     private String filename;
     private String syncStatus;
     private String syncMessage;
@@ -51,6 +52,7 @@ public class DocumentHistoryDTO {
                 .filename(doc.getName())
                 .useCase(doc.getUseCase())
                 .retryCount(doc.getRetryCountSafe())
+                .businessRetryCount(doc.getRetryCountSafe())
                 .isZip(doc.getIsZip())
                 .startedAt(Instant.now())
                 .homologationFolder(doc.getHomologationFolder())

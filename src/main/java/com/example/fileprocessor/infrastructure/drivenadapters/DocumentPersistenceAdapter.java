@@ -33,6 +33,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
         Document doc = new Document();
         doc.setId(id);
         doc.setState(ProcessingResultCodes.IN_PROGRESS.name());
+        doc.setRetryCount(currentRetry);
         
         return documentRepository.updateStateAndRetry(doc, ProcessingResultCodes.PENDING.name());
     }
@@ -44,7 +45,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
         Document doc = Document.builder()
                 .id(history.getDocumentId())
                 .state(history.getState())
-                .retryCount(history.getRetryCount())
+                .retryCount(history.getBusinessRetryCount())
                 .syncMessage(history.getSyncMessage())
                 .homologationFolder(history.getHomologationFolder())
                 .homologationCountry(history.getHomologationCountry())
