@@ -5,12 +5,6 @@ import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapBody;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelope;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapHeader;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.SoapFaultDetail;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.TransmitirDocumentoResponse;
-import jakarta.xml.bind.JAXBContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,21 +23,11 @@ import static org.mockito.Mockito.when;
 class SoapMapperTest {
 
     private SoapMapper soapMapper;
-    private JAXBContext jaxbContext;
     private SoapProperties props;
     private ResourceLoader resourceLoader;
 
     @BeforeEach
     void setUp() throws Exception {
-        jaxbContext = JAXBContext.newInstance(
-            SoapEnvelope.class,
-            SoapHeader.class,
-            SoapBody.class,
-            TransmitirDocumentoResponse.class,
-            SoapFaultDetail.class,
-            com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataWrapper.class,
-            com.example.fileprocessor.infrastructure.helpers.soap.xml.model.body.MetaDataEntry.class
-        );
         props = Mockito.mock(SoapProperties.class);
         resourceLoader = Mockito.mock(ResourceLoader.class);
 
@@ -57,11 +41,11 @@ class SoapMapperTest {
         when(props.metaData()).thenReturn(Map.of());
 
         // Template mock
-        String template = "TEMPLATE {{traceId}} {{filename}} {{base64Content}} {{subTipo}} {{METADATA_BLOCK}}";
+        String template = "TEMPLATE {{traceId}} {{filename}} {{base64Content}} {{subTipo}} {{categoriaHomologada}} {{paisHomologado}} {{carpetaHomologada}} {{metaNameFecha}} {{fecha}} {{metaNameComentario}} {{comentario}}";
         Resource res = new ByteArrayResource(template.getBytes());
         when(resourceLoader.getResource(anyString())).thenReturn(res);
 
-        soapMapper = new SoapMapper(jaxbContext, props, resourceLoader);
+        soapMapper = new SoapMapper(props, resourceLoader);
         soapMapper.init();
     }
 
@@ -148,8 +132,8 @@ class SoapMapperTest {
 
         assertEquals("FAILURE", response.getStatus());
         assertEquals("1421", response.getCorrelationId());
-        assertEquals("El parámetro archivo es obligatorio.", response.getMessage());
-        assertEquals(ProcessingResultCodes.SOAP_ERROR.name(), response.getSyncStatus());
+        assertEquals("1421 - El parámetro archivo es obligatorio.", response.getMessage());
+        assertEquals("SOAP_ERROR", response.getSyncStatus());
     }
 
     @Test
@@ -184,18 +168,16 @@ class SoapMapperTest {
     }
 
     @Test
-    @DisplayName("Debe generar el bloque de metadatos correctamente")
-    void buildEnvelope_withMetadata_generatesMetadataBlock() {
-        when(props.metaData()).thenReturn(Map.of("KEY1", "VAL1", "KEY2", "VAL2"));
+    @DisplayName("Debe generar el bloque de metadatos estáticos correctamente")
+    void buildEnvelope_withMetadata_generatesFixedMetadataBlock() {
         FileUploadRequest request = FileUploadRequest.builder().filename("test.pdf").content("".getBytes()).build();
 
         String xml = soapMapper.buildEnvelope(request, "trace-meta");
 
-        assertTrue(xml.contains("<tiposMetaData>"), "Debe contener etiquetas tiposMetaData");
-        assertTrue(xml.contains("<nombre>KEY1</nombre>"), "Debe contener el nombre de la clave 1");
-        assertTrue(xml.contains("<valor>VAL1</valor>"), "Debe contener el valor 1");
+        assertTrue(xml.contains("Bfecha"), "Debe contener la constante Bfecha para la metadata de la fecha");
+        assertTrue(xml.contains("Bcomentario"), "Debe contener la constante Bcomentario");
+        assertTrue(xml.contains("Procesamiento automatico"), "Debe contener el valor del comentario por defecto");
     }
-
     @Test
     @DisplayName("Debe mappear manualmente si JAXB falla pero el elemento es el correcto")
     void parseResponse_withManualMapping_returnsResponse() {
@@ -242,7 +224,7 @@ class SoapMapperTest {
     @DisplayName("Debe manejar errores de inicialización del template")
     void init_withInvalidResource_throwsRuntimeException() {
         when(resourceLoader.getResource(anyString())).thenReturn(null);
-        SoapMapper mapper = new SoapMapper(jaxbContext, props, resourceLoader);
+        SoapMapper mapper = new SoapMapper(props, resourceLoader);
         
         assertThrows(RuntimeException.class, mapper::init);
     }

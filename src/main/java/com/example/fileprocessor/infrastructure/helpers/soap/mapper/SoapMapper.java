@@ -169,12 +169,12 @@ public class SoapMapper {
 
     private FileUploadResponse handleSoapFault(Element faultElement, String traceId) {
         String faultString = "SOAP Fault received";
-        String syncStatus = ProcessingResultCodes.SOAP_ERROR.name();
+        String extractedCode = "";
 
         try {
             String directCode = extractTextContentRecursive(faultElement, "code");
             if (directCode != null)
-                syncStatus = directCode;
+                extractedCode = directCode;
 
             String directDesc = extractTextContentRecursive(faultElement, "description");
             if (directDesc != null) {
@@ -188,10 +188,12 @@ public class SoapMapper {
             LOGGER.log(Level.WARNING, "Error during Fault extraction for traceId=" + traceId, e);
         }
 
+        String finalMessage = extractedCode.isBlank() ? faultString : extractedCode + " - " + faultString;
+
         return FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILURE.name())
-                .message(faultString)
-                .correlationId(syncStatus)
+                .message(finalMessage)
+                .correlationId(extractedCode.isBlank() ? ProcessingResultCodes.SOAP_ERROR.name() : extractedCode)
                 .processedAt(Instant.now())
                 .success(false)
                 .syncStatus(ProcessingResultCodes.SOAP_ERROR.name())
