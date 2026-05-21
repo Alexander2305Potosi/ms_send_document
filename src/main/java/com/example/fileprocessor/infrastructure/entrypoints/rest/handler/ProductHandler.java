@@ -40,24 +40,18 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
-        String processorType = request.queryParam(ApiConstants.PARAM_PROCESSOR)
-            .map(String::toLowerCase)
-            .orElse(ApiConstants.PROCESSOR_SOAP);
-
         var headers = request.headers().asHttpHeaders().toSingleValueMap();
-        String typeJobValue = request.pathVariables().containsKey(TYPE_JOB)
-            ? request.pathVariable(TYPE_JOB)
-            : "default";
 
         Context context = Context.of(
-            TYPE_JOB, typeJobValue,
+            TYPE_JOB, request.pathVariables().containsKey(TYPE_JOB) ? request.pathVariable(TYPE_JOB) : "default",
             HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
             HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default")
         );
 
         return Mono.deferContextual(ctx -> {
+            String useCase = ctx.get(TYPE_JOB);
             String traceId = ctx.get(HEADER_TRACE_ID);
-            var results = getProcessor(processorType).executePendingDocuments()
+            var results = getProcessor(useCase).executePendingDocuments()
                 .doOnNext(result -> LOGGER.log(Level.INFO, "Document processed: correlationId={0}, status={1}",
                     new Object[]{result.getCorrelationId(), result.getStatus()}))
                 .doOnError(error -> LOGGER.log(Level.SEVERE, "Processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}));
@@ -70,14 +64,11 @@ public class ProductHandler {
 
     public Mono<ServerResponse> syncProducts(ServerRequest request) {
         var headers = request.headers().asHttpHeaders().toSingleValueMap();
-        String typeJobValue = request.pathVariables().containsKey(TYPE_JOB)
-            ? request.pathVariable(TYPE_JOB)
-            : "default";
 
         Context context = Context.of(
-            TYPE_JOB, typeJobValue,
-            HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
-            HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default")
+                TYPE_JOB, request.pathVariables().containsKey(TYPE_JOB) ? request.pathVariable(TYPE_JOB) : "default",
+                HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
+                HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default")
         );
 
         return Mono.deferContextual(ctx -> {

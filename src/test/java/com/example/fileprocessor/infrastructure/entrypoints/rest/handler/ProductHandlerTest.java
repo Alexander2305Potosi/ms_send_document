@@ -65,6 +65,12 @@ class ProductHandlerTest {
         httpHeaders.add(ApiConstants.HEADER_USE_CASE, "default");
         when(headers.asHttpHeaders()).thenReturn(httpHeaders);
 
+        java.util.Map<String, String> pathVars = new java.util.HashMap<>();
+        String expectedProcessor = (processorParam != null) ? processorParam : ApiConstants.PROCESSOR_SOAP;
+        pathVars.put(ApiConstants.TYPE_JOB, expectedProcessor);
+        when(request.pathVariables()).thenReturn(pathVars);
+        lenient().when(request.pathVariable(ApiConstants.TYPE_JOB)).thenReturn(expectedProcessor);
+
         return request;
     }
 
