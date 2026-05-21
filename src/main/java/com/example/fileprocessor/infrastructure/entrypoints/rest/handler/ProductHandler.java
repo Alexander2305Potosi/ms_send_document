@@ -102,9 +102,4 @@ public class ProductHandler {
                 "Unknown processor type: '" + processorType + "'. Valid values: soap, s3");
         };
     }
-
-    static String resolveTraceId(ServerRequest request) {
-        String header = request.headers().firstHeader(ApiConstants.HEADER_TRACE_ID);
-        return (header != null && !header.isBlank()) ? header : UUID.randomUUID().toString();
-    }
 }

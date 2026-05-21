@@ -74,15 +74,6 @@ class ProductHandlerTest {
         return request;
     }
 
-    private static ServerRequest mockRequestForTraceId(String traceIdHeader) {
-        ServerRequest request = mock(ServerRequest.class);
-        ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
-        when(request.headers()).thenReturn(headers);
-        when(headers.firstHeader(ApiConstants.HEADER_TRACE_ID)).thenReturn(traceIdHeader);
-        lenient().when(request.queryParam(anyString())).thenReturn(Optional.empty());
-        return request;
-    }
-
     private static ServerRequest mockRequestForSync(String traceIdHeader) {
         ServerRequest request = mock(ServerRequest.class);
         ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
@@ -108,31 +99,7 @@ class ProductHandlerTest {
             .build();
     }
 
-    // resolveTraceId tests
 
-    @Test
-    void resolveTraceId_withHeader_returnsHeaderValue() {
-        ServerRequest request = mockRequestForTraceId("custom-trace-456");
-        assertEquals("custom-trace-456", ProductHandler.resolveTraceId(request));
-    }
-
-    @Test
-    void resolveTraceId_withBlankHeader_generatesUuid() {
-        ServerRequest request = mockRequestForTraceId("   ");
-        String result = ProductHandler.resolveTraceId(request);
-        assertNotNull(result);
-        assertFalse(result.isBlank());
-        UUID.fromString(result);
-    }
-
-    @Test
-    void resolveTraceId_withNullHeader_generatesUuid() {
-        ServerRequest request = mockRequestForTraceId(null);
-        String result = ProductHandler.resolveTraceId(request);
-        assertNotNull(result);
-        assertFalse(result.isBlank());
-        UUID.fromString(result);
-    }
 
     // getProcessor tests
 

@@ -11,9 +11,6 @@ public final class ApiConstants {
     public static final String PROCESSOR_SOAP = "soap";
     public static final String PROCESSOR_S3 = "s3";
 
-    // Query parameter names
-    public static final String PARAM_PROCESSOR = "processor";
-
     // HTTP headers
     public static final String HEADER_TRACE_ID = "message-id";
     public static final String HEADER_USE_CASE = "use-case";
