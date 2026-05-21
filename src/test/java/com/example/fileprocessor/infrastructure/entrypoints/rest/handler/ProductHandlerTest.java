@@ -57,7 +57,13 @@ class ProductHandlerTest {
         lenient().when(request.queryParam("processor"))
             .thenReturn(processorParam != null ? Optional.of(processorParam) : Optional.empty());
         when(request.headers()).thenReturn(headers);
-        when(headers.firstHeader(ApiConstants.HEADER_TRACE_ID)).thenReturn(traceIdHeader);
+
+        org.springframework.http.HttpHeaders httpHeaders = new org.springframework.http.HttpHeaders();
+        if (traceIdHeader != null) {
+            httpHeaders.add(ApiConstants.HEADER_TRACE_ID, traceIdHeader);
+        }
+        httpHeaders.add(ApiConstants.HEADER_USE_CASE, "default");
+        when(headers.asHttpHeaders()).thenReturn(httpHeaders);
 
         return request;
     }
@@ -75,8 +81,14 @@ class ProductHandlerTest {
         ServerRequest request = mock(ServerRequest.class);
         ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
         when(request.headers()).thenReturn(headers);
-        when(headers.firstHeader(ApiConstants.HEADER_TRACE_ID)).thenReturn(traceIdHeader);
-        when(headers.firstHeader(ApiConstants.HEADER_USE_CASE)).thenReturn("retention");
+        
+        org.springframework.http.HttpHeaders httpHeaders = new org.springframework.http.HttpHeaders();
+        if (traceIdHeader != null) {
+            httpHeaders.add(ApiConstants.HEADER_TRACE_ID, traceIdHeader);
+        }
+        httpHeaders.add(ApiConstants.HEADER_USE_CASE, "retention");
+        when(headers.asHttpHeaders()).thenReturn(httpHeaders);
+        
         return request;
     }
 

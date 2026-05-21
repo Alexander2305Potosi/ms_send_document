@@ -13,13 +13,13 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
 
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_TRACE_ID;
-import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_USE_CASE;
+import static com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.*;
 
 @Component
 public class ProductHandler {
@@ -43,9 +43,20 @@ public class ProductHandler {
         String processorType = request.queryParam(ApiConstants.PARAM_PROCESSOR)
             .map(String::toLowerCase)
             .orElse(ApiConstants.PROCESSOR_SOAP);
-        String traceId = resolveTraceId(request);
+
+        var headers = request.headers().asHttpHeaders().toSingleValueMap();
+        String typeJobValue = request.pathVariables().containsKey(TYPE_JOB)
+            ? request.pathVariable(TYPE_JOB)
+            : "default";
+
+        Context context = Context.of(
+            TYPE_JOB, typeJobValue,
+            HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
+            HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default")
+        );
 
         return Mono.deferContextual(ctx -> {
+            String traceId = ctx.get(HEADER_TRACE_ID);
             var results = getProcessor(processorType).executePendingDocuments()
                 .doOnNext(result -> LOGGER.log(Level.INFO, "Document processed: correlationId={0}, status={1}",
                     new Object[]{result.getCorrelationId(), result.getStatus()}))
@@ -54,14 +65,25 @@ public class ProductHandler {
             return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_NDJSON)
                 .body(results, com.example.fileprocessor.domain.entity.FileUploadResponse.class);
-        }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
+        }).contextWrite(context);
     }
 
     public Mono<ServerResponse> syncProducts(ServerRequest request) {
-        String traceId = resolveTraceId(request);
-        String useCase = request.headers().firstHeader(HEADER_USE_CASE);
+        var headers = request.headers().asHttpHeaders().toSingleValueMap();
+        String typeJobValue = request.pathVariables().containsKey(TYPE_JOB)
+            ? request.pathVariable(TYPE_JOB)
+            : "default";
+
+        Context context = Context.of(
+            TYPE_JOB, typeJobValue,
+            HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
+            HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default")
+        );
 
         return Mono.deferContextual(ctx -> {
+            String traceId = ctx.get(HEADER_TRACE_ID);
+            String useCase = ctx.get(HEADER_USE_CASE);
+
             LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}", new Object[]{traceId, useCase});
             syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> LOGGER.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
@@ -71,7 +93,7 @@ public class ProductHandler {
             return ServerResponse.accepted()
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(java.util.Map.of("status", "OK", "message", "Document sync initiated"));
-        }).contextWrite(ctx -> ctx.put(HEADER_TRACE_ID, traceId));
+        }).contextWrite(context);
     }
 
     AbstractDocumentProcessingUseCase getProcessor(String processorType) {

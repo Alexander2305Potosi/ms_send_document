@@ -17,4 +17,5 @@ public final class ApiConstants {
     // HTTP headers
     public static final String HEADER_TRACE_ID = "message-id";
     public static final String HEADER_USE_CASE = "use-case";
+    public static final String TYPE_JOB = "type_job";
 }
