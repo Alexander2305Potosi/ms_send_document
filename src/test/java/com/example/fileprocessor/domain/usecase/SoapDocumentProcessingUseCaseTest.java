@@ -93,4 +93,47 @@ class SoapDocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(10));
     }
+
+    @Test
+    void uploadDocument_whenSoapGatewayThrowsException_returnsFailureResponse() {
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder()
+                .filename("test.pdf")
+                .build();
+        
+        when(homologationRepository.resolve(any()))
+                .thenReturn(Mono.just(HomologationResult.builder()
+                        .categoriaDocument("mocked-categoria")
+                        .build()));
+
+        when(soapGateway.send(any(FileUploadRequest.class)))
+                .thenReturn(Flux.error(new RuntimeException("SOAP failure")));
+
+        StepVerifier.create(useCase.uploadDocument(history, 1L))
+                .expectNextMatches(resp -> !resp.isSuccess() 
+                        && "FAILURE".equals(resp.getStatus())
+                        && "UNKNOWN_ERROR".equals(resp.getSyncStatus())
+                        && "SOAP failure".equals(resp.getMessage())
+                        && "test.pdf".equals(resp.getFilename()))
+                .expectComplete()
+                .verify();
+    }
+
+    @Test
+    void uploadDocument_whenHomologationRepositoryThrowsException_returnsFailureResponse() {
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder()
+                .filename("test.pdf")
+                .build();
+
+        when(homologationRepository.resolve(any()))
+                .thenReturn(Mono.error(new RuntimeException("Homologation failure")));
+
+        StepVerifier.create(useCase.uploadDocument(history, 1L))
+                .expectNextMatches(resp -> !resp.isSuccess() 
+                        && "FAILURE".equals(resp.getStatus())
+                        && "UNKNOWN_ERROR".equals(resp.getSyncStatus())
+                        && "Homologation failure".equals(resp.getMessage())
+                        && "test.pdf".equals(resp.getFilename()))
+                .expectComplete()
+                .verify();
+    }
 }

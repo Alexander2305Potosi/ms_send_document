@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.server.RouterFunction;
+import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
@@ -37,7 +38,7 @@ class ProductRoutesTest {
 
     @Test
     void processPendingProductsRoute_shouldRouteToHandler() {
-        when(productHandler.processPendingProducts(any()))
+        when(productHandler.processPendingProducts(any(ServerRequest.class)))
                 .thenReturn(ServerResponse.ok().build());
 
         client.get()
@@ -45,12 +46,12 @@ class ProductRoutesTest {
                 .exchange()
                 .expectStatus().isOk();
 
-        verify(productHandler).processPendingProducts(any());
+        verify(productHandler).processPendingProducts(any(ServerRequest.class));
     }
 
     @Test
     void syncProductsRoute_shouldRouteToHandler() {
-        when(productHandler.syncProducts(any()))
+        when(productHandler.syncProducts(any(ServerRequest.class)))
                 .thenReturn(ServerResponse.accepted().build());
 
         client.get()
@@ -58,6 +59,6 @@ class ProductRoutesTest {
                 .exchange()
                 .expectStatus().isAccepted();
 
-        verify(productHandler).syncProducts(any());
+        verify(productHandler).syncProducts(any(ServerRequest.class));
     }
 }

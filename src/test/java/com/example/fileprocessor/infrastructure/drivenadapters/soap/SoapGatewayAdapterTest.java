@@ -34,6 +34,9 @@ class SoapGatewayAdapterTest {
     private WebClient soapWebClient;
 
     @Mock
+    private WebClient.Builder webClientBuilder;
+
+    @Mock
     private SoapMapper mapper;
 
     @Mock
@@ -55,7 +58,9 @@ class SoapGatewayAdapterTest {
             "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
             Map.of(), Map.of(), 5, 0 // Short timeout and NO retries
         );
-        adapter = new SoapGatewayAdapter(soapWebClient, properties, mapper);
+        when(webClientBuilder.baseUrl(anyString())).thenReturn(webClientBuilder);
+        when(webClientBuilder.build()).thenReturn(soapWebClient);
+        adapter = new SoapGatewayAdapter(webClientBuilder, properties, mapper);
     }
 
     private void mockWebClientSuccess(String responseBody) {

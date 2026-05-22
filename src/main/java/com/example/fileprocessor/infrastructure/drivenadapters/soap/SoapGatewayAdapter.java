@@ -35,8 +35,10 @@ public class SoapGatewayAdapter implements SoapGateway {
     private final SoapProperties properties;
     private final SoapMapper mapper;
 
-    public SoapGatewayAdapter(WebClient soapWebClient, SoapProperties properties, SoapMapper mapper) {
-        this.soapWebClient = soapWebClient;
+    public SoapGatewayAdapter(WebClient.Builder webClientBuilder, SoapProperties properties, SoapMapper mapper) {
+        this.soapWebClient = webClientBuilder
+                .baseUrl(properties.endpoint())
+                .build();
         this.properties = properties;
         this.mapper = mapper;
     }
@@ -66,14 +68,14 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .onErrorResume(error -> handleFinalError(error, traceId)
                         .map(errorResp -> errorResp.toBuilder().attemptCount(attempt).build()))
                 .flatMapMany(response -> {
-                    boolean isRetryable = !response.isSuccess() && 
-                                         ProcessingResultCodes.isTransient(response.getSyncStatus()) && 
+                    boolean isRetryable = !response.isSuccess() &&
+                                         ProcessingResultCodes.isTransient(response.getSyncStatus()) &&
                                          attempt <= properties.retryAttempts();
 
                     if (isRetryable) {
-                        LOGGER.log(Level.INFO, "[TraceID: {0}] Technical retry {1}/{2} due to: {3}", 
+                        LOGGER.log(Level.INFO, "[TraceID: {0}] Technical retry {1}/{2} due to: {3}",
                                 new Object[]{traceId, attempt, properties.retryAttempts(), response.getMessage()});
-                        
+
                         return Flux.just(response.toBuilder().technicalRetry(true).build())
                                 .concatWith(Mono.delay(Duration.ofMillis(500))
                                         .flatMapMany(unused -> sendWithRetry(request, traceId, attempt + 1)));
