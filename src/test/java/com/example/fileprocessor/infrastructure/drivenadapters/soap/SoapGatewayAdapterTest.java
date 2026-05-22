@@ -98,6 +98,7 @@ class SoapGatewayAdapterTest {
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getSyncStatus());
@@ -126,6 +127,7 @@ class SoapGatewayAdapterTest {
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals("Parsed Error", result.getMessage());
@@ -143,6 +145,7 @@ class SoapGatewayAdapterTest {
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), result.getSyncStatus());
