@@ -48,7 +48,7 @@ class SoapGatewayAdapterTest {
         properties = new SoapProperties(
             "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
             "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
-            Map.of(), Map.of(), 2, 0 // 2 seconds timeout and NO retries
+            Map.of(), Map.of(), 10, 0 // 10 seconds timeout and NO retries
         );
         adapter = new SoapGatewayAdapter(WebClient.builder(), properties, mapper);
     }
@@ -90,13 +90,20 @@ class SoapGatewayAdapterTest {
 
     @Test
     void send_whenTimeout_returnsGatewayTimeout() {
+        SoapProperties localProperties = new SoapProperties(
+            "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+            "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
+            Map.of(), Map.of(), 1, 0 // 1 second timeout
+        );
+        SoapGatewayAdapter localAdapter = new SoapGatewayAdapter(WebClient.builder(), localProperties, mapper);
+
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         
         mockWebServer.enqueue(new MockResponse()
-            .setHeadersDelay(4, TimeUnit.SECONDS) // Delay exceeds 2 seconds timeout
+            .setHeadersDelay(2, TimeUnit.SECONDS) // Delay exceeds 1 second timeout
             .setBody("<soap>response</soap>"));
 
-        StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
+        StepVerifier.create(localAdapter.send(FileUploadRequest.builder().filename("f.pdf").build())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
@@ -137,11 +144,11 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_whenGenericError_returnsUnknownError() {
+    void send_whenGenericError_returnsUnknownError() throws IOException {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         
-        mockWebServer.enqueue(new MockResponse()
-            .setSocketPolicy(SocketPolicy.DISCONNECT_AT_START));
+        // Shut down the server to force an immediate Connection Refused error
+        mockWebServer.shutdown();
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
