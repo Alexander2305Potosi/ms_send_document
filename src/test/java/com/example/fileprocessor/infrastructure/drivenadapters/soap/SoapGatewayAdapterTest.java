@@ -6,22 +6,24 @@ import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.SocketPolicy;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -30,55 +32,30 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SoapGatewayAdapterTest {
 
-    @Mock
-    private WebClient soapWebClient;
-
-    @Mock
-    private WebClient.Builder webClientBuilder;
+    private MockWebServer mockWebServer;
 
     @Mock
     private SoapMapper mapper;
-
-    @Mock
-    private WebClient.RequestBodyUriSpec bodyUriSpec;
-
-    @Mock
-    private WebClient.RequestHeadersSpec headersSpec;
-
-    @Mock
-    private WebClient.ResponseSpec responseSpec;
 
     private SoapProperties properties;
     private SoapGatewayAdapter adapter;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws IOException {
+        mockWebServer = new MockWebServer();
+        mockWebServer.start();
+
         properties = new SoapProperties(
-            "http://localhost:8080/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+            "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
             "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
-            Map.of(), Map.of(), 5, 0 // Short timeout and NO retries
+            Map.of(), Map.of(), 2, 0 // 2 seconds timeout and NO retries
         );
-        when(webClientBuilder.baseUrl(anyString())).thenReturn(webClientBuilder);
-        when(webClientBuilder.build()).thenReturn(soapWebClient);
-        adapter = new SoapGatewayAdapter(webClientBuilder, properties, mapper);
+        adapter = new SoapGatewayAdapter(WebClient.builder(), properties, mapper);
     }
 
-    private void mockWebClientSuccess(String responseBody) {
-        when(soapWebClient.post()).thenReturn(bodyUriSpec);
-        when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
-        when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
-        doReturn(headersSpec).when(bodyUriSpec).bodyValue(any());
-        when(headersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just(responseBody));
-    }
-
-    private void mockWebClientError(Throwable error) {
-        when(soapWebClient.post()).thenReturn(bodyUriSpec);
-        when(bodyUriSpec.contentType(any())).thenReturn(bodyUriSpec);
-        when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
-        doReturn(headersSpec).when(bodyUriSpec).bodyValue(any());
-        when(headersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.error(error));
+    @AfterEach
+    void tearDown() throws IOException {
+        mockWebServer.shutdown();
     }
 
     @Test
@@ -92,7 +69,11 @@ class SoapGatewayAdapterTest {
                 .processedAt(Instant.now())
                 .build()
         );
-        mockWebClientSuccess("<soap>response</soap>");
+
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody("<soap>response</soap>")
+            .addHeader("Content-Type", "text/xml"));
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder()
                 .filename("test.pdf")
@@ -110,7 +91,10 @@ class SoapGatewayAdapterTest {
     @Test
     void send_whenTimeout_returnsGatewayTimeout() {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
-        mockWebClientError(new TimeoutException("Read timeout"));
+        
+        mockWebServer.enqueue(new MockResponse()
+            .setHeadersDelay(4, TimeUnit.SECONDS) // Delay exceeds 2 seconds timeout
+            .setBody("<soap>response</soap>"));
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
@@ -127,10 +111,10 @@ class SoapGatewayAdapterTest {
     void send_whenHttp500WithSoapFault_parsesFaultFromBody() {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         
-        WebClientResponseException ex = WebClientResponseException.create(
-            500, "Internal Server Error", null, "<Fault>Error</Fault>".getBytes(), null
-        );
-        mockWebClientError(ex);
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(500)
+            .setBody("<Fault>Error</Fault>")
+            .addHeader("Content-Type", "text/xml"));
         
         when(mapper.parseResponse(eq("<Fault>Error</Fault>"), anyString())).thenReturn(
             FileUploadResponse.builder()
@@ -153,7 +137,9 @@ class SoapGatewayAdapterTest {
     @Test
     void send_whenGenericError_returnsUnknownError() {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
-        mockWebClientError(new RuntimeException("Fatal failure"));
+        
+        mockWebServer.enqueue(new MockResponse()
+            .setSocketPolicy(SocketPolicy.DISCONNECT_AT_START));
 
         StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
