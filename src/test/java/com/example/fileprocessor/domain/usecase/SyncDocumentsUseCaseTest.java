@@ -220,4 +220,28 @@ class SyncDocumentsUseCaseTest {
         assertEquals(ProcessingResultCodes.ERR_DUPLICATED_DOC.value(), savedDoc.getSyncMessage());
         assertEquals("retention", savedDoc.getUseCase());
     }
+
+    @Test
+    void execute_whenBranchNotFound_savesPlaceholderAndSkipsDownload() {
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productLocalRepository.findBranchByProductId("p1")).thenReturn(Mono.empty());
+        when(documentRepository.save(any(Document.class)))
+            .thenReturn(Mono.just(savedDocument(10L, ProcessingResultCodes.NO_SUCURSAL.name(), "retention")));
+
+        StepVerifier.create(useCase.execute("retention"))
+            .assertNext(result -> assertEquals("Document sync completed", result))
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+
+        verify(productRestGateway, never()).getDocumentsByProduct(any());
+
+        ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(docCaptor.capture());
+        Document savedDoc = docCaptor.getValue();
+        assertEquals(ProcessingResultCodes.NO_SUCURSAL.name(), savedDoc.getDocumentId());
+        assertEquals("p1", savedDoc.getProductId());
+        assertEquals(ProcessingResultCodes.FAILED.name(), savedDoc.getState());
+        assertEquals(ProcessingResultCodes.NO_SUCURSAL.value(), savedDoc.getSyncMessage());
+        assertEquals("retention", savedDoc.getUseCase());
+    }
 }

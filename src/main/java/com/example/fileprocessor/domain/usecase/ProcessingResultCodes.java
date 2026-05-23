@@ -45,7 +45,8 @@ public enum ProcessingResultCodes {
     SKIPPED("Omitted due to business rules"),
     ERROR("High-level technical failure"),
     SOAP_ERROR("Specific business fault returned by SOAP gateway"),
-    UNKNOWN_ERROR("Critical unclassified error");
+    UNKNOWN_ERROR("Critical unclassified error"),
+    NO_SUCURSAL("No se encontró sucursal");
 
     private final String description;
 
