@@ -12,6 +12,7 @@ class ProcessingResultCodesTest {
         assertNotNull(ProcessingResultCodes.INVALID_BASE64);
         assertNotNull(ProcessingResultCodes.INVALID_RESPONSE);
         assertNotNull(ProcessingResultCodes.UNKNOWN_ERROR);
+        assertNotNull(ProcessingResultCodes.NO_SUCURSAL);
     }
 
     @Test
@@ -20,5 +21,7 @@ class ProcessingResultCodesTest {
         assertEquals("INVALID_BASE64", ProcessingResultCodes.INVALID_BASE64.name());
         assertEquals("INVALID_RESPONSE", ProcessingResultCodes.INVALID_RESPONSE.name());
         assertEquals("UNKNOWN_ERROR", ProcessingResultCodes.UNKNOWN_ERROR.name());
+        assertEquals("NO_SUCURSAL", ProcessingResultCodes.NO_SUCURSAL.name());
+        assertEquals("No se encontró sucursal", ProcessingResultCodes.NO_SUCURSAL.value());
     }
 }
