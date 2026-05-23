@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
+import com.example.fileprocessor.domain.port.out.ProductLocalRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,11 +33,14 @@ class SyncDocumentsUseCaseTest {
     @Mock
     private ProductRestGateway productRestGateway;
 
+    @Mock
+    private ProductLocalRepository productLocalRepository;
+
     private SyncDocumentsUseCase useCase;
 
     @BeforeEach
     void setUp() {
-        useCase = new SyncDocumentsUseCase(documentRepository, productMasterRepository, productRestGateway);
+        useCase = new SyncDocumentsUseCase(documentRepository, productMasterRepository, productRestGateway, productLocalRepository);
     }
 
     private static ProductMaestro product(String id) {
@@ -80,6 +84,7 @@ class SyncDocumentsUseCaseTest {
     @Test
     void execute_whenProductsExist_processesEachDocument() {
         when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productLocalRepository.findBranchByProductId("p1")).thenReturn(Mono.just("Sucursal Bogota"));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
         when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
@@ -96,6 +101,7 @@ class SyncDocumentsUseCaseTest {
         Document savedDoc = docCaptor.getValue();
         assertEquals("doc1", savedDoc.getDocumentId());
         assertEquals("p1", savedDoc.getProductId());
+        assertEquals("Sucursal Bogota", savedDoc.getSucursal());
         assertEquals(ProcessingResultCodes.PENDING.name(), savedDoc.getState());
         assertEquals("retention", savedDoc.getUseCase());
     }
@@ -103,6 +109,7 @@ class SyncDocumentsUseCaseTest {
     @Test
     void execute_withZipDocument_parentZipNameIsNull() {
         when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productLocalRepository.findBranchByProductId("p1")).thenReturn(Mono.just("Sucursal Medellin"));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", true)));
         when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
@@ -118,11 +125,13 @@ class SyncDocumentsUseCaseTest {
         verify(documentRepository).save(docCaptor.capture());
         Document saved = docCaptor.getValue();
         assertTrue(Boolean.TRUE.equals(saved.getIsZip()));
+        assertEquals("Sucursal Medellin", saved.getSucursal());
     }
 
     @Test
     void execute_withMultipleProducts_processesAll() {
         when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1"), product("p2")));
+        when(productLocalRepository.findBranchByProductId(anyString())).thenReturn(Mono.just("Sucursal Multi"));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)))
             .thenReturn(Flux.just(doc("p2", "doc2", false)));
@@ -152,6 +161,7 @@ class SyncDocumentsUseCaseTest {
     @Test
     void execute_whenGatewayFails_ignoresErrorAndContinues() {
         when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productLocalRepository.findBranchByProductId("p1")).thenReturn(Mono.just("Sucursal FailTest"));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.error(new RuntimeException("Gateway error")));
 
@@ -166,6 +176,7 @@ class SyncDocumentsUseCaseTest {
     @Test
     void execute_usesUseCaseFromParameter() {
         when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productLocalRepository.findBranchByProductId("p1")).thenReturn(Mono.just("Sucursal UC"));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
         when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
@@ -180,11 +191,13 @@ class SyncDocumentsUseCaseTest {
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
         assertEquals("extract", captor.getValue().getUseCase());
+        assertEquals("Sucursal UC", captor.getValue().getSucursal());
     }
 
     @Test
     void execute_whenDocumentAlreadyExists_savesAsDuplicated() {
         when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p1")));
+        when(productLocalRepository.findBranchByProductId("p1")).thenReturn(Mono.just("Sucursal Dup"));
         when(productRestGateway.getDocumentsByProduct(any()))
             .thenReturn(Flux.just(doc("p1", "doc1", false)));
         when(documentRepository.existsByProductIdAndDocumentId("p1", "doc1")).thenReturn(Mono.just(true));
@@ -201,6 +214,7 @@ class SyncDocumentsUseCaseTest {
         Document savedDoc = docCaptor.getValue();
         assertEquals("doc1", savedDoc.getDocumentId());
         assertEquals("p1", savedDoc.getProductId());
+        assertEquals("Sucursal Dup", savedDoc.getSucursal());
         assertEquals(ProcessingResultCodes.ERR_DUPLICATED_DOC.name(), savedDoc.getState());
         assertNotNull(savedDoc.getSyncMessage());
         assertEquals(ProcessingResultCodes.ERR_DUPLICATED_DOC.value(), savedDoc.getSyncMessage());

@@ -3,6 +3,7 @@ package com.example.fileprocessor.application.service.config;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.ProductLocalRepository;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
@@ -57,11 +58,13 @@ public class DomainConfig {
     public SyncDocumentsUseCase syncDocumentsUseCase(
             DocumentRepository documentRepository,
             ProductMasterRepository productMasterRepository,
-            ProductRestGateway productRestGateway) {
+            ProductRestGateway productRestGateway,
+            ProductLocalRepository productLocalRepository) {
         return new SyncDocumentsUseCase(
             documentRepository,
             productMasterRepository,
-            productRestGateway
+            productRestGateway,
+            productLocalRepository
         );
     }
 }

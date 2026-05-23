@@ -63,6 +63,9 @@ public class DocumentEntity {
     @Column("categoria_homologado")
     private String categoriaHomologada;
 
+    @Column("sucursal")
+    private String sucursal;
+
     @Column("reintentos")
     private Integer retryCount;
 

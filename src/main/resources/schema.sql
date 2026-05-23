@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS documentos (
     carpeta_homologada VARCHAR(255),
     pais_homologado VARCHAR(100),
     categoria_homologado VARCHAR(100),
+    sucursal VARCHAR(255),
     reintentos INT DEFAULT 0,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_carga_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -79,3 +80,22 @@ INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('SC-', 'ele
 INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('DOC-', 'ropa');
 INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('TXT-', 'aseo');
 INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES ('ZIP-', 'zapatos');
+
+-- Schema & Data for custom schema branch query (otro_esquema.tabla_maestra)
+CREATE SCHEMA IF NOT EXISTS otro_esquema;
+CREATE TABLE IF NOT EXISTS otro_esquema.tabla_maestra (
+    id_producto VARCHAR(100) PRIMARY KEY,
+    sucursal VARCHAR(255)
+);
+
+DELETE FROM otro_esquema.tabla_maestra;
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-01', 'Sucursal Bogota');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-02', 'Sucursal Medellin');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-03', 'Sucursal Cali');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-04', 'Sucursal Barranquilla');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-05', 'Sucursal Cartagena');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-01', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-02', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-03', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-04', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-05', 'Sucursal Central');

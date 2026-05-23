@@ -31,6 +31,7 @@ public class Document {
     private String homologationFolder;
     private String homologationCountry;
     private String categoriaHomologada;
+    private String sucursal;
     private LocalDateTime createdAt;
     private Integer retryCount;
 
