@@ -34,11 +34,10 @@ CREATE TABLE IF NOT EXISTS historico_documentos (
 
 CREATE TABLE IF NOT EXISTS pais_homologado (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    carpeta_origen VARCHAR(255),
-    pais_origen VARCHAR(100),
+    orden INT NOT NULL,
+    condicion_jsonb CLOB,
     carpeta_homologada VARCHAR(255),
-    pais_homologado VARCHAR(100),
-    aplica_filtro_pais BOOLEAN DEFAULT TRUE
+    pais_homologado VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS categoria_manual (
@@ -48,31 +47,31 @@ CREATE TABLE IF NOT EXISTS categoria_manual (
 );
 
 -- Data for Local DB
--- 22 Scenarios for pais_homologado
+-- 23 Scenarios for pais_homologado
 DELETE FROM pais_homologado;
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('garantia,oficina', 'colomb,co', 'Manuales Garantía', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('user,usuario', 'mex,mx', 'Manuales de Usuario', 'México');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('tech,tecnico', 'braz,bras,br', 'Manuales Técnicos y Mantenimiento', 'Brasil');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('instal,setup', 'arg', 'Guías de Instalación', 'Argentina');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('seguridad,safe', 'chile,cl', 'Manuales de Seguridad', 'Chile');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('calidad,qa', 'peru,pe', 'Certificados de Calidad', 'Perú');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('garant', 'mex,mx', 'Manuales Garantía', 'México');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('uso,manual', 'colomb,co', 'Manuales de Usuario', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('mantenimiento,maint', 'arg', 'Manuales Técnicos y Mantenimiento', 'Argentina');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('guia,guide', 'braz,bras,br', 'Guías de Instalación', 'Brasil');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('prevencion', 'chile,cl', 'Manuales de Seguridad', 'Chile');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('certificado,cert', 'peru,pe', 'Certificados de Calidad', 'Perú');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('soporte', 'colomb,co', 'Manuales Técnicos y Mantenimiento', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('operacion,ops', 'mex,mx', 'Manuales de Usuario', 'México');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('industrial', 'braz,bras,br', 'Manuales de Seguridad', 'Brasil');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('procesos', 'arg', 'Certificados de Calidad', 'Argentina');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('directrices', 'chile,cl', 'Manuales de Usuario', 'Chile');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('normas,rules', 'peru,pe', 'Manuales de Seguridad', 'Perú');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('fabrica,factory', 'colomb,co', 'Manuales Técnicos y Mantenimiento', 'Colombia');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('comercial', 'mex,mx', 'Manuales de Usuario', 'México');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('cliente', 'braz,bras,br', 'Manuales de Usuario', 'Brasil');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado) VALUES ('auditoria', 'arg', 'Certificados de Calidad', 'Argentina');
-INSERT INTO pais_homologado (carpeta_origen, pais_origen, carpeta_homologada, pais_homologado, aplica_filtro_pais) VALUES ('*', '*', 'Otros / No Catalogado', 'Internacional / Sin Asignar', FALSE);
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (10, '{"originFolder": {"$containsAny": ["garantia", "oficina"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}', 'Manuales Garantía', 'Colombia');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (20, '{"originFolder": {"$containsAny": ["user", "usuario"]}, "originCountry": {"$containsAny": ["mex", "mx"]}}', 'Manuales de Usuario', 'México');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (30, '{"originFolder": {"$containsAny": ["tech", "tecnico"]}, "originCountry": {"$containsAny": ["braz", "bras", "br"]}}', 'Manuales Técnicos y Mantenimiento', 'Brasil');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (40, '{"originFolder": {"$containsAny": ["instal", "setup"]}, "originCountry": {"$containsAny": ["arg"]}}', 'Guías de Instalación', 'Argentina');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (50, '{"originFolder": {"$containsAny": ["seguridad", "safe"]}, "originCountry": {"$containsAny": ["chile", "cl"]}}', 'Manuales de Seguridad', 'Chile');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (60, '{"originFolder": {"$containsAny": ["calidad", "qa"]}, "originCountry": {"$containsAny": ["peru", "pe"]}}', 'Certificados de Calidad', 'Perú');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (70, '{"originFolder": {"$containsAny": ["garant"]}, "originCountry": {"$containsAny": ["mex", "mx"]}}', 'Manuales Garantía', 'México');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (80, '{"originFolder": {"$containsAny": ["uso", "manual"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}', 'Manuales de Usuario', 'Colombia');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (90, '{"originFolder": {"$containsAny": ["mantenimiento", "maint"]}, "originCountry": {"$containsAny": ["arg"]}}', 'Manuales Técnicos y Mantenimiento', 'Argentina');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (100, '{"originFolder": {"$containsAny": ["guia", "guide"]}, "originCountry": {"$containsAny": ["braz", "bras", "br"]}}', 'Guías de Instalación', 'Brasil');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (110, '{"originFolder": {"$containsAny": ["prevencion"]}, "originCountry": {"$containsAny": ["chile", "cl"]}}', 'Manuales de Seguridad', 'Chile');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (120, '{"originFolder": {"$containsAny": ["certificado", "cert"]}, "originCountry": {"$containsAny": ["peru", "pe"]}}', 'Certificados de Calidad', 'Perú');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (130, '{"originFolder": {"$containsAny": ["soporte"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}', 'Manuales Técnicos y Mantenimiento', 'Colombia');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (140, '{"originFolder": {"$containsAny": ["operacion", "ops"]}, "originCountry": {"$containsAny": ["mex", "mx"]}}', 'Manuales de Usuario', 'México');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (150, '{"originFolder": {"$containsAny": ["industrial"]}, "originCountry": {"$containsAny": ["braz", "bras", "br"]}}', 'Manuales de Seguridad', 'Brasil');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (160, '{"originFolder": {"$containsAny": ["procesos"]}, "originCountry": {"$containsAny": ["arg"]}}', 'Certificados de Calidad', 'Argentina');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (170, '{"originFolder": {"$containsAny": ["directrices"]}, "originCountry": {"$containsAny": ["chile", "cl"]}}', 'Manuales de Usuario', 'Chile');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (180, '{"originFolder": {"$containsAny": ["normas", "rules"]}, "originCountry": {"$containsAny": ["peru", "pe"]}}', 'Manuales de Seguridad', 'Perú');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (190, '{"originFolder": {"$containsAny": ["fabrica", "factory"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}', 'Manuales Técnicos y Mantenimiento', 'Colombia');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (200, '{"originFolder": {"$containsAny": ["comercial"]}, "originCountry": {"$containsAny": ["mex", "mx"]}}', 'Manuales de Usuario', 'México');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (210, '{"originFolder": {"$containsAny": ["cliente"]}, "originCountry": {"$containsAny": ["braz", "bras", "br"]}}', 'Manuales de Usuario', 'Brasil');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (220, '{"originFolder": {"$containsAny": ["auditoria"]}, "originCountry": {"$containsAny": ["arg"]}}', 'Certificados de Calidad', 'Argentina');
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES (9999, '{}', 'Otros / No Catalogado', 'Internacional / Sin Asignar');
 
 -- Scenarios for categoria_manual
 DELETE FROM categoria_manual;

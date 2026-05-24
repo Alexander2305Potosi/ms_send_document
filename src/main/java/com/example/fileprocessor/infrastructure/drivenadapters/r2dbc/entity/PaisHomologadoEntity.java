@@ -22,19 +22,16 @@ public class PaisHomologadoEntity {
     @Id
     private Long id;
 
-    @Column("carpeta_origen")
-    private String originFolder;
+    @Column("orden")
+    private Integer orden;
 
-    @Column("pais_origen")
-    private String originCountry;
+    @Column("condicion_jsonb")
+    private String condicionJsonb;
 
     @Column("carpeta_homologada")
     private String homologationFolder;
 
     @Column("pais_homologado")
     private String homologationCountry;
-
-    @Column("aplica_filtro_pais")
-    private Boolean aplicaFiltroPais;
 
 }

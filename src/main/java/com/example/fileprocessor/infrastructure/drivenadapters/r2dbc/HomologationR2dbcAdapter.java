@@ -6,15 +6,19 @@ import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.entity.homologation.CategoryManual;
 import com.example.fileprocessor.domain.entity.homologation.PaisHomologado;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CategoryManualEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.PaisHomologadoEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.PaisHomologadoRepository;
+import com.example.fileprocessor.infrastructure.helpers.rule.JsonRuleEvaluator;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -27,6 +31,8 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
 
     private final CategoryManualRepository categoryRepository;
     private final PaisHomologadoRepository paisRepository;
+    private final JsonRuleEvaluator ruleEvaluator;
+    private final ObjectMapper mapper = new ObjectMapper();
 
     private final List<CategoryManual> categoryCache = new CopyOnWriteArrayList<>();
     private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
@@ -42,8 +48,6 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
 
     private Mono<HomologationResult> resolveFromCache(DocumentHistoryDTO history) {
         String documentId = history.getBusinessDocumentId() != null ? history.getBusinessDocumentId() : "";
-        String originFolder = normalizeText(history.getOriginFolder());
-        String originCountry = normalizeText(history.getOriginCountry());
 
         // 1. Resolve Category by prefix
         String categoriaDocument = documentId; // default to documentId or empty
@@ -54,21 +58,16 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             }
         }
 
-        // 2. Resolve Country and Folder by iterating the DB rules
+        // 2. Resolve Country and Folder by dynamic JSON engine
+        JsonNode dtoNode = mapper.valueToTree(history);
         String homologationFolder = history.getOriginFolder();
         String homologationCountry = history.getOriginCountry();
 
         for (PaisHomologado p : paisCache) {
-            List<String> folderKeywords = parseKeywords(p.originFolder());
-            List<String> countryKeywords = parseKeywords(p.originCountry());
-
-            boolean folderMatch = containsAny(originFolder, folderKeywords);
-            boolean countryMatch = Boolean.FALSE.equals(p.aplicaFiltroPais()) || containsAny(originCountry, countryKeywords);
-
-            if (folderMatch && countryMatch) {
+            if (ruleEvaluator.evaluate(p.ruleNode(), dtoNode)) {
                 homologationFolder = p.homologationFolder();
                 homologationCountry = p.homologationCountry();
-                break; // Cortocircuito (Evaluación secuencial)
+                break;
             }
         }
 
@@ -81,33 +80,6 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             .categoriaDocument(categoriaDocument)
             .homologationCountry(hc)
             .build());
-    }
-
-    private List<String> parseKeywords(String dbValue) {
-        if (dbValue == null || dbValue.isBlank()) return List.of();
-        return java.util.Arrays.stream(dbValue.split(","))
-            .map(String::trim)
-            .filter(s -> !s.isEmpty())
-            .toList();
-    }
-
-    private String normalizeText(String text) {
-        if (text == null) return "";
-        return java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase();
-    }
-
-    private boolean containsAny(String text, List<String> keywords) {
-        if (keywords.isEmpty()) return false;
-        if (keywords.size() == 1 && "*".equals(keywords.get(0))) return true;
-        if (text == null || text.isEmpty()) return false;
-        for (String keyword : keywords) {
-            if (text.contains(keyword)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private Mono<Void> loadCache() {
@@ -124,15 +96,22 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             .then();
 
         Mono<Void> loadPais = paisRepository.findAll()
-            .collectSortedList(java.util.Comparator.comparing(PaisHomologadoEntity::getId))
+            .collectSortedList(java.util.Comparator.comparing(PaisHomologadoEntity::getOrden))
             .map(list -> list.stream()
-                .map(entity -> new PaisHomologado(
-                    entity.getOriginFolder(),
-                    entity.getOriginCountry(),
-                    entity.getHomologationFolder(),
-                    entity.getHomologationCountry(),
-                    entity.getAplicaFiltroPais()
-                )).toList()
+                .map(entity -> {
+                    JsonNode ruleNode;
+                    try {
+                        ruleNode = mapper.readTree(entity.getCondicionJsonb());
+                    } catch (Exception e) {
+                        ruleNode = mapper.createObjectNode();
+                    }
+                    return new PaisHomologado(
+                        entity.getOrden(),
+                        ruleNode,
+                        entity.getHomologationFolder(),
+                        entity.getHomologationCountry()
+                    );
+                }).toList()
             )
             .doOnNext(list -> {
                 paisCache.clear();
