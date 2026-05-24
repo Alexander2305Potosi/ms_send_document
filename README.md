@@ -571,11 +571,29 @@ CREATE INDEX IF NOT EXISTS idx_pais_orden ON pais_homologado(orden);
 
 ---
 
-## Homologacion de Origin y Pais (SOAP)
+## Homologacion de Categoria, Origin y Pais (SOAP)
 
-El caso de uso SOAP realiza una homologacion de `origin` y `pais` antes de enviar el documento utilizando un **Motor Reactivo Dinámico JSON**.
+El caso de uso SOAP realiza una homologacion de la `categoria` del documento, así como de la carpeta (`originFolder`) y el país (`originCountry`) antes de enviarlo.
 
-### Flujo de Homologacion
+### 1. Homologacion de Categoria (Por Prefijo)
+
+La homologacion de la categoria del documento se hace buscando por prefijo sobre el ID del documento:
+1. Se itera sobre las categorias (`categoria_manual`) cargadas en cache.
+2. Si el ID del documento inicia con el prefijo (`prefijo`) de la categoria, se usa el valor de `categoria_homologado`.
+
+```
+Documento.businessDocumentId = "MAN-12345"
+        │
+        ▼
+Busca en categoria_manual por prefijo
+        │
+        ▼
+categoriaDocument = "Manual Tecnico del Producto"
+```
+
+### 2. Homologacion de Origin y Pais (Motor JSON)
+
+La homologacion de la carpeta de origen y el país se realiza utilizando un **Motor Reactivo Dinámico JSON** configurado en la tabla `pais_homologado`.
 
 ```
 Documento.originFolder = "garantia"
@@ -595,9 +613,7 @@ HomologationResult.carpeta = "Manuales Garantía"
 HomologationResult.pais = "Colombia"
 ```
 
-### Motor de Reglas Dinámico (JSON)
-
-La homologación utiliza un evaluador JSON interno en `JsonRuleEvaluator` que procesa un árbol de condiciones sobre los atributos del documento. Se pueden especificar los siguientes operadores:
+El evaluador JSON interno (`JsonRuleEvaluator`) procesa el árbol de condiciones sobre los atributos del documento. Se soportan los siguientes operadores:
 
 - `$eq`: Igualdad exacta (ignorando mayúsculas/minúsculas).
 - `$contains`: Contiene el substring.
@@ -605,15 +621,19 @@ La homologación utiliza un evaluador JSON interno en `JsonRuleEvaluator` que pr
 - `$in`: Coincide con cualquiera de los valores en la lista.
 - `$containsAny`: Contiene al menos uno de los substrings en la lista.
 
-Las reglas se evalúan de forma secuencial de acuerdo al campo `orden`. Cuando la primera regla hace *match*, se retornan los valores de `carpeta_homologada` y `pais_homologado` y se cortocircuita el proceso. La caché en memoria en `HomologationR2dbcAdapter` optimiza esto evitando la base de datos por cada documento.
+Las reglas se evalúan de forma secuencial de acuerdo al campo `orden`. Cuando la primera regla hace *match*, se retornan los valores de `carpeta_homologada` y `pais_homologado` y se cortocircuita el proceso.
+
+### Cache en Memoria
+
+`HomologationR2dbcAdapter` carga todas las categorias y reglas JSON una sola vez en listas _thread-safe_ al primer acceso. Las consultas siguientes usan la caché en memoria sin volver a acceder a la base de datos. La caché se carga de forma _lazy_ (perezosa).
 
 ### Datos de Ejemplo
 
 ```sql
 -- Categoria manual (Por Prefijo de Documento)
-INSERT INTO categoria_manual (categoria, descripcion_manual) VALUES
-('manual_tecnico', 'Manual Tecnico del Producto'),
-('manual_usuario', 'Manual de Usuario');
+INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES
+('MAN', 'Manual Tecnico del Producto'),
+('USR', 'Manual de Usuario');
 
 -- Pais y Carpeta homologado (Motor JSON)
 INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES 
