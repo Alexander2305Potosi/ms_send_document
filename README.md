@@ -430,7 +430,7 @@ Almacena la homologacion de carpetas y paises mediante un Motor Reactivo Dinámi
 |---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `orden` | INT | Orden de prioridad de evaluación de la regla |
-| `condicion_jsonb` | CLOB | Regla en formato JSON (soporta $eq, $contains, $in, $containsAny, etc.) |
+| `condicion_jsonb` | TEXT | Regla en formato JSON (soporta $eq, $contains, $in, $containsAny, etc.) |
 | `carpeta_homologada` | VARCHAR(255) | Nombre de carpeta destino resultante |
 | `pais_homologado` | VARCHAR(100) | Nombre de pais destino resultante |
 
@@ -560,7 +560,7 @@ CREATE INDEX IF NOT EXISTS idx_cat_categoria_vigencia ON categoria_manual(catego
 CREATE TABLE IF NOT EXISTS pais_homologado (
     id                  BIGSERIAL       PRIMARY KEY,
     orden               INT             NOT NULL,
-    condicion_jsonb     CLOB,
+    condicion_jsonb     TEXT,
     carpeta_homologada  VARCHAR(255),
     pais_homologado     VARCHAR(100)
 );

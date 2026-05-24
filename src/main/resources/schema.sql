@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS historico_documentos (
 CREATE TABLE IF NOT EXISTS pais_homologado (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     orden INT NOT NULL,
-    condicion_jsonb CLOB,
+    condicion_jsonb TEXT,
     carpeta_homologada VARCHAR(255),
     pais_homologado VARCHAR(100)
 );
