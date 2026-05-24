@@ -424,14 +424,15 @@ Almacena la homologacion de categorias de manuales. Se usa para resolver el `ori
 
 ### Tabla: pais_homologado
 
-Almacena la homologacion de paises. Se usa para resolver el `pais` de los documentos en el caso de uso SOAP.
+Almacena la homologacion de carpetas y paises mediante un Motor Reactivo Dinámico JSON.
 
 | Columna | Tipo | Descripcion |
 |---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
-| `pais` | VARCHAR(255) | Codigo de pais (ej: "AR", "CL") |
-| `pais_homologado` | VARCHAR(255) | Nombre homologado del pais (ej: "Argentina", "Chile") |
-| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
+| `orden` | INT | Orden de prioridad de evaluación de la regla |
+| `condicion_jsonb` | CLOB | Regla en formato JSON (soporta $eq, $contains, $in, $containsAny, etc.) |
+| `carpeta_homologada` | VARCHAR(255) | Nombre de carpeta destino resultante |
+| `pais_homologado` | VARCHAR(100) | Nombre de pais destino resultante |
 
 ### Tabla: productos
 
@@ -469,7 +470,7 @@ CREATE INDEX idx_prod_carga_estado ON productos(fecha_carga, estado);
 CREATE INDEX idx_cat_categoria_vigencia ON categoria_manual (categoria, fecha_vigencia);
 
 -- pais_homologado
-CREATE INDEX idx_pais_codigo ON pais_homologado(pais);
+CREATE INDEX idx_pais_orden ON pais_homologado(orden);
 ```
     
 ### DDL Completo
@@ -554,16 +555,17 @@ CREATE INDEX IF NOT EXISTS idx_cat_categoria_vigencia ON categoria_manual(catego
 
 -- ============================================================================
 -- Tabla: pais_homologado
--- Homologacion de paises para resolucion de pais en SOAP.
+-- Motor reactivo dinámico para resolver carpeta y pais homologado usando JSON.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS pais_homologado (
-    id              BIGSERIAL       PRIMARY KEY,
-    pais            VARCHAR(255)    NOT NULL UNIQUE,
-    pais_homologado VARCHAR(255)    NOT NULL,
-    fecha_creacion  TIMESTAMP       NOT NULL DEFAULT NOW()
+    id                  BIGSERIAL       PRIMARY KEY,
+    orden               INT             NOT NULL,
+    condicion_jsonb     CLOB,
+    carpeta_homologada  VARCHAR(255),
+    pais_homologado     VARCHAR(100)
 );
 
-CREATE INDEX IF NOT EXISTS idx_pais_codigo ON pais_homologado(pais);
+CREATE INDEX IF NOT EXISTS idx_pais_orden ON pais_homologado(orden);
 ```
 
 
@@ -571,64 +573,53 @@ CREATE INDEX IF NOT EXISTS idx_pais_codigo ON pais_homologado(pais);
 
 ## Homologacion de Origin y Pais (SOAP)
 
-El caso de uso SOAP realiza una homologacion de `origin` y `pais` antes de enviar el documento.
+El caso de uso SOAP realiza una homologacion de `origin` y `pais` antes de enviar el documento utilizando un **Motor Reactivo Dinámico JSON**.
 
 ### Flujo de Homologacion
 
 ```
-Documento.origin = "manual_tecnico"
+Documento.originFolder = "garantia"
+Documento.originCountry = "colombia"
         │
         ▼
-Busca en categoria_manual (usa contains + eliminacion de tildes)
+Itera sobre pais_homologado en memoria ordenados por 'orden'
         │
         ▼
-descripcion_manual = "Manual Tecnico del Producto"
+Evalua JSON: {"originFolder": {"$containsAny": ["garantia"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}
         │
         ▼
-Documento.pais = "AR"
+Match!
         │
         ▼
-Busca en pais_homologado WHERE pais = "AR"
-        │
-        ▼
-pais_homologado = "Argentina"
-        │
-        ▼
-FileUploadRequest.origin = "Manual Tecnico del Producto"
-FileUploadRequest.paisHomologado = "Argentina"
+HomologationResult.carpeta = "Manuales Garantía"
+HomologationResult.pais = "Colombia"
 ```
 
-### Busqueda con Contains y Eliminacion de Tildes
+### Motor de Reglas Dinámico (JSON)
 
-La homologacion de origin usa busqueda tipo `contains` con normalizacion de tildes:
+La homologación utiliza un evaluador JSON interno en `JsonRuleEvaluator` que procesa un árbol de condiciones sobre los atributos del documento. Se pueden especificar los siguientes operadores:
 
-1. Se normaliza el origin del documento eliminando tildes y conviertiendo a minusculas
-2. Se itera sobre las categorias cargadas en cache
-3. Se compara el origen normalizado contra cada clave de categoria (tambien normalizada)
-4. Si la clave normalizada **contiene** el origin normalizado, se usa esa descripcion
+- `$eq`: Igualdad exacta (ignorando mayúsculas/minúsculas).
+- `$contains`: Contiene el substring.
+- `$regex`: Cumple con la expresión regular.
+- `$in`: Coincide con cualquiera de los valores en la lista.
+- `$containsAny`: Contiene al menos uno de los substrings en la lista.
 
-Ejemplo:
-- Documento.origin = "manual_tecnico"
-- Categoria en cache: `categoria="manual_tecnico"` → `descripcion_manual="Manual Tecnico del Producto"`
-- Resultado: origin se homologa a "Manual Tecnico del Producto"
-
-### Cache en Memoria
-
-`HomologationR2dbcAdapter` carga todas las categorias y paises una sola vez en `ConcurrentHashMap` al primer acceso. Las consultas siguientes usan el cache sin acceder a la base de datos. El cache se carga lazy (solo cuando se necesita por primera vez).
+Las reglas se evalúan de forma secuencial de acuerdo al campo `orden`. Cuando la primera regla hace *match*, se retornan los valores de `carpeta_homologada` y `pais_homologado` y se cortocircuita el proceso. La caché en memoria en `HomologationR2dbcAdapter` optimiza esto evitando la base de datos por cada documento.
 
 ### Datos de Ejemplo
 
 ```sql
--- Categoria manual
+-- Categoria manual (Por Prefijo de Documento)
 INSERT INTO categoria_manual (categoria, descripcion_manual) VALUES
 ('manual_tecnico', 'Manual Tecnico del Producto'),
 ('manual_usuario', 'Manual de Usuario');
 
--- Pais homologado
-INSERT INTO pais_homologado (pais, pais_homologado) VALUES
-('AR', 'Argentina'),
-('CL', 'Chile'),
-('CO', 'Colombia');
+-- Pais y Carpeta homologado (Motor JSON)
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES 
+(10, '{"originFolder": {"$containsAny": ["garantia", "oficina"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}', 'Manuales Garantía', 'Colombia'),
+(20, '{"originFolder": {"$containsAny": ["user", "usuario"]}, "originCountry": {"$containsAny": ["mex", "mx"]}}', 'Manuales de Usuario', 'México'),
+(9999, '{}', 'Otros / No Catalogado', 'Internacional / Sin Asignar');
 ```
 
 ### Acceso a Consola H2 (solo desarrollo)
