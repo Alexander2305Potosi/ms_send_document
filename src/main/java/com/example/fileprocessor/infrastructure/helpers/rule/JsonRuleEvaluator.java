@@ -1,10 +1,12 @@
 package com.example.fileprocessor.infrastructure.helpers.rule;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -12,8 +14,25 @@ import java.util.logging.Logger;
 public class JsonRuleEvaluator {
 
     private static final Logger log = Logger.getLogger(JsonRuleEvaluator.class.getName());
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final Map<String, JsonNode> ruleCache = new ConcurrentHashMap<>();
 
-    public boolean evaluate(JsonNode ruleNode, JsonNode dtoNode) {
+    public boolean evaluate(String ruleJson, Object dto) {
+        JsonNode ruleNode;
+        if (ruleJson == null || ruleJson.trim().isEmpty()) {
+            ruleNode = mapper.createObjectNode();
+        } else {
+            ruleNode = ruleCache.computeIfAbsent(ruleJson, k -> {
+                try {
+                    return mapper.readTree(k);
+                } catch (Exception e) {
+                    log.log(Level.WARNING, "Failed to parse rule JSON, using default", e);
+                    return mapper.createObjectNode();
+                }
+            });
+        }
+
+        JsonNode dtoNode = mapper.valueToTree(dto);
         if (ruleNode == null || ruleNode.isEmpty()) {
             log.log(Level.FINE, "Rule node is null or empty, evaluating to true (default fallback)");
             return true;

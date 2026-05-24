@@ -1,106 +1,105 @@
 package com.example.fileprocessor.infrastructure.helpers.rule;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class JsonRuleEvaluatorTest {
 
     private JsonRuleEvaluator evaluator;
-    private ObjectMapper mapper;
 
     @BeforeEach
     void setUp() {
         evaluator = new JsonRuleEvaluator();
-        mapper = new ObjectMapper();
     }
 
     @Test
     void evaluate_withNullOrEmptyRule_returnsTrue() {
-        JsonNode dtoNode = mapper.createObjectNode().put("name", "test");
-        assertTrue(evaluator.evaluate(null, dtoNode));
-        assertTrue(evaluator.evaluate(mapper.createObjectNode(), dtoNode));
+        Map<String, String> dto = Map.of("name", "test");
+        assertTrue(evaluator.evaluate(null, dto));
+        assertTrue(evaluator.evaluate("{}", dto));
+        assertTrue(evaluator.evaluate("", dto));
     }
 
     @Test
-    void evaluate_withEqOperator_matchesExactly() throws Exception {
-        JsonNode rule = mapper.readTree("{\"name\": {\"$eq\": \"TEST\"}}");
+    void evaluate_withEqOperator_matchesExactly() {
+        String rule = "{\"name\": {\"$eq\": \"TEST\"}}";
         
-        JsonNode matchingDto = mapper.createObjectNode().put("name", "test");
+        Map<String, String> matchingDto = Map.of("name", "test");
         assertTrue(evaluator.evaluate(rule, matchingDto));
 
-        JsonNode nonMatchingDto = mapper.createObjectNode().put("name", "other");
+        Map<String, String> nonMatchingDto = Map.of("name", "other");
         assertFalse(evaluator.evaluate(rule, nonMatchingDto));
     }
 
     @Test
-    void evaluate_withContainsOperator_matchesSubstring() throws Exception {
-        JsonNode rule = mapper.readTree("{\"folder\": {\"$contains\": \"docs\"}}");
+    void evaluate_withContainsOperator_matchesSubstring() {
+        String rule = "{\"folder\": {\"$contains\": \"docs\"}}";
         
-        JsonNode matchingDto = mapper.createObjectNode().put("folder", "/shared/docs/public");
+        Map<String, String> matchingDto = Map.of("folder", "/shared/docs/public");
         assertTrue(evaluator.evaluate(rule, matchingDto));
 
-        JsonNode nonMatchingDto = mapper.createObjectNode().put("folder", "/shared/private");
+        Map<String, String> nonMatchingDto = Map.of("folder", "/shared/private");
         assertFalse(evaluator.evaluate(rule, nonMatchingDto));
     }
 
     @Test
-    void evaluate_withRegexOperator_matchesPattern() throws Exception {
-        JsonNode rule = mapper.readTree("{\"filename\": {\"$regex\": \"^prod_[0-9]{4}\\\\.pdf$\"}}");
+    void evaluate_withRegexOperator_matchesPattern() {
+        String rule = "{\"filename\": {\"$regex\": \"^prod_[0-9]{4}\\\\.pdf$\"}}";
         
-        JsonNode matchingDto = mapper.createObjectNode().put("filename", "prod_2023.pdf");
+        Map<String, String> matchingDto = Map.of("filename", "prod_2023.pdf");
         assertTrue(evaluator.evaluate(rule, matchingDto));
 
-        JsonNode nonMatchingDto = mapper.createObjectNode().put("filename", "prod_abc.pdf");
+        Map<String, String> nonMatchingDto = Map.of("filename", "prod_abc.pdf");
         assertFalse(evaluator.evaluate(rule, nonMatchingDto));
     }
 
     @Test
-    void evaluate_withInOperator_matchesAnyInList() throws Exception {
-        JsonNode rule = mapper.readTree("{\"country\": {\"$in\": [\"co\", \"pe\", \"cl\"]}}");
+    void evaluate_withInOperator_matchesAnyInList() {
+        String rule = "{\"country\": {\"$in\": [\"co\", \"pe\", \"cl\"]}}";
         
-        JsonNode matchingDto = mapper.createObjectNode().put("country", "PE");
+        Map<String, String> matchingDto = Map.of("country", "PE");
         assertTrue(evaluator.evaluate(rule, matchingDto));
 
-        JsonNode nonMatchingDto = mapper.createObjectNode().put("country", "AR");
+        Map<String, String> nonMatchingDto = Map.of("country", "AR");
         assertFalse(evaluator.evaluate(rule, nonMatchingDto));
     }
 
     @Test
-    void evaluate_withContainsAnyOperator_matchesAnySubstring() throws Exception {
-        JsonNode rule = mapper.readTree("{\"folder\": {\"$containsAny\": [\"garantia\", \"oficina\"]}}");
+    void evaluate_withContainsAnyOperator_matchesAnySubstring() {
+        String rule = "{\"folder\": {\"$containsAny\": [\"garantia\", \"oficina\"]}}";
         
-        JsonNode matchingDto1 = mapper.createObjectNode().put("folder", "/docs/oficina/ventas");
+        Map<String, String> matchingDto1 = Map.of("folder", "/docs/oficina/ventas");
         assertTrue(evaluator.evaluate(rule, matchingDto1));
 
-        JsonNode matchingDto2 = mapper.createObjectNode().put("folder", "garantias2023");
+        Map<String, String> matchingDto2 = Map.of("folder", "garantias2023");
         assertTrue(evaluator.evaluate(rule, matchingDto2));
 
-        JsonNode nonMatchingDto = mapper.createObjectNode().put("folder", "/docs/general");
+        Map<String, String> nonMatchingDto = Map.of("folder", "/docs/general");
         assertFalse(evaluator.evaluate(rule, nonMatchingDto));
     }
 
     @Test
-    void evaluate_withMultipleConditions_actsAsAnd() throws Exception {
-        JsonNode rule = mapper.readTree("{\"folder\": {\"$contains\": \"docs\"}, \"country\": {\"$eq\": \"co\"}}");
+    void evaluate_withMultipleConditions_actsAsAnd() {
+        String rule = "{\"folder\": {\"$contains\": \"docs\"}, \"country\": {\"$eq\": \"co\"}}";
         
-        JsonNode matchingDto = mapper.createObjectNode().put("folder", "/docs/").put("country", "CO");
+        Map<String, String> matchingDto = Map.of("folder", "/docs/", "country", "CO");
         assertTrue(evaluator.evaluate(rule, matchingDto));
 
-        JsonNode nonMatchingDto1 = mapper.createObjectNode().put("folder", "/images/").put("country", "CO");
+        Map<String, String> nonMatchingDto1 = Map.of("folder", "/images/", "country", "CO");
         assertFalse(evaluator.evaluate(rule, nonMatchingDto1));
 
-        JsonNode nonMatchingDto2 = mapper.createObjectNode().put("folder", "/docs/").put("country", "PE");
+        Map<String, String> nonMatchingDto2 = Map.of("folder", "/docs/", "country", "PE");
         assertFalse(evaluator.evaluate(rule, nonMatchingDto2));
     }
 
     @Test
-    void evaluate_whenFieldIsMissingInDto_returnsFalse() throws Exception {
-        JsonNode rule = mapper.readTree("{\"name\": {\"$eq\": \"test\"}}");
-        JsonNode dtoNode = mapper.createObjectNode(); // Empty DTO
-        assertFalse(evaluator.evaluate(rule, dtoNode));
+    void evaluate_whenFieldIsMissingInDto_returnsFalse() {
+        String rule = "{\"name\": {\"$eq\": \"test\"}}";
+        Map<String, String> dto = Map.of(); // Empty DTO
+        assertFalse(evaluator.evaluate(rule, dto));
     }
 }

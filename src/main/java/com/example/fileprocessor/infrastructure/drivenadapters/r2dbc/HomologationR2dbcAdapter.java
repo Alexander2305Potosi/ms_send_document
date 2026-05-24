@@ -10,8 +10,7 @@ import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.Pais
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.PaisHomologadoRepository;
 import com.example.fileprocessor.infrastructure.helpers.rule.JsonRuleEvaluator;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.fileprocessor.infrastructure.helpers.rule.JsonRuleEvaluator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -32,12 +31,9 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
     private final CategoryManualRepository categoryRepository;
     private final PaisHomologadoRepository paisRepository;
     private final JsonRuleEvaluator ruleEvaluator;
-    private final ObjectMapper mapper = new ObjectMapper();
 
-    private record PaisCacheEntry(PaisHomologado pais, JsonNode ruleNode) {}
-    
     private final List<CategoryManual> categoryCache = new CopyOnWriteArrayList<>();
-    private final List<PaisCacheEntry> paisCache = new CopyOnWriteArrayList<>();
+    private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
     private boolean cacheLoaded = false;
 
     @Override
@@ -61,14 +57,13 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         }
 
         // 2. Resolve Country and Folder by dynamic JSON engine
-        JsonNode dtoNode = mapper.valueToTree(history);
         String homologationFolder = history.getOriginFolder();
         String homologationCountry = history.getOriginCountry();
 
-        for (PaisCacheEntry entry : paisCache) {
-            if (ruleEvaluator.evaluate(entry.ruleNode(), dtoNode)) {
-                homologationFolder = entry.pais().homologationFolder();
-                homologationCountry = entry.pais().homologationCountry();
+        for (PaisHomologado p : paisCache) {
+            if (ruleEvaluator.evaluate(p.ruleNode(), history)) {
+                homologationFolder = p.homologationFolder();
+                homologationCountry = p.homologationCountry();
                 break;
             }
         }
@@ -100,21 +95,12 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         Mono<Void> loadPais = paisRepository.findAll()
             .collectSortedList(java.util.Comparator.comparing(PaisHomologadoEntity::getOrden))
             .map(list -> list.stream()
-                .map(entity -> {
-                    JsonNode ruleNode;
-                    try {
-                        ruleNode = mapper.readTree(entity.getCondicionJsonb());
-                    } catch (Exception e) {
-                        ruleNode = mapper.createObjectNode();
-                    }
-                    PaisHomologado domain = new PaisHomologado(
-                        entity.getOrden(),
-                        entity.getCondicionJsonb() != null ? entity.getCondicionJsonb() : "{}",
-                        entity.getHomologationFolder(),
-                        entity.getHomologationCountry()
-                    );
-                    return new PaisCacheEntry(domain, ruleNode);
-                }).toList()
+                .map(entity -> new PaisHomologado(
+                    entity.getOrden(),
+                    entity.getCondicionJsonb() != null ? entity.getCondicionJsonb() : "{}",
+                    entity.getHomologationFolder(),
+                    entity.getHomologationCountry()
+                )).toList()
             )
             .doOnNext(list -> {
                 paisCache.clear();
