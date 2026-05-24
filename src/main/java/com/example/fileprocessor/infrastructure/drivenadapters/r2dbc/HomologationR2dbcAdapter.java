@@ -34,8 +34,10 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
     private final JsonRuleEvaluator ruleEvaluator;
     private final ObjectMapper mapper = new ObjectMapper();
 
+    private record PaisCacheEntry(PaisHomologado pais, JsonNode ruleNode) {}
+    
     private final List<CategoryManual> categoryCache = new CopyOnWriteArrayList<>();
-    private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
+    private final List<PaisCacheEntry> paisCache = new CopyOnWriteArrayList<>();
     private boolean cacheLoaded = false;
 
     @Override
@@ -63,10 +65,10 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         String homologationFolder = history.getOriginFolder();
         String homologationCountry = history.getOriginCountry();
 
-        for (PaisHomologado p : paisCache) {
-            if (ruleEvaluator.evaluate(p.ruleNode(), dtoNode)) {
-                homologationFolder = p.homologationFolder();
-                homologationCountry = p.homologationCountry();
+        for (PaisCacheEntry entry : paisCache) {
+            if (ruleEvaluator.evaluate(entry.ruleNode(), dtoNode)) {
+                homologationFolder = entry.pais().homologationFolder();
+                homologationCountry = entry.pais().homologationCountry();
                 break;
             }
         }
@@ -105,12 +107,13 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
                     } catch (Exception e) {
                         ruleNode = mapper.createObjectNode();
                     }
-                    return new PaisHomologado(
+                    PaisHomologado domain = new PaisHomologado(
                         entity.getOrden(),
-                        ruleNode,
+                        entity.getCondicionJsonb() != null ? entity.getCondicionJsonb() : "{}",
                         entity.getHomologationFolder(),
                         entity.getHomologationCountry()
                     );
+                    return new PaisCacheEntry(domain, ruleNode);
                 }).toList()
             )
             .doOnNext(list -> {
