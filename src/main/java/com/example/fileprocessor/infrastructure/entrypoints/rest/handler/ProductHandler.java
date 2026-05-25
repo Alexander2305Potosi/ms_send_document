@@ -51,14 +51,20 @@ public class ProductHandler {
         return Mono.deferContextual(ctx -> {
             String useCase = ctx.get(TYPE_JOB);
             String traceId = ctx.get(HEADER_TRACE_ID);
-            var results = getProcessor(useCase).executePendingDocuments()
+            
+            LOGGER.log(Level.INFO, "Starting pending documents processing, traceId: {0}, useCase: {1}", new Object[]{traceId, useCase});
+            
+            getProcessor(useCase).executePendingDocuments()
                 .doOnNext(result -> LOGGER.log(Level.INFO, "Document processed: correlationId={0}, status={1}",
                     new Object[]{result.getCorrelationId(), result.getStatus()}))
-                .doOnError(error -> LOGGER.log(Level.SEVERE, "Processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}));
+                .doOnError(error -> LOGGER.log(Level.SEVERE, "Processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
+                .doOnComplete(() -> LOGGER.log(Level.INFO, "Pending documents processing completed for traceId: {0}", new Object[]{traceId}))
+                .contextWrite(ctx)
+                .subscribe();
 
-            return ServerResponse.ok()
-                .contentType(MediaType.APPLICATION_NDJSON)
-                .body(results, com.example.fileprocessor.domain.entity.FileUploadResponse.class);
+            return ServerResponse.accepted()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(java.util.Map.of("status", "OK", "message", "Document processing initiated"));
         }).contextWrite(context);
     }
 

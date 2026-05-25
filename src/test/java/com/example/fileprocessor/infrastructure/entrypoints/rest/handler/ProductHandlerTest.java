@@ -135,7 +135,7 @@ class ProductHandlerTest {
     // processPendingProducts tests
 
     @Test
-    void processPendingProducts_defaultsToSoap_returnsOkNdjson() {
+    void processPendingProducts_defaultsToSoap_returnsAccepted() {
         ServerRequest request = mockRequestForProcessing(null, "trace-1");
         when(soapDocumentUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
 
@@ -143,14 +143,14 @@ class ProductHandlerTest {
 
         StepVerifier.create(responseMono)
             .assertNext(response -> {
-                assertEquals(HttpStatus.OK, response.statusCode());
-                assertEquals(MediaType.APPLICATION_NDJSON, response.headers().getContentType());
+                assertEquals(HttpStatus.ACCEPTED, response.statusCode());
+                assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
             })
             .verifyComplete();
     }
 
     @Test
-    void processPendingProducts_withS3Param_returnsOkNdjson() {
+    void processPendingProducts_withS3Param_returnsAccepted() {
         ServerRequest request = mockRequestForProcessing("s3", "trace-1");
         when(s3DocumentUseCaseProvider.getIfAvailable()).thenReturn(s3DocumentUseCase);
         when(s3DocumentUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
@@ -159,8 +159,8 @@ class ProductHandlerTest {
 
         StepVerifier.create(responseMono)
             .assertNext(response -> {
-                assertEquals(HttpStatus.OK, response.statusCode());
-                assertEquals(MediaType.APPLICATION_NDJSON, response.headers().getContentType());
+                assertEquals(HttpStatus.ACCEPTED, response.statusCode());
+                assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
             })
             .verifyComplete();
     }
