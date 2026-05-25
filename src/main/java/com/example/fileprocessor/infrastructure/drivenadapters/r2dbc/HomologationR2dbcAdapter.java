@@ -33,7 +33,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
     private final JsonRuleEvaluator ruleEvaluator;
 
     private final List<CategoryManual> categoryCache = new CopyOnWriteArrayList<>();
-    private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
+        private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
     private boolean cacheLoaded = false;
 
     @Override
@@ -92,8 +92,8 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             })
             .then();
 
-        Mono<Void> loadPais = paisRepository.findAll()
-            .collectSortedList(java.util.Comparator.comparing(PaisHomologadoEntity::getOrden))
+        Mono<Void> loadPais = paisRepository.findAllByOrderByOrdenAsc()
+            .collectList()
             .map(list -> list.stream()
                 .map(entity -> new PaisHomologado(
                     entity.getOrden(),
@@ -109,11 +109,10 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             })
             .then();
 
-        return Mono.zip(loadCategories, loadPais)
-            .doOnNext(tuple -> {
+        return Mono.when(loadCategories, loadPais)
+            .then(Mono.fromRunnable(() -> {
                 cacheLoaded = true;
                 log.log(Level.INFO, "Full homologation cache initialized successfully");
-            })
-            .then();
+            }));
     }
 }
