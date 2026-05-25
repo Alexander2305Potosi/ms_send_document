@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
+import java.text.Normalizer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -71,13 +72,13 @@ public class JsonRuleEvaluator {
             return false;
         }
         
-        String value = actualValue.toLowerCase();
+        String value = sanitize(actualValue);
         
-        if (ruleCriteria.has("$eq") && !value.equals(ruleCriteria.get("$eq").asText().toLowerCase())) {
+        if (ruleCriteria.has("$eq") && !value.equals(sanitize(ruleCriteria.get("$eq").asText()))) {
             return false;
         }
         
-        if (ruleCriteria.has("$contains") && !value.contains(ruleCriteria.get("$contains").asText().toLowerCase())) {
+        if (ruleCriteria.has("$contains") && !value.contains(sanitize(ruleCriteria.get("$contains").asText()))) {
             return false;
         }
         
@@ -88,7 +89,7 @@ public class JsonRuleEvaluator {
         if (ruleCriteria.has("$in")) {
             boolean matchIn = false;
             for (JsonNode allowedValue : ruleCriteria.get("$in")) {
-                if (value.equals(allowedValue.asText().toLowerCase())) {
+                if (value.equals(sanitize(allowedValue.asText()))) {
                     matchIn = true;
                     break;
                 }
@@ -99,7 +100,7 @@ public class JsonRuleEvaluator {
         if (ruleCriteria.has("$containsAny")) {
             boolean matchContainsAny = false;
             for (JsonNode keyword : ruleCriteria.get("$containsAny")) {
-                if (value.contains(keyword.asText().toLowerCase())) {
+                if (value.contains(sanitize(keyword.asText()))) {
                     matchContainsAny = true;
                     break;
                 }
@@ -108,5 +109,11 @@ public class JsonRuleEvaluator {
         }
         
         return true;
+    }
+
+    private String sanitize(String text) {
+        if (text == null) return null;
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD);
+        return normalized.replaceAll("\\p{M}", "").toLowerCase();
     }
 }

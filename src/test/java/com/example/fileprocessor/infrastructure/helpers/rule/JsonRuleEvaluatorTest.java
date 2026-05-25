@@ -97,6 +97,23 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
+    void evaluate_withAccents_ignoresAccentsAndCase() {
+        String rule = "{\"city\": {\"$eq\": \"bogotá\"}, \"department\": {\"$containsAny\": [\"antioquía\", \"boyacá\"]}}";
+        
+        // DTO without accents, uppercase
+        Map<String, String> matchingDto1 = Map.of("city", "BOGOTA", "department", "Antioquia");
+        assertTrue(evaluator.evaluate(rule, matchingDto1));
+
+        // DTO with accents, mixed case
+        Map<String, String> matchingDto2 = Map.of("city", "BógOtä", "department", "bOyÁcA");
+        assertTrue(evaluator.evaluate(rule, matchingDto2));
+        
+        // DTO not matching
+        Map<String, String> nonMatchingDto = Map.of("city", "bogota", "department", "cundinamarca");
+        assertFalse(evaluator.evaluate(rule, nonMatchingDto));
+    }
+
+    @Test
     void evaluate_whenFieldIsMissingInDto_returnsFalse() {
         String rule = "{\"name\": {\"$eq\": \"test\"}}";
         Map<String, String> dto = Map.of(); // Empty DTO
