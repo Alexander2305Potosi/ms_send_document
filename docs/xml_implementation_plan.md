@@ -205,21 +205,21 @@ public final class SoapConstants {
     public static final String T_NS_ENV = "{{ns_envelope}}";
     public static final String T_NS_BODY = "{{ns_body}}";
     
-    public static final String T_TRACE_ID    = "{{traceId}}";
-    public static final String T_TIMESTAMP   = "{{timestamp}}";
+    public static final String T_TRACE_ID    = "{{TRACE_ID}}";
+    public static final String T_TIMESTAMP   = "{{TIMESTAMP}}";
     
-    public static final String T_SYSTEM_ID   = "{{systemId}}";
-    public static final String T_USER_NAME   = "{{userName}}";
-    public static final String T_USER_TOKEN  = "{{userToken}}";
+    public static final String T_SYSTEM_ID   = "{{SYSTEM_ID}}";
+    public static final String T_USER_NAME   = "{{USER_NAME}}";
+    public static final String T_USER_TOKEN  = "{{USER_TOKEN}}";
     
-    public static final String T_DEST_NAME   = "{{destName}}";
-    public static final String T_DEST_NS     = "{{destNs}}";
-    public static final String T_DEST_OP     = "{{destOp}}";
+    public static final String T_DEST_NAME   = "{{DESTINATION_NAME}}";
+    public static final String T_DEST_NS     = "{{DESTINATION_NAMESPACE}}";
+    public static final String T_DEST_OP     = "{{DESTINATION_OPERATION}}";
     
-    public static final String T_CLASS       = "{{classification}}";
+    public static final String T_CLASS       = "{{CLASSIFICATION}}";
     
-    public static final String T_FILENAME    = "{{filename}}";
-    public static final String T_CONTENT     = "{{base64Content}}";
+    public static final String T_FILENAME    = "{{FILENAME}}";
+    public static final String T_CONTENT     = "{{CONTENT}}";
 
     // Nuevas constantes para la estructura GestionInternaDocumental
     public static final String T_TIPO_DOCUMENTAL = "{{TIPO_DOCUMENTAL}}";
