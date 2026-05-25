@@ -92,7 +92,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
             })
             .then();
 
-        Mono<Void> loadPais = paisRepository.findAllByOrderByOrdenAsc()
+        Mono<Void> loadPais = paisRepository.findAll()
             .collectList()
             .map(list -> list.stream()
                 .map(entity -> new PaisHomologado(
