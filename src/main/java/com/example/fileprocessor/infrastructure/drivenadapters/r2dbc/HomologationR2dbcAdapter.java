@@ -33,7 +33,7 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
     private final JsonRuleEvaluator ruleEvaluator;
 
     private final List<CategoryManual> categoryCache = new CopyOnWriteArrayList<>();
-        private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
+    private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
     private boolean cacheLoaded = false;
 
     @Override
@@ -69,50 +69,50 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         }
 
         HomologationCountry hc = HomologationCountry.builder()
-            .homologationFolder(homologationFolder)
-            .homologationCountry(homologationCountry)
-            .build();
+                .homologationFolder(homologationFolder)
+                .homologationCountry(homologationCountry)
+                .build();
 
         return Mono.just(HomologationResult.builder()
-            .categoriaDocument(categoriaDocument)
-            .homologationCountry(hc)
-            .build());
+                .categoriaDocument(categoriaDocument)
+                .homologationCountry(hc)
+                .build());
     }
 
     private Mono<Void> loadCache() {
         log.log(Level.INFO, "Loading homologation cache from database");
 
         Mono<Void> loadCategories = categoryRepository.findAll()
-            .map(entity -> new CategoryManual(entity.getPrefijo(), entity.getCategoriaHomologado()))
-            .collectList()
-            .doOnNext(list -> {
-                categoryCache.clear();
-                categoryCache.addAll(list);
-                log.log(Level.INFO, "Category cache loaded with {0} entries", new Object[]{categoryCache.size()});
-            })
-            .then();
+                .map(entity -> new CategoryManual(entity.getPrefijo(), entity.getCategoriaHomologado()))
+                .collectList()
+                .doOnNext(list -> {
+                    categoryCache.clear();
+                    categoryCache.addAll(list);
+                    log.log(Level.INFO, "Category cache loaded with {0} entries",
+                            new Object[] { categoryCache.size() });
+                })
+                .then();
 
         Mono<Void> loadPais = paisRepository.findAll()
-            .collectList()
-            .map(list -> list.stream()
-                .map(entity -> new PaisHomologado(
-                    entity.getOrden(),
-                    entity.getCondicionJsonb() != null ? entity.getCondicionJsonb() : "{}",
-                    entity.getHomologationFolder(),
-                    entity.getHomologationCountry()
-                )).toList()
-            )
-            .doOnNext(list -> {
-                paisCache.clear();
-                paisCache.addAll(list);
-                log.log(Level.INFO, "Pais cache loaded with {0} entries", new Object[]{paisCache.size()});
-            })
-            .then();
+                .collectList()
+                .map(list -> list.stream()
+                        .map(entity -> new PaisHomologado(
+                                entity.getOrden(),
+                                entity.getCondicionJsonb() != null ? entity.getCondicionJsonb() : "{}",
+                                entity.getHomologationFolder(),
+                                entity.getHomologationCountry()))
+                        .toList())
+                .doOnNext(list -> {
+                    paisCache.clear();
+                    paisCache.addAll(list);
+                    log.log(Level.INFO, "Pais cache loaded with {0} entries", new Object[] { paisCache.size() });
+                })
+                .then();
 
         return Mono.when(loadCategories, loadPais)
-            .then(Mono.fromRunnable(() -> {
-                cacheLoaded = true;
-                log.log(Level.INFO, "Full homologation cache initialized successfully");
-            }));
+                .then(Mono.fromRunnable(() -> {
+                    cacheLoaded = true;
+                    log.log(Level.INFO, "Full homologation cache initialized successfully");
+                }));
     }
 }
