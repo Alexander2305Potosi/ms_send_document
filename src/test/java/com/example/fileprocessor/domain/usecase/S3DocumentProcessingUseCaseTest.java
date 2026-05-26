@@ -78,4 +78,39 @@ class S3DocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(10));
     }
+
+    @Test
+    void executePendingDocuments_withS3_failure() {
+        Document doc = Document.builder()
+            .id(1L)
+            .documentId("doc-1")
+            .productId("prod-1")
+            .name("test.pdf")
+            .retryCount(0)
+            .isZip(false)
+            .build();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+            .productId("prod-1")
+            .documentId("doc-1")
+            .filename("test.pdf")
+            .content(new byte[]{1})
+            .isZip(false)
+            .build();
+
+        when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
+        when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt())).thenReturn(Mono.just(1L));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
+            .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        
+        when(s3Gateway.send(any(FileUploadRequest.class))).thenReturn(Mono.error(new RuntimeException("S3 connection error")));
+
+        when(persistencePort.finalizeProcessingAtomically(any())).thenReturn(Mono.empty());
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .expectNextMatches(result -> !result.isSuccess() && "S3 connection error".equals(result.getMessage()))
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
 }
