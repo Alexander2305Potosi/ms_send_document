@@ -903,6 +903,177 @@ class SoapMapperTest {
 }
 ```
 
+## 5.2 Clase Completa de Pruebas para el Adaptador (`SoapGatewayAdapterTest.java`)
+
+Para verificar que el adaptador de integración envía correctamente las peticiones utilizando el nuevo modelo de datos y constructor de `SoapProperties`, se incluye la clase de pruebas unitarias completa:
+
+```java
+package com.example.fileprocessor.infrastructure.drivenadapters.soap;
+
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.entity.FileUploadRequest;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.test.StepVerifier;
+import reactor.util.context.Context;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class SoapGatewayAdapterTest {
+
+    private MockWebServer mockWebServer;
+
+    @Mock
+    private SoapMapper mapper;
+
+    private SoapProperties properties;
+    private SoapGatewayAdapter adapter;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        mockWebServer = new MockWebServer();
+        mockWebServer.start();
+
+        properties = new SoapProperties(
+            "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+            "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
+            "tipo-doc", "autor-name", "grupo-seg", "cuenta-seg", "id-perfil",
+            Map.of(), Map.of(), 10, 0 // 10 seconds timeout and NO retries
+        );
+        adapter = new SoapGatewayAdapter(WebClient.builder(), properties, mapper);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        mockWebServer.shutdown();
+    }
+
+    @Test
+    void send_whenSuccessful_returnsSuccessResult() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.parseResponse(anyString(), anyString())).thenReturn(
+            FileUploadResponse.builder()
+                .status("OK")
+                .success(true)
+                .correlationId("corr-123")
+                .processedAt(Instant.now())
+                .build()
+        );
+
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody("<soap>response</soap>")
+            .addHeader("Content-Type", "text/xml"));
+
+        StepVerifier.create(adapter.send(FileUploadRequest.builder()
+                .documentName("test.pdf")
+                .fileContent(new byte[]{1})
+                .build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .assertNext(result -> {
+                assertTrue(result.isSuccess());
+                assertEquals("corr-123", result.getCorrelationId());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void send_whenTimeout_returnsGatewayTimeout() {
+        SoapProperties localProperties = new SoapProperties(
+            "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+            "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
+            "tipo-doc", "autor-name", "grupo-seg", "cuenta-seg", "id-perfil",
+            Map.of(), Map.of(), 1, 0 // 1 second timeout
+        );
+        SoapGatewayAdapter localAdapter = new SoapGatewayAdapter(WebClient.builder(), localProperties, mapper);
+
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        
+        mockWebServer.enqueue(new MockResponse()
+            .setHeadersDelay(2, TimeUnit.SECONDS) // Delay exceeds 1 second timeout
+            .setBody("<soap>response</soap>"));
+
+        StepVerifier.create(localAdapter.send(FileUploadRequest.builder().documentName("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getSyncStatus());
+                assertTrue(result.getMessage().contains("Timeout"));
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void send_whenHttp500WithSoapFault_parsesFaultFromBody() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(500)
+            .setBody("<Fault>Error</Fault>")
+            .addHeader("Content-Type", "text/xml"));
+        
+        when(mapper.parseResponse(eq("<Fault>Error</Fault>"), anyString())).thenReturn(
+            FileUploadResponse.builder()
+                .status("FAILURE")
+                .success(false)
+                .message("Parsed Error")
+                .build()
+        );
+
+        StepVerifier.create(adapter.send(FileUploadRequest.builder().documentName("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals("Parsed Error", result.getMessage());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void send_whenGenericError_returnsUnknownError() throws IOException {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        
+        // Shut down the server to force an immediate Connection Refused error
+        mockWebServer.shutdown();
+
+        StepVerifier.create(adapter.send(FileUploadRequest.builder().documentName("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), result.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+}
+```
+
 ## 6. Inventario Completo de Propiedades y Valores a Considerar
 
 A continuación se detalla la matriz completa de todos los campos que componen la estructura XML, su clasificación (Estática o Dinámica) y la fuente sugerida para su obtención:
