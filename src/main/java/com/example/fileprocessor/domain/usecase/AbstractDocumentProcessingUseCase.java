@@ -110,8 +110,9 @@ public abstract class AbstractDocumentProcessingUseCase {
                     if (ProcessingResultCodes.isBusinessRule(e.getErrorCode())) {
                         return Mono.error(e);
                     }
-                    return Mono.error(
-                            new ProcessingException("Validation failed: " + e.getMessage(), e.getErrorCode(), e));
+                    ProcessingException pe = new ProcessingException("Validation failed: " + e.getMessage(), e.getErrorCode(), e);
+                    pe.setFilename(e.getFilename());
+                    return Mono.error(pe);
                 });
     }
 

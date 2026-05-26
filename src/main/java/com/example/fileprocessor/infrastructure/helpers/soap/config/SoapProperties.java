@@ -10,30 +10,33 @@ import java.util.Map;
 @Validated
 @ConfigurationProperties(prefix = "app.soap.v2")
 public record SoapProperties(
-    @NotBlank String endpoint,
-    @NotBlank String systemId,
-    @NotBlank String userName,
-    @NotBlank String headerNamespace,
-    @NotBlank String bodyNamespace,
-    @NotBlank String soapNamespace,
+        @NotBlank String endpoint,
+        @NotBlank String systemId,
+        @NotBlank String userName,
+        @NotBlank String headerNamespace,
+        @NotBlank String bodyNamespace,
+        @NotBlank String soapNamespace,
 
-    String userToken,
-    String destinationName,
-    String destinationNamespace,
-    String destinationOperation,
-    String soapAction,
+        String userToken,
+        String destinationName,
+        String destinationNamespace,
+        String destinationOperation,
+        String soapAction,
 
-    String classification,
-    Map<String, String> messageContext,
-    Map<String, String> metaData,
+        String classification,
+        Map<String, String> messageContext,
+        Map<String, String> metaData,
 
-    @Min(1) int timeoutSeconds,
-    @Min(1) int retryAttempts
-) {
+        @Min(1) int timeoutSeconds,
+        @Min(1) int retryAttempts) {
     public SoapProperties {
-        if (messageContext == null) messageContext = Map.of();
-        if (metaData == null) metaData = Map.of();
-        if (timeoutSeconds <= 0) timeoutSeconds = 30;
-        if (retryAttempts < 0) retryAttempts = 0;
+        if (messageContext == null)
+            messageContext = Map.of();
+        if (metaData == null)
+            metaData = Map.of();
+        if (timeoutSeconds <= 0)
+            timeoutSeconds = 30;
+        if (retryAttempts < 0)
+            retryAttempts = 0;
     }
 }

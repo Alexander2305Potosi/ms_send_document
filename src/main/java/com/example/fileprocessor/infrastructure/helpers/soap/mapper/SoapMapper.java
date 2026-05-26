@@ -168,7 +168,8 @@ public class SoapMapper {
             externalReference = extractTextContentRecursive(el, SoapConstants.EL_ID_DOCUMENTO);
         }
 
-        boolean isSuccess = SoapConstants.STATUS_OK.equalsIgnoreCase(status) || ProcessingResultCodes.SUCCESS.name().equalsIgnoreCase(status);
+        boolean isSuccess = SoapConstants.STATUS_OK.equalsIgnoreCase(status)
+                || ProcessingResultCodes.SUCCESS.name().equalsIgnoreCase(status);
 
         String finalStatus = status != null ? status : ProcessingResultCodes.SUCCESS.name();
         String finalCorrelationId = correlationId != null ? correlationId : "N/A";

@@ -295,6 +295,50 @@ class AbstractDocumentProcessingUseCaseTest {
     }
 
     @Test
+    void executePendingDocuments_withZipValidationErrorNotBusinessRule_setsFilenameInException() throws Exception {
+        Document doc = Document.builder()
+            .id(1L)
+            .documentId("doc-zip-non-br")
+            .productId("p1")
+            .state("PENDING")
+            .isZip(true)
+            .build();
+
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
+            java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry("inner-file.pdf");
+            zos.putNextEntry(entry);
+            zos.write("dummy-data".getBytes());
+            zos.closeEntry();
+        }
+        byte[] zipBytes = baos.toByteArray();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("p1")
+                .documentId("doc-zip-non-br")
+                .filename("archive.zip")
+                .content(zipBytes)
+                .isZip(true)
+                .build();
+
+        when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        
+        when(documentValidator.validate(any(), anyBoolean()))
+            .thenReturn(Mono.error(new ProcessingException("Invalid inner file", "SOME_NON_BUSINESS_RULE_ERROR")));
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(resp -> {
+                assertFalse(resp.isSuccess());
+                assertEquals("inner-file.pdf", resp.getFilename());
+                assertEquals("SOME_NON_BUSINESS_RULE_ERROR", resp.getSyncStatus());
+                assertTrue(resp.getMessage().contains("Invalid inner file"));
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(5));
+    }
+
+    @Test
     void executePendingDocuments_withZipEmpty_throwsEmptyContent() throws Exception {
         Document doc = Document.builder()
             .id(1L)
