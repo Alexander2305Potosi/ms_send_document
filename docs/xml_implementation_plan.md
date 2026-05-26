@@ -526,11 +526,22 @@ public class SoapMapper {
             finalMessage = message != null ? message : ProcessingResultCodes.FAILURE.name();
         }
 
+        Instant parsedDate;
+        try {
+            parsedDate = processedAt != null ? Instant.parse(processedAt.trim()) : Instant.now();
+        } catch (Exception e) {
+            try {
+                parsedDate = java.time.OffsetDateTime.parse(processedAt.trim()).toInstant();
+            } catch (Exception ex) {
+                parsedDate = Instant.now();
+            }
+        }
+
         return FileUploadResponse.builder()
                 .status(finalStatus)
                 .message(finalMessage)
                 .correlationId(finalCorrelationId)
-                .processedAt(processedAt != null ? Instant.parse(processedAt) : Instant.now())
+                .processedAt(parsedDate)
                 .externalReference(externalReference)
                 .success(isSuccess)
                 .syncStatus(finalStatus)
