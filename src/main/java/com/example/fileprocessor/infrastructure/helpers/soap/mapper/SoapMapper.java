@@ -52,10 +52,10 @@ public class SoapMapper {
             try (InputStream is = resource.getInputStream()) {
                 String rawTemplate = new String(is.readAllBytes(), StandardCharsets.UTF_8);
                 this.xmlTemplate = rawTemplate
-                        .replace(SoapConstants.T_NS_STD, props.soapNamespace())
-                        .replace(SoapConstants.T_NS_BODY, props.bodyNamespace())
-                        .replace(SoapConstants.T_NS_ENV, props.headerNamespace())
-                        .replace(SoapConstants.T_SYSTEM_ID, props.systemId())
+                        .replace(SoapConstants.T_NS_STD, Objects.requireNonNullElse(props.soapNamespace(), ""))
+                        .replace(SoapConstants.T_NS_BODY, Objects.requireNonNullElse(props.bodyNamespace(), ""))
+                        .replace(SoapConstants.T_NS_ENV, Objects.requireNonNullElse(props.headerNamespace(), ""))
+                        .replace(SoapConstants.T_SYSTEM_ID, Objects.requireNonNullElse(props.systemId(), ""))
                         .replace(SoapConstants.T_USER_NAME, Objects.requireNonNullElse(props.userName(), ""))
                         .replace(SoapConstants.T_USER_TOKEN, Objects.requireNonNullElse(props.userToken(), ""))
                         .replace(SoapConstants.T_DEST_NAME, Objects.requireNonNullElse(props.destinationName(), ""))
