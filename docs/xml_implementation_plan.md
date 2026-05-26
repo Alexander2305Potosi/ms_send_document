@@ -40,6 +40,7 @@ public record SoapProperties(
         String grupoSeguridad,
         String cuentaSeguridad,
         String idPerfil,
+        String codigoSubSerie, // <-- Añadido para el código de subserie fijo
 
         Map<String, String> messageContext,
         Map<String, String> metaData,
@@ -70,6 +71,7 @@ app:
       grupo-seguridad: "Aliados"
       cuenta-seguridad: "Aliado/contratos_proveedor_abastecimiento"
       id-perfil: "Contratosproveedorabast"
+      codigo-sub-serie: "TuSubserieFija" # <-- Definido en YAML
 ```
 
 ## 1.2 Clase Completa `FileUploadRequest.java`
@@ -168,6 +170,7 @@ app:
       grupo-seguridad: ${SOAP_V2_GRUPO_SEGURIDAD:Aliados}
       cuenta-seguridad: ${SOAP_V2_CUENTA_SEGURIDAD:Aliado/contratos_proveedor_abastecimiento}
       id-perfil: ${SOAP_V2_ID_PERFIL:Contratosproveedorabast}
+      codigo-sub-serie: ${SOAP_V2_CODIGO_SUBSERIE:TuSubserieFija}
       
       # Nombres de metadatos requeridos a mapear (se inyectan como llaves en Map<String, String>)
       meta-data:
@@ -366,7 +369,8 @@ public class SoapMapper {
                         .replace(SoapConstants.T_CLASS, Objects.requireNonNullElse(props.classification(), ""))
                         .replace(SoapConstants.T_GRUPO_SEGURIDAD, Objects.requireNonNullElse(props.grupoSeguridad(), ""))
                         .replace(SoapConstants.T_CUENTA_SEGURIDAD, Objects.requireNonNullElse(props.cuentaSeguridad(), ""))
-                        .replace(SoapConstants.T_ID_PERFIL, Objects.requireNonNullElse(props.idPerfil(), ""));
+                        .replace(SoapConstants.T_ID_PERFIL, Objects.requireNonNullElse(props.idPerfil(), ""))
+                        .replace(SoapConstants.T_CODIGO_SUBSERIE, Objects.requireNonNullElse(props.codigoSubSerie(), ""));
                 LOGGER.info("SOAP Template loaded successfully");
             }
         } catch (Exception e) {
@@ -383,10 +387,8 @@ public class SoapMapper {
             String safeFilename = escapeXml(Objects.requireNonNullElse(request.getDocumentName(), "unknown"));
             String subTipo = escapeXml(Objects.requireNonNullElse(request.getSubTypeDocumentary(), ""));
             
-            // Reemplazo dinámico o fallback a propiedades configuradas en application.yml
-            String tipoDoc = request.getTypeDocumentary() != null && !request.getTypeDocumentary().isBlank()
-                    ? escapeXml(request.getTypeDocumentary())
-                    : escapeXml(Objects.requireNonNullElse(props.tipoDocumental(), ""));
+            // Asignación directa del campo del request sin depender del fallback de properties
+            String tipoDoc = escapeXml(request.getTypeDocumentary());
                     
             String autor = request.getNameNegotiator() != null && !request.getNameNegotiator().isBlank()
                     ? escapeXml(request.getNameNegotiator())
@@ -394,7 +396,9 @@ public class SoapMapper {
 
             String tipoDocId = escapeXml(request.getTypeDocumentSupplier()); 
             String numDocId = escapeXml(request.getIdentificationSupplier());
-            String codigoSubSerie = escapeXml(request.getSubProduct());
+            
+            // Se lee directamente de las propiedades configuradas en el application.yml
+            String codigoSubSerie = escapeXml(Objects.requireNonNullElse(props.codigoSubSerie(), ""));
 
             // Construir metadata dinámicamente mapeando los campos del modelo real FileUploadRequest
             StringBuilder metadataBuilder = new StringBuilder();
