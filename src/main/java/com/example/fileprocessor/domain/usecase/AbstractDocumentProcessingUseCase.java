@@ -92,10 +92,19 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .flatMapMany(this::decompress)
                 .concatMap(h -> documentValidator.validate(h, true)
                     .onErrorMap(e -> {
-                        if (e instanceof ProcessingException pe && Boolean.TRUE.equals(history.getIsZip())) {
+                        ProcessingException pe;
+                        if (e instanceof ProcessingException existingPe) {
+                            pe = existingPe;
+                            if (pe.getErrorCode() == null || pe.getErrorCode().isBlank()) {
+                                pe = new ProcessingException(pe.getMessage(), ProcessingResultCodes.PATTERN_MISMATCH.name(), pe.getCause());
+                            }
+                        } else {
+                            pe = new ProcessingException(e.getMessage(), ProcessingResultCodes.PATTERN_MISMATCH.name(), e);
+                        }
+                        if (Boolean.TRUE.equals(history.getIsZip())) {
                             pe.setFilename(h.getFilename());
                         }
-                        return e;
+                        return pe;
                     }))
                 .next()
                 .switchIfEmpty(Mono.defer(() -> {
@@ -170,6 +179,12 @@ public abstract class AbstractDocumentProcessingUseCase {
     private String calculateNextState(Document doc, FileUploadResponse response) {
         if (response.isSuccess()) {
             return ProcessingResultCodes.PROCESSED.name();
+        }
+
+        // Treat as BUSINESS_REJECTION if it is a known business rule or any non-transient error status
+        if (ProcessingResultCodes.isBusinessRule(response.getSyncStatus()) || 
+            (response.getSyncStatus() != null && !ProcessingResultCodes.isTransient(response.getSyncStatus()))) {
+            return ProcessingResultCodes.BUSINESS_REJECTION.name();
         }
 
         int currentRetry = doc.getRetryCountSafe();

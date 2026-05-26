@@ -14,6 +14,7 @@ public enum ProcessingResultCodes {
     PROCESSED("Document successfully uploaded and finalized"),
     FAILED("Document failed all processing attempts"),
     ERR_DUPLICATED_DOC("Document skipped because it already exists"),
+    BUSINESS_REJECTION("Document rejected by business rules validation"),
 
     // ── Result Details (historico_documentos table) ──────────────────────────
     SUCCESS("Operation completed successfully"),

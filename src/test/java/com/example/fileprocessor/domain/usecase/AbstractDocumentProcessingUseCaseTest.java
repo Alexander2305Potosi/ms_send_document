@@ -245,7 +245,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(5));
 
         verify(persistencePort).finalizeProcessingAtomically(argThat(h -> 
-            ProcessingResultCodes.FAILED.name().equals(h.getState()) &&
+            ProcessingResultCodes.BUSINESS_REJECTION.name().equals(h.getState()) &&
             ProcessingResultCodes.PATTERN_MISMATCH.name().equals(h.getSyncStatus())
         ));
     }
