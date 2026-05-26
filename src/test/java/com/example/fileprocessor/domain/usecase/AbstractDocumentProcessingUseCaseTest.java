@@ -249,4 +249,85 @@ class AbstractDocumentProcessingUseCaseTest {
             ProcessingResultCodes.PATTERN_MISMATCH.name().equals(h.getSyncStatus())
         ));
     }
+
+    @Test
+    void executePendingDocuments_withZipValidationError_setsFilenameInException() throws Exception {
+        Document doc = Document.builder()
+            .id(1L)
+            .documentId("doc-zip")
+            .productId("p1")
+            .state("PENDING")
+            .isZip(true)
+            .build();
+
+        // Create a valid zip with one file entry
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
+            java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry("inner-file.pdf");
+            zos.putNextEntry(entry);
+            zos.write("dummy-data".getBytes());
+            zos.closeEntry();
+        }
+        byte[] zipBytes = baos.toByteArray();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("p1")
+                .documentId("doc-zip")
+                .filename("archive.zip")
+                .content(zipBytes)
+                .isZip(true)
+                .build();
+
+        when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        
+        when(documentValidator.validate(any(), anyBoolean()))
+            .thenReturn(Mono.error(new ProcessingException("Invalid inner file", ProcessingResultCodes.PATTERN_MISMATCH.name())));
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(resp -> {
+                assertFalse(resp.isSuccess());
+                assertEquals("inner-file.pdf", resp.getFilename());
+                assertEquals(ProcessingResultCodes.PATTERN_MISMATCH.name(), resp.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void executePendingDocuments_withZipEmpty_throwsEmptyContent() throws Exception {
+        Document doc = Document.builder()
+            .id(1L)
+            .documentId("doc-zip-empty")
+            .productId("p1")
+            .state("PENDING")
+            .isZip(true)
+            .build();
+
+        // Create an empty zip (no file entries)
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
+            // no entries
+        }
+        byte[] zipBytes = baos.toByteArray();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("p1")
+                .documentId("doc-zip-empty")
+                .filename("archive-empty.zip")
+                .content(zipBytes)
+                .isZip(true)
+                .build();
+
+        when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(resp -> {
+                assertFalse(resp.isSuccess());
+                assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), resp.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(5));
+    }
 }
