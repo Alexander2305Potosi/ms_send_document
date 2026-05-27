@@ -1235,6 +1235,10 @@ app:
 curl -X POST http://localhost:8080/api/v1/products/sync \
   -H "message-id: my-trace-123"
 
+# Sincronizar productos y documentos desde API REST a BD filtrando por rango de fechas de cargue
+curl -X POST "http://localhost:8080/api/v1/products/sync?date_init=2026-05-01&date_end=2026-05-27" \
+  -H "message-id: my-trace-123"
+
 # Procesar documentos pendientes via SOAP
 curl "http://localhost:8080/api/v1/products?processor=soap" \
   -H "message-id: my-trace-456"

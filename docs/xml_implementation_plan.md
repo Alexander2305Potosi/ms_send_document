@@ -331,6 +331,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import com.google.gson.Gson;
 
 @Component
 public class SoapMapper {
@@ -343,11 +344,13 @@ public class SoapMapper {
 
     private final SoapProperties props;
     private final ResourceLoader resourceLoader;
+    private final Gson gson;
     private String xmlTemplate;
 
-    public SoapMapper(SoapProperties props, ResourceLoader resourceLoader) {
+    public SoapMapper(SoapProperties props, ResourceLoader resourceLoader, Gson gson) {
         this.props = props;
         this.resourceLoader = resourceLoader;
+        this.gson = gson;
     }
 
     @PostConstruct
@@ -410,7 +413,19 @@ public class SoapMapper {
                     String val = "";
                     switch (entry.getKey()) {
                         case "xNumeroDoc" -> val = request.getIdSupplierErp();
-                        case "xNombre" -> val = request.getNameSupplier() != null ? request.getNameSupplier() : request.getNameSupplierErp();
+                        case "xNombre" -> {
+                            String nameVal = request.getNameSupplier() != null ? request.getNameSupplier() : request.getNameSupplierErp();
+                            if (nameVal != null && nameVal.trim().startsWith("{")) {
+                                try {
+                                    Map<?, ?> map = gson.fromJson(nameVal, Map.class);
+                                    val = map.containsKey("businessName") ? String.valueOf(map.get("businessName")) : nameVal;
+                                } catch (Exception e) {
+                                    val = nameVal;
+                                }
+                            } else {
+                                val = nameVal;
+                            }
+                        }
                         case "xRadicado" -> val = request.getEstablished();
                         case "xSubproducto" -> val = request.getSubProduct();
                         case "xAsunto" -> val = request.getContratcState(); // Nota: se respeta el campo contratcState
@@ -808,7 +823,7 @@ class SoapMapperTest {
         Resource res = new ByteArrayResource(template.getBytes());
         when(resourceLoader.getResource(anyString())).thenReturn(res);
 
-        soapMapper = new SoapMapper(props, resourceLoader);
+        soapMapper = new SoapMapper(props, resourceLoader, new com.google.gson.Gson());
         soapMapper.init();
     }
 

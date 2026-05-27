@@ -47,8 +47,8 @@ public abstract class AbstractDocumentProcessingUseCase {
 
         return Mono.deferContextual(ctx -> {
             String traceId = extractTraceId(ctx);
-            LOGGER.log(Level.INFO, "[TraceID: {0}] Starting SEQUENTIAL execution for: {1}", 
-                    new Object[]{traceId, implementationName()});
+            LOGGER.log(Level.INFO, "[TraceID: {0}] Starting SEQUENTIAL execution for: {1}",
+                    new Object[] { traceId, implementationName() });
             return Mono.just(traceId);
         }).flatMapMany(traceId -> persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
                 .collectList()
@@ -62,11 +62,14 @@ public abstract class AbstractDocumentProcessingUseCase {
         return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
                 .filter(rows -> rows > 0)
                 .doOnDiscard(Long.class,
-                        unused -> LOGGER.log(Level.WARNING, "[TraceID: {0}] Document {1} is already being processed or locked.",
-                                new Object[]{traceId, doc.getDocumentId()}))
+                        unused -> LOGGER.log(Level.WARNING,
+                                "[TraceID: {0}] Document {1} is already being processed or locked.",
+                                new Object[] { traceId, doc.getDocumentId() }))
                 .flatMap(unused -> fetchAndValidate(historyDto))
                 .flatMapMany(h -> uploadDocument(h, doc.getId())
-                        .map(resp -> (Boolean.TRUE.equals(doc.getIsZip()) && resp.getFilename() == null) ? resp.toBuilder().filename(h.getFilename()).build() : resp))
+                        .map(resp -> (Boolean.TRUE.equals(doc.getIsZip()) && resp.getFilename() == null)
+                                ? resp.toBuilder().filename(h.getFilename()).build()
+                                : resp))
                 .onErrorResume(error -> handleGlobalError(error).flux())
                 .concatMap(response -> {
                     if (response.isTechnicalRetry()) {
@@ -91,27 +94,29 @@ public abstract class AbstractDocumentProcessingUseCase {
                         .build())
                 .flatMapMany(this::decompress)
                 .concatMap(h -> documentValidator.validate(h, true)
-                    .onErrorMap(e -> {
-                        ProcessingException pe;
-                        if (e instanceof ProcessingException existingPe) {
-                            pe = existingPe;
-                            if (pe.getErrorCode() == null || pe.getErrorCode().isBlank()) {
-                                pe = new ProcessingException(pe.getMessage(), ProcessingResultCodes.PATTERN_MISMATCH.name(), pe.getCause());
+                        .onErrorMap(e -> {
+                            ProcessingException pe;
+                            if (e instanceof ProcessingException existingPe) {
+                                pe = existingPe;
+                                if (pe.getErrorCode() == null || pe.getErrorCode().isBlank()) {
+                                    pe = new ProcessingException(pe.getMessage(),
+                                            ProcessingResultCodes.PATTERN_MISMATCH.name(), pe.getCause());
+                                }
+                            } else {
+                                pe = new ProcessingException(e.getMessage(),
+                                        ProcessingResultCodes.PATTERN_MISMATCH.name(), e);
                             }
-                        } else {
-                            pe = new ProcessingException(e.getMessage(), ProcessingResultCodes.PATTERN_MISMATCH.name(), e);
-                        }
-                        if (Boolean.TRUE.equals(history.getIsZip())) {
-                            pe.setFilename(h.getFilename());
-                        }
-                        return pe;
-                    }))
+                            if (Boolean.TRUE.equals(history.getIsZip())) {
+                                pe.setFilename(h.getFilename());
+                            }
+                            return pe;
+                        }))
                 .next()
                 .switchIfEmpty(Mono.defer(() -> {
                     if (Boolean.TRUE.equals(history.getIsZip())) {
                         return Mono.error(new ProcessingException(
-                            ProcessingResultCodes.EMPTY_CONTENT.value(),
-                            ProcessingResultCodes.EMPTY_CONTENT.name()));
+                                ProcessingResultCodes.EMPTY_CONTENT.value(),
+                                ProcessingResultCodes.EMPTY_CONTENT.name()));
                     }
                     return Mono.empty();
                 }))
@@ -119,7 +124,8 @@ public abstract class AbstractDocumentProcessingUseCase {
                     if (ProcessingResultCodes.isBusinessRule(e.getErrorCode())) {
                         return Mono.error(e);
                     }
-                    ProcessingException pe = new ProcessingException("Validation failed: " + e.getMessage(), e.getErrorCode(), e);
+                    ProcessingException pe = new ProcessingException("Validation failed: " + e.getMessage(),
+                            e.getErrorCode(), e);
                     pe.setFilename(e.getFilename());
                     return Mono.error(pe);
                 });
@@ -129,30 +135,36 @@ public abstract class AbstractDocumentProcessingUseCase {
             FileUploadResponse response, String traceId) {
         int businessRetryCount = doc.getRetryCountSafe();
         String nextState = calculateNextState(doc, response);
-        String logPrefix = response.isSuccess() ? ProcessingResultCodes.SUCCESS.name() : 
-                         (ProcessingResultCodes.PENDING.name().equals(nextState) ? ProcessingResultCodes.RETRYABLE_ERROR.name() : ProcessingResultCodes.FAILURE.name());
+        String logPrefix = response.isSuccess() ? ProcessingResultCodes.SUCCESS.name()
+                : (ProcessingResultCodes.PENDING.name().equals(nextState) ? ProcessingResultCodes.RETRYABLE_ERROR.name()
+                        : ProcessingResultCodes.FAILURE.name());
 
         doc.setState(nextState);
         doc.setSyncMessage(response.getMessage());
 
         LOGGER.log(Level.INFO, "[TraceID: {0}] [{1}] Document {2} (Product: {3}) -> {4}. Message: {5}",
-                new Object[]{traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState, response.getMessage()});
+                new Object[] { traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState,
+                        response.getMessage() });
 
-        return persistencePort.finalizeProcessingAtomically(syncHistoryDTO(doc, history, response, nextState, businessRetryCount))
+        return persistencePort
+                .finalizeProcessingAtomically(syncHistoryDTO(doc, history, response, nextState, businessRetryCount))
                 .thenReturn(response);
     }
 
-    private Mono<Void> saveAuditOnly(Document doc, DocumentHistoryDTO history, FileUploadResponse response, String traceId) {
+    private Mono<Void> saveAuditOnly(Document doc, DocumentHistoryDTO history, FileUploadResponse response,
+            String traceId) {
         if (response.isTechnicalRetry()) {
             LOGGER.log(Level.INFO, "[TraceID: {0}] Recording technical retry audit for Document {1} (Attempt {2})",
-                    new Object[]{traceId, doc.getDocumentId(), response.getAttemptCount()});
+                    new Object[] { traceId, doc.getDocumentId(), response.getAttemptCount() });
         }
-        return persistencePort.saveHistory(syncHistoryDTO(doc, history, response, doc.getState(), doc.getRetryCountSafe()));
+        return persistencePort
+                .saveHistory(syncHistoryDTO(doc, history, response, doc.getState(), doc.getRetryCountSafe()));
     }
 
-    private DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO history, FileUploadResponse response, String state, int businessRetryCount) {
-        String actualFilename = response.getFilename() != null ? response.getFilename() : 
-                        (Boolean.TRUE.equals(doc.getIsZip()) ? history.getFilename() : null);
+    private DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO history, FileUploadResponse response,
+            String state, int businessRetryCount) {
+        String actualFilename = response.getFilename() != null ? response.getFilename()
+                : (Boolean.TRUE.equals(doc.getIsZip()) ? history.getFilename() : null);
 
         String finalMessage = (response.getSyncStatus() != null && !response.getSyncStatus().isBlank())
                 ? String.format("[%s] %s", response.getSyncStatus(), response.getMessage())
@@ -181,9 +193,10 @@ public abstract class AbstractDocumentProcessingUseCase {
             return ProcessingResultCodes.PROCESSED.name();
         }
 
-        // Treat as BUSINESS_REJECTION if it is a known business rule or any non-transient error status
-        if (ProcessingResultCodes.isBusinessRule(response.getSyncStatus()) || 
-            (response.getSyncStatus() != null && !ProcessingResultCodes.isTransient(response.getSyncStatus()))) {
+        // Treat as BUSINESS_REJECTION if it is a known business rule or any
+        // non-transient error status
+        if (ProcessingResultCodes.isBusinessRule(response.getSyncStatus()) ||
+                (response.getSyncStatus() != null && !ProcessingResultCodes.isTransient(response.getSyncStatus()))) {
             return ProcessingResultCodes.BUSINESS_REJECTION.name();
         }
 
@@ -219,7 +232,8 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO history) {
-        if (!Boolean.TRUE.equals(history.getIsZip()) || history.getFilename() == null || history.getFilename().isBlank()) {
+        if (!Boolean.TRUE.equals(history.getIsZip()) || history.getFilename() == null
+                || history.getFilename().isBlank()) {
             return Flux.just(history);
         }
         return ZipDecompressor.decompress(history);

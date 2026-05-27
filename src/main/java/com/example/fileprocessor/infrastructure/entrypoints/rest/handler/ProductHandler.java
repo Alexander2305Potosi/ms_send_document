@@ -51,9 +51,9 @@ public class ProductHandler {
         return Mono.deferContextual(ctx -> {
             String useCase = ctx.get(TYPE_JOB);
             String traceId = ctx.get(HEADER_TRACE_ID);
-            
+
             LOGGER.log(Level.INFO, "Starting pending documents processing, traceId: {0}, useCase: {1}", new Object[]{traceId, useCase});
-            
+
             getProcessor(useCase).executePendingDocuments()
                 .doOnNext(result -> LOGGER.log(Level.INFO, "Document processed: correlationId={0}, status={1}",
                     new Object[]{result.getCorrelationId(), result.getStatus()}))
@@ -74,14 +74,19 @@ public class ProductHandler {
         Context context = Context.of(
                 TYPE_JOB, request.pathVariables().containsKey(TYPE_JOB) ? request.pathVariable(TYPE_JOB) : "default",
                 HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
-                HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default")
+                HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default"),
+                HEADER_DATE_INIT, request.queryParam(ApiConstants.HEADER_DATE_INIT).orElse(""),
+                HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse("")
         );
 
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(HEADER_TRACE_ID);
             String useCase = ctx.get(HEADER_USE_CASE);
+            String dateInitVal = ctx.get(ApiConstants.HEADER_DATE_INIT);
+            String dateEndVal = ctx.get(ApiConstants.HEADER_DATE_END);
 
-            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}", new Object[]{traceId, useCase});
+            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}",
+                    new Object[]{traceId, useCase, dateInitVal, dateEndVal});
             syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> LOGGER.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
                 .doOnSuccess(v -> LOGGER.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
