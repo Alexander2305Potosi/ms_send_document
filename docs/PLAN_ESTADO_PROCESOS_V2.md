@@ -1,7 +1,7 @@
 # Plan de Implementación V2: Consulta de Estado de Procesos Asíncronos
-## (Plan Corregido — Resuelve los 14 Hallazgos del Análisis)
+## (Plan Corregido — Sin Validación de Tiempo Límite)
 
-Este plan corrige todos los errores críticos, mejoras y cobertura de pruebas identificados en el plan anterior `PLAN_ESTADO_PROCESOS.md`.
+Este plan corrige todos los hallazgos identificados. La validación del tiempo límite **es responsabilidad del consumidor del endpoint**; los endpoints solo reportan el estado actual en BD.
 
 ---
 
@@ -12,16 +12,13 @@ Este plan corrige todos los errores críticos, mejoras y cobertura de pruebas id
 | 1 | 🔴 CRÍTICO | Constructor de `ProductHandler` conserva los 3 campos existentes y agrega los 2 nuevos |
 | 2 | 🔴 CRÍTICO | `ProductRoutes` mantiene el patrón `nest()` + `PathProperties` y agrega 2 beans adicionales |
 | 3 | 🔴 CRÍTICO | `StateCount` en `domain.entity.product` (relación correcta: infra importa de dominio) |
-| 4 | 🔴 CRÍTICO | Prefijo cambiado a `app.status.sync` y `app.status.process` para evitar colisión con `app.sync.sucursal-query` |
-| 5 | 🟡 MEJORA | `ProductMasterRepository` agrega `Mono<Long> countAllProducts()` — evita cargar todos los registros |
-| 6 | 🟡 MEJORA | `LocalTime.parse()` dentro de `Mono.fromCallable()` para propagar errores reactivamente |
-| 7 | 🟡 MEJORA | Se elimina el check explícito de `ERR_DUPLICATED_DOC` en el usecase, ya que `isBusinessRule()` lo cubre |
+| 4 | ~~🔴 Colisión `app.sync`~~ | **Eliminado** — no se necesitan propiedades de tiempo |
+| 5 | 🟡 MEJORA | `ProductMasterRepository` agrega `Mono<Long> countAllProducts()` para evitar cargar todos los registros |
+| 6 | ~~🟡 `LocalTime.parse` reactivo~~ | **Eliminado** — no hay parseo de tiempo |
+| 7 | 🟡 MEJORA | Se elimina el check explícito de `ERR_DUPLICATED_DOC` — `isBusinessRule()` ya lo cubre |
 | 8 | 🔴 CRÍTICO | `DomainConfig` registra `GetSyncStatusUseCase` y `GetProcessStatusUseCase` como `@Bean` |
-| 9 | 🔴 CRÍTICO | `DomainConfig` añade `@EnableConfigurationProperties` para `SyncStatusProperties` y `ProcessStatusProperties` |
-| 10 | 🟢 TEST | Se agrega prueba: `sync_whenLocalEqualsOrExceedsMaster_returnsOne` |
-| 11 | 🟢 TEST | Se agrega prueba: `sync_whenLocalExceedsMaster_returnsOne` |
-| 12 | 🟢 TEST | Se agrega prueba: `process_whenNoDocumentsToday_returnsOne` |
-| 13 | 🟢 TEST | Se agrega prueba: `process_whenExceededDeadlineWithPending_returnsError` |
+| 9 | ~~🔴 `@EnableConfigurationProperties`~~ | **Eliminado** — no hay records de propiedades de tiempo |
+| 10-13 | 🟢 TEST | Casos de prueba ampliados y corregidos sin lógica de tiempo |
 | 14 | 🟢 TEST | `ProductHandlerStatusTest` corrige el mock de headers para evitar NPE |
 
 ---
@@ -30,82 +27,72 @@ Este plan corrige todos los errores críticos, mejoras y cobertura de pruebas id
 
 El cuerpo de la respuesta de ambos endpoints retornará únicamente:
 - **En ejecución / completado con éxito:** `"1"`
-- **Fallo técnico o tiempo límite excedido:** `"error consulta carga"`
+- **Error técnico o proceso incompleto:** `"error consulta carga"`
 
-### Propiedades Corregidas (sin colisión con `app.sync.sucursal-query`)
-```yaml
-app:
-  status:
-    sync:
-      start-time: "08:00:00"    # Hora de inicio programada para la sincronización
-      timeout-hours: 1          # Tiempo límite de la sincronización (en horas)
-    process:
-      start-time: "09:00:00"    # Hora de inicio programada para el procesamiento
-      timeout-hours: 2          # Tiempo límite del procesamiento (en horas)
-```
+> **Sin propiedades de tiempo:** no se necesitan `SyncStatusProperties`, `ProcessStatusProperties`, ni entradas en `application.yml`.
+
+---
+
+### A. Sincronización (`GET /api/v1/products/sync/status/{type_job}`)
+
+| Condición | Status |
+|-----------|--------|
+| `localCount >= masterCount` | `"1"` — completado |
+| `localCount < masterCount` | `"error consulta carga"` — incompleto |
+
+---
+
+### B. Procesamiento (`GET /api/v1/products/process/status/{type_job}`)
+
+**Reglas de Decisión:**
+* **Estado en progreso activo:** Únicamente `ON_PROCESSING` (si lleva menos de 1 hora de iniciado).
+* **Estados excluidos:** `NO_SUCURSAL` y los cubiertos por `isBusinessRule()` (incluye `ERR_DUPLICATED_DOC`).
+* **Regla de Expiración:** Si un documento en estado `ON_PROCESSING` tiene más de 1 hora desde su inicio (`fecha_carga`), se considera error técnico y el endpoint debe retornar `"error consulta carga"`.
+
+| Condición | Status |
+|-----------|--------|
+| `totalApplicable == 0` | `"1"` — sin documentos que procesar |
+| `pending > 0` (documentos en `ON_PROCESSING` con < 1 hora) | `"1"` — en curso |
+| `pending == 0 && technicalFailures > 0` (incluyendo stuck `ON_PROCESSING` con > 1 hora o estado `FAILED`) | `"error consulta carga"` |
+| `pending == 0 && technicalFailures == 0` | `"1"` — todo procesado |
 
 ---
 
 ## 2. Clases a Modificar y Crear
 
-### A. Capa de Configuración (Propiedades)
+### A. Constantes
 
-#### [NEW] `SyncStatusProperties.java`
-> Prefijo `app.status.sync` para no colisionar con `app.sync.sucursal-query` existente.
-
-```java
-package com.example.fileprocessor.infrastructure.config;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.validation.annotation.Validated;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Min;
-
-@Validated
-@ConfigurationProperties(prefix = "app.status.sync")
-public record SyncStatusProperties(
-    @NotBlank String startTime,
-    @Min(1) int timeoutHours
-) {}
-```
-
-#### [NEW] `ProcessStatusProperties.java`
-```java
-package com.example.fileprocessor.infrastructure.config;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.validation.annotation.Validated;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Min;
-
-@Validated
-@ConfigurationProperties(prefix = "app.status.process")
-public record ProcessStatusProperties(
-    @NotBlank String startTime,
-    @Min(1) int timeoutHours
-) {}
-```
+> **Nota sobre `ON_PROCESSING`**: La constante `ProcessingResultCodes.ON_PROCESSING` ya existe en la base de código actual, por lo que no es necesario modificar `ProcessingResultCodes.java` para declararla.
 
 #### [MODIFY] [ApiConstants.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/entrypoints/rest/constants/ApiConstants.java)
-> Agregar las dos constantes de status al final de la clase.
-
 ```java
-// Respuestas de estado del proceso
-public static final String STATUS_OK = "1";
-public static final String STATUS_ERROR = "error consulta carga";
-```
+// MODIFICADO
+package com.example.fileprocessor.infrastructure.entrypoints.rest.constants;
 
-#### [MODIFY] [application.yml](file:///Users/alexander2305/Downloads/file-processor-service/src/main/resources/application.yml)
-> Agregar la sección `app.status` al final del archivo, sin tocar `app.sync` existente.
+/**
+ * API-level constants for REST endpoints and integrations.
+ */
+public final class ApiConstants {
 
-```yaml
-  status:
-    sync:
-      start-time: "08:00:00"
-      timeout-hours: 1
-    process:
-      start-time: "09:00:00"
-      timeout-hours: 2
+    private ApiConstants() {}
+
+    // Processor types
+    public static final String PROCESSOR_SOAP = "soap";
+    public static final String PROCESSOR_S3 = "s3";
+
+    // HTTP headers
+    public static final String HEADER_TRACE_ID = "message-id";
+    public static final String HEADER_USE_CASE = "use-case";
+    public static final String HEADER_DATE_INIT = "date_init";
+    public static final String HEADER_DATE_END = "date_end";
+    public static final String TYPE_JOB = "type_job";
+
+    // Respuestas de estado del proceso
+    // NUEVO
+    public static final String STATUS_OK = "1";
+    public static final String STATUS_ERROR = "error consulta carga";
+    public static final String STATE_ON_PROCESSING = "ON_PROCESSING";
+}
 ```
 
 ---
@@ -113,42 +100,127 @@ public static final String STATUS_ERROR = "error consulta carga";
 ### B. Capa de Persistencia
 
 #### [MODIFY] [ProductMasterRepository.java (Puerto)](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/domain/port/out/ProductMasterRepository.java)
-> Agregar método eficiente `countAllProducts()` que evita traer todos los registros a memoria.
-
 ```java
+// MODIFICADO
 package com.example.fileprocessor.domain.port.out;
 
 import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * Port for fetching master product information from an external database.
+ */
 public interface ProductMasterRepository {
     Flux<ProductMaestro> getAllProducts();
 
-    /**
-     * Cuenta el total de productos maestros sin cargarlos todos en memoria.
-     */
+    // NUEVO
+    /** Cuenta el total de productos maestros sin cargarlos en memoria. */
     Mono<Long> countAllProducts();
 }
 ```
 
 #### [MODIFY] [ProductMasterR2dbcAdapter.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/drivenadapters/masterdb/ProductMasterR2dbcAdapter.java)
-> Implementar `countAllProducts()` con consulta SQL directa `COUNT(*)`.
-
 ```java
-@Override
-public Mono<Long> countAllProducts() {
-    return masterDatabaseClient.sql("SELECT COUNT(*) FROM productos_maestros")
-            .map((row, metadata) -> row.get(0, Long.class))
-            .one()
-            .defaultIfEmpty(0L);
+// MODIFICADO
+package com.example.fileprocessor.infrastructure.drivenadapters.masterdb;
+
+import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
+import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.util.logging.Logger;
+
+@Component
+@RequiredArgsConstructor
+public class ProductMasterR2dbcAdapter implements ProductMasterRepository {
+
+    private static final Logger LOGGER = Logger.getLogger(ProductMasterR2dbcAdapter.class.getName());
+
+    @Qualifier("masterDatabaseClient")
+    private final DatabaseClient masterDatabaseClient;
+
+    @Override
+    public Flux<ProductMaestro> getAllProducts() {
+        return Flux.deferContextual(ctx -> {
+            String dateInit = ctx.getOrDefault(ApiConstants.HEADER_DATE_INIT, "");
+            String dateEnd = ctx.getOrDefault(ApiConstants.HEADER_DATE_END, "");
+
+            LOGGER.info(() -> "Fetching master products from EXTERNAL DATABASE. Filters - dateInit: " + dateInit + ", dateEnd: " + dateEnd);
+
+            String baseSql = "SELECT id, id_producto, nombre, fecha_cargue, estado, carpeta_origen, pais_origen FROM productos_maestros";
+
+            if (dateInit != null && !dateInit.isBlank() && dateEnd != null && !dateEnd.isBlank()) {
+                baseSql += " WHERE fecha_cargue BETWEEN :dateInit AND :dateEnd";
+                java.time.LocalDateTime start = parseDateTime(dateInit, false);
+                java.time.LocalDateTime end = parseDateTime(dateEnd, true);
+                
+                return masterDatabaseClient.sql(baseSql)
+                    .bind("dateInit", start)
+                    .bind("dateEnd", end)
+                    .map((row, metadata) -> ProductMaestro.builder()
+                        .id(row.get("id", Long.class))
+                        .productId(row.get("id_producto", String.class))
+                        .name(row.get("nombre", String.class))
+                        .loadDate(row.get("fecha_cargue", java.time.LocalDateTime.class))
+                        .state(row.get("estado", String.class))
+                        .originFolder(row.get("carpeta_origen", String.class))
+                        .originCountry(row.get("pais_origen", String.class))
+                        .build())
+                    .all();
+            }
+
+            return masterDatabaseClient.sql(baseSql)
+                .map((row, metadata) -> ProductMaestro.builder()
+                    .id(row.get("id", Long.class))
+                    .productId(row.get("id_producto", String.class))
+                    .name(row.get("nombre", String.class))
+                    .loadDate(row.get("fecha_cargue", java.time.LocalDateTime.class))
+                    .state(row.get("estado", String.class))
+                    .originFolder(row.get("carpeta_origen", String.class))
+                    .originCountry(row.get("pais_origen", String.class))
+                    .build())
+                .all();
+        });
+    }
+
+    // NUEVO
+    @Override
+    public Mono<Long> countAllProducts() {
+        return masterDatabaseClient.sql("SELECT COUNT(*) FROM productos_maestros")
+                .map((row, metadata) -> row.get(0, Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
+    private java.time.LocalDateTime parseDateTime(String dateStr, boolean endOfDay) {
+        try {
+            String trimmed = dateStr.trim();
+            if (trimmed.contains(" ") || trimmed.contains("T")) {
+                String clean = trimmed.replace("T", " ");
+                if (clean.length() > 19) {
+                    clean = clean.substring(0, 19);
+                }
+                return java.time.LocalDateTime.parse(clean, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            }
+            java.time.LocalDate date = java.time.LocalDate.parse(trimmed);
+            return endOfDay ? date.atTime(23, 59, 59) : date.atStartOfDay();
+        } catch (Exception e) {
+            return endOfDay ? java.time.LocalDateTime.now() : java.time.LocalDateTime.of(1970, 1, 1, 0, 0);
+        }
+    }
 }
 ```
 
-#### [NEW] `StateCount.java`
-> Ubicado en dominio (infra importa de dominio — relación correcta).
-
+#### [NEW] `StateCount.java` — `com.example.fileprocessor.domain.entity.product`
 ```java
+// NUEVO
 package com.example.fileprocessor.domain.entity.product;
 
 import lombok.AllArgsConstructor;
@@ -156,54 +228,181 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor
 public class StateCount {
     private String state;
     private Long total;
 }
 ```
 
-#### [MODIFY] [DocumentRepository.java (Puerto de dominio)](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/domain/port/out/DocumentRepository.java)
-> Agregar los dos nuevos métodos de consulta.
-
+#### [MODIFY] [DocumentRepository.java (Puerto)](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/domain/port/out/DocumentRepository.java)
 ```java
+// MODIFICADO
+package com.example.fileprocessor.domain.port.out;
+
+import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.StateCount;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-// Cuenta documentos creados hoy filtrados por caso de uso (para sync status)
-Mono<Long> countDocumentsCreatedToday(LocalDateTime startOfDay, String useCase);
+import java.time.LocalDateTime;
 
-// Agrupa documentos por estado hoy filtrados por caso de uso (para process status)
-Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
+/**
+ * Port for managing document metadata and lifecycle states.
+ */
+public interface DocumentRepository {
+    Mono<Document> save(Document document);
+
+    /**
+     * Finds documents for the current day.
+     */
+    Flux<Document> findByStateAndUseCaseToday(String state, String useCase, LocalDateTime startOfDay);
+
+    /**
+     * Updates document state and retry count.
+     * @param doc The document with new values.
+     * @param expectedState The previous state required for the update to succeed.
+     */
+    Mono<Long> updateStateAndRetry(Document doc, String expectedState);
+
+    /**
+     * Checks if a document with the given productId and documentId already exists.
+     */
+    Mono<Boolean> existsByProductIdAndDocumentId(String productId, String documentId);
+
+    // NUEVO
+    // Cuenta documentos creados hoy por caso de uso (sync status)
+    Mono<Long> countDocumentsCreatedToday(LocalDateTime startOfDay, String useCase);
+
+    // NUEVO
+    // Agrupa documentos por estado hoy por caso de uso (process status)
+    Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
+
+    // NUEVO
+    // Cuenta documentos en un estado específico que llevan más de cierto tiempo hoy
+    Mono<Long> countStaleDocuments(String state, String useCase, LocalDateTime startOfDay, LocalDateTime thresholdTime);
+}
 ```
 
 #### [MODIFY] [DocumentRepository.java (R2DBC)](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/drivenadapters/r2dbc/repository/DocumentRepository.java)
-> Agregar las queries con `@Query`. `StateCount` se importa desde el paquete de dominio.
-
 ```java
+// MODIFICADO
+package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository;
+
 import com.example.fileprocessor.domain.entity.product.StateCount;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;
+import org.springframework.data.r2dbc.repository.Query;
+import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-@Query("SELECT COUNT(*) FROM documentos WHERE fecha_carga >= $1 AND caso_uso = $2")
-Mono<Long> countDocumentsCreatedToday(LocalDateTime startOfDay, String useCase);
+import java.time.LocalDateTime;
 
-@Query("SELECT estado_sincronizacion AS state, COUNT(*) AS total FROM documentos WHERE fecha_carga >= $1 AND caso_uso = $2 GROUP BY estado_sincronizacion")
-Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
+@Repository
+public interface DocumentRepository extends R2dbcRepository<DocumentEntity, Long> {
+
+    @Query("SELECT * FROM documentos WHERE estado_sincronizacion = $1 AND caso_uso = $2 AND fecha_carga >= $3")
+    Flux<DocumentEntity> findByStateAndUseCaseToday(String estado, String casoUso, LocalDateTime startOfDay);
+
+    @Query("SELECT COUNT(*) > 0 FROM documentos WHERE id_producto = $1 AND id_documento = $2")
+    Mono<Boolean> existsByProductIdAndDocumentId(String productId, String documentId);
+
+    // NUEVO
+    @Query("SELECT COUNT(*) FROM documentos WHERE fecha_carga >= $1 AND caso_uso = $2")
+    Mono<Long> countDocumentsCreatedToday(LocalDateTime startOfDay, String useCase);
+
+    // NUEVO
+    @Query("SELECT estado_sincronizacion AS state, COUNT(*) AS total FROM documentos WHERE fecha_carga >= $1 AND caso_uso = $2 GROUP BY estado_sincronizacion")
+    Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
+
+    // NUEVO
+    @Query("SELECT COUNT(*) FROM documentos WHERE estado_sincronizacion = $1 AND caso_uso = $2 AND fecha_carga >= $3 AND fecha_carga_actualizacion < $4")
+    Mono<Long> countStaleDocuments(String state, String useCase, LocalDateTime startOfDay, LocalDateTime thresholdTime);
+}
 ```
 
 #### [MODIFY] [DocumentR2dbcAdapter.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/drivenadapters/r2dbc/DocumentR2dbcAdapter.java)
-> Implementar los dos nuevos métodos del puerto delegando al repositorio R2DBC.
-
 ```java
-@Override
-public Mono<Long> countDocumentsCreatedToday(LocalDateTime startOfDay, String useCase) {
-    return repository.countDocumentsCreatedToday(startOfDay, useCase);
-}
+// MODIFICADO
+package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-@Override
-public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase) {
-    return repository.countDocumentsGroupedByStateToday(startOfDay, useCase);
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.StateCount;
+import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.common.AbstractReactiveAdapterOperation;
+import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;
+import org.reactivecommons.utils.ObjectMapper;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.time.LocalDateTime;
+
+@Component
+public class DocumentR2dbcAdapter
+        extends
+        AbstractReactiveAdapterOperation<DocumentEntity, Document, Long, com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository>
+        implements DocumentRepository {
+
+    public DocumentR2dbcAdapter(
+            com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository repository,
+            ObjectMapper mapper) {
+        super(repository, mapper, d -> mapper.map(d, Document.class), DocumentEntity.class);
+    }
+
+    @Override
+    public Flux<Document> findByStateAndUseCaseToday(String state, String useCase, LocalDateTime startOfDay) {
+        return doQueryMany(() -> repository.findByStateAndUseCaseToday(state, useCase, startOfDay));
+    }
+
+    @Override
+    public Mono<Long> updateStateAndRetry(Document doc, String expectedState) {
+        return repository.findById(doc.getId())
+            .flatMap(entity -> {
+                // Atomic state validation
+                if (!expectedState.equals(entity.getState())) {
+                    return Mono.error(new com.example.fileprocessor.domain.exception.ProcessingException(
+                        "No se pudo actualizar el documento: el estado actual [" + entity.getState() + 
+                        "] no coincide con el esperado [" + expectedState + "]", 
+                        "STATE_MISMATCH"));
+                }
+
+                // Map updates from domain aggregate
+                entity.setState(doc.getState());
+                entity.setRetryCount(doc.getRetryCountSafe());
+                entity.setUpdatedAt(LocalDateTime.now());
+                entity.setSyncMessage(doc.getSyncMessage());
+                entity.setHomologationFolder(doc.getHomologationFolder());
+                entity.setHomologationCountry(doc.getHomologationCountry());
+                entity.setCategoriaHomologada(doc.getCategoriaHomologada());
+
+                return repository.save(entity).thenReturn(1L);
+            });
+    }
+
+    @Override
+    public Mono<Boolean> existsByProductIdAndDocumentId(String productId, String documentId) {
+        return repository.existsByProductIdAndDocumentId(productId, documentId);
+    }
+
+    // NUEVO
+    @Override
+    public Mono<Long> countDocumentsCreatedToday(LocalDateTime startOfDay, String useCase) {
+        return repository.countDocumentsCreatedToday(startOfDay, useCase);
+    }
+
+    // NUEVO
+    @Override
+    public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase) {
+        return repository.countDocumentsGroupedByStateToday(startOfDay, useCase);
+    }
+
+    // NUEVO
+    @Override
+    public Mono<Long> countStaleDocuments(String state, String useCase, LocalDateTime startOfDay, LocalDateTime thresholdTime) {
+        return repository.countStaleDocuments(state, useCase, startOfDay, thresholdTime);
+    }
 }
 ```
 
@@ -212,18 +411,15 @@ public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfD
 ### C. Capa de Dominio (Casos de Uso)
 
 #### [NEW] `GetSyncStatusUseCase.java`
-> Usa `countAllProducts()` en vez de `getAllProducts().count()`. Parseo de `LocalTime` dentro de `Mono.fromCallable()` para manejo reactivo de errores.
-
 ```java
+// NUEVO
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
-import com.example.fileprocessor.infrastructure.config.SyncStatusProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
-
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
@@ -232,152 +428,193 @@ public class GetSyncStatusUseCase {
 
     private final ProductMasterRepository productMasterRepository;
     private final DocumentRepository documentRepository;
-    private final SyncStatusProperties properties;
 
     public Mono<String> execute(String useCase, String traceId) {
-        return Mono.fromCallable(() -> {
-                    LocalTime startTime = LocalTime.parse(properties.startTime());
-                    return startTime.plusHours(properties.timeoutHours());
-                })
-                .flatMap(deadlineTime -> {
-                    LocalDateTime startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-                    LocalTime now = LocalTime.now();
+        LocalDateTime startOfDay = LocalDateTime.now().with(LocalTime.MIN);
 
-                    return Mono.zip(
-                            productMasterRepository.countAllProducts().defaultIfEmpty(0L),
-                            documentRepository.countDocumentsCreatedToday(startOfDay, useCase).defaultIfEmpty(0L)
-                    ).map(tuple -> {
-                        long masterCount = tuple.getT1();
-                        long localCount = tuple.getT2();
-
-                        if (localCount < masterCount && now.isAfter(deadlineTime)) {
-                            return ApiConstants.STATUS_ERROR;
-                        }
-                        return ApiConstants.STATUS_OK;
-                    });
-                });
+        return Mono.zip(
+                productMasterRepository.countAllProducts().defaultIfEmpty(0L),
+                documentRepository.countDocumentsCreatedToday(startOfDay, useCase).defaultIfEmpty(0L)
+        ).map(tuple -> {
+            long masterCount = tuple.getT1();
+            long localCount = tuple.getT2();
+            return (localCount >= masterCount)
+                    ? ApiConstants.STATUS_OK
+                    : ApiConstants.STATUS_ERROR;
+        });
     }
 }
 ```
 
 #### [NEW] `GetProcessStatusUseCase.java`
-> Elimina el check explícito de `ERR_DUPLICATED_DOC` (ya cubierto por `isBusinessRule()`). Parseo reactivo de propiedades.
-
 ```java
+// NUEVO
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.product.StateCount;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.infrastructure.config.ProcessStatusProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 @RequiredArgsConstructor
 public class GetProcessStatusUseCase {
 
     private final DocumentRepository documentRepository;
-    private final ProcessStatusProperties properties;
 
     public Mono<String> execute(String useCase, String traceId) {
-        return Mono.fromCallable(() -> {
-                    LocalTime startTime = LocalTime.parse(properties.startTime());
-                    return startTime.plusHours(properties.timeoutHours());
-                })
-                .flatMap(deadlineTime -> {
-                    LocalDateTime startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-                    LocalTime now = LocalTime.now();
+        LocalDateTime startOfDay = LocalDateTime.now().with(LocalTime.MIN);
+        LocalDateTime thresholdTime = LocalDateTime.now().minusHours(1);
 
-                    return documentRepository.countDocumentsGroupedByStateToday(startOfDay, useCase)
-                            .collectList()
-                            .map(list -> {
-                                long processed = 0;
-                                long pending = 0;
-                                long technicalFailures = 0;
+        return Mono.zip(
+                documentRepository.countDocumentsGroupedByStateToday(startOfDay, useCase).collectList(),
+                documentRepository.countStaleDocuments(
+                        ProcessingResultCodes.ON_PROCESSING.name(),
+                        useCase,
+                        startOfDay,
+                        thresholdTime
+                ).defaultIfEmpty(0L)
+        ).map(tuple -> {
+            List<StateCount> list = tuple.getT1();
+            long staleCount = tuple.getT2();
 
-                                for (var row : list) {
-                                    String state = row.getState();
-                                    long count = row.getTotal();
+            long processed = 0;
+            long pending = 0;
+            long technicalFailures = 0;
 
-                                    // isBusinessRule() ya incluye ERR_DUPLICATED_DOC
-                                    if (ProcessingResultCodes.NO_SUCURSAL.name().equals(state)
-                                            || ProcessingResultCodes.isBusinessRule(state)) {
-                                        continue;
-                                    }
+            for (var row : list) {
+                String state = row.getState();
+                long count = row.getTotal();
 
-                                    if (ProcessingResultCodes.PENDING.name().equals(state)
-                                            || ProcessingResultCodes.IN_PROGRESS.name().equals(state)) {
-                                        pending += count;
-                                    } else if (ProcessingResultCodes.PROCESSED.name().equals(state)) {
-                                        processed += count;
-                                    } else {
-                                        technicalFailures += count;
-                                    }
-                                }
+                // isBusinessRule() incluye ERR_DUPLICATED_DOC; NO_SUCURSAL se excluye explícitamente
+                if (ProcessingResultCodes.NO_SUCURSAL.name().equals(state)
+                        || ProcessingResultCodes.isBusinessRule(state)) {
+                    continue;
+                }
 
-                                long totalApplicable = processed + pending + technicalFailures;
+                if (ProcessingResultCodes.ON_PROCESSING.name().equals(state)) {
+                    // Si están en ON_PROCESSING, descontamos los que llevan más de 1 hora
+                    long active = Math.max(0, count - staleCount);
+                    pending += active;
+                } else if (ProcessingResultCodes.PROCESSED.name().equals(state)) {
+                    processed += count;
+                } else {
+                    technicalFailures += count;
+                }
+            }
 
-                                if (totalApplicable == 0) {
-                                    return ApiConstants.STATUS_OK;
-                                }
-                                if (pending > 0) {
-                                    return now.isAfter(deadlineTime)
-                                            ? ApiConstants.STATUS_ERROR
-                                            : ApiConstants.STATUS_OK;
-                                }
-                                return (technicalFailures > 0)
-                                        ? ApiConstants.STATUS_ERROR
-                                        : ApiConstants.STATUS_OK;
-                            });
-                });
+            // Los documentos en ON_PROCESSING que superaron la hora cuentan como fallos técnicos
+            technicalFailures += staleCount;
+
+            long totalApplicable = processed + pending + technicalFailures;
+
+            if (totalApplicable == 0 || pending > 0) {
+                return ApiConstants.STATUS_OK;
+            }
+            return (technicalFailures > 0)
+                    ? ApiConstants.STATUS_ERROR
+                    : ApiConstants.STATUS_OK;
+        });
     }
 }
 ```
 
 ---
 
-### D. Capa de Aplicación (Configuración de Beans)
+### D. Capa de Aplicación
 
 #### [MODIFY] [DomainConfig.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/application/service/config/DomainConfig.java)
-> Registrar los dos nuevos use cases como `@Bean` y habilitar las nuevas propiedades.
-
 ```java
+// MODIFICADO
 package com.example.fileprocessor.application.service.config;
 
-import com.example.fileprocessor.domain.port.out.*;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
+import com.example.fileprocessor.domain.port.out.DocumentRepository;
+import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.ProductLocalRepository;
+import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
+import com.example.fileprocessor.domain.port.out.S3Gateway;
+import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
-import com.example.fileprocessor.domain.usecase.*;
-import com.example.fileprocessor.infrastructure.config.*;
+import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
+import com.example.fileprocessor.domain.usecase.GetSyncStatusUseCase;
+import com.example.fileprocessor.domain.usecase.GetProcessStatusUseCase;
+import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({
-        ProcessorsProperties.class,
-        SyncStatusProperties.class,
-        ProcessStatusProperties.class
-})
+@EnableConfigurationProperties(ProcessorsProperties.class)
 public class DomainConfig {
 
-    // ... beans existentes sin cambios (soapDocumentUseCase, s3DocumentUseCase, syncDocumentsUseCase) ...
-
     @Bean
-    public GetSyncStatusUseCase getSyncStatusUseCase(
-            ProductMasterRepository productMasterRepository,
-            DocumentRepository documentRepository,
-            SyncStatusProperties syncStatusProperties) {
-        return new GetSyncStatusUseCase(productMasterRepository, documentRepository, syncStatusProperties);
+    @ConditionalOnBean(SoapGateway.class)
+    public SoapDocumentProcessingUseCase soapDocumentUseCase(
+            DocumentPersistenceGateway persistencePort,
+            ProductRestGateway productRestGateway,
+            SoapGateway soapGateway,
+            HomologationRepository homologationRepository,
+            ProcessorsProperties properties) {
+        return new SoapDocumentProcessingUseCase(
+            persistencePort,
+            productRestGateway,
+            soapGateway,
+            new RulesBussinesService(properties.soap()),
+            homologationRepository
+        );
     }
 
     @Bean
-    public GetProcessStatusUseCase getProcessStatusUseCase(
+    @ConditionalOnBean(S3Gateway.class)
+    public S3DocumentProcessingUseCase s3DocumentUseCase(
+            DocumentPersistenceGateway persistencePort,
+            ProductRestGateway productRestGateway,
+            S3Gateway s3Gateway,
+            ProcessorsProperties properties) {
+        return new S3DocumentProcessingUseCase(
+            persistencePort,
+            productRestGateway,
+            s3Gateway,
+            new RulesBussinesService(properties.s3())
+        );
+    }
+
+    @Bean
+    public SyncDocumentsUseCase syncDocumentsUseCase(
             DocumentRepository documentRepository,
-            ProcessStatusProperties processStatusProperties) {
-        return new GetProcessStatusUseCase(documentRepository, processStatusProperties);
+            ProductMasterRepository productMasterRepository,
+            ProductRestGateway productRestGateway,
+            ProductLocalRepository productLocalRepository) {
+        return new SyncDocumentsUseCase(
+            documentRepository,
+            productMasterRepository,
+            productRestGateway,
+            productLocalRepository
+        );
+    }
+
+    // NUEVO
+    @Bean
+    public GetSyncStatusUseCase getSyncStatusUseCase(
+            ProductMasterRepository productMasterRepository,
+            DocumentRepository documentRepository) {
+        return new GetSyncStatusUseCase(productMasterRepository, documentRepository);
+    }
+
+    // NUEVO
+    @Bean
+    public GetProcessStatusUseCase getProcessStatusUseCase(
+            DocumentRepository documentRepository) {
+        return new GetProcessStatusUseCase(documentRepository);
     }
 }
 ```
@@ -387,11 +624,11 @@ public class DomainConfig {
 ### E. Capa de Presentación
 
 #### [MODIFY] [ProductRoutes.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/entrypoints/rest/ProductRoutes.java)
-> Se mantiene el patrón `nest()` + `PathProperties` existente. Se agregan **2 beans nuevos** al lado de los existentes.
-
 ```java
+// MODIFICADO
 package com.example.fileprocessor.infrastructure.entrypoints.rest;
 
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiPaths;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.PathProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.handler.ProductHandler;
 import lombok.RequiredArgsConstructor;
@@ -401,9 +638,9 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
+import static org.springframework.web.reactive.function.server.RequestPredicates.path;
 import static org.springframework.web.reactive.function.server.RouterFunctions.nest;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
-import static org.springframework.web.reactive.function.server.RequestPredicates.path;
 
 @Configuration
 @RequiredArgsConstructor
@@ -411,26 +648,23 @@ public class ProductRoutes {
 
     private final PathProperties pathProperties;
 
-    // --- Beans existentes sin cambios ---
-
     @Bean
     public RouterFunction<ServerResponse> processPendingProducts(ProductHandler handler) {
         return nest(
             path(pathProperties.basePath()),
             route(GET(pathProperties.API_V1_PRODUCTS()), handler::processPendingProducts)
-        );
+            );
     }
 
     @Bean
     public RouterFunction<ServerResponse> syncProducts(ProductHandler handler) {
         return nest(
-            path(pathProperties.basePath()),
-            route(GET(pathProperties.API_V1_PRODUCTS_SYNC()), handler::syncProducts)
+                path(pathProperties.basePath()),
+                route(GET(pathProperties.API_V1_PRODUCTS_SYNC()), handler::syncProducts)
         );
     }
 
-    // --- Nuevos beans para los endpoints de status ---
-
+    // NUEVO
     @Bean
     public RouterFunction<ServerResponse> syncStatusRoute(ProductHandler handler) {
         return nest(
@@ -439,6 +673,7 @@ public class ProductRoutes {
         );
     }
 
+    // NUEVO
     @Bean
     public RouterFunction<ServerResponse> processStatusRoute(ProductHandler handler) {
         return nest(
@@ -450,12 +685,16 @@ public class ProductRoutes {
 ```
 
 #### [MODIFY] [ProductHandler.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/entrypoints/rest/handler/ProductHandler.java)
-> Se conservan los 3 campos existentes. Se agregan los 2 nuevos use cases al constructor.
-
 ```java
+// MODIFICADO
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
-import com.example.fileprocessor.domain.usecase.*;
+import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
+import com.example.fileprocessor.domain.usecase.GetSyncStatusUseCase;
+import com.example.fileprocessor.domain.usecase.GetProcessStatusUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
@@ -478,20 +717,21 @@ public class ProductHandler {
 
     private static final Logger LOGGER = Logger.getLogger(ProductHandler.class.getName());
 
-    // Campos existentes
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
     private final SyncDocumentsUseCase syncDocumentsUseCase;
-
-    // Nuevos campos
+    // NUEVO
     private final GetSyncStatusUseCase getSyncStatusUseCase;
+    // NUEVO
     private final GetProcessStatusUseCase getProcessStatusUseCase;
 
     public ProductHandler(
             SoapDocumentProcessingUseCase soapDocumentUseCase,
             ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider,
             SyncDocumentsUseCase syncDocumentsUseCase,
+            // NUEVO
             GetSyncStatusUseCase getSyncStatusUseCase,
+            // NUEVO
             GetProcessStatusUseCase getProcessStatusUseCase) {
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
@@ -500,17 +740,70 @@ public class ProductHandler {
         this.getProcessStatusUseCase = getProcessStatusUseCase;
     }
 
-    // --- Métodos existentes sin cambios (processPendingProducts, syncProducts, getProcessor) ---
+    public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
+        var headers = request.headers().asHttpHeaders().toSingleValueMap();
 
-    // --- Nuevos métodos ---
+        Context context = Context.of(
+            TYPE_JOB, request.pathVariables().containsKey(TYPE_JOB) ? request.pathVariable(TYPE_JOB) : "default",
+            HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
+            HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default")
+        );
 
+        return Mono.deferContextual(ctx -> {
+            String useCase = ctx.get(TYPE_JOB);
+            String traceId = ctx.get(HEADER_TRACE_ID);
+
+            LOGGER.log(Level.INFO, "Starting pending documents processing, traceId: {0}, useCase: {1}", new Object[]{traceId, useCase});
+
+            getProcessor(useCase).executePendingDocuments()
+                .doOnNext(result -> LOGGER.log(Level.INFO, "Document processed: correlationId={0}, status={1}",
+                    new Object[]{result.getCorrelationId(), result.getStatus()}))
+                .doOnError(error -> LOGGER.log(Level.SEVERE, "Processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
+                .doOnComplete(() -> LOGGER.log(Level.INFO, "Pending documents processing completed for traceId: {0}", new Object[]{traceId}))
+                .contextWrite(ctx)
+                .subscribe();
+
+            return ServerResponse.accepted()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(java.util.Map.of("status", "OK", "message", "Document processing initiated"));
+        }).contextWrite(context);
+    }
+
+    public Mono<ServerResponse> syncProducts(ServerRequest request) {
+        var headers = request.headers().asHttpHeaders().toSingleValueMap();
+
+        Context context = Context.of(
+                TYPE_JOB, request.pathVariables().containsKey(TYPE_JOB) ? request.pathVariable(TYPE_JOB) : "default",
+                HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
+                HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default"),
+                HEADER_DATE_INIT, request.queryParam(ApiConstants.HEADER_DATE_INIT).orElse(""),
+                HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse("")
+        );
+
+        return Mono.deferContextual(ctx -> {
+            String traceId = ctx.get(HEADER_TRACE_ID);
+            String useCase = ctx.get(HEADER_USE_CASE);
+            String dateInitVal = ctx.get(ApiConstants.HEADER_DATE_INIT);
+            String dateEndVal = ctx.get(ApiConstants.HEADER_DATE_END);
+
+            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}",
+                    new Object[]{traceId, useCase, dateInitVal, dateEndVal});
+            syncDocumentsUseCase.execute(useCase)
+                .doOnError(error -> LOGGER.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
+                .doOnSuccess(v -> LOGGER.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
+                .contextWrite(ctx)
+                .subscribe();
+            return ServerResponse.accepted()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(java.util.Map.of("status", "OK", "message", "Document sync initiated"));
+        }).contextWrite(context);
+    }
+
+    // NUEVO
     public Mono<ServerResponse> getSyncStatus(ServerRequest request) {
         var headers = request.headers().asHttpHeaders().toSingleValueMap();
         String traceId = headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString());
         String useCase = request.pathVariable(TYPE_JOB);
-
-        LOGGER.log(Level.INFO, "getSyncStatus called - traceId: {0}, useCase: {1}",
-                new Object[]{traceId, useCase});
 
         return getSyncStatusUseCase.execute(useCase, traceId)
                 .flatMap(status -> ServerResponse.ok()
@@ -518,33 +811,47 @@ public class ProductHandler {
                         .bodyValue(status));
     }
 
+    // NUEVO
     public Mono<ServerResponse> getProcessStatus(ServerRequest request) {
         var headers = request.headers().asHttpHeaders().toSingleValueMap();
         String traceId = headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString());
         String useCase = request.pathVariable(TYPE_JOB);
-
-        LOGGER.log(Level.INFO, "getProcessStatus called - traceId: {0}, useCase: {1}",
-                new Object[]{traceId, useCase});
 
         return getProcessStatusUseCase.execute(useCase, traceId)
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status));
     }
+
+    AbstractDocumentProcessingUseCase getProcessor(String processorType) {
+        return switch (processorType) {
+            case ApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
+            case ApiConstants.PROCESSOR_S3 -> {
+                S3DocumentProcessingUseCase s3UseCase = s3DocumentUseCaseProvider.getIfAvailable();
+                if (s3UseCase == null) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "S3 processor not available - enable 's3' profile");
+                }
+                yield s3UseCase;
+            }
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Unknown processor type: '" + processorType + "'. Valid values: soap, s3");
+        };
+    }
 }
 ```
 
 ---
 
-## 3. Pruebas Unitarias (Cobertura Completa)
+## 3. Pruebas Unitarias
 
 ### `GetSyncStatusUseCaseTest.java`
 ```java
+// NUEVO
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
-import com.example.fileprocessor.infrastructure.config.SyncStatusProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -552,9 +859,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -567,60 +871,47 @@ class GetSyncStatusUseCaseTest {
     @Mock private ProductMasterRepository productMasterRepository;
     @Mock private DocumentRepository documentRepository;
 
-    private GetSyncStatusUseCase buildUseCase(String startTime, int timeoutHours) {
-        return new GetSyncStatusUseCase(productMasterRepository, documentRepository,
-                new SyncStatusProperties(startTime, timeoutHours));
+    private GetSyncStatusUseCase useCase() {
+        return new GetSyncStatusUseCase(productMasterRepository, documentRepository);
     }
 
-    private String futureStartTime() {
-        return LocalTime.now().minusHours(1).toString().substring(0, 8);
-    }
-
-    private String pastStartTime() {
-        return LocalTime.now().minusHours(3).toString().substring(0, 8);
-    }
-
-    // ✅ Caso 1: dentro del deadline, local < master → STATUS_OK (aún en ejecución)
     @Test
-    void execute_whenRunningWithinDeadline_returnsOne() {
+    void execute_whenLocalLessThanMaster_returnsError() {
         when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(10L));
         when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(5L));
 
-        StepVerifier.create(buildUseCase(futureStartTime(), 3).execute("retention", "t1"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_OK, res))
+        StepVerifier.create(useCase().execute("retention", "t1"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r))
                 .verifyComplete();
     }
 
-    // ✅ Caso 2: excedió deadline con local < master → STATUS_ERROR
-    @Test
-    void execute_whenExceededDeadlineAndNotComplete_returnsError() {
-        when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(10L));
-        when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(5L));
-
-        StepVerifier.create(buildUseCase(pastStartTime(), 1).execute("retention", "t2"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_ERROR, res))
-                .verifyComplete();
-    }
-
-    // ✅ Caso 3: local == master → STATUS_OK (completado)
     @Test
     void execute_whenLocalEqualsMaster_returnsOne() {
         when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(10L));
         when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(10L));
 
-        StepVerifier.create(buildUseCase(pastStartTime(), 1).execute("retention", "t3"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_OK, res))
+        StepVerifier.create(useCase().execute("retention", "t2"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r))
                 .verifyComplete();
     }
 
-    // ✅ Caso 4: local > master → STATUS_OK
     @Test
     void execute_whenLocalExceedsMaster_returnsOne() {
         when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(5L));
         when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(8L));
 
-        StepVerifier.create(buildUseCase(pastStartTime(), 1).execute("retention", "t4"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_OK, res))
+        StepVerifier.create(useCase().execute("retention", "t3"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r))
+                .verifyComplete();
+    }
+
+    @Test
+    void execute_whenBothZero_returnsOne() {
+        when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(0L));
+        when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(0L));
+
+        StepVerifier.create(useCase().execute("retention", "t4"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r))
                 .verifyComplete();
     }
 }
@@ -628,20 +919,20 @@ class GetSyncStatusUseCaseTest {
 
 ### `GetProcessStatusUseCaseTest.java`
 ```java
+// NUEVO
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.product.StateCount;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
-import com.example.fileprocessor.infrastructure.config.ProcessStatusProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.LocalTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -654,17 +945,8 @@ class GetProcessStatusUseCaseTest {
 
     @Mock private DocumentRepository documentRepository;
 
-    private GetProcessStatusUseCase buildUseCase(String startTime, int timeoutHours) {
-        return new GetProcessStatusUseCase(documentRepository,
-                new ProcessStatusProperties(startTime, timeoutHours));
-    }
-
-    private String futureDeadlineStart() {
-        return LocalTime.now().minusHours(1).toString().substring(0, 8);
-    }
-
-    private String pastDeadlineStart() {
-        return LocalTime.now().minusHours(3).toString().substring(0, 8);
+    private GetProcessStatusUseCase useCase() {
+        return new GetProcessStatusUseCase(documentRepository);
     }
 
     private void mockCounts(List<StateCount> counts) {
@@ -672,76 +954,105 @@ class GetProcessStatusUseCaseTest {
                 .thenReturn(Flux.fromIterable(counts));
     }
 
-    // ✅ Caso 1: sin documentos hoy → STATUS_OK
+    private void mockStale(long count) {
+        when(documentRepository.countStaleDocuments(anyString(), anyString(), any(), any()))
+                .thenReturn(Mono.just(count));
+    }
+
     @Test
     void execute_whenNoDocumentsToday_returnsOne() {
         mockCounts(List.of());
-
-        StepVerifier.create(buildUseCase(futureDeadlineStart(), 2).execute("retention", "t1"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_OK, res))
-                .verifyComplete();
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t1"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
     }
 
-    // ✅ Caso 2: pendientes dentro del deadline → STATUS_OK
     @Test
-    void execute_whenPendingWithinDeadline_returnsOne() {
+    void execute_whenPendingDocumentsNoOnProcessing_returnsError() {
         mockCounts(List.of(new StateCount(ProcessingResultCodes.PENDING.name(), 5L)));
-
-        StepVerifier.create(buildUseCase(futureDeadlineStart(), 2).execute("retention", "t2"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_OK, res))
-                .verifyComplete();
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t2"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
     }
 
-    // ✅ Caso 3: pendientes y excedió deadline → STATUS_ERROR
     @Test
-    void execute_whenPendingAndExceededDeadline_returnsError() {
-        mockCounts(List.of(new StateCount(ProcessingResultCodes.PENDING.name(), 3L)));
-
-        StepVerifier.create(buildUseCase(pastDeadlineStart(), 1).execute("retention", "t3"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_ERROR, res))
-                .verifyComplete();
+    void execute_whenInProgressNoOnProcessing_returnsError() {
+        mockCounts(List.of(new StateCount(ProcessingResultCodes.IN_PROGRESS.name(), 3L)));
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t3"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
     }
 
-    // ✅ Caso 4: todos procesados, sin fallos → STATUS_OK
+    @Test
+    void execute_whenOnProcessingActive_returnsOne() {
+        mockCounts(List.of(new StateCount("ON_PROCESSING", 4L)));
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t_op1"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+    }
+
+    @Test
+    void execute_whenOnProcessingStaleNoOtherPending_returnsError() {
+        mockCounts(List.of(new StateCount("ON_PROCESSING", 2L)));
+        mockStale(2L);
+        StepVerifier.create(useCase().execute("retention", "t_op2"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
+    }
+
+    @Test
+    void execute_whenOnProcessingMixed_returnsOne() {
+        mockCounts(List.of(new StateCount("ON_PROCESSING", 3L)));
+        mockStale(1L);
+        StepVerifier.create(useCase().execute("retention", "t_op3"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+    }
+
     @Test
     void execute_whenAllProcessedNoFailures_returnsOne() {
         mockCounts(List.of(new StateCount(ProcessingResultCodes.PROCESSED.name(), 10L)));
-
-        StepVerifier.create(buildUseCase(pastDeadlineStart(), 1).execute("retention", "t4"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_OK, res))
-                .verifyComplete();
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t4"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
     }
 
-    // ✅ Caso 5: fallos técnicos sin pendientes → STATUS_ERROR
     @Test
-    void execute_whenHasTechnicalFailures_returnsError() {
+    void execute_whenTechnicalFailuresNoPending_returnsError() {
         mockCounts(List.of(
                 new StateCount(ProcessingResultCodes.PROCESSED.name(), 8L),
                 new StateCount(ProcessingResultCodes.FAILED.name(), 2L)
         ));
-
-        StepVerifier.create(buildUseCase(futureDeadlineStart(), 2).execute("retention", "t5"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_ERROR, res))
-                .verifyComplete();
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t5"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
     }
 
-    // ✅ Caso 6: solo estados excluidos (ERR_DUPLICATED_DOC, NO_SUCURSAL) → STATUS_OK
+    @Test
+    void execute_whenTechnicalFailuresAndStillActive_returnsOne() {
+        mockCounts(List.of(
+                new StateCount("ON_PROCESSING", 2L),
+                new StateCount(ProcessingResultCodes.FAILED.name(), 1L)
+                ));
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t6"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+    }
+
     @Test
     void execute_whenOnlyExcludedStates_returnsOne() {
         mockCounts(List.of(
                 new StateCount(ProcessingResultCodes.ERR_DUPLICATED_DOC.name(), 5L),
                 new StateCount(ProcessingResultCodes.NO_SUCURSAL.name(), 3L)
         ));
-
-        StepVerifier.create(buildUseCase(pastDeadlineStart(), 1).execute("retention", "t6"))
-                .assertNext(res -> assertEquals(ApiConstants.STATUS_OK, res))
-                .verifyComplete();
+        mockStale(0L);
+        StepVerifier.create(useCase().execute("retention", "t7"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
     }
 }
 ```
 
 ### `ProductHandlerStatusTest.java`
 ```java
+// NUEVO
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
 import com.example.fileprocessor.domain.usecase.GetProcessStatusUseCase;
@@ -775,20 +1086,17 @@ class ProductHandlerStatusTest {
 
     @BeforeEach
     void setUp() {
-        // Constructor con los 5 parámetros reales (existentes + nuevos)
         handler = new ProductHandler(null, null, null, getSyncStatusUseCase, getProcessStatusUseCase);
     }
 
     private void mockRequestHeaders() {
-        // Fix hallazgo #14: el mock de headers debe retornar un HttpHeaders válido
         ServerRequest.Headers headers = Mockito.mock(ServerRequest.Headers.class);
         when(headers.asHttpHeaders()).thenReturn(new HttpHeaders());
         when(serverRequest.headers()).thenReturn(headers);
     }
 
-    // ✅ getSyncStatus retorna HTTP 200 con STATUS_OK
     @Test
-    void getSyncStatus_whenUseCaseReturnsOk_responds200() {
+    void getSyncStatus_returnsHttp200() {
         mockRequestHeaders();
         when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
         when(getSyncStatusUseCase.execute(anyString(), anyString()))
@@ -799,28 +1107,14 @@ class ProductHandlerStatusTest {
                 .verifyComplete();
     }
 
-    // ✅ getProcessStatus retorna HTTP 200 con STATUS_OK
     @Test
-    void getProcessStatus_whenUseCaseReturnsOk_responds200() {
+    void getProcessStatus_returnsHttp200() {
         mockRequestHeaders();
         when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
         when(getProcessStatusUseCase.execute(anyString(), anyString()))
-                .thenReturn(Mono.just(ApiConstants.STATUS_OK));
-
-        StepVerifier.create(handler.getProcessStatus(serverRequest))
-                .assertNext(res -> assertEquals(HttpStatus.OK, res.statusCode()))
-                .verifyComplete();
-    }
-
-    // ✅ getSyncStatus retorna HTTP 200 con STATUS_ERROR (el status va en el body, no en el código HTTP)
-    @Test
-    void getSyncStatus_whenUseCaseReturnsError_stillResponds200() {
-        mockRequestHeaders();
-        when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
-        when(getSyncStatusUseCase.execute(anyString(), anyString()))
                 .thenReturn(Mono.just(ApiConstants.STATUS_ERROR));
 
-        StepVerifier.create(handler.getSyncStatus(serverRequest))
+        StepVerifier.create(handler.getProcessStatus(serverRequest))
                 .assertNext(res -> assertEquals(HttpStatus.OK, res.statusCode()))
                 .verifyComplete();
     }
