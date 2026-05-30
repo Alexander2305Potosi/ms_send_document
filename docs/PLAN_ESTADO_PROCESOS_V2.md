@@ -83,6 +83,7 @@ public final class ApiConstants {
     public static final String HEADER_USE_CASE = "use-case";
     public static final String HEADER_DATE_INIT = "date_init";
     public static final String HEADER_DATE_END = "date_end";
+    public static final String HEADER_PRODUCT_STATUS = "product_status";
     public static final String TYPE_JOB = "type_job";
 
     // Respuestas de estado del proceso
@@ -126,13 +127,15 @@ package com.example.fileprocessor.infrastructure.drivenadapters.masterdb;
 import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
+import com.example.fileprocessor.infrastructure.drivenadapters.masterdb.repository.ProductMasterR2dbcRepository;
+import com.example.fileprocessor.infrastructure.drivenadapters.masterdb.entity.ProductMasterEntity;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 @Component
@@ -141,63 +144,63 @@ public class ProductMasterR2dbcAdapter implements ProductMasterRepository {
 
     private static final Logger LOGGER = Logger.getLogger(ProductMasterR2dbcAdapter.class.getName());
 
-    @Qualifier("masterDatabaseClient")
-    private final DatabaseClient masterDatabaseClient;
+    private final ProductMasterR2dbcRepository repository;
+
+    private record ProductFilter(LocalDateTime start, LocalDateTime end, String state) {}
+
+    private Optional<ProductFilter> getProductFilter(reactor.util.context.ContextView ctx) {
+        String dateInit = ctx.getOrDefault(ApiConstants.HEADER_DATE_INIT, "");
+        String dateEnd = ctx.getOrDefault(ApiConstants.HEADER_DATE_END, "");
+        String state = ctx.getOrDefault(ApiConstants.HEADER_PRODUCT_STATUS, "");
+
+        LocalDateTime start = (dateInit != null && !dateInit.isBlank()) ? parseDateTime(dateInit, false) : null;
+        LocalDateTime end = (dateEnd != null && !dateEnd.isBlank()) ? parseDateTime(dateEnd, true) : null;
+        String filterState = (state != null && !state.isBlank()) ? state : null;
+
+        if (start == null && end == null && filterState == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new ProductFilter(start, end, filterState));
+    }
 
     @Override
     public Flux<ProductMaestro> getAllProducts() {
         return Flux.deferContextual(ctx -> {
-            String dateInit = ctx.getOrDefault(ApiConstants.HEADER_DATE_INIT, "");
-            String dateEnd = ctx.getOrDefault(ApiConstants.HEADER_DATE_END, "");
+            Optional<ProductFilter> productFilter = getProductFilter(ctx);
+            LOGGER.info(() -> "Fetching master products from EXTERNAL DATABASE.");
 
-            LOGGER.info(() -> "Fetching master products from EXTERNAL DATABASE. Filters - dateInit: " + dateInit + ", dateEnd: " + dateEnd);
+            String estado = productFilter.map(ProductFilter::state).orElse(null);
+            LocalDateTime start = productFilter.map(ProductFilter::start).orElse(null);
+            LocalDateTime end = productFilter.map(ProductFilter::end).orElse(null);
 
-            String baseSql = "SELECT id, id_producto, nombre, fecha_cargue, estado, carpeta_origen, pais_origen FROM productos_maestros";
-
-            if (dateInit != null && !dateInit.isBlank() && dateEnd != null && !dateEnd.isBlank()) {
-                baseSql += " WHERE fecha_cargue BETWEEN :dateInit AND :dateEnd";
-                java.time.LocalDateTime start = parseDateTime(dateInit, false);
-                java.time.LocalDateTime end = parseDateTime(dateEnd, true);
-                
-                return masterDatabaseClient.sql(baseSql)
-                    .bind("dateInit", start)
-                    .bind("dateEnd", end)
-                    .map((row, metadata) -> ProductMaestro.builder()
-                        .id(row.get("id", Long.class))
-                        .productId(row.get("id_producto", String.class))
-                        .name(row.get("nombre", String.class))
-                        .loadDate(row.get("fecha_cargue", java.time.LocalDateTime.class))
-                        .state(row.get("estado", String.class))
-                        .originFolder(row.get("carpeta_origen", String.class))
-                        .originCountry(row.get("pais_origen", String.class))
-                        .build())
-                    .all();
-            }
-
-            return masterDatabaseClient.sql(baseSql)
-                .map((row, metadata) -> ProductMaestro.builder()
-                    .id(row.get("id", Long.class))
-                    .productId(row.get("id_producto", String.class))
-                    .name(row.get("nombre", String.class))
-                    .loadDate(row.get("fecha_cargue", java.time.LocalDateTime.class))
-                    .state(row.get("estado", String.class))
-                    .originFolder(row.get("carpeta_origen", String.class))
-                    .originCountry(row.get("pais_origen", String.class))
-                    .build())
-                .all();
+            return repository.findAllProducts(estado, start, end)
+                    .map(entity -> ProductMaestro.builder()
+                            .id(entity.getId())
+                            .productId(entity.getProductId())
+                            .name(entity.getNombre())
+                            .loadDate(entity.getFechaCargue())
+                            .state(entity.getEstado())
+                            .originFolder(entity.getCarpetaOrigen())
+                            .originCountry(entity.getPaisOrigen())
+                            .build());
         });
     }
 
     // NUEVO
     @Override
     public Mono<Long> countAllProducts() {
-        return masterDatabaseClient.sql("SELECT COUNT(*) FROM productos_maestros")
-                .map((row, metadata) -> row.get(0, Long.class))
-                .one()
-                .defaultIfEmpty(0L);
+        return Mono.deferContextual(ctx -> {
+            Optional<ProductFilter> productFilter = getProductFilter(ctx);
+
+            String estado = productFilter.map(ProductFilter::state).orElse(null);
+            LocalDateTime start = productFilter.map(ProductFilter::start).orElse(null);
+            LocalDateTime end = productFilter.map(ProductFilter::end).orElse(null);
+
+            return repository.countAllProducts(estado, start, end);
+        });
     }
 
-    private java.time.LocalDateTime parseDateTime(String dateStr, boolean endOfDay) {
+    private LocalDateTime parseDateTime(String dateStr, boolean endOfDay) {
         try {
             String trimmed = dateStr.trim();
             if (trimmed.contains(" ") || trimmed.contains("T")) {
@@ -205,14 +208,79 @@ public class ProductMasterR2dbcAdapter implements ProductMasterRepository {
                 if (clean.length() > 19) {
                     clean = clean.substring(0, 19);
                 }
-                return java.time.LocalDateTime.parse(clean, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                return LocalDateTime.parse(clean, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             }
             java.time.LocalDate date = java.time.LocalDate.parse(trimmed);
             return endOfDay ? date.atTime(23, 59, 59) : date.atStartOfDay();
         } catch (Exception e) {
-            return endOfDay ? java.time.LocalDateTime.now() : java.time.LocalDateTime.of(1970, 1, 1, 0, 0);
+            return endOfDay ? LocalDateTime.now() : LocalDateTime.of(1970, 1, 1, 0, 0);
         }
     }
+}
+```
+
+#### [NEW] [ProductMasterEntity.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/drivenadapters/masterdb/entity/ProductMasterEntity.java)
+```java
+// NUEVO
+package com.example.fileprocessor.infrastructure.drivenadapters.masterdb.entity;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Table("productos_maestros")
+public class ProductMasterEntity {
+    @Id
+    private Long id;
+    
+    @Column("id_producto")
+    private String productId;
+    
+    private String nombre;
+    
+    @Column("fecha_cargue")
+    private LocalDateTime fechaCargue;
+    
+    private String estado;
+    
+    @Column("carpeta_origen")
+    private String carpetaOrigen;
+    
+    @Column("pais_origen")
+    private String paisOrigen;
+}
+```
+
+#### [NEW] [ProductMasterR2dbcRepository.java](file:///Users/alexander2305/Downloads/file-processor-service/src/main/java/com/example/fileprocessor/infrastructure/drivenadapters/masterdb/repository/ProductMasterR2dbcRepository.java)
+```java
+// NUEVO
+package com.example.fileprocessor.infrastructure.drivenadapters.masterdb.repository;
+
+import com.example.fileprocessor.infrastructure.drivenadapters.masterdb.entity.ProductMasterEntity;
+import org.springframework.data.r2dbc.repository.Query;
+import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import java.time.LocalDateTime;
+
+@Repository
+public interface ProductMasterR2dbcRepository extends R2dbcRepository<ProductMasterEntity, Long> {
+
+    @Query("SELECT * FROM productos_maestros WHERE ($1 IS NULL OR estado = $1) AND ($2 IS NULL OR $3 IS NULL OR fecha_cargue BETWEEN $2 AND $3)")
+    Flux<ProductMasterEntity> findAllProducts(String estado, LocalDateTime dateInit, LocalDateTime dateEnd);
+
+    @Query("SELECT COUNT(*) FROM productos_maestros WHERE ($1 IS NULL OR estado = $1) AND ($2 IS NULL OR $3 IS NULL OR fecha_cargue BETWEEN $2 AND $3)")
+    Mono<Long> countAllProducts(String estado, LocalDateTime dateInit, LocalDateTime dateEnd);
 }
 ```
 
@@ -751,7 +819,8 @@ public class ProductHandler {
                 HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
                 HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default"),
                 HEADER_DATE_INIT, request.queryParam(ApiConstants.HEADER_DATE_INIT).orElse(""),
-                HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse("")
+                HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse(""),
+                HEADER_PRODUCT_STATUS, request.queryParam(ApiConstants.HEADER_PRODUCT_STATUS).orElse("")
         );
 
         return Mono.deferContextual(ctx -> {
@@ -759,9 +828,10 @@ public class ProductHandler {
             String useCase = ctx.get(HEADER_USE_CASE);
             String dateInitVal = ctx.get(ApiConstants.HEADER_DATE_INIT);
             String dateEndVal = ctx.get(ApiConstants.HEADER_DATE_END);
+            String stateVal = ctx.get(ApiConstants.HEADER_PRODUCT_STATUS);
 
-            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}",
-                    new Object[]{traceId, useCase, dateInitVal, dateEndVal});
+            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}, state: {4}",
+                    new Object[]{traceId, useCase, dateInitVal, dateEndVal, stateVal});
             syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> LOGGER.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
                 .doOnSuccess(v -> LOGGER.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
@@ -779,10 +849,20 @@ public class ProductHandler {
         String traceId = headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString());
         String useCase = request.pathVariable(TYPE_JOB);
 
+        Context context = Context.of(
+                TYPE_JOB, useCase,
+                HEADER_TRACE_ID, traceId,
+                HEADER_USE_CASE, useCase,
+                HEADER_DATE_INIT, request.queryParam(ApiConstants.HEADER_DATE_INIT).orElse(""),
+                HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse(""),
+                HEADER_PRODUCT_STATUS, request.queryParam(ApiConstants.HEADER_PRODUCT_STATUS).orElse("")
+        );
+
         return getSyncStatusUseCase.execute(useCase, traceId)
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
-                        .bodyValue(status));
+                        .bodyValue(status))
+                .contextWrite(context);
     }
 
     // NUEVO
