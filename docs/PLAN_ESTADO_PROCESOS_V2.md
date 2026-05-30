@@ -26,10 +26,9 @@ Este plan corrige todos los hallazgos identificados. La validación del tiempo l
 ## 1. Diseño de la Solución
 
 El cuerpo de la respuesta de ambos endpoints retornará únicamente:
-- **En ejecución / completado con éxito:** `"1"`
-- **Error técnico o proceso incompleto:** `"error consulta carga"`
-
-> **Sin propiedades de tiempo:** no se necesitan `SyncStatusProperties`, `ProcessStatusProperties`, ni entradas en `application.yml`.
+- **En proceso:** `"1"`
+- **Finalizado con éxito:** `"exitoso"`
+- **Error:** `"error"`
 
 ---
 
@@ -37,24 +36,23 @@ El cuerpo de la respuesta de ambos endpoints retornará únicamente:
 
 | Condición | Status |
 |-----------|--------|
-| `localCount >= masterCount` | `"1"` — completado |
-| `localCount < masterCount` | `"error consulta carga"` — incompleto |
+| `localCount >= masterCount` | `"exitoso"` — finalizado |
+| `localCount < masterCount` | `"1"` — en proceso / incompleto |
 
 ---
 
 ### B. Procesamiento (`GET /api/v1/products/process/status/{type_job}`)
 
 **Reglas de Decisión:**
-* **Estado en progreso activo:** Únicamente `ON_PROCESSING` (si lleva menos de 1 hora de iniciado).
+* **Estados en progreso (activos):** `PENDING`, `IN_PROGRESS` y `ON_PROCESSING`.
 * **Estados excluidos:** `NO_SUCURSAL` y los cubiertos por `isBusinessRule()` (incluye `ERR_DUPLICATED_DOC`).
-* **Regla de Expiración:** Si un documento en estado `ON_PROCESSING` tiene más de 1 hora desde su inicio (`fecha_carga`), se considera error técnico y el endpoint debe retornar `"error consulta carga"`.
 
 | Condición | Status |
 |-----------|--------|
-| `totalApplicable == 0` | `"1"` — sin documentos que procesar |
-| `pending > 0` (documentos en `ON_PROCESSING` con < 1 hora) | `"1"` — en curso |
-| `pending == 0 && technicalFailures > 0` (incluyendo stuck `ON_PROCESSING` con > 1 hora o estado `FAILED`) | `"error consulta carga"` |
-| `pending == 0 && technicalFailures == 0` | `"1"` — todo procesado |
+| `totalApplicable == 0` | `"exitoso"` — sin documentos que procesar |
+| `pending > 0` (documentos en `PENDING`, `IN_PROGRESS` o `ON_PROCESSING`) | `"1"` — en proceso |
+| `pending == 0 && technicalFailures > 0` (procesamiento finalizado con fallos, ej. estado `FAILED`) | `"error"` |
+| `pending == 0 && technicalFailures == 0` | `"exitoso"` — todo procesado |
 
 ---
 
@@ -89,9 +87,9 @@ public final class ApiConstants {
 
     // Respuestas de estado del proceso
     // NUEVO
-    public static final String STATUS_OK = "1";
-    public static final String STATUS_ERROR = "error consulta carga";
-    public static final String STATE_ON_PROCESSING = "ON_PROCESSING";
+    public static final String STATUS_IN_PROGRESS = "1";
+    public static final String STATUS_COMPLETED = "exitoso";
+    public static final String STATUS_ERROR = "error";
 }
 ```
 
@@ -277,10 +275,6 @@ public interface DocumentRepository {
     // NUEVO
     // Agrupa documentos por estado hoy por caso de uso (process status)
     Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
-
-    // NUEVO
-    // Cuenta documentos en un estado específico que llevan más de cierto tiempo hoy
-    Mono<Long> countStaleDocuments(String state, String useCase, LocalDateTime startOfDay, LocalDateTime thresholdTime);
 }
 ```
 
@@ -315,10 +309,6 @@ public interface DocumentRepository extends R2dbcRepository<DocumentEntity, Long
     // NUEVO
     @Query("SELECT estado_sincronizacion AS state, COUNT(*) AS total FROM documentos WHERE fecha_carga >= $1 AND caso_uso = $2 GROUP BY estado_sincronizacion")
     Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
-
-    // NUEVO
-    @Query("SELECT COUNT(*) FROM documentos WHERE estado_sincronizacion = $1 AND caso_uso = $2 AND fecha_carga >= $3 AND fecha_carga_actualizacion < $4")
-    Mono<Long> countStaleDocuments(String state, String useCase, LocalDateTime startOfDay, LocalDateTime thresholdTime);
 }
 ```
 
@@ -397,12 +387,6 @@ public class DocumentR2dbcAdapter
     public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase) {
         return repository.countDocumentsGroupedByStateToday(startOfDay, useCase);
     }
-
-    // NUEVO
-    @Override
-    public Mono<Long> countStaleDocuments(String state, String useCase, LocalDateTime startOfDay, LocalDateTime thresholdTime) {
-        return repository.countStaleDocuments(state, useCase, startOfDay, thresholdTime);
-    }
 }
 ```
 
@@ -439,8 +423,8 @@ public class GetSyncStatusUseCase {
             long masterCount = tuple.getT1();
             long localCount = tuple.getT2();
             return (localCount >= masterCount)
-                    ? ApiConstants.STATUS_OK
-                    : ApiConstants.STATUS_ERROR;
+                    ? ApiConstants.STATUS_COMPLETED
+                    : ApiConstants.STATUS_IN_PROGRESS;
         });
     }
 }
@@ -468,57 +452,47 @@ public class GetProcessStatusUseCase {
 
     public Mono<String> execute(String useCase, String traceId) {
         LocalDateTime startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-        LocalDateTime thresholdTime = LocalDateTime.now().minusHours(1);
 
-        return Mono.zip(
-                documentRepository.countDocumentsGroupedByStateToday(startOfDay, useCase).collectList(),
-                documentRepository.countStaleDocuments(
-                        ProcessingResultCodes.ON_PROCESSING.name(),
-                        useCase,
-                        startOfDay,
-                        thresholdTime
-                ).defaultIfEmpty(0L)
-        ).map(tuple -> {
-            List<StateCount> list = tuple.getT1();
-            long staleCount = tuple.getT2();
+        return documentRepository.countDocumentsGroupedByStateToday(startOfDay, useCase)
+                .collectList()
+                .map(list -> {
+                    long processed = 0;
+                    long pending = 0;
+                    long technicalFailures = 0;
 
-            long processed = 0;
-            long pending = 0;
-            long technicalFailures = 0;
+                    for (var row : list) {
+                        String state = row.getState();
+                        long count = row.getTotal();
 
-            for (var row : list) {
-                String state = row.getState();
-                long count = row.getTotal();
+                        // isBusinessRule() incluye ERR_DUPLICATED_DOC; NO_SUCURSAL se excluye explícitamente
+                        if (ProcessingResultCodes.NO_SUCURSAL.name().equals(state)
+                                || ProcessingResultCodes.isBusinessRule(state)) {
+                            continue;
+                        }
 
-                // isBusinessRule() incluye ERR_DUPLICATED_DOC; NO_SUCURSAL se excluye explícitamente
-                if (ProcessingResultCodes.NO_SUCURSAL.name().equals(state)
-                        || ProcessingResultCodes.isBusinessRule(state)) {
-                    continue;
-                }
+                        // Los estados activos/en progreso son PENDING e IN_PROGRESS
+                        if (ProcessingResultCodes.PENDING.name().equals(state)
+                                || ProcessingResultCodes.IN_PROGRESS.name().equals(state)) {
+                            pending += count;
+                        } else if (ProcessingResultCodes.PROCESSED.name().equals(state)) {
+                            processed += count;
+                        } else {
+                            technicalFailures += count;
+                        }
+                    }
 
-                if (ProcessingResultCodes.ON_PROCESSING.name().equals(state)) {
-                    // Si están en ON_PROCESSING, descontamos los que llevan más de 1 hora
-                    long active = Math.max(0, count - staleCount);
-                    pending += active;
-                } else if (ProcessingResultCodes.PROCESSED.name().equals(state)) {
-                    processed += count;
-                } else {
-                    technicalFailures += count;
-                }
-            }
+                    long totalApplicable = processed + pending + technicalFailures;
 
-            // Los documentos en ON_PROCESSING que superaron la hora cuentan como fallos técnicos
-            technicalFailures += staleCount;
-
-            long totalApplicable = processed + pending + technicalFailures;
-
-            if (totalApplicable == 0 || pending > 0) {
-                return ApiConstants.STATUS_OK;
-            }
-            return (technicalFailures > 0)
-                    ? ApiConstants.STATUS_ERROR
-                    : ApiConstants.STATUS_OK;
-        });
+                    if (totalApplicable == 0) {
+                        return ApiConstants.STATUS_COMPLETED;
+                    }
+                    if (pending > 0) {
+                        return ApiConstants.STATUS_IN_PROGRESS;
+                    }
+                    return (technicalFailures > 0)
+                            ? ApiConstants.STATUS_ERROR
+                            : ApiConstants.STATUS_COMPLETED;
+                });
     }
 }
 ```
@@ -876,42 +850,42 @@ class GetSyncStatusUseCaseTest {
     }
 
     @Test
-    void execute_whenLocalLessThanMaster_returnsError() {
+    void execute_whenLocalLessThanMaster_returnsInProgress() {
         when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(10L));
         when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(5L));
 
         StepVerifier.create(useCase().execute("retention", "t1"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_IN_PROGRESS, r))
                 .verifyComplete();
     }
 
     @Test
-    void execute_whenLocalEqualsMaster_returnsOne() {
+    void execute_whenLocalEqualsMaster_returnsCompleted() {
         when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(10L));
         when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(10L));
 
         StepVerifier.create(useCase().execute("retention", "t2"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_COMPLETED, r))
                 .verifyComplete();
     }
 
     @Test
-    void execute_whenLocalExceedsMaster_returnsOne() {
+    void execute_whenLocalExceedsMaster_returnsCompleted() {
         when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(5L));
         when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(8L));
 
         StepVerifier.create(useCase().execute("retention", "t3"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_COMPLETED, r))
                 .verifyComplete();
     }
 
     @Test
-    void execute_whenBothZero_returnsOne() {
+    void execute_whenBothZero_returnsCompleted() {
         when(productMasterRepository.countAllProducts()).thenReturn(Mono.just(0L));
         when(documentRepository.countDocumentsCreatedToday(any(), anyString())).thenReturn(Mono.just(0L));
 
         StepVerifier.create(useCase().execute("retention", "t4"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_COMPLETED, r))
                 .verifyComplete();
     }
 }
@@ -954,65 +928,42 @@ class GetProcessStatusUseCaseTest {
                 .thenReturn(Flux.fromIterable(counts));
     }
 
-    private void mockStale(long count) {
-        when(documentRepository.countStaleDocuments(anyString(), anyString(), any(), any()))
-                .thenReturn(Mono.just(count));
-    }
-
     @Test
-    void execute_whenNoDocumentsToday_returnsOne() {
+    void execute_whenNoDocumentsToday_returnsCompleted() {
         mockCounts(List.of());
-        mockStale(0L);
         StepVerifier.create(useCase().execute("retention", "t1"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_COMPLETED, r)).verifyComplete();
     }
 
     @Test
-    void execute_whenPendingDocumentsNoOnProcessing_returnsError() {
+    void execute_whenPendingDocuments_returnsInProgress() {
         mockCounts(List.of(new StateCount(ProcessingResultCodes.PENDING.name(), 5L)));
-        mockStale(0L);
         StepVerifier.create(useCase().execute("retention", "t2"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_IN_PROGRESS, r)).verifyComplete();
     }
 
     @Test
-    void execute_whenInProgressNoOnProcessing_returnsError() {
+    void execute_whenInProgress_returnsInProgress() {
         mockCounts(List.of(new StateCount(ProcessingResultCodes.IN_PROGRESS.name(), 3L)));
-        mockStale(0L);
         StepVerifier.create(useCase().execute("retention", "t3"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_IN_PROGRESS, r)).verifyComplete();
     }
 
     @Test
-    void execute_whenOnProcessingActive_returnsOne() {
-        mockCounts(List.of(new StateCount("ON_PROCESSING", 4L)));
-        mockStale(0L);
-        StepVerifier.create(useCase().execute("retention", "t_op1"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+    void execute_whenPendingAndInProgressActive_returnsInProgress() {
+        mockCounts(List.of(
+                new StateCount(ProcessingResultCodes.PENDING.name(), 2L),
+                new StateCount(ProcessingResultCodes.IN_PROGRESS.name(), 2L)
+        ));
+        StepVerifier.create(useCase().execute("retention", "t_active"))
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_IN_PROGRESS, r)).verifyComplete();
     }
 
     @Test
-    void execute_whenOnProcessingStaleNoOtherPending_returnsError() {
-        mockCounts(List.of(new StateCount("ON_PROCESSING", 2L)));
-        mockStale(2L);
-        StepVerifier.create(useCase().execute("retention", "t_op2"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
-    }
-
-    @Test
-    void execute_whenOnProcessingMixed_returnsOne() {
-        mockCounts(List.of(new StateCount("ON_PROCESSING", 3L)));
-        mockStale(1L);
-        StepVerifier.create(useCase().execute("retention", "t_op3"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
-    }
-
-    @Test
-    void execute_whenAllProcessedNoFailures_returnsOne() {
+    void execute_whenAllProcessedNoFailures_returnsCompleted() {
         mockCounts(List.of(new StateCount(ProcessingResultCodes.PROCESSED.name(), 10L)));
-        mockStale(0L);
         StepVerifier.create(useCase().execute("retention", "t4"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_COMPLETED, r)).verifyComplete();
     }
 
     @Test
@@ -1021,31 +972,28 @@ class GetProcessStatusUseCaseTest {
                 new StateCount(ProcessingResultCodes.PROCESSED.name(), 8L),
                 new StateCount(ProcessingResultCodes.FAILED.name(), 2L)
         ));
-        mockStale(0L);
         StepVerifier.create(useCase().execute("retention", "t5"))
                 .assertNext(r -> assertEquals(ApiConstants.STATUS_ERROR, r)).verifyComplete();
     }
 
     @Test
-    void execute_whenTechnicalFailuresAndStillActive_returnsOne() {
+    void execute_whenTechnicalFailuresAndStillActive_returnsInProgress() {
         mockCounts(List.of(
-                new StateCount("ON_PROCESSING", 2L),
+                new StateCount(ProcessingResultCodes.IN_PROGRESS.name(), 2L),
                 new StateCount(ProcessingResultCodes.FAILED.name(), 1L)
                 ));
-        mockStale(0L);
         StepVerifier.create(useCase().execute("retention", "t6"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_IN_PROGRESS, r)).verifyComplete();
     }
 
     @Test
-    void execute_whenOnlyExcludedStates_returnsOne() {
+    void execute_whenOnlyExcludedStates_returnsCompleted() {
         mockCounts(List.of(
                 new StateCount(ProcessingResultCodes.ERR_DUPLICATED_DOC.name(), 5L),
                 new StateCount(ProcessingResultCodes.NO_SUCURSAL.name(), 3L)
         ));
-        mockStale(0L);
         StepVerifier.create(useCase().execute("retention", "t7"))
-                .assertNext(r -> assertEquals(ApiConstants.STATUS_OK, r)).verifyComplete();
+                .assertNext(r -> assertEquals(ApiConstants.STATUS_COMPLETED, r)).verifyComplete();
     }
 }
 ```
@@ -1100,7 +1048,7 @@ class ProductHandlerStatusTest {
         mockRequestHeaders();
         when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
         when(getSyncStatusUseCase.execute(anyString(), anyString()))
-                .thenReturn(Mono.just(ApiConstants.STATUS_OK));
+                .thenReturn(Mono.just(ApiConstants.STATUS_COMPLETED));
 
         StepVerifier.create(handler.getSyncStatus(serverRequest))
                 .assertNext(res -> assertEquals(HttpStatus.OK, res.statusCode()))
