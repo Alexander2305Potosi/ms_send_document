@@ -27,11 +27,19 @@ class ProductRoutesTest {
 
     @BeforeEach
     void setUp() {
-        PathProperties pathProperties = new PathProperties("/api/v1", "/products", "/products/sync");
+        PathProperties pathProperties = new PathProperties(
+                "/api/v1",
+                "/products",
+                "/products/sync",
+                "/products/sync/status/{type_job}",
+                "/products/process/status/{type_job}"
+        );
         ProductRoutes productRoutes = new ProductRoutes(pathProperties);
 
         RouterFunction<ServerResponse> combinedRouter = productRoutes.processPendingProducts(productHandler)
-                .and(productRoutes.syncProducts(productHandler));
+                .and(productRoutes.syncProducts(productHandler))
+                .and(productRoutes.syncStatusRoute(productHandler))
+                .and(productRoutes.processStatusRoute(productHandler));
 
         client = WebTestClient.bindToRouterFunction(combinedRouter).build();
     }
@@ -60,5 +68,33 @@ class ProductRoutesTest {
                 .expectStatus().isAccepted();
 
         verify(productHandler).syncProducts(any(ServerRequest.class));
+    }
+
+    @Test
+    void syncStatusRoute_shouldRouteToHandler() {
+        when(productHandler.getSyncStatus(any(ServerRequest.class)))
+                .thenReturn(ServerResponse.ok().bodyValue("exitoso"));
+
+        client.get()
+                .uri("/api/v1/products/sync/status/retention")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("exitoso");
+
+        verify(productHandler).getSyncStatus(any(ServerRequest.class));
+    }
+
+    @Test
+    void processStatusRoute_shouldRouteToHandler() {
+        when(productHandler.getProcessStatus(any(ServerRequest.class)))
+                .thenReturn(ServerResponse.ok().bodyValue("1"));
+
+        client.get()
+                .uri("/api/v1/products/process/status/retention")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("1");
+
+        verify(productHandler).getProcessStatus(any(ServerRequest.class));
     }
 }

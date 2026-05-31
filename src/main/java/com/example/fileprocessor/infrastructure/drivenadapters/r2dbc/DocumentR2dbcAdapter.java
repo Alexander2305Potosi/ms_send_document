@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
 import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.StateCount;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.common.AbstractReactiveAdapterOperation;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;
@@ -59,4 +60,15 @@ public class DocumentR2dbcAdapter
         return repository.existsByProductIdAndDocumentId(productId, documentId);
     }
 
+    // NUEVO
+    @Override
+    public Mono<Long> countDocumentsCreatedToday(LocalDateTime startOfDay, String useCase) {
+        return repository.countDocumentsCreatedToday(startOfDay, useCase);
+    }
+
+    // NUEVO
+    @Override
+    public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase) {
+        return repository.countDocumentsGroupedByStateToday(startOfDay, useCase);
+    }
 }

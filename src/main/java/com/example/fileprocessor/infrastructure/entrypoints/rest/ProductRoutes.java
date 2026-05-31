@@ -35,4 +35,22 @@ public class ProductRoutes {
                 route(GET(pathProperties.API_V1_PRODUCTS_SYNC()), handler::syncProducts)
         );
     }
+
+    // NUEVO
+    @Bean
+    public RouterFunction<ServerResponse> syncStatusRoute(ProductHandler handler) {
+        return nest(
+            path(pathProperties.basePath()),
+            route(GET(pathProperties.API_V1_PRODUCTS_SYNC_STATUS()), handler::getSyncStatus)
+        );
+    }
+
+    // NUEVO
+    @Bean
+    public RouterFunction<ServerResponse> processStatusRoute(ProductHandler handler) {
+        return nest(
+            path(pathProperties.basePath()),
+            route(GET(pathProperties.API_V1_PRODUCTS_PROCESS_STATUS()), handler::getProcessStatus)
+        );
+    }
 }

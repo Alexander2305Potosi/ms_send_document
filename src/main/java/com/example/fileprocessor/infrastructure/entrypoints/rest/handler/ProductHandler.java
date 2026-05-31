@@ -3,6 +3,8 @@ package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.GetSyncStatusUseCase;
+import com.example.fileprocessor.domain.usecase.GetProcessStatusUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,14 +31,20 @@ public class ProductHandler {
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
     private final SyncDocumentsUseCase syncDocumentsUseCase;
+    private final GetSyncStatusUseCase getSyncStatusUseCase;
+    private final GetProcessStatusUseCase getProcessStatusUseCase;
 
     public ProductHandler(
             SoapDocumentProcessingUseCase soapDocumentUseCase,
             ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider,
-            SyncDocumentsUseCase syncDocumentsUseCase) {
+            SyncDocumentsUseCase syncDocumentsUseCase,
+            GetSyncStatusUseCase getSyncStatusUseCase,
+            GetProcessStatusUseCase getProcessStatusUseCase) {
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
         this.syncDocumentsUseCase = syncDocumentsUseCase;
+        this.getSyncStatusUseCase = getSyncStatusUseCase;
+        this.getProcessStatusUseCase = getProcessStatusUseCase;
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
@@ -77,16 +85,17 @@ public class ProductHandler {
                 HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default"),
                 HEADER_DATE_INIT, request.queryParam(ApiConstants.HEADER_DATE_INIT).orElse(""),
                 HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse("")
-        );
+        ).put(HEADER_PRODUCT_STATUS, request.queryParam(ApiConstants.HEADER_PRODUCT_STATUS).orElse(""));
 
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(HEADER_TRACE_ID);
             String useCase = ctx.get(HEADER_USE_CASE);
             String dateInitVal = ctx.get(ApiConstants.HEADER_DATE_INIT);
             String dateEndVal = ctx.get(ApiConstants.HEADER_DATE_END);
+            String stateVal = ctx.get(ApiConstants.HEADER_PRODUCT_STATUS);
 
-            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}",
-                    new Object[]{traceId, useCase, dateInitVal, dateEndVal});
+            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}, state: {4}",
+                    new Object[]{traceId, useCase, dateInitVal, dateEndVal, stateVal});
             syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> LOGGER.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
                 .doOnSuccess(v -> LOGGER.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))
@@ -96,6 +105,37 @@ public class ProductHandler {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(java.util.Map.of("status", "OK", "message", "Document sync initiated"));
         }).contextWrite(context);
+    }
+
+    public Mono<ServerResponse> getSyncStatus(ServerRequest request) {
+        var headers = request.headers().asHttpHeaders().toSingleValueMap();
+        String traceId = headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString());
+        String useCase = request.pathVariable(TYPE_JOB);
+
+        Context context = Context.of(
+                TYPE_JOB, useCase,
+                HEADER_TRACE_ID, traceId,
+                HEADER_USE_CASE, useCase,
+                HEADER_DATE_INIT, request.queryParam(ApiConstants.HEADER_DATE_INIT).orElse(""),
+                HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse("")
+        ).put(HEADER_PRODUCT_STATUS, request.queryParam(ApiConstants.HEADER_PRODUCT_STATUS).orElse(""));
+
+        return getSyncStatusUseCase.execute(useCase, traceId)
+                .flatMap(status -> ServerResponse.ok()
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .bodyValue(status))
+                .contextWrite(context);
+    }
+
+    public Mono<ServerResponse> getProcessStatus(ServerRequest request) {
+        var headers = request.headers().asHttpHeaders().toSingleValueMap();
+        String traceId = headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString());
+        String useCase = request.pathVariable(TYPE_JOB);
+
+        return getProcessStatusUseCase.execute(useCase, traceId)
+                .flatMap(status -> ServerResponse.ok()
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .bodyValue(status));
     }
 
     AbstractDocumentProcessingUseCase getProcessor(String processorType) {

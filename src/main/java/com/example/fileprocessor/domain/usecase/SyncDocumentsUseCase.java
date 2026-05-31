@@ -42,6 +42,17 @@ public class SyncDocumentsUseCase {
 
     private Flux<Document> syncDocumentsForProduct(ProductMaestro product, String useCase) {
         return productLocalRepository.findBranchByProductId(product.getProductId())
+                .switchIfEmpty(Mono.defer(() -> {
+                    Document errorDoc = Document.builder()
+                            .productId(product.getProductId())
+                            .documentId(ProcessingResultCodes.NO_SUCURSAL.name())
+                            .name(ProcessingResultCodes.NO_SUCURSAL.name())
+                            .state(ProcessingResultCodes.FAILED.name())
+                            .syncMessage(ProcessingResultCodes.NO_SUCURSAL.value())
+                            .useCase(useCase)
+                            .build();
+                    return documentRepository.save(errorDoc).then(Mono.empty());
+                }))
                 .flatMapMany(sucursal -> productRestGateway.getDocumentsByProduct(product)
                         .flatMap(doc -> documentRepository.existsByProductIdAndDocumentId(doc.getProductId(), doc.getDocumentId())
                                 .flatMap(exists -> {
@@ -57,17 +68,6 @@ public class SyncDocumentsUseCase {
                                     }
                                     return documentRepository.save(doc);
                                 })))
-                .switchIfEmpty(Mono.defer(() -> {
-                    Document errorDoc = Document.builder()
-                            .productId(product.getProductId())
-                            .documentId(ProcessingResultCodes.NO_SUCURSAL.name())
-                            .name(ProcessingResultCodes.NO_SUCURSAL.name())
-                            .state(ProcessingResultCodes.FAILED.name())
-                            .syncMessage(ProcessingResultCodes.NO_SUCURSAL.value())
-                            .useCase(useCase)
-                            .build();
-                    return documentRepository.save(errorDoc);
-                }))
                 .onErrorResume(e -> {
                     LOGGER.severe("Error syncing documents for product " + product.getProductId() + ": " + e.getMessage());
                     return Flux.empty();

@@ -9,10 +9,15 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.r2dbc.connection.R2dbcTransactionManager;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
 import org.springframework.transaction.ReactiveTransactionManager;
 import org.springframework.transaction.reactive.TransactionalOperator;
 
 @Configuration
+@EnableR2dbcRepositories(
+    basePackages = "com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository",
+    entityOperationsRef = "r2dbcEntityTemplate"
+)
 public class R2dbcConfig {
 
     @Value("${spring.r2dbc.url}")

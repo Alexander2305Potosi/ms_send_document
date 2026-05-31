@@ -12,6 +12,8 @@ import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
+import com.example.fileprocessor.domain.usecase.GetSyncStatusUseCase;
+import com.example.fileprocessor.domain.usecase.GetProcessStatusUseCase;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -66,5 +68,18 @@ public class DomainConfig {
             productRestGateway,
             productLocalRepository
         );
+    }
+
+    @Bean
+    public GetSyncStatusUseCase getSyncStatusUseCase(
+            ProductMasterRepository productMasterRepository,
+            DocumentRepository documentRepository) {
+        return new GetSyncStatusUseCase(productMasterRepository, documentRepository);
+    }
+
+    @Bean
+    public GetProcessStatusUseCase getProcessStatusUseCase(
+            DocumentRepository documentRepository) {
+        return new GetProcessStatusUseCase(documentRepository);
     }
 }
