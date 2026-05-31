@@ -177,7 +177,7 @@ class ProductHandlerTest {
         StepVerifier.create(responseMono)
             .assertNext(response -> {
                 assertEquals(HttpStatus.ACCEPTED, response.statusCode());
-                assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
+                assertEquals(MediaType.TEXT_PLAIN, response.headers().getContentType());
             })
             .verifyComplete();
 

@@ -102,8 +102,8 @@ public class ProductHandler {
                 .contextWrite(ctx)
                 .subscribe();
             return ServerResponse.accepted()
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(java.util.Map.of("status", "OK", "message", "Document sync initiated"));
+                .contentType(MediaType.TEXT_PLAIN)
+                .bodyValue("1");
         }).contextWrite(context);
     }
 
@@ -145,12 +145,12 @@ public class ProductHandler {
                 S3DocumentProcessingUseCase s3UseCase = s3DocumentUseCaseProvider.getIfAvailable();
                 if (s3UseCase == null) {
                     throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                        "S3 processor not available - enable 's3' profile");
+                         "S3 processor not available - enable 's3' profile");
                 }
                 yield s3UseCase;
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Unknown processor type: '" + processorType + "'. Valid values: soap, s3");
+                 "Unknown processor type: '" + processorType + "'. Valid values: soap, s3");
         };
     }
 }
