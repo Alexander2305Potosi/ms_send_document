@@ -71,4 +71,29 @@ public class DocumentR2dbcAdapter
     public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase) {
         return repository.countDocumentsGroupedByStateToday(startOfDay, useCase);
     }
+
+    // Implementación del método de reanudación utilizando constantes límites.
+    @Override
+    public Mono<String> findLastProcessedProductIdInRange() {
+        return Mono.deferContextual(ctx -> {
+            String dateInitVal = ctx.getOrDefault(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_DATE_INIT, "");
+            String dateEndVal  = ctx.getOrDefault(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_DATE_END,  "");
+
+            // Parseo defensivo
+            java.time.LocalDate start = com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.parseDateOrToday(dateInitVal);
+            java.time.LocalDate end   = com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.parseDateOrToday(dateEndVal);
+
+            // Conversión a LocalDateTime con las horas límite
+            LocalDateTime startDateTime = start.atTime(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.START_OF_DAY_TIME);
+            LocalDateTime endDateTime   = end.atTime(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.END_OF_DAY_TIME);
+
+            LOGGER.info(() -> "Buscando último producto sincronizado en rango: ["
+                    + startDateTime + " - " + endDateTime + "]");
+
+            return repository.findLastProcessedProductIdInRange(startDateTime, endDateTime);
+        });
+    }
+
+    private static final java.util.logging.Logger LOGGER =
+            java.util.logging.Logger.getLogger(DocumentR2dbcAdapter.class.getName());
 }

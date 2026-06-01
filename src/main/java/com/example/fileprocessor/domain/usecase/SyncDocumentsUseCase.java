@@ -33,9 +33,20 @@ public class SyncDocumentsUseCase {
     }
 
     public Mono<String> execute(String useCase) {
-        return productMasterRepository.getAllProducts()
-                .collectList()
-                .flatMapMany(Flux::fromIterable)
+        return documentRepository.findLastProcessedProductIdInRange()
+                .defaultIfEmpty("")
+                .flatMapMany(lastProductId -> {
+                    if (lastProductId.isEmpty()) {
+                        LOGGER.info("[SYNC] Iniciando sincronización completa (sin registros previos en el rango).");
+                    } else {
+                        LOGGER.info("[SYNC] Reanudando sincronización a partir del id_producto: " + lastProductId);
+                    }
+                    // Inyectar el cursor en el contexto reactivo solo cuando existe un ID previo
+                    return productMasterRepository.getAllProducts()
+                            .contextWrite(ctx -> lastProductId.isEmpty()
+                                    ? ctx
+                                    : ctx.put("last_product_id", lastProductId));
+                })
                 .flatMap(product -> syncDocumentsForProduct(product, useCase))
                 .then(Mono.just("Document sync completed"));
     }

@@ -29,27 +29,44 @@ public class ProductMasterR2dbcAdapter implements ProductMasterRepository {
         String dateEnd = ctx.getOrDefault(ApiConstants.HEADER_DATE_END, "");
         String state = ctx.getOrDefault(ApiConstants.HEADER_PRODUCT_STATUS, "");
 
-        LocalDateTime start = (dateInit != null && !dateInit.isBlank()) ? parseDateTime(dateInit, false) : null;
-        LocalDateTime end = (dateEnd != null && !dateEnd.isBlank()) ? parseDateTime(dateEnd, true) : null;
+        java.time.LocalDate start = (dateInit == null || dateInit.isBlank())
+                ? null
+                : ApiConstants.parseDateOrToday(dateInit);
+
+        java.time.LocalDate end = (dateEnd == null || dateEnd.isBlank())
+                ? null
+                : ApiConstants.parseDateOrToday(dateEnd);
+
         String filterState = (state != null && !state.isBlank()) ? state : null;
 
         if (start == null && end == null && filterState == null) {
             return Optional.empty();
         }
-        return Optional.of(new ProductFilter(start, end, filterState));
+
+        LocalDateTime startDateTime = start != null ? start.atTime(ApiConstants.START_OF_DAY_TIME) : null;
+        LocalDateTime endDateTime   = end   != null ? end.atTime(ApiConstants.END_OF_DAY_TIME)     : null;
+
+        return Optional.of(new ProductFilter(startDateTime, endDateTime, filterState));
     }
 
     @Override
     public Flux<ProductMaestro> getAllProducts() {
         return Flux.deferContextual(ctx -> {
             Optional<ProductFilter> productFilter = getProductFilter(ctx);
-            LOGGER.info(() -> "Fetching master products from EXTERNAL DATABASE.");
+            
+            // Extraer el cursor de reanudación del contexto reactivo
+            String lastProductId = ctx.getOrDefault(ApiConstants.LAST_PRODUCT_ID, null);
+            if (lastProductId != null && !lastProductId.isBlank()) {
+                LOGGER.info(() -> "[REANUDACIÓN] Consultando productos maestros a partir de id_producto > " + lastProductId);
+            } else {
+                LOGGER.info(() -> "[INICIO] Consultando todos los productos maestros (sin cursor de reanudación).");
+            }
 
             String estado = productFilter.map(ProductFilter::state).orElse(null);
             LocalDateTime start = productFilter.map(ProductFilter::start).orElse(null);
             LocalDateTime end = productFilter.map(ProductFilter::end).orElse(null);
 
-            return repository.findAllProducts(estado, start, end)
+            return repository.findAllProducts(estado, start, end, lastProductId)
                     .map(entity -> ProductMaestro.builder()
                             .id(entity.getId())
                             .productId(entity.getProductId())
@@ -66,29 +83,13 @@ public class ProductMasterR2dbcAdapter implements ProductMasterRepository {
     public Mono<Long> countAllProducts() {
         return Mono.deferContextual(ctx -> {
             Optional<ProductFilter> productFilter = getProductFilter(ctx);
+            String lastProductId = ctx.getOrDefault(ApiConstants.LAST_PRODUCT_ID, null);
 
             String estado = productFilter.map(ProductFilter::state).orElse(null);
             LocalDateTime start = productFilter.map(ProductFilter::start).orElse(null);
             LocalDateTime end = productFilter.map(ProductFilter::end).orElse(null);
 
-            return repository.countAllProducts(estado, start, end);
+            return repository.countAllProducts(estado, start, end, lastProductId);
         });
-    }
-
-    private LocalDateTime parseDateTime(String dateStr, boolean endOfDay) {
-        try {
-            String trimmed = dateStr.trim();
-            if (trimmed.contains(" ") || trimmed.contains("T")) {
-                String clean = trimmed.replace("T", " ");
-                if (clean.length() > 19) {
-                    clean = clean.substring(0, 19);
-                }
-                return LocalDateTime.parse(clean, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-            }
-            java.time.LocalDate date = java.time.LocalDate.parse(trimmed);
-            return endOfDay ? date.atTime(23, 59, 59) : date.atStartOfDay();
-        } catch (Exception e) {
-            return endOfDay ? LocalDateTime.now() : LocalDateTime.of(1970, 1, 1, 0, 0);
-        }
     }
 }

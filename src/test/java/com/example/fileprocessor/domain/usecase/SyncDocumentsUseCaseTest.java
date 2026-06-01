@@ -41,6 +41,7 @@ class SyncDocumentsUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new SyncDocumentsUseCase(documentRepository, productMasterRepository, productRestGateway, productLocalRepository);
+        lenient().when(documentRepository.findLastProcessedProductIdInRange()).thenReturn(Mono.empty());
     }
 
     private static ProductMaestro product(String id) {
@@ -243,5 +244,25 @@ class SyncDocumentsUseCaseTest {
         assertEquals(ProcessingResultCodes.FAILED.name(), savedDoc.getState());
         assertEquals(ProcessingResultCodes.NO_SUCURSAL.value(), savedDoc.getSyncMessage());
         assertEquals("retention", savedDoc.getUseCase());
+    }
+
+    @Test
+    void execute_whenLastProcessedProductExists_resumesFromNextProduct() {
+        // Given
+        when(documentRepository.findLastProcessedProductIdInRange()).thenReturn(Mono.just("p1"));
+        when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p2")));
+        when(productLocalRepository.findBranchByProductId("p2")).thenReturn(Mono.just("Sucursal Medellin"));
+        when(productRestGateway.getDocumentsByProduct(any())).thenReturn(Flux.just(doc("p2", "doc2", false)));
+        when(documentRepository.existsByProductIdAndDocumentId(any(), any())).thenReturn(Mono.just(false));
+        when(documentRepository.save(any(Document.class))).thenReturn(Mono.just(savedDocument(12L, "doc2", "retention")));
+
+        // When & Then
+        StepVerifier.create(useCase.execute("retention"))
+            .assertNext(result -> assertEquals("Document sync completed", result))
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+
+        verify(documentRepository, times(1)).findLastProcessedProductIdInRange();
+        verify(productMasterRepository).getAllProducts();
     }
 }
