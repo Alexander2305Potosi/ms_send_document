@@ -1,6 +1,5 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest;
 
-import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.RestApiPaths;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.PathProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.handler.ProductHandler;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +35,6 @@ public class ProductRoutes {
         );
     }
 
-    // NUEVO
     @Bean
     public RouterFunction<ServerResponse> syncStatusRoute(ProductHandler handler) {
         return nest(
@@ -45,7 +43,6 @@ public class ProductRoutes {
         );
     }
 
-    // NUEVO
     @Bean
     public RouterFunction<ServerResponse> processStatusRoute(ProductHandler handler) {
         return nest(
