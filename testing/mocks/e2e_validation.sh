@@ -40,7 +40,7 @@ done
 echo -e "\nMS is UP!"
 
 echo "3. Synchronizing Documents (GET /sync)..."
-curl -s -H "use-case: SOAP" "$MS_URL/api/v1/products/sync" > /dev/null
+curl -s -H "use-case: SOAP" "$MS_URL/api/v1/products/sync/soap" > /dev/null
 echo "   Waiting for sync to complete..."
 until grep -q "Document sync completed" "$SCRIPT_DIR/ms.log"; do
     sleep 2
@@ -48,14 +48,14 @@ done
 echo "   Sync completed!"
 
 echo "4. Processing Documents - FIRST RUN (GET /products)..."
-curl -s "$MS_URL/api/v1/products?processor=soap" > /dev/null
+curl -s "$MS_URL/api/v1/products/soap" > /dev/null
 echo "   First run completed! Waiting 5s before next run..."
 sleep 5
 
 echo "--- SECOND RUN LOGS START HERE ---" >> "$SCRIPT_DIR/ms.log"
 
 echo "5. Processing Documents - SECOND RUN (GET /products)..."
-curl -s "$MS_URL/api/v1/products?processor=soap" > /dev/null
+curl -s "$MS_URL/api/v1/products/soap" > /dev/null
 echo "   Second run completed!"
 
 echo ""

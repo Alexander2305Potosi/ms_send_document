@@ -18,6 +18,10 @@ public class JsonRuleEvaluator {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, JsonNode> ruleCache = new ConcurrentHashMap<>();
 
+    public JsonRuleEvaluator() {
+        mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+    }
+
     public boolean evaluate(String ruleJson, Object dto) {
         JsonNode ruleNode;
         if (ruleJson == null || ruleJson.trim().isEmpty()) {
