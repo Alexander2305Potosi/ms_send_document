@@ -144,7 +144,7 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_whenGenericError_returnsUnknownError() throws IOException {
+    void send_whenConnectionRefused_returnsServiceUnavailable() throws IOException {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         
         // Shut down the server to force an immediate Connection Refused error
@@ -155,7 +155,47 @@ class SoapGatewayAdapterTest {
             .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), result.getSyncStatus());
+                assertEquals(ProcessingResultCodes.SERVICE_UNAVAILABLE.name(), result.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void send_whenHttp429_returnsSourceRateLimit() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(429)
+            .setBody("<html>Rate limited</html>")
+            .addHeader("Content-Type", "text/html"));
+
+        StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-429")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(ProcessingResultCodes.SOURCE_RATE_LIMIT.name(), result.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void send_whenHttp404_returnsSourceNotFound() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(404)
+            .setBody("<html>Not found</html>")
+            .addHeader("Content-Type", "text/html"));
+
+        StepVerifier.create(adapter.send(FileUploadRequest.builder().filename("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-404")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(ProcessingResultCodes.SOURCE_NOT_FOUND.name(), result.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(10));

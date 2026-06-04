@@ -88,13 +88,32 @@ public final class DocumentHistoryFactory {
                 .collect(Collectors.joining(" | "));
     }
 
+    /**
+     * Builds a failure {@link FileUploadResponse} from any error that escaped adapter-level
+     * handling. At this point, network/HTTP errors should already have been translated into
+     * {@link ProcessingException} by the adapter layer (via {@code AdapterErrorMapper}).
+     *
+     * <p>This method is responsible only for domain-level error extraction.</p>
+     */
     public static FileUploadResponse handleGlobalError(Throwable error) {
         String syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
         String message = error.getMessage();
         String filename = null;
 
-        if (error instanceof ProcessingException pe) {
-            syncStatus = pe.getErrorCode();
+        // Unwrap until we find a recognized domain exception
+        Throwable root = error;
+        while (root.getCause() != null && root != root.getCause()) {
+            if (root instanceof ProcessingException) {
+                break;
+            }
+            root = root.getCause();
+        }
+
+        if (root instanceof ProcessingException pe) {
+            syncStatus = pe.getErrorCode() != null && !pe.getErrorCode().isBlank()
+                    ? pe.getErrorCode()
+                    : ProcessingResultCodes.UNKNOWN_ERROR.name();
+            message = pe.getMessage();
             filename = pe.getFilename();
         }
 

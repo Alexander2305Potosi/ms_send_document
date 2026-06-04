@@ -4,6 +4,7 @@ import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import com.example.fileprocessor.infrastructure.drivenadapters.AdapterErrorMapper;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
@@ -14,10 +15,8 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.net.ConnectException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -97,12 +96,13 @@ public class SoapGatewayAdapter implements SoapGateway {
             }
         }
 
-        String syncStatus = mapErrorCode(error);
+        // Delegate all HTTP/timeout/connection error mapping to the shared infrastructure utility
+        String syncStatus = AdapterErrorMapper.resolveErrorCode(error);
         String message = error.getMessage();
 
         if (error instanceof WebClientResponseException wce) {
             message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
-        } else if (error instanceof java.util.concurrent.TimeoutException) {
+        } else if (syncStatus.equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name())) {
             message = "Timeout: El servicio no respondió en " + properties.timeoutSeconds() + " segundos";
         }
 
@@ -118,13 +118,5 @@ public class SoapGatewayAdapter implements SoapGateway {
 
     private boolean isXml(String body) {
         return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
-    }
-
-    private String mapErrorCode(Throwable error) {
-        if (error instanceof WebClientResponseException)
-            return ProcessingResultCodes.BAD_GATEWAY.name();
-        if (error instanceof TimeoutException)
-            return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
-        return ProcessingResultCodes.UNKNOWN_ERROR.name();
     }
 }

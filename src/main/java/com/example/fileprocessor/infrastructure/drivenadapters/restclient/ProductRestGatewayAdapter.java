@@ -6,6 +6,7 @@ import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
+import com.example.fileprocessor.infrastructure.drivenadapters.AdapterErrorMapper;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -38,6 +39,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         this.webClient = webClientBuilder
                 .baseUrl(properties.endpoint())
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(25 * 1024 * 1024))
                 .build();
     }
 
@@ -58,7 +60,12 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                     .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
                     .map(doc -> mapToDocument(product.getProductId(), doc))
                     .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
-                            new Object[] { doc.getProductId(), doc.getDocumentId() }));
+                            new Object[] { doc.getProductId(), doc.getDocumentId() }))
+                    .onErrorMap(error -> {
+                        LOGGER.log(Level.WARNING, "[REST] Error fetching documents for product {0}: {1}",
+                                new Object[] { product.getProductId(), error.getMessage() });
+                        return mapToProcessingException(error, traceId);
+                    });
         });
     }
 
@@ -79,7 +86,12 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                     .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
                     .map(response -> mapToProductDocumentFile(productId, response))
                     .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
-                            new Object[] { documentId, productId }));
+                            new Object[] { documentId, productId }))
+                    .onErrorMap(error -> {
+                        LOGGER.log(Level.WARNING, "[REST] Error fetching document {0} for product {1}: {2}",
+                                new Object[] { documentId, productId, error.getMessage() });
+                        return mapToProcessingException(error, traceId);
+                    });
         });
     }
 
@@ -121,5 +133,21 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                     "Base64 decode failed for document: " + json.getDocumentId(),
                     ProcessingResultCodes.INVALID_BASE64.name(), json.getDocumentId());
         }
+    }
+
+    /**
+     * Translates any network/HTTP error into a {@link ProcessingException} with the
+     * appropriate domain error code, delegating the mapping logic to {@link AdapterErrorMapper}.
+     * Already-mapped {@link ProcessingException} instances are returned as-is.
+     */
+    private static ProcessingException mapToProcessingException(Throwable error, String traceId) {
+        if (error instanceof ProcessingException pe) {
+            return pe;
+        }
+        String code = AdapterErrorMapper.resolveErrorCode(error);
+        return new ProcessingException(
+                error.getMessage() != null ? error.getMessage() : ProcessingResultCodes.UNKNOWN_ERROR.value(),
+                code,
+                traceId);
     }
 }

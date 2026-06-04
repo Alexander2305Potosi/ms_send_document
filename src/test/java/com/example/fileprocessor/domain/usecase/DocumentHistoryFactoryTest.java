@@ -193,6 +193,47 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
+    void handleGlobalError_withProcessingExceptionBlankCode_returnsUnknownError() {
+        ProcessingException pe = new ProcessingException("Error", "");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+
+        assertFalse(response.isSuccess());
+        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+    }
+
+    @Test
+    void handleGlobalError_withProcessingExceptionNullCode_returnsUnknownError() {
+        ProcessingException pe = new ProcessingException("Error", null);
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+
+        assertFalse(response.isSuccess());
+        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+    }
+
+    @Test
+    void handleGlobalError_withProcessingExceptionWithFilename_preservesFilename() {
+        ProcessingException pe = new ProcessingException("File error", "SIZE_EXCEEDED");
+        pe.setFilename("bigfile.pdf");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+
+        assertFalse(response.isSuccess());
+        assertEquals("SIZE_EXCEEDED", response.getSyncStatus());
+        assertEquals("bigfile.pdf", response.getFilename());
+    }
+
+    @Test
+    void handleGlobalError_withWrappedProcessingException_unwrapsAndUsesCode() {
+        ProcessingException pe = new ProcessingException("Inner error", "GATEWAY_TIMEOUT");
+        RuntimeException wrapper = new RuntimeException("Outer wrapper", pe);
+
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
+
+        assertFalse(response.isSuccess());
+        assertEquals("GATEWAY_TIMEOUT", response.getSyncStatus());
+        assertEquals("Inner error", response.getMessage());
+    }
+
+    @Test
     void handleGlobalError_withGenericException_returnsUnknownError() {
         RuntimeException ex = new RuntimeException("Generic exception");
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
@@ -201,6 +242,15 @@ class DocumentHistoryFactoryTest {
         assertEquals(ProcessingResultCodes.FAILURE.name(), response.getStatus());
         assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
         assertEquals("Generic exception", response.getMessage());
+    }
+
+    @Test
+    void handleGlobalError_withNullMessage_usesUnknownErrorDescription() {
+        RuntimeException ex = new RuntimeException((String) null);
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
+
+        assertFalse(response.isSuccess());
+        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.value(), response.getMessage());
     }
 
     @Test

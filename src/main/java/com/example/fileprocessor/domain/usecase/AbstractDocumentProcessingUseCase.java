@@ -115,7 +115,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private FileUploadResponse ensureFilename(FileUploadResponse resp, DocumentHistoryDTO innerFile, Boolean isZip) {
-        if (Boolean.TRUE.equals(isZip) && resp.getFilename() == null) {
+        if (resp.getFilename() == null) {
             return resp.toBuilder().filename(innerFile.getFilename()).build();
         }
         return resp;
@@ -128,6 +128,15 @@ public abstract class AbstractDocumentProcessingUseCase {
         return Mono.just(resp);
     }
 
+    private List<FileUploadResponse> getFinalResponses(List<FileUploadResponse> responses) {
+        java.util.Map<String, FileUploadResponse> finalMap = new java.util.LinkedHashMap<>();
+        for (FileUploadResponse resp : responses) {
+            String filename = resp.getFilename() != null ? resp.getFilename() : "unknown";
+            finalMap.put(filename, resp);
+        }
+        return new java.util.ArrayList<>(finalMap.values());
+    }
+
     private Mono<FileUploadResponse> concludeProcessing(Document doc, DocumentHistoryDTO masterHistory, List<FileUploadResponse> responses, String traceId) {
         if (responses.isEmpty()) {
             return handleGlobalErrorAndConclude(
@@ -135,17 +144,19 @@ public abstract class AbstractDocumentProcessingUseCase {
                     doc, masterHistory, traceId);
         }
 
-        FileUploadResponse representative = responses.get(0);
-        boolean hasTechnicalRetry = responses.stream().anyMatch(FileUploadResponse::isTechnicalRetry);
+        List<FileUploadResponse> finalResponses = getFinalResponses(responses);
+        FileUploadResponse representative = finalResponses.get(0);
+        boolean hasTechnicalRetry = finalResponses.stream().anyMatch(FileUploadResponse::isTechnicalRetry);
 
         if (hasTechnicalRetry) {
             return saveAuditOnly(doc, masterHistory, responses, traceId).thenReturn(representative);
         } else {
-            return finalizeProcessing(doc, masterHistory, responses, traceId).thenReturn(representative);
+            return finalizeProcessing(doc, masterHistory, finalResponses, traceId).thenReturn(representative);
         }
     }
 
     private Mono<FileUploadResponse> handleGlobalErrorAndConclude(Throwable error, Document doc, DocumentHistoryDTO masterHistory, String traceId) {
+        LOGGER.log(Level.SEVERE, String.format("[TraceID: %s] Error processing document %s: %s", traceId, doc.getDocumentId(), error.getMessage()), error);
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(error);
         if (error instanceof ProcessingException pe && pe.getFilename() != null) {
             response = response.toBuilder().filename(pe.getFilename()).build();
