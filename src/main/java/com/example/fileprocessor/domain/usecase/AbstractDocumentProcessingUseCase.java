@@ -100,11 +100,11 @@ public abstract class AbstractDocumentProcessingUseCase {
                                 pe = existingPe;
                                 if (pe.getErrorCode() == null || pe.getErrorCode().isBlank()) {
                                     pe = new ProcessingException(pe.getMessage(),
-                                            ProcessingResultCodes.PATTERN_MISMATCH.name(), pe.getCause());
+                                            ProcessingResultCodes.UNKNOWN_ERROR.name(), pe.getCause());
                                 }
                             } else {
                                 pe = new ProcessingException(e.getMessage(),
-                                        ProcessingResultCodes.PATTERN_MISMATCH.name(), e);
+                                        ProcessingResultCodes.UNKNOWN_ERROR.name(), e);
                             }
                             if (Boolean.TRUE.equals(history.getIsZip())) {
                                 pe.setFilename(h.getFilename());

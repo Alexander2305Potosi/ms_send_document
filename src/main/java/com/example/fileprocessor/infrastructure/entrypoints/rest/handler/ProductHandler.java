@@ -78,6 +78,9 @@ public class ProductHandler {
 
     public Mono<ServerResponse> syncProducts(ServerRequest request) {
         var headers = request.headers().asHttpHeaders().toSingleValueMap();
+        String lastProductId = request.queryParam("last_product_id")
+                .or(() -> request.queryParam("lastProductId"))
+                .orElse("");
 
         Context context = Context.of(
                 TYPE_JOB, request.pathVariables().containsKey(TYPE_JOB) ? request.pathVariable(TYPE_JOB) : "default",
@@ -85,7 +88,8 @@ public class ProductHandler {
                 HEADER_USE_CASE, headers.getOrDefault(HEADER_USE_CASE, "default"),
                 HEADER_DATE_INIT, request.queryParam(ApiConstants.HEADER_DATE_INIT).orElse(""),
                 HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse("")
-        ).put(HEADER_PRODUCT_STATUS, request.queryParam(ApiConstants.HEADER_PRODUCT_STATUS).orElse(""));
+        ).put(HEADER_PRODUCT_STATUS, request.queryParam(ApiConstants.HEADER_PRODUCT_STATUS).orElse(""))
+         .put("last_product_id", lastProductId);
 
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(HEADER_TRACE_ID);
@@ -93,9 +97,10 @@ public class ProductHandler {
             String dateInitVal = ctx.get(ApiConstants.HEADER_DATE_INIT);
             String dateEndVal = ctx.get(ApiConstants.HEADER_DATE_END);
             String stateVal = ctx.get(ApiConstants.HEADER_PRODUCT_STATUS);
+            String lastProductIdVal = ctx.get("last_product_id");
 
-            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}, state: {4}",
-                    new Object[]{traceId, useCase, dateInitVal, dateEndVal, stateVal});
+            LOGGER.log(Level.INFO, "Starting document sync, traceId: {0}, useCase: {1}, dateInit: {2}, dateEnd: {3}, state: {4}, lastProductId: {5}",
+                    new Object[]{traceId, useCase, dateInitVal, dateEndVal, stateVal, lastProductIdVal});
             syncDocumentsUseCase.execute(useCase)
                 .doOnError(error -> LOGGER.log(Level.SEVERE, "Document sync failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
                 .doOnSuccess(v -> LOGGER.log(Level.INFO, "Document sync completed for traceId: {0}", new Object[]{traceId}))

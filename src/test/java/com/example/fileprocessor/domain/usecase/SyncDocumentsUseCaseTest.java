@@ -249,7 +249,6 @@ class SyncDocumentsUseCaseTest {
     @Test
     void execute_whenLastProcessedProductExists_resumesFromNextProduct() {
         // Given
-        when(documentRepository.findLastProcessedProductIdInRange()).thenReturn(Mono.just("p1"));
         when(productMasterRepository.getAllProducts()).thenReturn(Flux.just(product("p2")));
         when(productLocalRepository.findBranchByProductId("p2")).thenReturn(Mono.just("Sucursal Medellin"));
         when(productRestGateway.getDocumentsByProduct(any())).thenReturn(Flux.just(doc("p2", "doc2", false)));
@@ -257,12 +256,11 @@ class SyncDocumentsUseCaseTest {
         when(documentRepository.save(any(Document.class))).thenReturn(Mono.just(savedDocument(12L, "doc2", "retention")));
 
         // When & Then
-        StepVerifier.create(useCase.execute("retention"))
+        StepVerifier.create(useCase.execute("retention").contextWrite(reactor.util.context.Context.of("last_product_id", "p1")))
             .assertNext(result -> assertEquals("Document sync completed", result))
             .expectComplete()
             .verify(Duration.ofSeconds(10));
 
-        verify(documentRepository, times(1)).findLastProcessedProductIdInRange();
         verify(productMasterRepository).getAllProducts();
     }
 }

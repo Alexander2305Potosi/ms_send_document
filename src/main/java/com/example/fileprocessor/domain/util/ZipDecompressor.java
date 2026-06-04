@@ -22,35 +22,34 @@ public final class ZipDecompressor {
             return Flux.just(zipHistory);
         }
 
-        return Flux.generate(
-            () -> new ZipInputStream(new ByteArrayInputStream(zipHistory.getContent())),
-            (zis, sink) -> {
-                try {
-                    ZipEntry entry;
-                    while ((entry = zis.getNextEntry()) != null) {
+        try {
+            java.io.File tempFile = java.io.File.createTempFile("decompress-", ".zip");
+            try {
+                java.nio.file.Files.write(tempFile.toPath(), zipHistory.getContent());
+
+                java.util.List<DocumentHistoryDTO> entries = new java.util.ArrayList<>();
+                try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(tempFile)) {
+                    java.util.Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
+                    while (enumeration.hasMoreElements()) {
+                        ZipEntry entry = enumeration.nextElement();
                         if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
-                            byte[] decompressed = zis.readAllBytes();
-                            sink.next(buildHistoryEntry(entry.getName(), decompressed, zipHistory));
-                            return zis;
+                            try (java.io.InputStream is = zipFile.getInputStream(entry)) {
+                                byte[] decompressed = is.readAllBytes();
+                                entries.add(buildHistoryEntry(entry.getName(), decompressed, zipHistory));
+                            }
                         }
                     }
-                    sink.complete();
-                } catch (IOException e) {
-                    sink.error(new ProcessingException(
-                        "Failed to decompress ZIP '" + zipHistory.getFilename() + "': " + e.getMessage(),
-                        ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
-                        e));
                 }
-                return zis;
-            },
-            zis -> {
-                try {
-                    zis.close();
-                } catch (IOException e) {
-                    // Silent close
-                }
+                return Flux.fromIterable(entries);
+            } finally {
+                java.nio.file.Files.deleteIfExists(tempFile.toPath());
             }
-        );
+        } catch (IOException e) {
+            return Flux.error(new ProcessingException(
+                "Failed to decompress ZIP '" + zipHistory.getFilename() + "': " + e.getMessage(),
+                ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
+                e));
+        }
     }
 
     private static DocumentHistoryDTO buildHistoryEntry(String filename, byte[] content, DocumentHistoryDTO original) {

@@ -85,6 +85,10 @@ class ProductHandlerTest {
         }
         httpHeaders.add(ApiConstants.HEADER_USE_CASE, "retention");
         when(headers.asHttpHeaders()).thenReturn(httpHeaders);
+
+        lenient().when(request.queryParam(anyString())).thenReturn(Optional.empty());
+        lenient().when(request.pathVariables()).thenReturn(java.util.Map.of(ApiConstants.TYPE_JOB, "retention"));
+        lenient().when(request.pathVariable(anyString())).thenReturn("retention");
         
         return request;
     }
@@ -98,8 +102,6 @@ class ProductHandlerTest {
             .processedAt(Instant.now())
             .build();
     }
-
-
 
     // getProcessor tests
 

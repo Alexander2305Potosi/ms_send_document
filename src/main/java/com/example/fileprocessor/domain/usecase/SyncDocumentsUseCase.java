@@ -33,22 +33,23 @@ public class SyncDocumentsUseCase {
     }
 
     public Mono<String> execute(String useCase) {
-        return documentRepository.findLastProcessedProductIdInRange()
-                .defaultIfEmpty("")
-                .flatMapMany(lastProductId -> {
-                    if (lastProductId.isEmpty()) {
-                        LOGGER.info("[SYNC] Iniciando sincronización completa (sin registros previos en el rango).");
-                    } else {
-                        LOGGER.info("[SYNC] Reanudando sincronización a partir del id_producto: " + lastProductId);
-                    }
-                    // Inyectar el cursor en el contexto reactivo solo cuando existe un ID previo
-                    return productMasterRepository.getAllProducts()
-                            .contextWrite(ctx -> lastProductId.isEmpty()
-                                    ? ctx
-                                    : ctx.put("last_product_id", lastProductId));
-                })
-                .flatMap(product -> syncDocumentsForProduct(product, useCase))
-                .then(Mono.just("Document sync completed"));
+        return Mono.deferContextual(ctx -> {
+            String lastProductId = ctx.getOrDefault("last_product_id", "");
+            
+            if (lastProductId.isEmpty()) {
+                LOGGER.info("[SYNC] Iniciando sincronización completa (sin registros previos en el rango).");
+            } else {
+                LOGGER.info("[SYNC] Reanudando sincronización a partir del id_producto: " + lastProductId);
+            }
+            
+            // Inyectar el cursor en el contexto reactivo solo cuando existe un ID previo
+            return productMasterRepository.getAllProducts()
+                    .contextWrite(c -> lastProductId.isEmpty()
+                            ? c
+                            : c.put("last_product_id", lastProductId))
+                    .flatMap(product -> syncDocumentsForProduct(product, useCase))
+                    .then(Mono.just("Document sync completed"));
+        });
     }
 
     private Flux<Document> syncDocumentsForProduct(ProductMaestro product, String useCase) {
