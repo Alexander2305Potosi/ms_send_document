@@ -5,10 +5,15 @@ import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import reactor.core.publisher.Flux;
 
-import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
 
 /**
  * Utility class for decompressing ZIP archives into individual DocumentHistoryDTO instances.
@@ -23,19 +28,19 @@ public final class ZipDecompressor {
         }
 
         try {
-            java.io.File tempFile = java.io.File.createTempFile("decompress-", ".zip");
+            File tempFile = File.createTempFile("decompress-", ".zip");
             try {
-                java.nio.file.Files.write(tempFile.toPath(), zipHistory.getContent());
+                Files.write(tempFile.toPath(), zipHistory.getContent());
 
-                java.util.List<DocumentHistoryDTO> entries = new java.util.ArrayList<>();
-                java.util.zip.ZipFile zipFile;
+                List<DocumentHistoryDTO> entries = new ArrayList<>();
+                ZipFile zipFile;
                 try {
-                    zipFile = new java.util.zip.ZipFile(tempFile, java.nio.charset.StandardCharsets.UTF_8);
-                } catch (java.util.zip.ZipException e) {
-                    zipFile = new java.util.zip.ZipFile(tempFile, java.nio.charset.StandardCharsets.ISO_8859_1);
+                    zipFile = new ZipFile(tempFile, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (ZipException e) {
+                    zipFile = new ZipFile(tempFile, java.nio.charset.StandardCharsets.ISO_8859_1);
                 }
                 try {
-                    java.util.Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
+                    Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
                     while (enumeration.hasMoreElements()) {
                         ZipEntry entry = enumeration.nextElement();
                         if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
@@ -50,7 +55,7 @@ public final class ZipDecompressor {
                 }
                 return Flux.fromIterable(entries);
             } finally {
-                java.nio.file.Files.deleteIfExists(tempFile.toPath());
+                Files.deleteIfExists(tempFile.toPath());
             }
         } catch (IOException e) {
             return Flux.error(new ProcessingException(

@@ -374,4 +374,112 @@ class AbstractDocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(5));
     }
+
+    @Test
+    void executePendingDocuments_withZipMultipleFiles_allSuccess_marksAsProcessed() throws Exception {
+        byte[] zipBytes = createZipBytes("file1.pdf", "file2.pdf");
+
+        Document doc = Document.builder()
+                .id(1L)
+                .documentId("doc-zip-multi")
+                .productId("p1")
+                .state(ProcessingResultCodes.PENDING.name())
+                .isZip(true)
+                .retryCount(0)
+                .build();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("p1")
+                .documentId("doc-zip-multi")
+                .filename("archive.zip")
+                .content(zipBytes)
+                .isZip(true)
+                .build();
+
+        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any())).thenReturn(Flux.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+            @Override
+            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
+                return Flux.just(FileUploadResponse.builder().success(true).syncStatus("SUCCESS").build());
+            }
+            @Override protected String implementationName() { return "TEST"; }
+        };
+
+        StepVerifier.create(useCase.executePendingDocuments())
+                .expectNextCount(1)
+                .expectComplete()
+                .verify(Duration.ofSeconds(10));
+
+        verify(persistencePort, times(2)).saveHistory(any(DocumentHistoryDTO.class));
+        verify(persistencePort).finalizeProcessingAtomically(argThat(h ->
+            ProcessingResultCodes.PROCESSED.name().equals(h.getState()) &&
+            h.getFilename().equals("archive.zip")
+        ));
+    }
+
+    @Test
+    void executePendingDocuments_withZipPartialFailure_marksAsBusinessRejection() throws Exception {
+        byte[] zipBytes = createZipBytes("file1.pdf", "file2.pdf");
+
+        Document doc = Document.builder()
+                .id(1L)
+                .documentId("doc-zip-partial")
+                .productId("p1")
+                .state(ProcessingResultCodes.PENDING.name())
+                .isZip(true)
+                .retryCount(0)
+                .build();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("p1")
+                .documentId("doc-zip-partial")
+                .filename("archive.zip")
+                .content(zipBytes)
+                .isZip(true)
+                .build();
+
+        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any())).thenReturn(Flux.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+            @Override
+            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
+                if (h.getFilename().equals("file1.pdf")) {
+                    return Flux.just(FileUploadResponse.builder().success(true).syncStatus("SUCCESS").build());
+                } else {
+                    return Flux.just(FileUploadResponse.builder()
+                            .success(false)
+                            .syncStatus(ProcessingResultCodes.PATTERN_MISMATCH.name())
+                            .build());
+                }
+            }
+            @Override protected String implementationName() { return "TEST"; }
+        };
+
+        StepVerifier.create(useCase.executePendingDocuments())
+                .expectNextCount(1)
+                .expectComplete()
+                .verify(Duration.ofSeconds(10));
+
+        verify(persistencePort, times(2)).saveHistory(any(DocumentHistoryDTO.class));
+        verify(persistencePort).finalizeProcessingAtomically(argThat(h ->
+            ProcessingResultCodes.BUSINESS_REJECTION.name().equals(h.getState())
+        ));
+    }
+
+    private byte[] createZipBytes(String... filenames) throws java.io.IOException {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
+            for (String name : filenames) {
+                zos.putNextEntry(new java.util.zip.ZipEntry(name));
+                zos.write("dummy content".getBytes());
+                zos.closeEntry();
+            }
+        }
+        return baos.toByteArray();
+    }
 }

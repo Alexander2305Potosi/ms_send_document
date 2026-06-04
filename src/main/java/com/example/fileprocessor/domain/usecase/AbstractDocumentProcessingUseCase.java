@@ -14,6 +14,7 @@ import reactor.util.context.ContextView;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -57,33 +58,30 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> processWithTracking(Document doc, String traceId) {
-        final DocumentHistoryDTO historyDto = DocumentHistoryDTO.fromDocument(doc);
-
+        DocumentHistoryDTO baseHistory = DocumentHistoryDTO.fromDocument(doc);
         return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
                 .filter(rows -> rows > 0)
                 .doOnDiscard(Long.class,
                         unused -> LOGGER.log(Level.WARNING,
                                 "[TraceID: {0}] Document {1} is already being processed or locked.",
                                 new Object[] { traceId, doc.getDocumentId() }))
-                .flatMap(unused -> fetchAndValidate(historyDto))
-                .flatMapMany(h -> uploadDocument(h, doc.getId())
-                        .map(resp -> (Boolean.TRUE.equals(doc.getIsZip()) && resp.getFilename() == null)
-                                ? resp.toBuilder().filename(h.getFilename()).build()
-                                : resp))
-                .onErrorResume(error -> handleGlobalError(error).flux())
-                .concatMap(response -> {
-                    if (response.isTechnicalRetry()) {
-                        return saveAuditOnly(doc, historyDto, response, traceId).thenReturn(response);
-                    } else {
-                        return finalizeProcessing(doc, historyDto, response, traceId);
-                    }
-                })
-                .last();
+                .flatMap(unused -> downloadDocument(baseHistory)
+                        .flatMap(masterHistory -> decompressAndValidate(masterHistory)
+                                .concatMap(innerFile -> uploadDocument(innerFile, doc.getId())
+                                        .map(resp -> ensureFilename(resp, innerFile, doc.getIsZip()))
+                                        .flatMap(resp -> saveInnerHistoryIfZip(doc, innerFile, resp))
+                                )
+                                .collectList()
+                                .flatMap(responses -> concludeProcessing(doc, masterHistory, responses, traceId))
+                                .onErrorResume(error -> handleGlobalErrorAndConclude(error, doc, masterHistory, traceId))
+                        )
+                )
+                .onErrorResume(error -> handleGlobalErrorAndConclude(error, doc, baseHistory, traceId));
     }
 
-    private Mono<DocumentHistoryDTO> fetchAndValidate(DocumentHistoryDTO history) {
-        return productRestGateway.getDocument(history.getProductId(), history.getBusinessDocumentId())
-                .map(file -> history.toBuilder()
+    private Mono<DocumentHistoryDTO> downloadDocument(DocumentHistoryDTO baseHistory) {
+        return productRestGateway.getDocument(baseHistory.getProductId(), baseHistory.getBusinessDocumentId())
+                .map(file -> baseHistory.toBuilder()
                         .content(file.getContent())
                         .size(file.getSize())
                         .contentType(file.getContentType())
@@ -91,8 +89,11 @@ public abstract class AbstractDocumentProcessingUseCase {
                         .originFolder(file.getOriginFolder())
                         .originCountry(file.getOriginCountry())
                         .isZip(file.getIsZip())
-                        .build())
-                .flatMapMany(this::decompress)
+                        .build());
+    }
+
+    private Flux<DocumentHistoryDTO> decompressAndValidate(DocumentHistoryDTO masterHistory) {
+        return decompress(masterHistory)
                 .concatMap(h -> documentValidator.validate(h, true)
                         .onErrorMap(e -> {
                             ProcessingException pe;
@@ -106,104 +107,191 @@ public abstract class AbstractDocumentProcessingUseCase {
                                 pe = new ProcessingException(e.getMessage(),
                                         ProcessingResultCodes.UNKNOWN_ERROR.name(), e);
                             }
-                            if (Boolean.TRUE.equals(history.getIsZip())) {
+                            if (Boolean.TRUE.equals(masterHistory.getIsZip())) {
                                 pe.setFilename(h.getFilename());
                             }
                             return pe;
                         }))
-                .next()
-                .switchIfEmpty(Mono.defer(() -> {
-                    if (Boolean.TRUE.equals(history.getIsZip())) {
-                        return Mono.error(new ProcessingException(
+                .switchIfEmpty(Flux.defer(() -> {
+                    if (Boolean.TRUE.equals(masterHistory.getIsZip())) {
+                        return Flux.<DocumentHistoryDTO>error(new ProcessingException(
                                 ProcessingResultCodes.EMPTY_CONTENT.value(),
                                 ProcessingResultCodes.EMPTY_CONTENT.name()));
                     }
-                    return Mono.empty();
+                    return Flux.<DocumentHistoryDTO>empty();
                 }))
                 .onErrorResume(ProcessingException.class, e -> {
                     if (ProcessingResultCodes.isBusinessRule(e.getErrorCode())) {
-                        return Mono.error(e);
+                        return Flux.error(e);
                     }
                     ProcessingException pe = new ProcessingException("Validation failed: " + e.getMessage(),
                             e.getErrorCode(), e);
-                    pe.setFilename(e.getFilename());
-                    return Mono.error(pe);
+                    pe.setFilename(e.getFilename() != null ? e.getFilename() : masterHistory.getFilename());
+                    return Flux.error(pe);
                 });
     }
 
-    private Mono<FileUploadResponse> finalizeProcessing(Document doc, DocumentHistoryDTO history,
-            FileUploadResponse response, String traceId) {
+    private FileUploadResponse ensureFilename(FileUploadResponse resp, DocumentHistoryDTO innerFile, Boolean isZip) {
+        if (Boolean.TRUE.equals(isZip) && resp.getFilename() == null) {
+            return resp.toBuilder().filename(innerFile.getFilename()).build();
+        }
+        return resp;
+    }
+
+    private Mono<FileUploadResponse> saveInnerHistoryIfZip(Document doc, DocumentHistoryDTO innerFile, FileUploadResponse resp) {
+        if (Boolean.TRUE.equals(doc.getIsZip())) {
+            return persistencePort.saveHistory(syncHistoryDTO(doc, innerFile, resp)).thenReturn(resp);
+        }
+        return Mono.just(resp);
+    }
+
+    private Mono<FileUploadResponse> concludeProcessing(Document doc, DocumentHistoryDTO masterHistory, List<FileUploadResponse> responses, String traceId) {
+        if (responses.isEmpty()) {
+            return handleGlobalErrorAndConclude(
+                    new ProcessingException("No files processed", ProcessingResultCodes.EMPTY_CONTENT.name()),
+                    doc, masterHistory, traceId);
+        }
+
+        FileUploadResponse representative = responses.get(0);
+        boolean hasTechnicalRetry = responses.stream().anyMatch(FileUploadResponse::isTechnicalRetry);
+
+        if (hasTechnicalRetry) {
+            return saveAuditOnly(doc, masterHistory, responses, traceId).thenReturn(representative);
+        } else {
+            return finalizeProcessing(doc, masterHistory, responses, traceId).thenReturn(representative);
+        }
+    }
+
+    private Mono<FileUploadResponse> handleGlobalErrorAndConclude(Throwable error, Document doc, DocumentHistoryDTO masterHistory, String traceId) {
+        return handleGlobalError(error).flatMap(response -> {
+            FileUploadResponse updatedResponse = response;
+            String failedFilename = null;
+            if (error instanceof ProcessingException pe && pe.getFilename() != null) {
+                updatedResponse = response.toBuilder().filename(pe.getFilename()).build();
+                failedFilename = pe.getFilename();
+            }
+
+            final DocumentHistoryDTO errorFileHistoryDto = failedFilename != null
+                    ? masterHistory.toBuilder().filename(failedFilename).isZip(false).build()
+                    : null;
+
+            Mono<Void> saveErrorHistory = Mono.empty();
+            if (Boolean.TRUE.equals(doc.getIsZip()) && errorFileHistoryDto != null) {
+                saveErrorHistory = persistencePort.saveHistory(
+                        syncHistoryDTO(doc, errorFileHistoryDto, updatedResponse)
+                );
+            }
+
+            List<FileUploadResponse> responses = List.of(updatedResponse);
+            Mono<Void> finalizeMono;
+            if (updatedResponse.isTechnicalRetry()) {
+                finalizeMono = saveAuditOnly(doc, masterHistory, responses, traceId);
+            } else {
+                finalizeMono = finalizeProcessing(doc, masterHistory, responses, traceId);
+            }
+
+            FileUploadResponse finalResponse = updatedResponse;
+            return saveErrorHistory.then(finalizeMono).thenReturn(finalResponse);
+        });
+    }
+
+    private Mono<Void> finalizeProcessing(Document doc, DocumentHistoryDTO history,
+            List<FileUploadResponse> responses, String traceId) {
         int businessRetryCount = doc.getRetryCountSafe();
-        String nextState = calculateNextState(doc, response);
-        String logPrefix = response.isSuccess() ? ProcessingResultCodes.SUCCESS.name()
+        String nextState = calculateNextState(doc, responses);
+
+        String logPrefix = responses.stream().allMatch(FileUploadResponse::isSuccess)
+                ? ProcessingResultCodes.SUCCESS.name()
                 : (ProcessingResultCodes.PENDING.name().equals(nextState) ? ProcessingResultCodes.RETRYABLE_ERROR.name()
                         : ProcessingResultCodes.FAILURE.name());
 
         doc.setState(nextState);
-        doc.setSyncMessage(response.getMessage());
+        doc.setSyncMessage(aggregateMessages(responses));
 
-        LOGGER.log(Level.INFO, "[TraceID: {0}] [{1}] Document {2} (Product: {3}) -> {4}. Message: {5}",
+        LOGGER.log(Level.INFO, "[TraceID: {0}] [{1}] Document {2} (Product: {3}) -> {4}. Messages: {5}",
                 new Object[] { traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), nextState,
-                        response.getMessage() });
+                        doc.getSyncMessage() });
 
         return persistencePort
-                .finalizeProcessingAtomically(syncHistoryDTO(doc, history, response, nextState, businessRetryCount))
-                .thenReturn(response);
+                .finalizeProcessingAtomically(syncGlobalHistory(doc, history, responses, nextState, businessRetryCount))
+                .then();
     }
 
-    private Mono<Void> saveAuditOnly(Document doc, DocumentHistoryDTO history, FileUploadResponse response,
+    private Mono<Void> saveAuditOnly(Document doc, DocumentHistoryDTO history, List<FileUploadResponse> responses,
             String traceId) {
-        if (response.isTechnicalRetry()) {
-            LOGGER.log(Level.INFO, "[TraceID: {0}] Recording technical retry audit for Document {1} (Attempt {2})",
-                    new Object[] { traceId, doc.getDocumentId(), response.getAttemptCount() });
+        LOGGER.log(Level.INFO, "[TraceID: {0}] Recording technical retry audit for Document {1} (Attempt {2})",
+                new Object[] { traceId, doc.getDocumentId(), doc.getRetryCountSafe() });
+        if (Boolean.TRUE.equals(history.getIsZip())) {
+            return Mono.empty();
         }
         return persistencePort
-                .saveHistory(syncHistoryDTO(doc, history, response, doc.getState(), doc.getRetryCountSafe()));
+                .saveHistory(syncGlobalHistory(doc, history, responses, doc.getState(), doc.getRetryCountSafe()));
     }
 
-    private DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO history, FileUploadResponse response,
+    private DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO fileHistory, FileUploadResponse response) {
+        return fileHistory.toBuilder()
+                .documentId(doc.getId())
+                .state(calculateFileState(response))
+                .useCase(doc.getUseCase())
+                .retryCount(doc.getRetryCountSafe())
+                .businessRetryCount(doc.getRetryCountSafe())
+                .filename(response.getFilename() != null ? response.getFilename() : fileHistory.getFilename())
+                .syncStatus(response.getSyncStatus())
+                .syncMessage(response.getMessage())
+                .completedAt(Instant.now())
+                .build();
+    }
+
+    private DocumentHistoryDTO syncGlobalHistory(Document doc, DocumentHistoryDTO history, List<FileUploadResponse> responses,
             String state, int businessRetryCount) {
-        String actualFilename = response.getFilename() != null ? response.getFilename()
-                : (Boolean.TRUE.equals(doc.getIsZip()) ? history.getFilename() : null);
-
-        String finalMessage = (response.getSyncStatus() != null && !response.getSyncStatus().isBlank())
-                ? String.format("[%s] %s", response.getSyncStatus(), response.getMessage())
-                : response.getMessage();
-
-        int realRetries = businessRetryCount + (response.getAttemptCount() > 0 ? response.getAttemptCount() - 1 : 0);
+        String finalMessage = aggregateMessages(responses);
+        String representativeStatus = responses.isEmpty() ? null : responses.get(0).getSyncStatus();
 
         return history.toBuilder()
                 .documentId(doc.getId())
                 .state(state)
                 .useCase(doc.getUseCase())
-                .retryCount(realRetries)
+                .retryCount(businessRetryCount)
                 .businessRetryCount(doc.getRetryCountSafe())
-                .filename(actualFilename)
-                .syncStatus(response.getSyncStatus())
+                .filename(history.getFilename())
+                .syncStatus(representativeStatus)
                 .syncMessage(finalMessage)
                 .completedAt(Instant.now())
-                .homologationFolder(response.getHomologationFolder())
-                .homologationCountry(response.getHomologationCountry())
-                .categoriaHomologada(response.getCategoriaHomologada())
                 .build();
     }
 
-    private String calculateNextState(Document doc, FileUploadResponse response) {
+    private String calculateFileState(FileUploadResponse response) {
         if (response.isSuccess()) {
             return ProcessingResultCodes.PROCESSED.name();
         }
+        if (ProcessingResultCodes.isBusinessRule(response.getSyncStatus())) {
+            return ProcessingResultCodes.BUSINESS_REJECTION.name();
+        }
+        return ProcessingResultCodes.PENDING.name();
+    }
 
-        // Treat as BUSINESS_REJECTION if it is a known business rule or any
-        // non-transient error status
-        if (ProcessingResultCodes.isBusinessRule(response.getSyncStatus()) ||
-                (response.getSyncStatus() != null && !ProcessingResultCodes.isTransient(response.getSyncStatus()))) {
+    private String aggregateMessages(List<FileUploadResponse> responses) {
+        return responses.stream()
+                .map(r -> String.format("%s: %s",
+                    r.getFilename() != null ? r.getFilename() : "unknown",
+                    r.isSuccess() ? "SUCCESS" : r.getSyncStatus()))
+                .collect(java.util.stream.Collectors.joining(" | "));
+    }
+
+    private String calculateNextState(Document doc, List<FileUploadResponse> responses) {
+        if (responses.stream().allMatch(FileUploadResponse::isSuccess)) {
+            return ProcessingResultCodes.PROCESSED.name();
+        }
+
+        if (responses.stream().anyMatch(r -> ProcessingResultCodes.isBusinessRule(r.getSyncStatus()))) {
             return ProcessingResultCodes.BUSINESS_REJECTION.name();
         }
 
         int currentRetry = doc.getRetryCountSafe();
-        boolean isRetryable = ProcessingResultCodes.isTransient(response.getSyncStatus()) && currentRetry < MAX_RETRIES;
-    
-        if (isRetryable) {
+        boolean hasTransient = responses.stream()
+                .anyMatch(r -> ProcessingResultCodes.isTransient(r.getSyncStatus()));
+
+        if (hasTransient && currentRetry < MAX_RETRIES) {
             doc.setRetryCount(currentRetry + 1);
             return ProcessingResultCodes.PENDING.name();
         }

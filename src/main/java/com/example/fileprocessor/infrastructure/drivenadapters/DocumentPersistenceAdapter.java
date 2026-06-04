@@ -52,10 +52,15 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
                 .categoriaHomologada(history.getCategoriaHomologada())
                 .build();
 
-        return documentRepository.updateStateAndRetry(doc, initialState)
-                .then(historyRepository.saveHistory(history))
-                .as(transactionalOperator::transactional)
-                .then();
+        Mono<Void> updateDb = documentRepository.updateStateAndRetry(doc, initialState).then();
+        
+        if (Boolean.TRUE.equals(history.getIsZip())) {
+            return updateDb.as(transactionalOperator::transactional);
+        } else {
+            return updateDb.then(historyRepository.saveHistory(history))
+                    .as(transactionalOperator::transactional)
+                    .then();
+        }
     }
 
     @Override

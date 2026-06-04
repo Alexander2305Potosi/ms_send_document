@@ -98,3 +98,19 @@ INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-02
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-03', 'Sucursal Central');
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-04', 'Sucursal Central');
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-05', 'Sucursal Central');
+
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-BR-01', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-BR-02', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-BR-03', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-BR-04', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-BR-05', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-BR-06', 'Sucursal Central');
+
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-01', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-02', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-03', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-04', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-05', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-06', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-07', 'Sucursal Central');
+
