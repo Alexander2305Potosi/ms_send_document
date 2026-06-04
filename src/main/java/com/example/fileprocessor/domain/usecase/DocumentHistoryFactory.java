@@ -1,0 +1,128 @@
+package com.example.fileprocessor.domain.usecase;
+
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.exception.ProcessingException;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public final class DocumentHistoryFactory {
+
+    private static final int MAX_RETRIES = 3;
+
+    private DocumentHistoryFactory() {
+        // Prevent instantiation
+    }
+
+    public record ProcessingConclusion(String nextState, int nextRetryCount) {}
+
+    public static ProcessingConclusion calculateNextState(int currentRetry, List<FileUploadResponse> responses) {
+        ProcessingConclusion conclusion;
+        if (responses.isEmpty()) {
+            conclusion = new ProcessingConclusion(ProcessingResultCodes.FAILED.name(), currentRetry);
+        } else if (responses.stream().allMatch(FileUploadResponse::isSuccess)) {
+            conclusion = new ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), currentRetry);
+        } else if (responses.stream().anyMatch(r -> ProcessingResultCodes.isBusinessRule(r.getSyncStatus()))) {
+            conclusion = new ProcessingConclusion(ProcessingResultCodes.BUSINESS_REJECTION.name(), currentRetry);
+        } else if (currentRetry < MAX_RETRIES && responses.stream().anyMatch(r -> ProcessingResultCodes.isTransient(r.getSyncStatus()))) {
+            conclusion = new ProcessingConclusion(ProcessingResultCodes.PENDING.name(), currentRetry + 1);
+        } else {
+            conclusion = new ProcessingConclusion(ProcessingResultCodes.FAILED.name(), currentRetry);
+        }
+        return conclusion;
+    }
+
+    public static DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO fileHistory, FileUploadResponse response) {
+        return fileHistory.toBuilder()
+                .documentId(doc.getId())
+                .state(calculateFileState(response))
+                .useCase(doc.getUseCase())
+                .retryCount(doc.getRetryCountSafe())
+                .businessRetryCount(doc.getRetryCountSafe())
+                .filename(response.getFilename() != null ? response.getFilename() : fileHistory.getFilename())
+                .syncStatus(response.getSyncStatus())
+                .syncMessage(response.getMessage())
+                .completedAt(Instant.now())
+                .build();
+    }
+
+    public static DocumentHistoryDTO syncGlobalHistory(
+            Document doc,
+            DocumentHistoryDTO history,
+            List<FileUploadResponse> responses,
+            ProcessingConclusion conclusion) {
+        String representativeStatus = responses.isEmpty() ? null : responses.get(0).getSyncStatus();
+        String syncMessage = aggregateMessages(responses);
+
+        return history.toBuilder()
+                .documentId(doc.getId())
+                .state(conclusion.nextState())
+                .useCase(doc.getUseCase())
+                .retryCount(doc.getRetryCountSafe())
+                .businessRetryCount(conclusion.nextRetryCount())
+                .filename(history.getFilename())
+                .syncStatus(representativeStatus)
+                .syncMessage(syncMessage)
+                .completedAt(Instant.now())
+                .build();
+    }
+
+    public static String calculateFileState(FileUploadResponse response) {
+        if (response.isSuccess()) {
+            return ProcessingResultCodes.PROCESSED.name();
+        }
+        if (ProcessingResultCodes.isBusinessRule(response.getSyncStatus())) {
+            return ProcessingResultCodes.BUSINESS_REJECTION.name();
+        }
+        return ProcessingResultCodes.PENDING.name();
+    }
+
+    public static String aggregateMessages(List<FileUploadResponse> responses) {
+        return responses.stream()
+                .map(r -> String.format("%s: %s",
+                        r.getFilename() != null ? r.getFilename() : "unknown",
+                        r.isSuccess() ? "SUCCESS" : r.getSyncStatus()))
+                .collect(Collectors.joining(" | "));
+    }
+
+    public static FileUploadResponse handleGlobalError(Throwable error) {
+        String syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
+        String message = error.getMessage();
+        String filename = null;
+
+        if (error instanceof ProcessingException pe) {
+            syncStatus = pe.getErrorCode();
+            filename = pe.getFilename();
+        }
+
+        return FileUploadResponse.builder()
+                .status(ProcessingResultCodes.FAILURE.name())
+                .syncStatus(syncStatus)
+                .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .processedAt(Instant.now())
+                .filename(filename)
+                .success(false)
+                .build();
+    }
+
+    public static ProcessingException mapValidationError(Throwable e, DocumentHistoryDTO masterHistory, DocumentHistoryDTO innerHistory) {
+        ProcessingException pe;
+        if (e instanceof ProcessingException existingPe) {
+            pe = existingPe;
+            if (pe.getErrorCode() == null || pe.getErrorCode().isBlank()) {
+                pe = new ProcessingException(pe.getMessage(),
+                        ProcessingResultCodes.UNKNOWN_ERROR.name(), pe.getCause());
+            }
+        } else {
+            pe = new ProcessingException(e.getMessage(),
+                    ProcessingResultCodes.UNKNOWN_ERROR.name(), e);
+        }
+        if (Boolean.TRUE.equals(masterHistory.getIsZip())) {
+            pe.setFilename(innerHistory.getFilename());
+        }
+        return pe;
+    }
+}
