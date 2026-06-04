@@ -28,7 +28,13 @@ public final class ZipDecompressor {
                 java.nio.file.Files.write(tempFile.toPath(), zipHistory.getContent());
 
                 java.util.List<DocumentHistoryDTO> entries = new java.util.ArrayList<>();
-                try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(tempFile)) {
+                java.util.zip.ZipFile zipFile;
+                try {
+                    zipFile = new java.util.zip.ZipFile(tempFile, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (java.util.zip.ZipException e) {
+                    zipFile = new java.util.zip.ZipFile(tempFile, java.nio.charset.StandardCharsets.ISO_8859_1);
+                }
+                try {
                     java.util.Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
                     while (enumeration.hasMoreElements()) {
                         ZipEntry entry = enumeration.nextElement();
@@ -39,6 +45,8 @@ public final class ZipDecompressor {
                             }
                         }
                     }
+                } finally {
+                    zipFile.close();
                 }
                 return Flux.fromIterable(entries);
             } finally {
