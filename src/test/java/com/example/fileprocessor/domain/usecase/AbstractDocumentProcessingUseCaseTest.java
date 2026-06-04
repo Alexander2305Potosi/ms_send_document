@@ -220,7 +220,9 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(5));
 
         verify(persistencePort).saveHistory(any());
-        verify(persistencePort, never()).finalizeProcessingAtomically(any());
+        verify(persistencePort).finalizeProcessingAtomically(
+            argThat(h -> ProcessingResultCodes.PENDING.name().equals(h.getState()))
+        );
     }
 
     @Test
@@ -373,5 +375,76 @@ class AbstractDocumentProcessingUseCaseTest {
             })
             .expectComplete()
             .verify(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void executePendingDocuments_withZipHavingMultipleFiles_uploadsAll() throws Exception {
+        Document doc = Document.builder()
+            .id(1L)
+            .documentId("doc-zip-multi")
+            .productId("p1")
+            .state("PENDING")
+            .isZip(true)
+            .build();
+
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
+            java.util.zip.ZipEntry entry1 = new java.util.zip.ZipEntry("file1.pdf");
+            zos.putNextEntry(entry1);
+            zos.write("dummy-data-1".getBytes());
+            zos.closeEntry();
+
+            java.util.zip.ZipEntry entry2 = new java.util.zip.ZipEntry("file2.pdf");
+            zos.putNextEntry(entry2);
+            zos.write("dummy-data-2".getBytes());
+            zos.closeEntry();
+        }
+        byte[] zipBytes = baos.toByteArray();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("p1")
+                .documentId("doc-zip-multi")
+                .filename("archive-multi.zip")
+                .content(zipBytes)
+                .isZip(true)
+                .build();
+
+        when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        
+        when(documentValidator.validate(any(), anyBoolean()))
+            .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        java.util.List<DocumentHistoryDTO> uploadedDocs = new java.util.ArrayList<>();
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+            @Override
+            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
+                uploadedDocs.add(history);
+                return Flux.just(FileUploadResponse.builder()
+                        .success(true)
+                        .filename(history.getFilename())
+                        .build());
+            }
+            @Override protected String implementationName() { return "TEST"; }
+        };
+
+        StepVerifier.create(useCase.executePendingDocuments())
+            .assertNext(resp -> {
+                assertTrue(resp.isSuccess());
+                assertEquals("file2.pdf", resp.getFilename());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(5));
+
+        assertEquals(2, uploadedDocs.size());
+        assertEquals("file1.pdf", uploadedDocs.get(0).getFilename());
+        assertEquals("file2.pdf", uploadedDocs.get(1).getFilename());
+
+        // Verify each file got its own audit record
+        verify(persistencePort, times(2)).saveHistory(any());
+        // Verify parent state finalized exactly once with PROCESSED
+        verify(persistencePort, times(1)).finalizeProcessingAtomically(
+            argThat(h -> ProcessingResultCodes.PROCESSED.name().equals(h.getState()))
+        );
     }
 }
