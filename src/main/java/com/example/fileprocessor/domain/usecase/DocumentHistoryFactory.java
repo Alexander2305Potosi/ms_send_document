@@ -36,11 +36,12 @@ public final class DocumentHistoryFactory {
     }
 
     public static DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO fileHistory, FileUploadResponse response) {
+        int effectiveRetry = response.getAttemptCount() > 0 ? response.getAttemptCount() : doc.getRetryCountSafe();
         return fileHistory.toBuilder()
                 .documentId(doc.getId())
                 .state(calculateFileState(response))
                 .useCase(doc.getUseCase())
-                .retryCount(doc.getRetryCountSafe())
+                .retryCount(effectiveRetry)
                 .businessRetryCount(doc.getRetryCountSafe())
                 .filename(response.getFilename() != null ? response.getFilename() : fileHistory.getFilename())
                 .syncStatus(response.getSyncStatus())

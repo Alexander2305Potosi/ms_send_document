@@ -101,6 +101,7 @@ class DocumentHistoryFactoryTest {
                 .filename("inner_updated.xml")
                 .syncStatus("OK")
                 .message("Successfully uploaded")
+                .attemptCount(3)
                 .build();
 
         DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
@@ -108,12 +109,35 @@ class DocumentHistoryFactoryTest {
         assertEquals(123L, result.getDocumentId());
         assertEquals(ProcessingResultCodes.PROCESSED.name(), result.getState());
         assertEquals("SOAP", result.getUseCase());
-        assertEquals(2, result.getRetryCount());
-        assertEquals(2, result.getBusinessRetryCount());
+        assertEquals(3, result.getRetryCount());         // Uses response.attemptCount
+        assertEquals(2, result.getBusinessRetryCount()); // Uses doc.retryCount
         assertEquals("inner_updated.xml", result.getFilename());
         assertEquals("OK", result.getSyncStatus());
         assertEquals("Successfully uploaded", result.getSyncMessage());
         assertNotNull(result.getCompletedAt());
+    }
+
+    @Test
+    void syncHistoryDTO_withZeroAttemptCount_fallsBackToDocRetry() {
+        Document doc = Document.builder()
+                .id(50L)
+                .useCase("S3")
+                .retryCount(2)
+                .build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder()
+                .filename("report.pdf")
+                .build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .filename("report.pdf")
+                .syncStatus("SUCCESS")
+                .attemptCount(0)
+                .build();
+
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+
+        assertEquals(2, result.getRetryCount());          // Fallback to doc.retryCount
+        assertEquals(2, result.getBusinessRetryCount());
     }
 
     @Test
