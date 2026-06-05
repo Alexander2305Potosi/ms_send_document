@@ -330,6 +330,18 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
+    void handleGlobalError_withWrappedSslExceptionHavingNullMessage_fallsBackToOuterMessage() {
+        javax.net.ssl.SSLHandshakeException sslEx = new javax.net.ssl.SSLHandshakeException(null);
+        RuntimeException wrapper = new RuntimeException("Request failed due to SSL handshake issue", sslEx);
+
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
+
+        assertFalse(response.isSuccess());
+        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals("Request failed due to SSL handshake issue", response.getMessage());
+    }
+
+    @Test
     void aggregateMessages_withSuccessMessage_usesDetailedMessage() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder()

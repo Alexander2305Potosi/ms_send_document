@@ -118,10 +118,12 @@ public final class DocumentHistoryFactory {
             filename = pe.getFilename();
         }
 
+        String finalMsg = message != null && !message.isBlank() ? message : error.getMessage();
+
         return FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILURE.name())
                 .syncStatus(syncStatus)
-                .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .message(finalMsg != null && !finalMsg.isBlank() ? finalMsg : ProcessingResultCodes.UNKNOWN_ERROR.value())
                 .processedAt(Instant.now())
                 .filename(filename)
                 .success(false)

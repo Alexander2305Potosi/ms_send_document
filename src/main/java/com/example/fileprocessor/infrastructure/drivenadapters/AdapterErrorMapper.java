@@ -82,13 +82,13 @@ public final class AdapterErrorMapper {
             message = "Connection refused: El servicio no está disponible";
         } else {
             syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
-            message = root.getMessage();
+            message = root.getMessage() != null && !root.getMessage().isBlank() ? root.getMessage() : error.getMessage();
         }
 
         return FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILURE.name())
                 .syncStatus(syncStatus)
-                .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .message(message != null && !message.isBlank() ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
                 .traceId(traceId)
                 .processedAt(Instant.now())
                 .success(false)

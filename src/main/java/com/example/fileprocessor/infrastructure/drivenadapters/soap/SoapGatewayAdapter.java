@@ -118,9 +118,13 @@ public class SoapGatewayAdapter implements SoapGateway {
             message = "Connection refused: El servicio no está disponible";
         }
 
+        if (message == null || message.isBlank()) {
+            message = error.getMessage();
+        }
+
         return Mono.just(FileUploadResponse.builder()
                 .status(ProcessingResultCodes.FAILED.name())
-                .message(message != null ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .message(message != null && !message.isBlank() ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
                 .syncStatus(syncStatus)
                 .traceId(traceId)
                 .processedAt(Instant.now())
