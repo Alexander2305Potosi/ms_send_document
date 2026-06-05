@@ -316,4 +316,30 @@ class DocumentHistoryFactoryTest {
         ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, inner);
         assertEquals("inner.xml", result.getFilename());
     }
+
+    @Test
+    void handleGlobalError_withWrappedSslException_unwrapsToSslMessage() {
+        javax.net.ssl.SSLHandshakeException sslEx = new javax.net.ssl.SSLHandshakeException("PKIX path building failed");
+        RuntimeException wrapper = new RuntimeException("Request failed", sslEx);
+
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
+
+        assertFalse(response.isSuccess());
+        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals("PKIX path building failed", response.getMessage());
+    }
+
+    @Test
+    void aggregateMessages_withSuccessMessage_usesDetailedMessage() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder()
+                        .filename("test.pdf")
+                        .success(true)
+                        .syncStatus("OK")
+                        .message("statusCode: OK, messageId: corr-123, idDocumento: doc-123")
+                        .build()
+        );
+        String message = DocumentHistoryFactory.aggregateMessages(responses);
+        assertEquals("test.pdf: statusCode: OK, messageId: corr-123, idDocumento: doc-123", message);
+    }
 }

@@ -98,12 +98,24 @@ public class SoapGatewayAdapter implements SoapGateway {
 
         // Delegate all HTTP/timeout/connection error mapping to the shared infrastructure utility
         String syncStatus = AdapterErrorMapper.resolveErrorCode(error);
-        String message = error.getMessage();
 
-        if (error instanceof WebClientResponseException wce) {
+        // Unwrap to find the root cause (e.g. SSLHandshakeException, ConnectException) for accurate messages
+        Throwable root = error;
+        while (root.getCause() != null && root != root.getCause()) {
+            if (root instanceof WebClientResponseException) {
+                break;
+            }
+            root = root.getCause();
+        }
+
+        String message = root.getMessage();
+
+        if (root instanceof WebClientResponseException wce) {
             message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
         } else if (syncStatus.equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name())) {
             message = "Timeout: El servicio no respondió en " + properties.timeoutSeconds() + " segundos";
+        } else if (root instanceof java.net.ConnectException) {
+            message = "Connection refused: El servicio no está disponible";
         }
 
         return Mono.just(FileUploadResponse.builder()

@@ -283,6 +283,19 @@ class AdapterErrorMapperTest {
 
             assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.value(), response.getMessage());
         }
+
+        @Test
+        void withWrappedSslException_buildsResponseWithSslErrorMessage() {
+            javax.net.ssl.SSLHandshakeException sslEx = new javax.net.ssl.SSLHandshakeException("PKIX path building failed");
+            RuntimeException wrapper = new RuntimeException("Outer request failed", sslEx);
+
+            FileUploadResponse response = AdapterErrorMapper.buildErrorResponse(wrapper, "trace-ssl");
+
+            assertFalse(response.isSuccess());
+            assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+            assertEquals("PKIX path building failed", response.getMessage());
+            assertEquals("trace-ssl", response.getTraceId());
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

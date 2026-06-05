@@ -85,7 +85,7 @@ public final class DocumentHistoryFactory {
         return responses.stream()
                 .map(r -> String.format("%s: %s",
                         r.getFilename() != null ? r.getFilename() : "unknown",
-                        r.isSuccess() ? "SUCCESS" : r.getSyncStatus()))
+                        r.getMessage() != null ? r.getMessage() : (r.isSuccess() ? "SUCCESS" : r.getSyncStatus())))
                 .collect(Collectors.joining(" | "));
     }
 
@@ -97,10 +97,6 @@ public final class DocumentHistoryFactory {
      * <p>This method is responsible only for domain-level error extraction.</p>
      */
     public static FileUploadResponse handleGlobalError(Throwable error) {
-        String syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
-        String message = error.getMessage();
-        String filename = null;
-
         // Unwrap until we find a recognized domain exception
         Throwable root = error;
         while (root.getCause() != null && root != root.getCause()) {
@@ -109,6 +105,10 @@ public final class DocumentHistoryFactory {
             }
             root = root.getCause();
         }
+
+        String syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
+        String message = root.getMessage();
+        String filename = null;
 
         if (root instanceof ProcessingException pe) {
             syncStatus = pe.getErrorCode() != null && !pe.getErrorCode().isBlank()
