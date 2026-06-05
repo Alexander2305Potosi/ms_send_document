@@ -1,11 +1,12 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
-import com.example.fileprocessor.domain.entity.ProductDocumentFile;
-import com.example.fileprocessor.domain.entity.ProductHistory;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.util.Base64Utils;
+import com.example.fileprocessor.infrastructure.drivenadapters.AdapterErrorMapper;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
@@ -31,129 +32,122 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     private final DocumentRestProperties properties;
 
     public ProductRestGatewayAdapter(WebClient.Builder webClientBuilder,
-                                     DocumentRestProperties properties) {
+            DocumentRestProperties properties) {
         this.properties = properties;
         HttpClient httpClient = HttpClient.create()
-            .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
+                .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
         this.webClient = webClientBuilder
-            .baseUrl(properties.endpoint())
-            .clientConnector(new ReactorClientHttpConnector(httpClient))
-            .build();
+                .baseUrl(properties.endpoint())
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(25 * 1024 * 1024))
+                .build();
     }
 
     @Override
-    public Flux<ProductHistory> getAllProducts() {
+    public Flux<Document> getDocumentsByProduct(ProductMaestro product) {
         return Flux.deferContextual(ctx -> {
-            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
-            LOGGER.log(Level.INFO, "Fetching all products from REST API, traceId: {0}", traceId);
-
-            return webClient.get()
-                .uri(properties.productsPath())
-                .accept(MediaType.APPLICATION_JSON)
-                .header(ApiConstants.HEADER_TRACE_ID, traceId)
-                .retrieve()
-                .bodyToFlux(com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductResponse.class)
-                .map(resp -> ProductHistory.builder()
-                    .productId(resp.getProductId())
-                    .name(resp.getName())
-                    .build())
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .doOnError(e -> LOGGER.log(Level.SEVERE, "Failed to fetch products: " + e.getMessage()));
-        });
-    }
-
-    @Override
-    public Flux<ProductDocumentHistory> getDocumentsByProduct(ProductHistory product) {
-        return Flux.deferContextual(ctx -> {
-            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown-trace");
             LOGGER.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
-                new Object[]{product.getProductId(), traceId});
+                    new Object[] { product.getProductId(), traceId });
 
             return webClient.get()
-                .uri(properties.productDocumentsPath(), product.getProductId())
-                .accept(MediaType.APPLICATION_JSON)
-                .header(ApiConstants.HEADER_TRACE_ID, traceId)
-                .retrieve()
-                .bodyToFlux(ProductDocumentResponse.class)
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .map(doc -> mapToProductDocument(product.getProductId(), doc))
-                .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
-                    new Object[]{doc.getProductId(), doc.getDocumentId()}));
+                    .uri(properties.productDocumentsPath(), product.getProductId())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                    .retrieve()
+                    .bodyToFlux(ProductDocumentResponse.class)
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .map(doc -> mapToDocument(product.getProductId(), doc))
+                    .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
+                            new Object[] { doc.getProductId(), doc.getDocumentId() }))
+                    .onErrorMap(error -> {
+                        LOGGER.log(Level.WARNING, "[REST] Error fetching documents for product {0}: {1}",
+                                new Object[] { product.getProductId(), error.getMessage() });
+                        return mapToProcessingException(error, traceId);
+                    });
         });
     }
 
     @Override
     public Mono<ProductDocumentFile> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
-            String traceId = ctx.get(ApiConstants.HEADER_TRACE_ID);
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown-trace");
             LOGGER.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
-                new Object[]{documentId, productId, traceId});
+                    new Object[] { documentId, productId, traceId });
 
             return webClient.get()
-                .uri(properties.productDocumentsPath() + "/{documentId}", productId, documentId)
-                .accept(MediaType.APPLICATION_JSON)
-                .header(ApiConstants.HEADER_TRACE_ID, traceId)
-                .retrieve()
-                .bodyToMono(ProductDocumentResponse.class)
-                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .map(response -> {
-                    ProductDocumentHistory doc = mapToProductDocument(productId, response);
-                    return ProductDocumentFile.builder()
-                        .productId(productId)
-                        .documentId(doc.getDocumentId())
-                        .filename(doc.getFilename())
-                        .content(doc.getContent())
-                        .contentType(doc.getContentType())
-                        .size(doc.getSize())
-                        .isZip(doc.isZip())
-                        .origin(doc.getOrigin())
-                        .pais(doc.getPais())
-                        .build();
-                })
-                .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
-                    new Object[]{documentId, productId}));
+                    .uri(properties.productDocumentsPath() + "/{documentId}", productId, documentId)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                    .retrieve()
+                    .bodyToMono(ProductDocumentResponse.class)
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .map(response -> mapToProductDocumentFile(productId, response))
+                    .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
+                            new Object[] { documentId, productId }))
+                    .onErrorMap(error -> {
+                        LOGGER.log(Level.WARNING, "[REST] Error fetching document {0} for product {1}: {2}",
+                                new Object[] { documentId, productId, error.getMessage() });
+                        return mapToProcessingException(error, traceId);
+                    });
         });
     }
 
-
-    ProductDocumentHistory mapToProductDocument(String productId, ProductDocumentResponse json) {
-        String contentBase64 = json.getContent();
-        String filename = json.getFilename();
-        String documentId = json.getDocumentId();
-
-        byte[] content;
-        if (contentBase64 != null && !contentBase64.isBlank()) {
-            try {
-                content = Base64Utils.decodeSafe(contentBase64, filename, documentId);
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "Failed to decode Base64 for document {0} ({1}): {2}",
-                    new Object[]{documentId, filename, e.getMessage()});
-                throw new ProcessingException(
-                    "Base64 decode failed for document: " + documentId,
-                    ProcessingResultCodes.INVALID_BASE64.name(), documentId);
-            }
-        } else {
-            content = null;
-        }
-
+    private ProductDocumentFile mapToProductDocumentFile(String productId, ProductDocumentResponse json) {
+        byte[] content = decodeBase64(json);
         long size = json.getSize() != null ? json.getSize() : (content != null ? content.length : 0);
 
-        // Validate isZip based on filename extension
-        boolean isZip = filename != null && filename.toLowerCase().endsWith(".zip");
+        return ProductDocumentFile.builder()
+                .productId(productId)
+                .documentId(json.getDocumentId())
+                .filename(json.getFilename())
+                .content(content)
+                .contentType(json.getContentType())
+                .size(size)
+                .isZip(json.isZip() || (json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip")))
+                .originFolder(json.getOriginFolder())
+                .originCountry(json.getOriginCountry())
+                .build();
+    }
 
-        return ProductDocumentHistory.builder()
-            .productId(productId)
-            .documentId(documentId)
-            .name(filename)
-            .filename(filename)
-            .contentType(json.getContentType())
-            .size(size)
-            .isZip(isZip)
-            .origin(json.getOrigin())
-            .pais(json.getPais())
-            .content(content)
-            .build();
+    private Document mapToDocument(String productId, ProductDocumentResponse json) {
+        return Document.builder()
+                .productId(productId)
+                .documentId(json.getDocumentId())
+                .name(json.getFilename())
+                .isZip(json.isZip() || (json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip")))
+                .build();
+    }
+
+    private byte[] decodeBase64(ProductDocumentResponse json) {
+        String contentBase64 = json.getContent();
+        if (contentBase64 == null || contentBase64.isBlank())
+            return null;
+
+        try {
+            return Base64Utils.decodeSafe(contentBase64, json.getFilename(), json.getDocumentId());
+        } catch (Exception e) {
+            throw new ProcessingException(
+                    "Base64 decode failed for document: " + json.getDocumentId(),
+                    ProcessingResultCodes.INVALID_BASE64.name(), json.getDocumentId());
+        }
+    }
+
+    /**
+     * Translates any network/HTTP error into a {@link ProcessingException} with the
+     * appropriate domain error code, delegating the mapping logic to {@link AdapterErrorMapper}.
+     * Already-mapped {@link ProcessingException} instances are returned as-is.
+     */
+    private static ProcessingException mapToProcessingException(Throwable error, String traceId) {
+        if (error instanceof ProcessingException pe) {
+            return pe;
+        }
+        String code = AdapterErrorMapper.resolveErrorCode(error);
+        return new ProcessingException(
+                error.getMessage() != null ? error.getMessage() : ProcessingResultCodes.UNKNOWN_ERROR.value(),
+                code,
+                traceId);
     }
 }

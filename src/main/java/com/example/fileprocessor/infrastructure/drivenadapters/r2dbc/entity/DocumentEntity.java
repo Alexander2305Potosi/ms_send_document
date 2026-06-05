@@ -33,14 +33,14 @@ public class DocumentEntity {
     @Column("id_producto")
     private String productId;
 
-    @Column("nombre")
+    @Column("nombre_documento")
     private String name;
 
-    @Column("estado")
+    @Column("estado_sincronizacion")
     private String state;
 
-    @Column("mensaje_error")
-    private String errorMessage;
+    @Column("mensaje_sincronizacion")
+    private String syncMessage;
 
     @Column("es_zip")
     private Boolean isZip;
@@ -48,12 +48,30 @@ public class DocumentEntity {
     @Column("caso_uso")
     private String useCase;
 
+    @Column("carpeta_origen")
+    private String originFolder;
+
+    @Column("pais_origen")
+    private String originCountry;
+
+    @Column("carpeta_homologada")
+    private String homologationFolder;
+
+    @Column("pais_homologado")
+    private String homologationCountry;
+
+    @Column("categoria_homologado")
+    private String categoriaHomologada;
+
+    @Column("sucursal")
+    private String sucursal;
+
     @Column("reintentos")
     private Integer retryCount;
 
-    @Column("fecha_creacion")
+    @Column("fecha_carga")
     private LocalDateTime createdAt;
 
-    @Column("fecha_actualizacion")
+    @Column("fecha_carga_actualizacion")
     private LocalDateTime updatedAt;
 }

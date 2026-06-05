@@ -1,17 +1,16 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import reactor.core.publisher.Mono;
 
 /**
  * Gateway interface for document validation.
- * Abstracts the validation implementation from domain logic.
  */
 public interface RulesBussinesGateway {
 
-    Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc);
+    Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history);
 
-    default Mono<ProductDocumentHistory> validate(ProductDocumentHistory doc, boolean includeSizeCheck) {
-        return validate(doc);
+    default Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history, boolean includeSizeCheck) {
+        return validate(history);
     }
 }

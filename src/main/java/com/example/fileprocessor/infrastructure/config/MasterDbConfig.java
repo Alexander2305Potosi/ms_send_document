@@ -2,16 +2,18 @@ package com.example.fileprocessor.infrastructure.config;
 
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
-import io.r2dbc.spi.ConnectionFactoryOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
 import org.springframework.r2dbc.core.DatabaseClient;
 
-import static io.r2dbc.spi.ConnectionFactoryOptions.*;
-
 @Configuration
+@EnableR2dbcRepositories(
+    basePackages = "com.example.fileprocessor.infrastructure.drivenadapters.masterdb.repository",
+    entityOperationsRef = "masterEntityTemplate"
+)
 public class MasterDbConfig {
 
     @Value("${spring.master-r2dbc.url}")

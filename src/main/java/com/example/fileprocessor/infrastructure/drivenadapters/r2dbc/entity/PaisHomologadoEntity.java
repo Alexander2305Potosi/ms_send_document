@@ -22,12 +22,16 @@ public class PaisHomologadoEntity {
     @Id
     private Long id;
 
-    @Column("pais")
-    private String pais;
+    @Column("orden")
+    private Integer orden;
+
+    @Column("condicion_jsonb")
+    private String condicionJsonb;
+
+    @Column("carpeta_homologada")
+    private String homologationFolder;
 
     @Column("pais_homologado")
-    private String paisHomologado;
+    private String homologationCountry;
 
-    @Column("fecha_creacion")
-    private LocalDateTime createdAt;
 }

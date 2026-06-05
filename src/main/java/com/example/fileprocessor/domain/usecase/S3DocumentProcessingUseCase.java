@@ -1,19 +1,20 @@
 package com.example.fileprocessor.domain.usecase;
 
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.logging.Level;
 
 /**
- * Use case for processing documents via S3. Restored to use ProductRestGateway.
+ * Use case for processing documents via S3 using DocumentHistoryDTO.
  */
 public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
@@ -29,15 +30,16 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
     }
 
     @Override
-    protected Mono<FileUploadResponse> uploadDocument(ProductDocumentHistory doc, String productId, Long docId) {
-        return Mono.fromCallable(() -> FileUploadRequest.from(doc, docId, null))
+    protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
+        return Mono.fromCallable(() -> FileUploadRequest.from(history, docId, null))
             .flatMap(request -> s3Gateway.send(request))
+            .flux()
             .map(response -> {
                 if (response.isSuccess()) {
                     return FileUploadResponse.builder()
                         .success(true)
                         .status(ProcessingResultCodes.SUCCESS.name())
-                        .message("Documento procesado correctamente en S3")
+                        .message(ProcessingResultCodes.SUCCESS.value())
                         .processedAt(Instant.now())
                         .correlationId(response.getCorrelationId())
                         .externalReference(response.getExternalReference())

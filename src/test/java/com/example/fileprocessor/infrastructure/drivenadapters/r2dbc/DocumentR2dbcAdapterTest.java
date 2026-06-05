@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.Document;
+import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.DocumentRepository;
 import org.reactivecommons.utils.ObjectMapper;
@@ -70,21 +70,30 @@ class DocumentR2dbcAdapterTest {
 
     @Test
     void updateStateAndRetry_delegatesToSpringDataRepository() {
-        com.example.fileprocessor.domain.entity.DocumentUpdateCommand command = 
-            com.example.fileprocessor.domain.entity.DocumentUpdateCommand.lock(
-                Document.builder().id(1L).build()
-            );
+        Document domain = Document.builder()
+            .id(1L)
+            .state("PROCESSED")
+            .retryCount(1)
+            .syncMessage("Success")
+            .build();
             
-        when(springDataRepository.updateStateAndRetry(
-            any(), any(), any(), anyInt(), any(), any()))
-            .thenReturn(Mono.just(1L));
+        DocumentEntity entity = DocumentEntity.builder()
+            .id(1L)
+            .state("IN_PROGRESS") // Initial state in DB
+            .build();
 
-        StepVerifier.create(adapter.updateStateAndRetry(command))
+        when(springDataRepository.findById(1L)).thenReturn(Mono.just(entity));
+        when(springDataRepository.save(any())).thenReturn(Mono.just(entity));
+
+        StepVerifier.create(adapter.updateStateAndRetry(domain, "IN_PROGRESS"))
             .expectNext(1L)
             .verifyComplete();
 
-        verify(springDataRepository).updateStateAndRetry(
-            eq(1L), eq("PENDING"), eq("IN_PROGRESS"), anyInt(), any(), any());
+        verify(springDataRepository).findById(1L);
+        verify(springDataRepository).save(argThat(e -> 
+            "PROCESSED".equals(e.getState()) && 
+            "Success".equals(e.getSyncMessage())
+        ));
     }
 
     @Test
@@ -97,20 +106,5 @@ class DocumentR2dbcAdapterTest {
             .verifyComplete();
 
         verify(springDataRepository).existsByProductIdAndDocumentId("PROD-1", "DOC-1");
-    }
-
-    @Test
-    void resetStaleDocumentsToday_delegatesToSpringDataRepository() {
-        LocalDateTime startOfDay = LocalDateTime.of(2026, 5, 9, 0, 0);
-        LocalDateTime threshold = LocalDateTime.of(2026, 5, 9, 10, 0);
-
-        when(springDataRepository.resetStaleDocumentsToday(eq("SYNC"), eq(startOfDay), eq(threshold), any()))
-            .thenReturn(Mono.just(2L));
-
-        StepVerifier.create(adapter.resetStaleDocumentsToday("SYNC", startOfDay, threshold))
-            .expectNext(2L)
-            .verifyComplete();
-
-        verify(springDataRepository).resetStaleDocumentsToday(eq("SYNC"), eq(startOfDay), eq(threshold), any());
     }
 }

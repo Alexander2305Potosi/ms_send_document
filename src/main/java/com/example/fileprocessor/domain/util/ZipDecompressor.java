@@ -1,75 +1,77 @@
 package com.example.fileprocessor.domain.util;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentHistory;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import reactor.core.publisher.Flux;
 
-import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
 
 /**
- * Utility class for decompressing ZIP archives into individual ProductDocument instances.
- * Refactored to process entries as a stream (Flux) to avoid memory exhaustion (OOM).
- * This class is now pure domain logic and depends on MimeTypeUtil.
+ * Utility class for decompressing ZIP archives into individual DocumentHistoryDTO instances.
  */
 public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
-    /**
-     * Decompresses a ZIP file into individual documents.
-     * @param zipDoc The ZIP document to decompress.
-     * @return A Flux of decompressed documents.
-     */
-    public static Flux<ProductDocumentHistory> decompress(ProductDocumentHistory zipDoc) {
-        if (!zipDoc.isZip() || zipDoc.getContent() == null) {
-            return Flux.just(zipDoc);
+    public static Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO zipHistory) {
+        if (!Boolean.TRUE.equals(zipHistory.getIsZip()) || zipHistory.getContent() == null) {
+            return Flux.just(zipHistory);
         }
 
-        return Flux.generate(
-            () -> new ZipInputStream(new ByteArrayInputStream(zipDoc.getContent())),
-            (zis, sink) -> {
+        try {
+            File tempFile = File.createTempFile("decompress-", ".zip");
+            try {
+                Files.write(tempFile.toPath(), zipHistory.getContent());
+
+                List<DocumentHistoryDTO> entries = new ArrayList<>();
+                ZipFile zipFile;
                 try {
-                    ZipEntry entry;
-                    while ((entry = zis.getNextEntry()) != null) {
+                    zipFile = new ZipFile(tempFile, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (ZipException e) {
+                    zipFile = new ZipFile(tempFile, java.nio.charset.StandardCharsets.ISO_8859_1);
+                }
+                try {
+                    Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
+                    while (enumeration.hasMoreElements()) {
+                        ZipEntry entry = enumeration.nextElement();
                         if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
-                            byte[] decompressed = zis.readAllBytes();
-                            sink.next(buildProductDocument(entry.getName(), decompressed, zipDoc));
-                            return zis; // Emit one entry and wait for next request
+                            try (java.io.InputStream is = zipFile.getInputStream(entry)) {
+                                byte[] decompressed = is.readAllBytes();
+                                entries.add(buildHistoryEntry(entry.getName(), decompressed, zipHistory));
+                            }
                         }
                     }
-                    sink.complete();
-                } catch (IOException e) {
-                    sink.error(new ProcessingException(
-                        ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
-                        "Failed to decompress ZIP '" + zipDoc.getFilename() + "': " + e.getMessage(),
-                        e));
+                } finally {
+                    zipFile.close();
                 }
-                return zis;
-            },
-            zis -> {
-                try {
-                    zis.close();
-                } catch (IOException e) {
-                    // Silent close
-                }
+                return Flux.fromIterable(entries);
+            } finally {
+                Files.deleteIfExists(tempFile.toPath());
             }
-        );
+        } catch (IOException e) {
+            return Flux.error(new ProcessingException(
+                "Failed to decompress ZIP '" + zipHistory.getFilename() + "': " + e.getMessage(),
+                ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
+                e));
+        }
     }
 
-    private static ProductDocumentHistory buildProductDocument(String filename, byte[] content, 
-                                                             ProductDocumentHistory original) {
-        return ProductDocumentHistory.builder()
-            .productId(original.getProductId())
-            .documentId(original.getDocumentId() + "/" + filename)
+    private static DocumentHistoryDTO buildHistoryEntry(String filename, byte[] content, DocumentHistoryDTO original) {
+        return original.toBuilder()
+            .businessDocumentId(original.getBusinessDocumentId() + "/" + filename)
             .filename(filename)
             .contentType(MimeTypeUtil.getMimeType(filename))
             .size((long) content.length)
             .isZip(false)
-            .pais(original.getPais())
             .content(content)
             .build();
     }

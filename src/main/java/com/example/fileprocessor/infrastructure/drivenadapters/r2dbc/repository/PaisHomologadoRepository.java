@@ -5,5 +5,4 @@ import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Mono;
 
 public interface PaisHomologadoRepository extends ReactiveCrudRepository<PaisHomologadoEntity, Long> {
-    Mono<PaisHomologadoEntity> findByPais(String pais);
 }

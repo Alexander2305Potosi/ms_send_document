@@ -27,15 +27,33 @@ public final class SoapConstants {
     public static final String T_FILENAME    = "{{filename}}";
     public static final String T_CONTENT     = "{{base64Content}}";
     
-    // Marcadores especiales
-    public static final String T_METADATA    = "{{METADATA_BLOCK}}";
-    public static final String T_CONTEXT     = "{{CONTEXT_BLOCK}}";
+    // Marcadores para metadatos fijos
+    public static final String T_CAT_HOM     = "{{categoriaHomologada}}";
+    public static final String T_PAIS_HOM    = "{{paisHomologado}}";
+    public static final String T_CARP_HOM    = "{{carpetaHomologada}}";
+    public static final String T_FECHA       = "{{fecha}}";
+    public static final String T_COMENTARIO  = "{{comentario}}";
+    public static final String T_META_NAME_FECHA = "{{metaNameFecha}}";
+    public static final String T_META_NAME_COMENTARIO = "{{metaNameComentario}}";
 
+    // Valores fijos
+    public static final String VAL_META_NAME_FECHA = "Bfecha";
+    public static final String VAL_META_NAME_COMENTARIO = "Bcomentario";
+    public static final String VAL_DEFAULT_COMENTARIO = "Procesamiento automatico";
     // Elementos XML (Solo los necesarios para el Envelope y Response)
     public static final String EL_ENVELOPE = "Envelope";
     public static final String EL_HEADER = "Header";
     public static final String EL_BODY = "Body";
     public static final String EL_TRANSMITIR_DOCUMENTO_RESPONSE = "transmitirDocumentoResponse";
+    public static final String EL_STATUS = "status";
+    public static final String EL_STATUS_CODE = "statusCode";
+    public static final String EL_MESSAGE = "message";
+    public static final String EL_CORRELATION_ID = "correlationId";
+    public static final String EL_MESSAGE_ID = "messageId";
+    public static final String EL_PROCESSED_AT = "processedAt";
+    public static final String EL_EXTERNAL_REFERENCE = "externalReference";
+    public static final String EL_ID_DOCUMENTO = "idDocumento";
+    public static final String STATUS_OK = "OK";
 
     // Namespaces para JAXB (Utilizados en parseo de respuesta)
     public static final String PREFIX_SOAPENV = "soapenv";

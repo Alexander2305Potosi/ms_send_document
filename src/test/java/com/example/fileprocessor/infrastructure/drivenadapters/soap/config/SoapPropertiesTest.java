@@ -12,10 +12,9 @@ class SoapPropertiesTest {
     @Test
     void soapProperties_recordCreatesValidProperties() {
         SoapProperties props = new SoapProperties(
-            "http://localhost:9000/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
-            "token", "dest", "d-ns", "op", "action", "CLASS-1",
-            Map.of(), Map.of(), 30, 3
-        );
+                "http://localhost:9000/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+                "token", "dest", "d-ns", "op", "action", "CLASS-1",
+                Map.of(), Map.of(), 30, 3);
 
         assertEquals("http://localhost:9000/soap", props.endpoint());
         assertEquals("SYS-01", props.systemId());

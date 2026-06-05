@@ -21,6 +21,9 @@ spring:
     console:
       enabled: true
       path: /h2-console
+  sql:
+    init:
+      mode: always
 
 management:
   endpoints:
@@ -86,3 +89,6 @@ app:
     soap:
       max-file-size-bytes: 10485760
       filename-pattern: ".*\\.(pdf|docx|txt)$"
+
+  sync:
+    sucursal-query: "SELECT sucursal FROM otro_esquema.tabla_maestra WHERE id_producto = :productId"

@@ -1,6 +1,7 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,8 +26,10 @@ public class ProductDocumentResponse {
     private Long size;
     @JsonProperty("isZip")
     private boolean isZip;
-    @JsonProperty("origin")
-    private String origin;
+    @JsonProperty("carpeta_origen")
+    @JsonAlias({"carpeta_origen", "originFolder", "origin"})
+    private String originFolder;
     @JsonProperty("pais")
-    private String pais;
+    @JsonAlias({"pais", "originCountry"})
+    private String originCountry;
 }

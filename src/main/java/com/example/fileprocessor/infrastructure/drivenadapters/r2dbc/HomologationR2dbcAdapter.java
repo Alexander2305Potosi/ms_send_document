@@ -1,19 +1,24 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.HomologationResult;
+import com.example.fileprocessor.domain.entity.homologation.HomologationCountry;
+import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
-import com.example.fileprocessor.domain.entity.CategoryManual;
-import com.example.fileprocessor.domain.entity.PaisHomologado;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.CategoryManualEntity;
+import com.example.fileprocessor.domain.entity.homologation.CategoryManual;
+import com.example.fileprocessor.domain.entity.homologation.PaisHomologado;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.PaisHomologadoEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.PaisHomologadoRepository;
+import com.example.fileprocessor.infrastructure.helpers.rule.JsonRuleEvaluator;
+import com.example.fileprocessor.infrastructure.helpers.rule.JsonRuleEvaluator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -25,71 +30,89 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
 
     private final CategoryManualRepository categoryRepository;
     private final PaisHomologadoRepository paisRepository;
+    private final JsonRuleEvaluator ruleEvaluator;
 
-    private final Map<String, CategoryManual> categoryCache = new ConcurrentHashMap<>();
-    private final Map<String, PaisHomologado> paisCache = new ConcurrentHashMap<>();
+    private final List<CategoryManual> categoryCache = new CopyOnWriteArrayList<>();
+    private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
     private boolean cacheLoaded = false;
 
     @Override
-    public Mono<HomologationResult> resolve(String origin, String pais) {
+    public Mono<HomologationResult> resolve(DocumentHistoryDTO history) {
         if (!cacheLoaded) {
-            return loadCache().then(Mono.defer(() -> resolveFromCache(origin, pais)));
+            return loadCache().then(Mono.defer(() -> resolveFromCache(history)));
         }
-        return resolveFromCache(origin, pais);
+        return resolveFromCache(history);
     }
 
-    private Mono<HomologationResult> resolveFromCache(String origin, String pais) {
-        String resolvedOrigin = origin;
-        if (origin != null) {
-            CategoryManual category = categoryCache.get(origin);
-            if (category != null) {
-                resolvedOrigin = category.descripcionManual() != null ? category.descripcionManual() : origin;
+    private Mono<HomologationResult> resolveFromCache(DocumentHistoryDTO history) {
+        String documentId = history.getBusinessDocumentId() != null ? history.getBusinessDocumentId() : "";
+
+        // 1. Resolve Category by prefix
+        String categoriaDocument = documentId; // default to documentId or empty
+        for (CategoryManual category : categoryCache) {
+            if (documentId.startsWith(category.prefijo())) {
+                categoriaDocument = category.categoriaHomologado();
+                break;
             }
         }
 
-        String resolvedPais = pais;
-        if (pais != null) {
-            PaisHomologado p = paisCache.get(pais);
-            if (p != null) {
-                resolvedPais = p.paisHomologado() != null ? p.paisHomologado() : pais;
+        // 2. Resolve Country and Folder by dynamic JSON engine
+        String homologationFolder = history.getOriginFolder();
+        String homologationCountry = history.getOriginCountry();
+
+        for (PaisHomologado p : paisCache) {
+            if (ruleEvaluator.evaluate(p.ruleNode(), history)) {
+                homologationFolder = p.homologationFolder();
+                homologationCountry = p.homologationCountry();
+                break;
             }
         }
 
-        return Mono.just(new HomologationResult(resolvedOrigin, resolvedPais));
+        HomologationCountry hc = HomologationCountry.builder()
+                .homologationFolder(homologationFolder)
+                .homologationCountry(homologationCountry)
+                .build();
+
+        return Mono.just(HomologationResult.builder()
+                .categoriaDocument(categoriaDocument)
+                .homologationCountry(hc)
+                .build());
     }
 
     private Mono<Void> loadCache() {
         log.log(Level.INFO, "Loading homologation cache from database");
 
         Mono<Void> loadCategories = categoryRepository.findAll()
-            .collectMap(
-                CategoryManualEntity::getCategoria,
-                entity -> new CategoryManual(entity.getCategoria(), entity.getDescripcionManual())
-            )
-            .doOnNext(map -> {
-                categoryCache.clear();
-                categoryCache.putAll(map);
-                log.log(Level.INFO, "Category cache loaded with {0} entries", new Object[]{categoryCache.size()});
-            })
-            .then();
+                .map(entity -> new CategoryManual(entity.getPrefijo(), entity.getCategoriaHomologado()))
+                .collectList()
+                .doOnNext(list -> {
+                    categoryCache.clear();
+                    categoryCache.addAll(list);
+                    log.log(Level.INFO, "Category cache loaded with {0} entries",
+                            new Object[] { categoryCache.size() });
+                })
+                .then();
 
         Mono<Void> loadPais = paisRepository.findAll()
-            .collectMap(
-                PaisHomologadoEntity::getPais,
-                entity -> new PaisHomologado(entity.getPais(), entity.getPaisHomologado())
-            )
-            .doOnNext(map -> {
-                paisCache.clear();
-                paisCache.putAll(map);
-                log.log(Level.INFO, "Pais cache loaded with {0} entries", new Object[]{paisCache.size()});
-            })
-            .then();
+                .collectList()
+                .map(list -> list.stream()
+                        .map(entity -> new PaisHomologado(
+                                entity.getOrden(),
+                                entity.getCondicionJsonb() != null ? entity.getCondicionJsonb() : "{}",
+                                entity.getHomologationFolder(),
+                                entity.getHomologationCountry()))
+                        .toList())
+                .doOnNext(list -> {
+                    paisCache.clear();
+                    paisCache.addAll(list);
+                    log.log(Level.INFO, "Pais cache loaded with {0} entries", new Object[] { paisCache.size() });
+                })
+                .then();
 
-        return Mono.zip(loadCategories, loadPais)
-            .doOnNext(tuple -> {
-                cacheLoaded = true;
-                log.log(Level.INFO, "Full homologation cache initialized successfully");
-            })
-            .then();
+        return Mono.when(loadCategories, loadPais)
+                .then(Mono.fromRunnable(() -> {
+                    cacheLoaded = true;
+                    log.log(Level.INFO, "Full homologation cache initialized successfully");
+                }));
     }
 }

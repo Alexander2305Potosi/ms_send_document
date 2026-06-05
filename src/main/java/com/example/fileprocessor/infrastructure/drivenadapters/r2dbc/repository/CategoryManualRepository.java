@@ -7,5 +7,4 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDate;
 
 public interface CategoryManualRepository extends ReactiveCrudRepository<CategoryManualEntity, Long> {
-    Mono<CategoryManualEntity> findByCategoria(String categoria);
 }

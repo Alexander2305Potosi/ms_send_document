@@ -12,7 +12,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
-import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
@@ -99,7 +98,7 @@ class S3GatewayAdapterTest {
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
                 assertEquals(ProcessingResultCodes.FAILURE.name(), result.getStatus());
-                assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), result.getErrorCode());
+                assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), result.getSyncStatus());
             })
             .verifyComplete();
 
@@ -139,7 +138,7 @@ class S3GatewayAdapterTest {
                 .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.DEST_UNAUTHORIZED.name(), result.getErrorCode());
+                assertEquals(ProcessingResultCodes.DEST_UNAUTHORIZED.name(), result.getSyncStatus());
             })
             .verifyComplete();
     }

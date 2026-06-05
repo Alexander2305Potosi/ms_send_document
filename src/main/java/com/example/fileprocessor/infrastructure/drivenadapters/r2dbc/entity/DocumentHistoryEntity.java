@@ -9,11 +9,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * R2DBC entity for the 'historico_documentos' table.
- * Removed: message_id (no external broker defined), fecha_creacion (redundant with fecha_inicio).
  */
 @Table("historico_documentos")
 @Getter
@@ -27,33 +26,30 @@ public class DocumentHistoryEntity {
     @Column("id")
     private Long id;
 
-    @Column("documento_id")
+    @Column("id_documentos")
     private Long documentId;
 
-    @Column("nombre_archivo")
+    @Column("nombre_documento")
     private String filename;
 
-    @Column("operacion")
-    private String operation;
+    @Column("caso_uso")
+    private String useCase;
 
     @Column("resultado")
     private String result;
 
-    @Column("codigo_error")
-    private String errorCode;
+    @Column("estado_sincronizacion")
+    private String syncStatus;
 
-    @Column("mensaje_error")
-    private String errorMessage;
-
-    @Column("stack_trace")
-    private String stackTrace;
+    @Column("mensaje_sincronizacion")
+    private String syncMessage;
 
     @Column("reintentos")
     private Integer retry;
 
-    @Column("fecha_inicio")
-    private LocalDateTime startedAt;
+    @Column("fecha_inicio_procesamiento")
+    private Instant startedAt;
 
-    @Column("fecha_fin")
-    private LocalDateTime completedAt;
+    @Column("fecha_fin_procesamiento")
+    private Instant completedAt;
 }

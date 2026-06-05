@@ -47,7 +47,7 @@ class ProductHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ProductHandler(soapDocumentUseCase, s3DocumentUseCaseProvider, syncDocumentsUseCase);
+        handler = new ProductHandler(soapDocumentUseCase, s3DocumentUseCaseProvider, syncDocumentsUseCase, null, null);
     }
 
     private static ServerRequest mockRequestForProcessing(String processorParam, String traceIdHeader) {
@@ -57,17 +57,20 @@ class ProductHandlerTest {
         lenient().when(request.queryParam("processor"))
             .thenReturn(processorParam != null ? Optional.of(processorParam) : Optional.empty());
         when(request.headers()).thenReturn(headers);
-        when(headers.firstHeader(ApiConstants.HEADER_TRACE_ID)).thenReturn(traceIdHeader);
 
-        return request;
-    }
+        org.springframework.http.HttpHeaders httpHeaders = new org.springframework.http.HttpHeaders();
+        if (traceIdHeader != null) {
+            httpHeaders.add(ApiConstants.HEADER_TRACE_ID, traceIdHeader);
+        }
+        httpHeaders.add(ApiConstants.HEADER_USE_CASE, "default");
+        when(headers.asHttpHeaders()).thenReturn(httpHeaders);
 
-    private static ServerRequest mockRequestForTraceId(String traceIdHeader) {
-        ServerRequest request = mock(ServerRequest.class);
-        ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
-        when(request.headers()).thenReturn(headers);
-        when(headers.firstHeader(ApiConstants.HEADER_TRACE_ID)).thenReturn(traceIdHeader);
-        lenient().when(request.queryParam(anyString())).thenReturn(Optional.empty());
+        java.util.Map<String, String> pathVars = new java.util.HashMap<>();
+        String expectedProcessor = (processorParam != null) ? processorParam : ApiConstants.PROCESSOR_SOAP;
+        pathVars.put(ApiConstants.TYPE_JOB, expectedProcessor);
+        when(request.pathVariables()).thenReturn(pathVars);
+        lenient().when(request.pathVariable(ApiConstants.TYPE_JOB)).thenReturn(expectedProcessor);
+
         return request;
     }
 
@@ -75,8 +78,18 @@ class ProductHandlerTest {
         ServerRequest request = mock(ServerRequest.class);
         ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
         when(request.headers()).thenReturn(headers);
-        when(headers.firstHeader(ApiConstants.HEADER_TRACE_ID)).thenReturn(traceIdHeader);
-        when(headers.firstHeader(ApiConstants.HEADER_USE_CASE)).thenReturn("retention");
+        
+        org.springframework.http.HttpHeaders httpHeaders = new org.springframework.http.HttpHeaders();
+        if (traceIdHeader != null) {
+            httpHeaders.add(ApiConstants.HEADER_TRACE_ID, traceIdHeader);
+        }
+        httpHeaders.add(ApiConstants.HEADER_USE_CASE, "retention");
+        when(headers.asHttpHeaders()).thenReturn(httpHeaders);
+
+        lenient().when(request.queryParam(anyString())).thenReturn(Optional.empty());
+        lenient().when(request.pathVariables()).thenReturn(java.util.Map.of(ApiConstants.TYPE_JOB, "retention"));
+        lenient().when(request.pathVariable(anyString())).thenReturn("retention");
+        
         return request;
     }
 
@@ -88,32 +101,6 @@ class ProductHandlerTest {
             .traceId("trace-1")
             .processedAt(Instant.now())
             .build();
-    }
-
-    // resolveTraceId tests
-
-    @Test
-    void resolveTraceId_withHeader_returnsHeaderValue() {
-        ServerRequest request = mockRequestForTraceId("custom-trace-456");
-        assertEquals("custom-trace-456", ProductHandler.resolveTraceId(request));
-    }
-
-    @Test
-    void resolveTraceId_withBlankHeader_generatesUuid() {
-        ServerRequest request = mockRequestForTraceId("   ");
-        String result = ProductHandler.resolveTraceId(request);
-        assertNotNull(result);
-        assertFalse(result.isBlank());
-        UUID.fromString(result);
-    }
-
-    @Test
-    void resolveTraceId_withNullHeader_generatesUuid() {
-        ServerRequest request = mockRequestForTraceId(null);
-        String result = ProductHandler.resolveTraceId(request);
-        assertNotNull(result);
-        assertFalse(result.isBlank());
-        UUID.fromString(result);
     }
 
     // getProcessor tests
@@ -150,7 +137,7 @@ class ProductHandlerTest {
     // processPendingProducts tests
 
     @Test
-    void processPendingProducts_defaultsToSoap_returnsOkNdjson() {
+    void processPendingProducts_defaultsToSoap_returnsAccepted() {
         ServerRequest request = mockRequestForProcessing(null, "trace-1");
         when(soapDocumentUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
 
@@ -158,14 +145,14 @@ class ProductHandlerTest {
 
         StepVerifier.create(responseMono)
             .assertNext(response -> {
-                assertEquals(HttpStatus.OK, response.statusCode());
-                assertEquals(MediaType.APPLICATION_NDJSON, response.headers().getContentType());
+                assertEquals(HttpStatus.ACCEPTED, response.statusCode());
+                assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
             })
             .verifyComplete();
     }
 
     @Test
-    void processPendingProducts_withS3Param_returnsOkNdjson() {
+    void processPendingProducts_withS3Param_returnsAccepted() {
         ServerRequest request = mockRequestForProcessing("s3", "trace-1");
         when(s3DocumentUseCaseProvider.getIfAvailable()).thenReturn(s3DocumentUseCase);
         when(s3DocumentUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
@@ -174,8 +161,8 @@ class ProductHandlerTest {
 
         StepVerifier.create(responseMono)
             .assertNext(response -> {
-                assertEquals(HttpStatus.OK, response.statusCode());
-                assertEquals(MediaType.APPLICATION_NDJSON, response.headers().getContentType());
+                assertEquals(HttpStatus.ACCEPTED, response.statusCode());
+                assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
             })
             .verifyComplete();
     }
@@ -192,7 +179,7 @@ class ProductHandlerTest {
         StepVerifier.create(responseMono)
             .assertNext(response -> {
                 assertEquals(HttpStatus.ACCEPTED, response.statusCode());
-                assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
+                assertEquals(MediaType.TEXT_PLAIN, response.headers().getContentType());
             })
             .verifyComplete();
 
