@@ -140,5 +140,7 @@ INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-14
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-RT-06', 'Sucursal Central');
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-15', 'Sucursal Central');
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-16', 'Sucursal Central');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-15', 'Sucursal Bogota');
+INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-16', 'Sucursal Bogota');
 
 
