@@ -17,10 +17,15 @@ import java.util.zip.ZipFile;
 
 /**
  * Utility class for decompressing ZIP archives into individual DocumentHistoryDTO instances.
+ * Restored the previous file-based ZipFile logic, with robust temporary directory path fallback options.
  */
 public final class ZipDecompressor {
 
     private ZipDecompressor() {}
+
+    public static Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO zipHistory) {
+        return decompress(zipHistory, null);
+    }
 
     public static Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO zipHistory, String tempDirPath) {
         if (!Boolean.TRUE.equals(zipHistory.getIsZip()) || zipHistory.getContent() == null) {
@@ -28,16 +33,7 @@ public final class ZipDecompressor {
         }
 
         try {
-            java.nio.file.Path tempFilePath;
-            if (tempDirPath != null && !tempDirPath.trim().isEmpty()) {
-                java.nio.file.Path dirPath = java.nio.file.Paths.get(tempDirPath);
-                if (!java.nio.file.Files.exists(dirPath)) {
-                    java.nio.file.Files.createDirectories(dirPath);
-                }
-                tempFilePath = java.nio.file.Files.createTempFile(dirPath, "decompress-", ".zip");
-            } else {
-                tempFilePath = java.nio.file.Files.createTempFile("decompress-", ".zip");
-            }
+            java.nio.file.Path tempFilePath = createTempFileWithFallback(tempDirPath);
             File tempFile = tempFilePath.toFile();
             try {
                 Files.write(tempFile.toPath(), zipHistory.getContent());
@@ -93,6 +89,57 @@ public final class ZipDecompressor {
                 "Failed to decompress ZIP '" + zipHistory.getFilename() + "': " + e.getMessage(),
                 ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
                 e));
+        }
+    }
+
+    private static java.nio.file.Path createTempFileWithFallback(String tempDirPath) throws IOException {
+        List<java.nio.file.Path> candidates = new ArrayList<>();
+
+        // 1. Configured path
+        if (tempDirPath != null && !tempDirPath.trim().isEmpty()) {
+            try {
+                candidates.add(java.nio.file.Paths.get(tempDirPath));
+            } catch (Exception ignored) {}
+        }
+
+        // 2. Default System tmpdir
+        String sysTemp = System.getProperty("java.io.tmpdir");
+        if (sysTemp != null && !sysTemp.trim().isEmpty()) {
+            candidates.add(java.nio.file.Paths.get(sysTemp));
+        }
+
+        // 3. User Home subdirectory (often writable even in read-only containers if home is volume-mounted)
+        String userHome = System.getProperty("user.home");
+        if (userHome != null && !userHome.trim().isEmpty()) {
+            candidates.add(java.nio.file.Paths.get(userHome).resolve(".temp-zip-dir"));
+        }
+
+        // 4. Current working directory subdirectory (often writable in local dev/pods)
+        String userDir = System.getProperty("user.dir");
+        if (userDir != null && !userDir.trim().isEmpty()) {
+            candidates.add(java.nio.file.Paths.get(userDir).resolve("tmp"));
+        }
+
+        IOException lastException = null;
+        for (java.nio.file.Path dir : candidates) {
+            try {
+                if (!java.nio.file.Files.exists(dir)) {
+                    java.nio.file.Files.createDirectories(dir);
+                }
+                return java.nio.file.Files.createTempFile(dir, "decompress-", ".zip");
+            } catch (IOException e) {
+                lastException = e;
+            }
+        }
+
+        // Final fallback using system default TempFile behavior
+        try {
+            return java.nio.file.Files.createTempFile("decompress-", ".zip");
+        } catch (IOException e) {
+            if (lastException != null) {
+                throw new IOException("Failed to create temporary file in any candidate directory. Last error: " + lastException.getMessage(), e);
+            }
+            throw e;
         }
     }
 
