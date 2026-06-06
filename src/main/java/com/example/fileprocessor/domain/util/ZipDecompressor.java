@@ -28,16 +28,17 @@ public final class ZipDecompressor {
         }
 
         try {
-            File tempFile;
+            java.nio.file.Path tempFilePath;
             if (tempDirPath != null && !tempDirPath.trim().isEmpty()) {
-                File dir = new File(tempDirPath);
-                if (!dir.exists()) {
-                    dir.mkdirs();
+                java.nio.file.Path dirPath = java.nio.file.Paths.get(tempDirPath);
+                if (!java.nio.file.Files.exists(dirPath)) {
+                    java.nio.file.Files.createDirectories(dirPath);
                 }
-                tempFile = File.createTempFile("decompress-", ".zip", dir);
+                tempFilePath = java.nio.file.Files.createTempFile(dirPath, "decompress-", ".zip");
             } else {
-                tempFile = File.createTempFile("decompress-", ".zip");
+                tempFilePath = java.nio.file.Files.createTempFile("decompress-", ".zip");
             }
+            File tempFile = tempFilePath.toFile();
             try {
                 Files.write(tempFile.toPath(), zipHistory.getContent());
 
@@ -49,13 +50,34 @@ public final class ZipDecompressor {
                     zipFile = new ZipFile(tempFile, java.nio.charset.StandardCharsets.ISO_8859_1);
                 }
                 try {
+                    final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB limit per file
+                    int totalEntries = 0;
+                    final int MAX_ENTRIES = 1000;
+
                     Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
                     while (enumeration.hasMoreElements()) {
                         ZipEntry entry = enumeration.nextElement();
+                        totalEntries++;
+                        
+                        if (totalEntries > MAX_ENTRIES) {
+                            throw new ProcessingException("Too many entries in ZIP (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+                        }
+
                         if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
+                            String entryName = entry.getName();
+                            
+                            // 1. Prevenir Zip Slip (Path Traversal)
+                            if (entryName.contains("..")) {
+                                throw new ProcessingException("Zip Slip vulnerability detected: " + entryName, ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+                            }
+
                             try (java.io.InputStream is = zipFile.getInputStream(entry)) {
-                                byte[] decompressed = is.readAllBytes();
-                                entries.add(buildHistoryEntry(entry.getName(), decompressed, zipHistory));
+                                // 2. Prevenir Zip Bomb (Limitando la lectura a MAX_FILE_SIZE + 1)
+                                byte[] decompressed = is.readNBytes((int) MAX_FILE_SIZE + 1);
+                                if (decompressed.length > MAX_FILE_SIZE) {
+                                    throw new ProcessingException("ZIP entry exceeds maximum allowed size (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+                                }
+                                entries.add(buildHistoryEntry(entryName, decompressed, zipHistory));
                             }
                         }
                     }
