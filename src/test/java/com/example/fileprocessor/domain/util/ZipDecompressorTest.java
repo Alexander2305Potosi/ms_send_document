@@ -14,6 +14,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ZipDecompressorTest {
 
+    private static final byte ZIP_SIG_1 = 0x50; // 'P'
+    private static final byte ZIP_SIG_2 = 0x4B; // 'K'
+    private static final byte LFH_SIG_3 = 0x03;
+    private static final byte LFH_SIG_4 = 0x04;
+
     @Test
     void decompress_nonZip_returnsSameDocument() {
         DocumentHistoryDTO history = DocumentHistoryDTO.builder()
@@ -143,7 +148,7 @@ class ZipDecompressorTest {
             .contentType("application/zip")
             .size(10L)
             .originFolder("origin")
-            .content(new byte[]{0x50, 0x4B, 0x03, 0x04, 5, 6, 7, 8, 9, 10})
+            .content(new byte[]{ZIP_SIG_1, ZIP_SIG_2, LFH_SIG_3, LFH_SIG_4, 5, 6, 7, 8, 9, 10})
             .build();
 
         StepVerifier.create(ZipDecompressor.decompress(zipHistory))
@@ -160,7 +165,7 @@ class ZipDecompressorTest {
         // "only DEFLATED entries can have EXT descriptor"
         
         byte[] lfh = {
-            0x50, 0x4B, 0x03, 0x04, // signature
+            ZIP_SIG_1, ZIP_SIG_2, LFH_SIG_3, LFH_SIG_4, // signature
             0x0A, 0x00,             // version needed (10)
             0x08, 0x00,             // GP flag (bit 3 set)
             0x00, 0x00,             // method (STORED)
@@ -174,13 +179,13 @@ class ZipDecompressorTest {
         byte[] filename = "test.txt".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         byte[] data = "Hello".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         byte[] dd = {
-            0x50, 0x4B, 0x07, 0x08, // data descriptor signature
+            ZIP_SIG_1, ZIP_SIG_2, 0x07, 0x08, // data descriptor signature
             (byte) 0x82, (byte) 0x89, (byte) 0xD1, (byte) 0xF7, // CRC-32 of "Hello" (0xF7D18982)
             0x05, 0x00, 0x00, 0x00, // compressed size (5)
             0x05, 0x00, 0x00, 0x00  // uncompressed size (5)
         };
         byte[] cdfh = {
-            0x50, 0x4B, 0x01, 0x02, // central directory signature
+            ZIP_SIG_1, ZIP_SIG_2, 0x01, 0x02, // central directory signature
             0x14, 0x00,             // version made by (20)
             0x0A, 0x00,             // version needed (10)
             0x08, 0x00,             // GP flag (bit 3 set)
@@ -198,7 +203,7 @@ class ZipDecompressorTest {
             0x00, 0x00, 0x00, 0x00  // local header offset (0)
         };
         byte[] eocd = {
-            0x50, 0x4B, 0x05, 0x06, // end of central directory signature
+            ZIP_SIG_1, ZIP_SIG_2, 0x05, 0x06, // end of central directory signature
             0x00, 0x00,             // number of this disk
             0x00, 0x00,             // disk where CD starts
             0x01, 0x00,             // total entries on this disk
