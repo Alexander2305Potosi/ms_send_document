@@ -42,7 +42,7 @@ class SoapDocumentProcessingUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new SoapDocumentProcessingUseCase(persistencePort, productRestGateway, soapGateway, documentValidator, homologationRepository);
+        useCase = new SoapDocumentProcessingUseCase(persistencePort, productRestGateway, soapGateway, documentValidator, homologationRepository, "/tmp/test-zip-dir");
     }
 
     @Test

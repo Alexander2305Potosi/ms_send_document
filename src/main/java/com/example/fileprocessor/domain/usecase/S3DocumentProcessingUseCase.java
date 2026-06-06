@@ -24,8 +24,9 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
             S3Gateway s3Gateway,
-            RulesBussinesGateway documentValidator) {
-        super(persistencePort, productRestGateway, documentValidator);
+            RulesBussinesGateway documentValidator,
+            String tempDirPath) {
+        super(persistencePort, productRestGateway, documentValidator, tempDirPath);
         this.s3Gateway = s3Gateway;
     }
 

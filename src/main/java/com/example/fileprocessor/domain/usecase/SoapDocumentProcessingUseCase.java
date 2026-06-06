@@ -27,8 +27,9 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
             ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
             RulesBussinesGateway documentValidator,
-            HomologationRepository homologationRepository) {
-        super(persistencePort, productRestGateway, documentValidator);
+            HomologationRepository homologationRepository,
+            String tempDirPath) {
+        super(persistencePort, productRestGateway, documentValidator, tempDirPath);
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
     }

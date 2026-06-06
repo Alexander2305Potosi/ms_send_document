@@ -38,7 +38,7 @@ class S3DocumentProcessingUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new S3DocumentProcessingUseCase(persistencePort, productRestGateway, s3Gateway, documentValidator);
+        useCase = new S3DocumentProcessingUseCase(persistencePort, productRestGateway, s3Gateway, documentValidator, "/tmp/test-zip-dir");
     }
 
     @Test

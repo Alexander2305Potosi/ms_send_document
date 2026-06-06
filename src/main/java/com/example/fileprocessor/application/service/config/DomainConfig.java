@@ -37,7 +37,8 @@ public class DomainConfig {
             productRestGateway,
             soapGateway,
             new RulesBussinesService(properties.soap()),
-            homologationRepository
+            homologationRepository,
+            properties.zipTempDir()
         );
     }
 
@@ -52,7 +53,8 @@ public class DomainConfig {
             persistencePort,
             productRestGateway,
             s3Gateway,
-            new RulesBussinesService(properties.s3())
+            new RulesBussinesService(properties.s3()),
+            properties.zipTempDir()
         );
     }
 
