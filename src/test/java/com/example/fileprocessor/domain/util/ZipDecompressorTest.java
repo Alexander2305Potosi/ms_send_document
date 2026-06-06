@@ -33,7 +33,7 @@ class ZipDecompressorTest {
             .content(new byte[]{1})
             .build();
 
-        StepVerifier.create(ZipDecompressor.decompress(history))
+        StepVerifier.create(ZipDecompressor.decompress(history, null))
             .expectNextMatches(result ->
                 result.getBusinessDocumentId().equals("doc-1") &&
                 result.getFilename().equals("test.pdf") &&
@@ -57,7 +57,7 @@ class ZipDecompressorTest {
             .content(zipContent)
             .build();
 
-        Flux<DocumentHistoryDTO> result = ZipDecompressor.decompress(zipHistory);
+        Flux<DocumentHistoryDTO> result = ZipDecompressor.decompress(zipHistory, null);
 
         StepVerifier.create(result)
             .assertNext(doc -> {
@@ -91,7 +91,7 @@ class ZipDecompressorTest {
             .content(emptyZip)
             .build();
 
-        StepVerifier.create(ZipDecompressor.decompress(zipHistory))
+        StepVerifier.create(ZipDecompressor.decompress(zipHistory, null))
             .verifyComplete();
     }
 
@@ -130,7 +130,7 @@ class ZipDecompressorTest {
             .content(new byte[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
             .build();
 
-        StepVerifier.create(ZipDecompressor.decompress(zipHistory))
+        StepVerifier.create(ZipDecompressor.decompress(zipHistory, null))
             .expectErrorMatches(throwable -> throwable instanceof com.example.fileprocessor.domain.exception.ProcessingException &&
                 ((com.example.fileprocessor.domain.exception.ProcessingException) throwable).getErrorCode()
                     .equals(com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DECOMPRESSION_ERROR.name()))
@@ -151,7 +151,7 @@ class ZipDecompressorTest {
             .content(new byte[]{ZIP_SIG_1, ZIP_SIG_2, LFH_SIG_3, LFH_SIG_4, 5, 6, 7, 8, 9, 10})
             .build();
 
-        StepVerifier.create(ZipDecompressor.decompress(zipHistory))
+        StepVerifier.create(ZipDecompressor.decompress(zipHistory, null))
             .expectErrorMatches(throwable -> throwable instanceof com.example.fileprocessor.domain.exception.ProcessingException &&
                 ((com.example.fileprocessor.domain.exception.ProcessingException) throwable).getErrorCode()
                     .equals(com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DECOMPRESSION_ERROR.name()))
@@ -237,12 +237,43 @@ class ZipDecompressorTest {
             .content(zipBytes)
             .build();
 
-        StepVerifier.create(ZipDecompressor.decompress(zipHistory))
+        StepVerifier.create(ZipDecompressor.decompress(zipHistory, null))
             .assertNext(doc -> {
                 assertEquals("test.txt", doc.getFilename());
                 assertEquals("doc-1/test.txt", doc.getBusinessDocumentId());
                 assertArrayEquals("Hello".getBytes(java.nio.charset.StandardCharsets.US_ASCII), doc.getContent());
                 assertFalse(Boolean.TRUE.equals(doc.getIsZip()));
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void decompress_withReadOnlyTempDir_fallsBackAndSucceeds() throws IOException {
+        byte[] zipContent = createZip("test.pdf", new byte[]{1}, "data.csv", new byte[]{2});
+
+        DocumentHistoryDTO zipHistory = DocumentHistoryDTO.builder()
+            .productId("prod-1")
+            .isZip(true)
+            .originCountry("AR")
+            .businessDocumentId("doc-1")
+            .filename("docs.zip")
+            .contentType("application/zip")
+            .size((long) zipContent.length)
+            .originFolder("origin")
+            .content(zipContent)
+            .build();
+
+        String readOnlyPath = "/read-only-dir-test-invalid-path-99999";
+        Flux<DocumentHistoryDTO> result = ZipDecompressor.decompress(zipHistory, readOnlyPath);
+
+        StepVerifier.create(result)
+            .assertNext(doc -> {
+                assertTrue(doc.getFilename().endsWith("test.pdf"));
+                assertEquals("doc-1/test.pdf", doc.getBusinessDocumentId());
+            })
+            .assertNext(doc -> {
+                assertTrue(doc.getFilename().endsWith("data.csv"));
+                assertEquals("doc-1/data.csv", doc.getBusinessDocumentId());
             })
             .verifyComplete();
     }

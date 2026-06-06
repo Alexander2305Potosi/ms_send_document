@@ -37,13 +37,6 @@ public abstract class AbstractDocumentProcessingUseCase {
     protected AbstractDocumentProcessingUseCase(
             DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
-            RulesBussinesGateway documentValidator) {
-        this(persistencePort, productRestGateway, documentValidator, null);
-    }
-
-    protected AbstractDocumentProcessingUseCase(
-            DocumentPersistenceGateway persistencePort,
-            ProductRestGateway productRestGateway,
             RulesBussinesGateway documentValidator,
             String tempDirPath) {
         this.persistencePort = persistencePort;

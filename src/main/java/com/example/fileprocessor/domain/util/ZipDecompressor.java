@@ -23,10 +23,6 @@ public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
-    public static Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO zipHistory) {
-        return decompress(zipHistory, null);
-    }
-
     public static Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO zipHistory, String tempDirPath) {
         if (!Boolean.TRUE.equals(zipHistory.getIsZip()) || zipHistory.getContent() == null) {
             return Flux.just(zipHistory);
