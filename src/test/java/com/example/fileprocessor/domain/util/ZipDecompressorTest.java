@@ -131,4 +131,25 @@ class ZipDecompressorTest {
                     .equals(com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DECOMPRESSION_ERROR.name()))
             .verify();
     }
+
+    @Test
+    void decompress_corruptZipWithHeaders_throwsProcessingException() {
+        DocumentHistoryDTO zipHistory = DocumentHistoryDTO.builder()
+            .productId("prod-1")
+            .isZip(true)
+            .originCountry("AR")
+            .businessDocumentId("doc-1")
+            .filename("corrupt_headers.zip")
+            .contentType("application/zip")
+            .size(10L)
+            .originFolder("origin")
+            .content(new byte[]{0x50, 0x4B, 0x03, 0x04, 5, 6, 7, 8, 9, 10})
+            .build();
+
+        StepVerifier.create(ZipDecompressor.decompress(zipHistory))
+            .expectErrorMatches(throwable -> throwable instanceof com.example.fileprocessor.domain.exception.ProcessingException &&
+                ((com.example.fileprocessor.domain.exception.ProcessingException) throwable).getErrorCode()
+                    .equals(com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DECOMPRESSION_ERROR.name()))
+            .verify();
+    }
 }
