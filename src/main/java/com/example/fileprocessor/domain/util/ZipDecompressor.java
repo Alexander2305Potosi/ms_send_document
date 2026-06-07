@@ -9,7 +9,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -19,8 +18,12 @@ import java.util.zip.ZipFile;
  * Utility class for decompressing ZIP archives into individual DocumentHistoryDTO instances.
  * Restored the previous file-based ZipFile logic, with robust temporary directory path fallback options.
  * Refactored to reduce control statement nesting to at most 3 levels to improve readability and complexity.
+ * Adheres to Sonar code quality guidelines (using var, L suffixes on long literals, and class constants).
  */
 public final class ZipDecompressor {
+
+    private static final long MAX_FILE_SIZE = 50L * 1024 * 1024; // 50 MB limit per file
+    private static final int MAX_ENTRIES = 1000;
 
     private ZipDecompressor() {}
 
@@ -30,11 +33,11 @@ public final class ZipDecompressor {
         }
 
         try {
-            java.nio.file.Path tempFilePath = createTempFileWithFallback(tempDirPath);
-            File tempFile = tempFilePath.toFile();
+            var tempFilePath = createTempFileWithFallback(tempDirPath);
+            var tempFile = tempFilePath.toFile();
             try {
                 Files.write(tempFile.toPath(), zipHistory.getContent());
-                List<DocumentHistoryDTO> entries = processZipFile(tempFile, zipHistory);
+                var entries = processZipFile(tempFile, zipHistory);
                 return Flux.fromIterable(entries);
             } finally {
                 Files.deleteIfExists(tempFile.toPath());
@@ -48,7 +51,7 @@ public final class ZipDecompressor {
     }
 
     private static List<DocumentHistoryDTO> processZipFile(File tempFile, DocumentHistoryDTO zipHistory) throws IOException {
-        ZipFile zipFile = openZipFile(tempFile);
+        var zipFile = openZipFile(tempFile);
         try {
             return extractEntries(zipFile, zipHistory);
         } finally {
@@ -65,14 +68,12 @@ public final class ZipDecompressor {
     }
 
     private static List<DocumentHistoryDTO> extractEntries(ZipFile zipFile, DocumentHistoryDTO zipHistory) throws IOException {
-        List<DocumentHistoryDTO> entries = new ArrayList<>();
-        final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB limit per file
-        final int MAX_ENTRIES = 1000;
-        int totalEntries = 0;
+        var entries = new ArrayList<DocumentHistoryDTO>();
+        var totalEntries = 0;
 
-        Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
+        var enumeration = zipFile.entries();
         while (enumeration.hasMoreElements()) {
-            ZipEntry entry = enumeration.nextElement();
+            var entry = enumeration.nextElement();
             totalEntries++;
             
             if (totalEntries > MAX_ENTRIES) {
@@ -83,21 +84,21 @@ public final class ZipDecompressor {
                 continue;
             }
 
-            String entryName = entry.getName();
+            var entryName = entry.getName();
             if (entryName.contains("..")) {
                 throw new ProcessingException("Zip Slip vulnerability detected: " + entryName, ProcessingResultCodes.DECOMPRESSION_ERROR.name());
             }
 
-            byte[] decompressed = readEntryContent(zipFile, entry, MAX_FILE_SIZE);
+            var decompressed = readEntryContent(zipFile, entry);
             entries.add(buildHistoryEntry(entryName, decompressed, zipHistory));
         }
         return entries;
     }
 
-    private static byte[] readEntryContent(ZipFile zipFile, ZipEntry entry, long maxFileSize) throws IOException {
-        try (java.io.InputStream is = zipFile.getInputStream(entry)) {
-            byte[] decompressed = is.readNBytes((int) maxFileSize + 1);
-            if (decompressed.length > maxFileSize) {
+    private static byte[] readEntryContent(ZipFile zipFile, ZipEntry entry) throws IOException {
+        try (var is = zipFile.getInputStream(entry)) {
+            var decompressed = is.readNBytes((int) MAX_FILE_SIZE + 1);
+            if (decompressed.length > MAX_FILE_SIZE) {
                 throw new ProcessingException("ZIP entry exceeds maximum allowed size (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
             }
             return decompressed;
@@ -105,7 +106,7 @@ public final class ZipDecompressor {
     }
 
     private static java.nio.file.Path createTempFileWithFallback(String tempDirPath) throws IOException {
-        List<java.nio.file.Path> candidates = new ArrayList<>();
+        var candidates = new ArrayList<java.nio.file.Path>();
 
         // 1. Configured path
         if (tempDirPath != null && !tempDirPath.trim().isEmpty()) {
@@ -115,25 +116,25 @@ public final class ZipDecompressor {
         }
 
         // 2. Default System tmpdir
-        String sysTemp = System.getProperty("java.io.tmpdir");
+        var sysTemp = System.getProperty("java.io.tmpdir");
         if (sysTemp != null && !sysTemp.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(sysTemp));
         }
 
         // 3. User Home subdirectory
-        String userHome = System.getProperty("user.home");
+        var userHome = System.getProperty("user.home");
         if (userHome != null && !userHome.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(userHome).resolve(".temp-zip-dir"));
         }
 
         // 4. Current working directory subdirectory
-        String userDir = System.getProperty("user.dir");
+        var userDir = System.getProperty("user.dir");
         if (userDir != null && !userDir.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(userDir).resolve("tmp"));
         }
 
         IOException lastException = null;
-        for (java.nio.file.Path dir : candidates) {
+        for (var dir : candidates) {
             try {
                 if (!java.nio.file.Files.exists(dir)) {
                     java.nio.file.Files.createDirectories(dir);
