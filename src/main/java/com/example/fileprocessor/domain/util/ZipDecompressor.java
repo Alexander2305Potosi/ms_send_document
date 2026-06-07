@@ -18,6 +18,7 @@ import java.util.zip.ZipFile;
 /**
  * Utility class for decompressing ZIP archives into individual DocumentHistoryDTO instances.
  * Restored the previous file-based ZipFile logic, with robust temporary directory path fallback options.
+ * Refactored to reduce control statement nesting to at most 3 levels to improve readability and complexity.
  */
 public final class ZipDecompressor {
 
@@ -33,49 +34,7 @@ public final class ZipDecompressor {
             File tempFile = tempFilePath.toFile();
             try {
                 Files.write(tempFile.toPath(), zipHistory.getContent());
-
-                List<DocumentHistoryDTO> entries = new ArrayList<>();
-                ZipFile zipFile;
-                try {
-                    zipFile = new ZipFile(tempFile, java.nio.charset.StandardCharsets.UTF_8);
-                } catch (ZipException e) {
-                    zipFile = new ZipFile(tempFile, java.nio.charset.StandardCharsets.ISO_8859_1);
-                }
-                try {
-                    final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB limit per file
-                    int totalEntries = 0;
-                    final int MAX_ENTRIES = 1000;
-
-                    Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
-                    while (enumeration.hasMoreElements()) {
-                        ZipEntry entry = enumeration.nextElement();
-                        totalEntries++;
-                        
-                        if (totalEntries > MAX_ENTRIES) {
-                            throw new ProcessingException("Too many entries in ZIP (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
-                        }
-
-                        if (!entry.isDirectory() && entry.getName() != null && !entry.getName().isBlank()) {
-                            String entryName = entry.getName();
-                            
-                            // 1. Prevenir Zip Slip (Path Traversal)
-                            if (entryName.contains("..")) {
-                                throw new ProcessingException("Zip Slip vulnerability detected: " + entryName, ProcessingResultCodes.DECOMPRESSION_ERROR.name());
-                            }
-
-                            try (java.io.InputStream is = zipFile.getInputStream(entry)) {
-                                // 2. Prevenir Zip Bomb (Limitando la lectura a MAX_FILE_SIZE + 1)
-                                byte[] decompressed = is.readNBytes((int) MAX_FILE_SIZE + 1);
-                                if (decompressed.length > MAX_FILE_SIZE) {
-                                    throw new ProcessingException("ZIP entry exceeds maximum allowed size (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
-                                }
-                                entries.add(buildHistoryEntry(entryName, decompressed, zipHistory));
-                            }
-                        }
-                    }
-                } finally {
-                    zipFile.close();
-                }
+                List<DocumentHistoryDTO> entries = processZipFile(tempFile, zipHistory);
                 return Flux.fromIterable(entries);
             } finally {
                 Files.deleteIfExists(tempFile.toPath());
@@ -85,6 +44,63 @@ public final class ZipDecompressor {
                 "Failed to decompress ZIP '" + zipHistory.getFilename() + "': " + e.getMessage(),
                 ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
                 e));
+        }
+    }
+
+    private static List<DocumentHistoryDTO> processZipFile(File tempFile, DocumentHistoryDTO zipHistory) throws IOException {
+        ZipFile zipFile = openZipFile(tempFile);
+        try {
+            return extractEntries(zipFile, zipHistory);
+        } finally {
+            zipFile.close();
+        }
+    }
+
+    private static ZipFile openZipFile(File tempFile) throws IOException {
+        try {
+            return new ZipFile(tempFile, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (ZipException e) {
+            return new ZipFile(tempFile, java.nio.charset.StandardCharsets.ISO_8859_1);
+        }
+    }
+
+    private static List<DocumentHistoryDTO> extractEntries(ZipFile zipFile, DocumentHistoryDTO zipHistory) throws IOException {
+        List<DocumentHistoryDTO> entries = new ArrayList<>();
+        final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB limit per file
+        final int MAX_ENTRIES = 1000;
+        int totalEntries = 0;
+
+        Enumeration<? extends ZipEntry> enumeration = zipFile.entries();
+        while (enumeration.hasMoreElements()) {
+            ZipEntry entry = enumeration.nextElement();
+            totalEntries++;
+            
+            if (totalEntries > MAX_ENTRIES) {
+                throw new ProcessingException("Too many entries in ZIP (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+            }
+
+            if (entry.isDirectory() || entry.getName() == null || entry.getName().isBlank()) {
+                continue;
+            }
+
+            String entryName = entry.getName();
+            if (entryName.contains("..")) {
+                throw new ProcessingException("Zip Slip vulnerability detected: " + entryName, ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+            }
+
+            byte[] decompressed = readEntryContent(zipFile, entry, MAX_FILE_SIZE);
+            entries.add(buildHistoryEntry(entryName, decompressed, zipHistory));
+        }
+        return entries;
+    }
+
+    private static byte[] readEntryContent(ZipFile zipFile, ZipEntry entry, long maxFileSize) throws IOException {
+        try (java.io.InputStream is = zipFile.getInputStream(entry)) {
+            byte[] decompressed = is.readNBytes((int) maxFileSize + 1);
+            if (decompressed.length > maxFileSize) {
+                throw new ProcessingException("ZIP entry exceeds maximum allowed size (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+            }
+            return decompressed;
         }
     }
 
@@ -104,13 +120,13 @@ public final class ZipDecompressor {
             candidates.add(java.nio.file.Paths.get(sysTemp));
         }
 
-        // 3. User Home subdirectory (often writable even in read-only containers if home is volume-mounted)
+        // 3. User Home subdirectory
         String userHome = System.getProperty("user.home");
         if (userHome != null && !userHome.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(userHome).resolve(".temp-zip-dir"));
         }
 
-        // 4. Current working directory subdirectory (often writable in local dev/pods)
+        // 4. Current working directory subdirectory
         String userDir = System.getProperty("user.dir");
         if (userDir != null && !userDir.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(userDir).resolve("tmp"));
