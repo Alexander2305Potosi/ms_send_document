@@ -38,7 +38,7 @@ class AbstractDocumentProcessingUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new AbstractDocumentProcessingUseCase(
-            persistencePort, productRestGateway, documentValidator
+            persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir"
         ) {
             @Override
             protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
@@ -200,7 +200,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .thenReturn(Mono.just(DocumentHistoryDTO.builder().build()));
 
         // We need to override uploadDocument to return a technical retry response
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
             @Override
             protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
                 return Flux.just(FileUploadResponse.builder()
@@ -400,7 +400,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
             @Override
             protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
                 return Flux.just(FileUploadResponse.builder().success(true).syncStatus("SUCCESS").build());
@@ -445,7 +445,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
             @Override
             protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
                 if (h.getFilename().equals("file1.pdf")) {
@@ -496,7 +496,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
             @Override
             protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
                 return Flux.just(FileUploadResponse.builder()
@@ -545,7 +545,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
             @Override
             protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
                 return Flux.just(
@@ -610,7 +610,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator) {
+        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
             @Override
             protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
                 if (h.getFilename().equals("file1.pdf")) {

@@ -69,3 +69,6 @@ INSERT INTO productos_maestros (id_producto, nombre, estado, carpeta_origen, pai
 INSERT INTO productos_maestros (id_producto, nombre, estado, carpeta_origen, pais_origen) VALUES ('SC-RT-06', 'Transient 503 Retry (Success on 2nd)', 'ACTIVE', '/mnt/network/retry', 'AR');
 INSERT INTO productos_maestros (id_producto, nombre, estado, carpeta_origen, pais_origen) VALUES ('SC-TE-15', 'Persistent Malformed XML SOAP Response', 'ACTIVE', '/opt/tech/errors', 'AR');
 INSERT INTO productos_maestros (id_producto, nombre, estado, carpeta_origen, pais_origen) VALUES ('SC-TE-16', 'Persistent SOAP Connection Timeout', 'ACTIVE', '/opt/tech/errors', 'CO');
+INSERT INTO productos_maestros (id_producto, nombre, estado, carpeta_origen, pais_origen) VALUES ('SC-OK-15', 'ZIP with Partial SOAP Failures', 'ACTIVE', '/mnt/shared/docs/zip', 'CO');
+INSERT INTO productos_maestros (id_producto, nombre, estado, carpeta_origen, pais_origen) VALUES ('SC-OK-16', 'ZIP with Total SOAP Failures', 'ACTIVE', '/mnt/shared/docs/zip', 'CO');
+

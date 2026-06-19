@@ -57,6 +57,8 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
                 "SC-OK-12": [{"documentId": "DOC-OK-12", "filename": "nested.zip"}],
                 "SC-OK-13": [{"documentId": "DOC-OK-13", "filename": "mexico_user.docx"}],
                 "SC-OK-14": [{"documentId": "DOC-OK-14", "filename": "col_compressed.zip"}],
+                "SC-OK-15": [{"documentId": "DOC-OK-15", "filename": "partial.zip"}],
+                "SC-OK-16": [{"documentId": "DOC-OK-16", "filename": "fail_all.zip"}],
                 "SC-RT-01": [{"documentId": "DOC-RT-01", "filename": "retry_timeout.pdf"}],
                 "SC-RT-02": [{"documentId": "DOC-RT-02", "filename": "retry_500.pdf"}],
                 "SC-RT-03": [{"documentId": "DOC-RT-03", "filename": "retry_503.pdf"}],
@@ -127,6 +129,7 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
                 "DOC-OK-06": "user_manual.pdf", "DOC-OK-07": "brazil_tech.docx", "DOC-OK-08": "arg_setup.txt",
                 "DOC-OK-09": "chile_safe.pdf", "DOC-OK-10": "peru_qa.pdf", "DOC-OK-11": "multi_type.zip",
                 "DOC-OK-12": "nested.zip", "DOC-OK-13": "mexico_user.docx", "DOC-OK-14": "col_compressed.zip",
+                "DOC-OK-15": "partial.zip", "DOC-OK-16": "fail_all.zip",
                 "DOC-BR-07": "duplicate.pdf", "DOC-BR-08": "oversized_inner.zip", "DOC-BR-09": "unsupported_inner.zip",
                 "DOC-BR-10": "empty_inner.zip", "DOC-BR-11": "corrupted.zip", "DOC-BR-12": "no_sucursal.pdf",
                 "DOC-TE-08": "persistent_500.pdf", "DOC-TE-09": "persistent_503.pdf", "DOC-TE-10": "persistent_504.pdf",
@@ -147,6 +150,12 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
             elif "DOC-OK-14" in doc_id:
                 content = create_mock_zip({"inner1.pdf": b"inner_content_1", "inner2.pdf": b"inner_content_2"})
                 filename = "col_compressed.zip"
+            elif "DOC-OK-15" in doc_id:
+                content = create_mock_zip({"inner_ok.pdf": b"c1", "inner_fail_soap.pdf": b"c2"})
+                filename = "partial.zip"
+            elif "DOC-OK-16" in doc_id:
+                content = create_mock_zip({"inner_fail_soap1.pdf": b"c1", "inner_fail_soap2.pdf": b"c2"})
+                filename = "fail_all.zip"
             elif "DOC-BR-06" in doc_id:
                 content = create_mock_zip({"f1.exe": b"virus", "f2.sh": b"script"})
                 filename = "mixed_content.zip"
@@ -241,6 +250,9 @@ class SoapHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(504); self.end_headers(); self.wfile.write(b"Gateway Timeout"); return
 
         # Persistent/Permanent HTTP failures
+        if "inner_fail_soap" in doc_key:
+            print(f"   -> Simulating SOAP failure for inner file {doc_key}", flush=True)
+            self.send_response(500); self.end_headers(); self.wfile.write(b"SOAP failure for inner file"); return
         if "persistent_500" in doc_key:
             print(f"   -> Simulating PERSISTENT HTTP 500 for {doc_key}", flush=True)
             self.send_response(500); self.end_headers(); self.wfile.write(b"Persistent Server Error"); return

@@ -7,7 +7,8 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "app.processors")
 public record ProcessorsProperties(
     ProcessorConfig s3,
-    ProcessorConfig soap
+    ProcessorConfig soap,
+    String zipTempDir
 ) {
     public record ProcessorConfig(
         Long maxFileSizeBytes,

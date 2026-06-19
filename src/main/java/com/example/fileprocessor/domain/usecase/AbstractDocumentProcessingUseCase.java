@@ -32,14 +32,17 @@ public abstract class AbstractDocumentProcessingUseCase {
     private final DocumentPersistenceGateway persistencePort;
     private final ProductRestGateway productRestGateway;
     private final RulesBussinesGateway documentValidator;
+    private final String tempDirPath;
 
     protected AbstractDocumentProcessingUseCase(
             DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
-            RulesBussinesGateway documentValidator) {
+            RulesBussinesGateway documentValidator,
+            String tempDirPath) {
         this.persistencePort = persistencePort;
         this.productRestGateway = productRestGateway;
         this.documentValidator = documentValidator;
+        this.tempDirPath = tempDirPath;
     }
 
     public Flux<FileUploadResponse> executePendingDocuments() {
@@ -228,7 +231,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 || history.getFilename().isBlank()) {
             return Flux.just(history);
         }
-        return ZipDecompressor.decompress(history);
+        return ZipDecompressor.decompress(history, tempDirPath);
     }
 
     private String extractTraceId(ContextView ctx) {
