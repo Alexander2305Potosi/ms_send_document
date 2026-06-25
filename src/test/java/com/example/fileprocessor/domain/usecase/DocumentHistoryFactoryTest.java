@@ -354,4 +354,154 @@ class DocumentHistoryFactoryTest {
         String message = DocumentHistoryFactory.aggregateMessages(responses);
         assertEquals("test.pdf: statusCode: OK, messageId: corr-123, idDocumento: doc-123", message);
     }
+
+    @Test
+    void privateConstructor_canBeCalledViaReflection() throws Exception {
+        java.lang.reflect.Constructor<DocumentHistoryFactory> constructor = DocumentHistoryFactory.class.getDeclaredConstructor();
+        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        constructor.setAccessible(true);
+        DocumentHistoryFactory instance = constructor.newInstance();
+        assertNotNull(instance);
+    }
+
+    @Test
+    void syncHistoryDTO_withValidTraceIdAndNullMessage_appendsTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .traceId("trace-xyz")
+                .message(null)
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals(" [TraceID: trace-xyz]", result.getSyncMessage());
+    }
+
+    @Test
+    void syncHistoryDTO_withBlankTraceId_doesNotAppendTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .traceId("   ")
+                .message("Message")
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals("Message", result.getSyncMessage());
+    }
+
+    @Test
+    void syncHistoryDTO_withUnknownTraceId_doesNotAppendTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .traceId("unknown")
+                .message("Message")
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals("Message", result.getSyncMessage());
+    }
+
+    @Test
+    void syncHistoryDTO_withNullFilename_fallsBackToFileHistoryFilename() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("fileHistory.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .filename(null)
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals("fileHistory.pdf", result.getFilename());
+    }
+
+    @Test
+    void syncGlobalHistory_withValidTraceIdAndNullMessage_appendsTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().filename("f1.xml").success(true).traceId("trace-abc").build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        assertTrue(result.getSyncMessage().contains("[TraceID: trace-abc]"));
+    }
+
+    @Test
+    void syncGlobalHistory_withBlankTraceId_doesNotAppend() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().filename("f1.xml").success(true).traceId("   ").build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        assertFalse(result.getSyncMessage().contains("TraceID"));
+    }
+
+    @Test
+    void syncGlobalHistory_withUnknownTraceId_doesNotAppend() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().filename("f1.xml").success(true).traceId("unknown").build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        assertFalse(result.getSyncMessage().contains("TraceID"));
+    }
+
+    @Test
+    void handleGlobalError_withExceptionHavingSelfAsCause_stopsUnwrapping() {
+        // Create an exception where getCause() returns itself
+        class SelfCausedException extends RuntimeException {
+            @Override
+            public synchronized Throwable getCause() {
+                return this;
+            }
+        }
+        SelfCausedException ex = new SelfCausedException();
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
+        assertNotNull(response);
+    }
+
+    @Test
+    void handleGlobalError_withBlankMessage_returnsUnknownErrorValue() {
+        ProcessingException pe = new ProcessingException("  ", "CODE");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.value(), response.getMessage());
+    }
+
+    @Test
+    void mapValidationError_whenMasterIsZipNull_doesNotSetFilename() {
+        ProcessingException pe = new ProcessingException("Err", "CODE");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(null).build();
+        DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, inner);
+        assertNull(result.getFilename());
+    }
+
+    @Test
+    void mapValidationError_whenMasterIsZipFalse_doesNotSetFilename() {
+        ProcessingException pe = new ProcessingException("Err", "CODE");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
+        DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, inner);
+        assertNull(result.getFilename());
+    }
+
+    @Test
+    void calculateNextState_withBusinessRejectionResponse_returnsBusinessRejection() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.BUSINESS_REJECTION.name()).build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(1, responses);
+
+        assertEquals(ProcessingResultCodes.BUSINESS_REJECTION.name(), conclusion.nextState());
+        assertEquals(1, conclusion.nextRetryCount());
+    }
 }
