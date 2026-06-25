@@ -11,8 +11,6 @@ import java.util.stream.Collectors;
 
 public final class DocumentHistoryFactory {
 
-    private static final int MAX_RETRIES = 3;
-
     private DocumentHistoryFactory() {
         // Prevent instantiation
     }
@@ -27,7 +25,7 @@ public final class DocumentHistoryFactory {
             conclusion = new ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), currentRetry);
         } else if (responses.stream().anyMatch(r -> ProcessingResultCodes.isBusinessRule(r.getSyncStatus()))) {
             conclusion = new ProcessingConclusion(ProcessingResultCodes.BUSINESS_REJECTION.name(), currentRetry);
-        } else if (currentRetry < MAX_RETRIES && responses.stream().anyMatch(r -> ProcessingResultCodes.isTransient(r.getSyncStatus()))) {
+        } else if (currentRetry < ProcessingResultCodes.MAX_RETRIES && responses.stream().anyMatch(r -> ProcessingResultCodes.isTransient(r.getSyncStatus()))) {
             conclusion = new ProcessingConclusion(ProcessingResultCodes.PENDING.name(), currentRetry + 1);
         } else {
             conclusion = new ProcessingConclusion(ProcessingResultCodes.FAILED.name(), currentRetry);

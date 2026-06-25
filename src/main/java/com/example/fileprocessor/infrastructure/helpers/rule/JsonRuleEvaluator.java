@@ -15,11 +15,11 @@ import java.util.logging.Logger;
 public class JsonRuleEvaluator {
 
     private static final Logger log = Logger.getLogger(JsonRuleEvaluator.class.getName());
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper;
     private final Map<String, JsonNode> ruleCache = new ConcurrentHashMap<>();
 
-    public JsonRuleEvaluator() {
-        mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+    public JsonRuleEvaluator(ObjectMapper mapper) {
+        this.mapper = mapper;
     }
 
     public boolean evaluate(String ruleJson, Object dto) {

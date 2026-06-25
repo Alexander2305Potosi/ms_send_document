@@ -51,6 +51,18 @@ public enum ProcessingResultCodes {
 
     private final String description;
 
+    public static final int MAX_RETRIES = 3;
+
+    private static final java.util.Set<String> BUSINESS_RULES = java.util.Set.of(
+        INVALID_BASE64.name(), EMPTY_CONTENT.name(), DECOMPRESSION_ERROR.name(), 
+        SIZE_EXCEEDED.name(), PATTERN_MISMATCH.name(), SKIPPED.name(), 
+        ERR_DUPLICATED_DOC.name(), BUSINESS_REJECTION.name()
+    );
+
+    private static final java.util.Set<String> TRANSIENT_ERRORS = java.util.Set.of(
+        BAD_GATEWAY.name(), GATEWAY_TIMEOUT.name(), SERVICE_UNAVAILABLE.name(), RETRYABLE_ERROR.name()
+    );
+
     ProcessingResultCodes(String description) {
         this.description = description;
     }
@@ -59,33 +71,13 @@ public enum ProcessingResultCodes {
         return description;
     }
 
-
-
     public static boolean isBusinessRule(String code) {
         if (code == null) return false;
-        try {
-            ProcessingResultCodes res = valueOf(code);
-            return switch (res) {
-                case INVALID_BASE64, EMPTY_CONTENT, DECOMPRESSION_ERROR, 
-                     SIZE_EXCEEDED, PATTERN_MISMATCH, SKIPPED, ERR_DUPLICATED_DOC,
-                     BUSINESS_REJECTION -> true;
-                default -> false;
-            };
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
+        return BUSINESS_RULES.contains(code);
     }
 
     public static boolean isTransient(String code) {
         if (code == null) return false;
-        try {
-            ProcessingResultCodes res = valueOf(code);
-            return switch (res) {
-                case BAD_GATEWAY, GATEWAY_TIMEOUT, SERVICE_UNAVAILABLE, UNKNOWN_ERROR, RETRYABLE_ERROR -> true;
-                default -> false;
-            };
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
+        return TRANSIENT_ERRORS.contains(code);
     }
 }

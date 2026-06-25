@@ -25,7 +25,6 @@ import java.util.logging.Logger;
 public abstract class AbstractDocumentProcessingUseCase {
 
     protected final Logger LOGGER = Logger.getLogger(getClass().getName());
-    private static final int MAX_RETRIES = 3;
     private static final String DEFAULT_TRACE = "unknown-trace";
     private static final String TRACE_KEY = ProcessingException.HEADER_TRACE_ID;
 
@@ -63,10 +62,12 @@ public abstract class AbstractDocumentProcessingUseCase {
         DocumentHistoryDTO baseHistory = DocumentHistoryDTO.fromDocument(doc);
         return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
                 .filter(rows -> rows > 0)
-                .doOnDiscard(Long.class,
-                        unused -> LOGGER.log(Level.WARNING,
-                                "[TraceID: {0}] Document {1} is already being processed or locked.",
-                                new Object[] { traceId, doc.getDocumentId() }))
+                .switchIfEmpty(Mono.defer(() -> {
+                    LOGGER.log(Level.WARNING,
+                            "[TraceID: {0}] Document {1} is already being processed or locked.",
+                            new Object[] { traceId, doc.getDocumentId() });
+                    return Mono.empty();
+                }))
                 .flatMap(unused -> downloadDocument(baseHistory)
                         .flatMap(masterHistory -> decompressAndValidate(masterHistory)
                                 .flatMap(innerFile -> uploadDocument(innerFile, doc.getId())

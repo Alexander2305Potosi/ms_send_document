@@ -31,12 +31,12 @@ public class MasterDbConfig {
     }
 
     @Bean(name = "masterDatabaseClient")
-    public DatabaseClient masterDatabaseClient(ConnectionFactory masterConnectionFactory) {
+    public DatabaseClient masterDatabaseClient(@org.springframework.beans.factory.annotation.Qualifier("masterConnectionFactory") ConnectionFactory masterConnectionFactory) {
         return DatabaseClient.create(masterConnectionFactory);
     }
 
     @Bean(name = "masterEntityTemplate")
-    public R2dbcEntityTemplate masterEntityTemplate(ConnectionFactory masterConnectionFactory) {
+    public R2dbcEntityTemplate masterEntityTemplate(@org.springframework.beans.factory.annotation.Qualifier("masterConnectionFactory") ConnectionFactory masterConnectionFactory) {
         return new R2dbcEntityTemplate(masterConnectionFactory);
     }
 }

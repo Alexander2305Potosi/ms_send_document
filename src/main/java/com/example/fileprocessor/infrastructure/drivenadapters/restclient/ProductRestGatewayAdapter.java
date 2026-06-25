@@ -57,7 +57,6 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                     .retrieve()
                     .bodyToFlux(ProductDocumentResponse.class)
                     .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                    .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
                     .map(doc -> mapToDocument(product.getProductId(), doc))
                     .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
                             new Object[] { doc.getProductId(), doc.getDocumentId() }))
@@ -83,7 +82,6 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                     .retrieve()
                     .bodyToMono(ProductDocumentResponse.class)
                     .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-                    .publishOn(reactor.core.scheduler.Schedulers.boundedElastic())
                     .map(response -> mapToProductDocumentFile(productId, response))
                     .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
                             new Object[] { documentId, productId }))

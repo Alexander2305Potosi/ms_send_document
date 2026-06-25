@@ -30,7 +30,4 @@ public interface DocumentRepository extends R2dbcRepository<DocumentEntity, Long
     @Query("SELECT estado_sincronizacion AS state, COUNT(*) AS total FROM documentos WHERE fecha_carga >= $1 AND caso_uso = $2 GROUP BY estado_sincronizacion")
     Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
 
-    // Obtiene el id_producto del penúltimo registro distinto insertado en el rango (para reanudar de forma segura).
-    @Query("SELECT id_producto FROM (SELECT id_producto, MAX(id) AS last_id FROM documentos WHERE fecha_carga BETWEEN $1 AND $2 GROUP BY id_producto) ranked ORDER BY last_id DESC LIMIT 1 OFFSET 1")
-    Mono<String> findLastProcessedProductIdInRange(LocalDateTime start, LocalDateTime end);
 }

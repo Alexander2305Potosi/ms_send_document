@@ -38,6 +38,4 @@ public interface DocumentRepository {
     /** Agrupa documentos por estado hoy por caso de uso (process status) */
     Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
 
-    /** Obtiene el último ID de producto procesado dentro del rango de fechas leído del contexto reactivo */
-    Mono<String> findLastProcessedProductIdInRange();
 }
