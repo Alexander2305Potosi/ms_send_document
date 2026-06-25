@@ -125,10 +125,7 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> saveInnerHistoryIfZip(Document doc, DocumentHistoryDTO innerFile, FileUploadResponse resp) {
-        // Skip intermediate technical retries — only save the final response per inner file
-        if (resp.isTechnicalRetry()) {
-            return Mono.just(resp);
-        }
+        // Allow intermediate technical retries to be saved to keep history traceability
         if (Boolean.TRUE.equals(doc.getIsZip())) {
             return persistencePort.saveHistory(DocumentHistoryFactory.syncHistoryDTO(doc, innerFile, resp)).thenReturn(resp);
         }

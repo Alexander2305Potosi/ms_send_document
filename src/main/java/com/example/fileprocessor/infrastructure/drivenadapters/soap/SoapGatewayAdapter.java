@@ -17,6 +17,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,7 +46,9 @@ public class SoapGatewayAdapter implements SoapGateway {
     @Override
     public Flux<FileUploadResponse> send(FileUploadRequest request) {
         return Flux.deferContextual(ctx -> {
-            final String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
+            final String messageId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
+            final String traceId = UUID.randomUUID().toString();
+            LOGGER.log(Level.INFO, "message id: {0} : {1}",new Object[]{messageId, request});
             return sendWithRetry(request, traceId, 1);
         });
     }
@@ -62,6 +65,7 @@ public class SoapGatewayAdapter implements SoapGateway {
                         ProcessingResultCodes.INVALID_RESPONSE.value(),
                         ProcessingResultCodes.INVALID_RESPONSE.name(), traceId)))
                 .map(xml -> mapper.parseResponse(xml, traceId).toBuilder()
+                        .traceId(traceId)
                         .attemptCount(attempt)
                         .build())
                 .onErrorResume(error -> handleFinalError(error, traceId)

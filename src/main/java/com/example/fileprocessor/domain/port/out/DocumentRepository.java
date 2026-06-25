@@ -21,9 +21,9 @@ public interface DocumentRepository {
     /**
      * Updates document state and retry count.
      * @param doc The document with new values.
-     * @param expectedState The previous state required for the update to succeed.
+     * @param expectedStates The previous state(s) required for the update to succeed.
      */
-    Mono<Long> updateStateAndRetry(Document doc, String expectedState);
+    Mono<Long> updateStateAndRetry(Document doc, String... expectedStates);
 
     /**
      * Checks if a document with the given productId and documentId already exists.

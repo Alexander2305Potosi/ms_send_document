@@ -109,7 +109,7 @@ class DocumentHistoryFactoryTest {
         assertEquals(123L, result.getDocumentId());
         assertEquals(ProcessingResultCodes.PROCESSED.name(), result.getState());
         assertEquals("SOAP", result.getUseCase());
-        assertEquals(3, result.getRetryCount());         // Uses response.attemptCount
+        assertEquals(2, result.getRetryCount());         // Uses doc.retryCount
         assertEquals(2, result.getBusinessRetryCount()); // Uses doc.retryCount
         assertEquals("inner_updated.xml", result.getFilename());
         assertEquals("OK", result.getSyncStatus());

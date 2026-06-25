@@ -30,15 +30,28 @@ public class DocumentR2dbcAdapter
         return doQueryMany(() -> repository.findByStateAndUseCaseToday(state, useCase, startOfDay));
     }
 
+    public Flux<Document> findByStatesAndUseCaseToday(String[] estados, String useCase, LocalDateTime startOfDay) {
+        return doQueryMany(() -> repository.findByStatesAndUseCaseToday(estados, useCase, startOfDay));
+    }
+
     @Override
-    public Mono<Long> updateStateAndRetry(Document doc, String expectedState) {
+    public Mono<Long> updateStateAndRetry(Document doc, String... expectedStates) {
         return repository.findById(doc.getId())
             .flatMap(entity -> {
-                // Atomic state validation
-                if (!expectedState.equals(entity.getState())) {
+                boolean stateMatches = false;
+                if (expectedStates != null) {
+                    for (String expectedState : expectedStates) {
+                        if (expectedState != null && expectedState.equals(entity.getState())) {
+                            stateMatches = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!stateMatches) {
                     return Mono.error(new com.example.fileprocessor.domain.exception.ProcessingException(
                         "No se pudo actualizar el documento: el estado actual [" + entity.getState() + 
-                        "] no coincide con el esperado [" + expectedState + "]", 
+                        "] no coincide con los esperados " + java.util.Arrays.toString(expectedStates), 
                         "STATE_MISMATCH"));
                 }
 

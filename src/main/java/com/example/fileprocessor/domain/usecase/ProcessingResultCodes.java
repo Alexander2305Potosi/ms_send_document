@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
-import java.util.Set;
+
 
 /**
  * Single source of truth for all processing states and result codes.
@@ -59,16 +59,7 @@ public enum ProcessingResultCodes {
         return description;
     }
 
-    /**
-     * Set of codes that represent valid states for the 'documentos' table.
-     */
-    private static final Set<ProcessingResultCodes> TABLE_STATES = Set.of(
-        PENDING, IN_PROGRESS, PROCESSED, FAILED, ERR_DUPLICATED_DOC
-    );
 
-    public boolean isTableState() {
-        return TABLE_STATES.contains(this);
-    }
 
     public static boolean isBusinessRule(String code) {
         if (code == null) return false;
@@ -76,7 +67,8 @@ public enum ProcessingResultCodes {
             ProcessingResultCodes res = valueOf(code);
             return switch (res) {
                 case INVALID_BASE64, EMPTY_CONTENT, DECOMPRESSION_ERROR, 
-                     SIZE_EXCEEDED, PATTERN_MISMATCH, SKIPPED, ERR_DUPLICATED_DOC -> true;
+                     SIZE_EXCEEDED, PATTERN_MISMATCH, SKIPPED, ERR_DUPLICATED_DOC,
+                     BUSINESS_REJECTION -> true;
                 default -> false;
             };
         } catch (IllegalArgumentException e) {

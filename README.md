@@ -401,7 +401,7 @@ Almacena la auditoria y trazabilidad detallada de cada intento de envio de un do
 |---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `documento_id` | BIGINT (FK) | Referencia al documento en la tabla `documentos` |
-| `nombre_archivo` | VARCHAR(255) | Nombre del archivo en el momento del envio |
+| `nombre_archivo` | VARCHAR(255) | Nombre del archivo interno procesado (Aplica SOLO para documentos `.zip`. Para archivos individuales se guarda como `NULL` para no duplicar el nombre de la tabla padre) |
 | `operacion` | VARCHAR(50) | Operacion realizada (ej. UPLOAD_SOAP, UPLOAD_S3) |
 | `resultado` | VARCHAR(50) | Resultado del intento: SUCCESS / FAILURE |
 | `codigo_error` | VARCHAR(50) | Codigo de error (si fallo) |
@@ -1002,52 +1002,79 @@ Definidos en `infrastructure/drivenadapters/aws/S3ErrorCodes.java`:
 | `SERVICE_UNAVAILABLE` | S3Exception 503, SdkException, throttling |
 | `UNKNOWN_ERROR` | Cualquier otra excepcion no mapeada |
 
----
+## Seguimiento, Estados y Reintentos (Guía Funcional)
 
-## Trazabilidad de Envios
+Para garantizar que no se pierda información y saber exactamente qué pasó con cada documento enviado, el sistema lleva un registro en dos niveles: un **"Expediente Principal"** (vista global) y una **"Bitácora Detallada"** (vista minuciosa). Esto es especialmente útil cuando se procesan paquetes (archivos `.zip`) que contienen múltiples documentos adentro.
 
-Cada documento procesado deja un registro en `historico_documentos` con el `caso_uso` que lo envio (SOAP o S3), lo que permite tracking por caso de uso y analisis de reintentos.
+### 1. Expediente Principal (Tabla `documentos`)
+Esta es la vista general. Muestra cómo va el trámite completo del paquete que se subió, sin entrar a ver el historial de cada archivo pequeño. 
 
-### Estructura de la tabla unificada
+- **¿En qué estado está el paquete? (`estado`)**
+  - **Pendiente (`PENDING`)**: El paquete está en fila esperando su turno para ser procesado, o tuvo un problema temporal (como una caída de internet) y el sistema lo volverá a intentar más tarde.
+  - **En Progreso (`IN_PROGRESS`)**: El sistema está trabajando con los archivos en este momento.
+  - **Procesado (`PROCESSED`)**: Todo fue un éxito. Todos los documentos dentro del paquete llegaron a su destino.
+  - **Fallido (`FAILED`)**: El sistema intentó enviarlo varias veces (agotó todas sus oportunidades) y no pudo por un problema de conexión recurrente.
+  - **Rechazado (`BUSINESS_REJECTION`)**: Fue rechazado porque no cumple con las reglas del negocio (por ejemplo, el documento pesa más de lo permitido o no es válido). El sistema no lo volverá a intentar porque requiere que una persona corrija el archivo.
+- **Contador de intentos generales (`reintentos`)**: Indica cuántas "oportunidades" o ciclos generales le ha dado el sistema a este paquete. Solo suma +1 cuando el paquete entero falla y pasa a estado Pendiente para intentar en el futuro.
+- **Mensaje de Error**: Un resumen fácil de leer sobre cuál fue el problema principal.
 
-La tabla `historico_documentos` contiene dos tipos de filas:
+### 2. Bitácora Detallada (Tabla `historico_documentos`)
+Esta es la vista con lupa. Es un diario que anota cada pequeño paso que da el sistema. **Nunca se borra nada**, solo se agregan nuevas líneas para saber exactamente qué pasó, cuándo y cuántas veces.
 
-- **Filas de metadatos** (`caso_uso IS NULL`): Representan el estado actual del documento. Se crean durante la sincronizacion y se actualizan durante el procesamiento.
-- **Filas de trazabilidad** (`caso_uso IS NOT NULL`): Registran cada intento de envio a un gateway. Son append-only para auditoria.
+- **Nombre exacto del archivo (`nombre_archivo`)**: *Solo se llena si el documento original es un `.zip`*. Sirve para identificar qué archivo interno específico se procesó (por ejemplo: `cedula.pdf` o `contrato.pdf`). Si subiste un documento individual (no-zip), este campo quedará vacío (`NULL`) para mantener la base de datos limpia, ya que el nombre general ya está anotado en el Expediente Principal.
+- **Resultado final del envío**: Indica si ese documento específico fue Exitoso, tuvo un Error, o fue Rechazado.
+- **Intentos rápidos o internos (`reintentos`)**: Si el sistema nota que la red falló justo al intentar enviar `cedula.pdf`, hará intentos muy rápidos e inmediatos (por ejemplo, 3 veces seguidas). Aquí verás anotados el intento 1, 2 y 3 para ese archivo en particular, lo cual ayuda a demostrar que el sistema sí "insistió".
+- **Detalle exacto del problema (`mensaje_error`)**: La respuesta exacta que dio el otro sistema.
 
-### Campos clave
+### ¿Cómo funciona en la práctica cuando subes un paquete (.zip)?
 
-- **`caso_uso`**: Identifica el gateway usado ("SOAP" o "S3"). NULL en filas de metadatos.
-- **`reintentos`**: Numero de intento actual (0 = primer intento, 1 = primer reintento, etc.). Se consulta `getRetryCount()` desde `historico_documentos` antes de cada intento.
-- **`id_documento`**: Incluye la ruta cuando el documento viene de un ZIP (ej: `doc-1/test.pdf`).
+Imagina que subes un paquete llamado `documentos_cliente.zip` que adentro trae dos archivos: `cedula.pdf` y `contrato.pdf`.
 
-### Flujo de Persistencia
+1. **Abriendo el paquete:** El sistema abre el `.zip` de forma automática y toma los dos archivos para enviarlos por separado.
+2. **Intentos individuales (Lo que pasa en la Bitácora):**
+   - El sistema intenta enviar `cedula.pdf`. Falla por un pequeño corte de red. Automáticamente insiste 3 veces rápidas. La **Bitácora Detallada** anotará 3 líneas nuevas diciendo: *"`cedula.pdf` falló en el intento 1"*, *"falló en el intento 2"*, *"falló en el intento 3"*.
+   - Luego, intenta enviar `contrato.pdf`. Este archivo sube perfecto a la primera. La **Bitácora** anota 1 línea: *"`contrato.pdf` fue un éxito en el intento 1"*.
+   - **Importante:** La Bitácora **solo registra los archivos internos** (`cedula.pdf`, `contrato.pdf`). **No se crea ninguna fila de resumen** con el nombre del paquete `.zip`, ya que esa información consolidada se guarda en el Expediente Principal.
+3. **Decisión Final (Lo que pasa en el Expediente Principal):**
+   Al terminar de intentar con todos los archivos, el sistema actualiza **únicamente** la vista global (tabla `documentos`):
+   - Como `cedula.pdf` falló, el sistema determina que el paquete completo aún no está listo. Cambia el estado del paquete a **Pendiente** y anota que gastó su primer intento general.
+4. **La segunda vuelta (El reintento):**
+   Más tarde, el sistema vuelve a revisar los casos Pendientes y toma el paquete de nuevo. Volverá a hacer todo el proceso. La Bitácora registrará los nuevos intentos rápidos (empezando de 1) con la nueva fecha y hora para que no se confundan con los de ayer. Mientras tanto, el Expediente Principal cambiará su contador a 2, mostrando que el sistema sigue trabajando en ello de manera ordenada.
 
-```
-uploadDocument() → FileUploadResult
-        │
-        ▼
-handleUploadSuccess() o handleUploadError()
-        │
-        ▼
-DocumentHistory (
-    null,                          // id (auto-generado)
-    document.documentId(),        // id_documento
-    document.productId(),         // id_producto
-    ...metadata fields...,        // nombre, propietario, ruta, etc.
-    implementationName(),         // caso_uso = "SOAP" o "S3"
-    isSuccess ? "SUCCESS" : "FAILURE", // resultado
-    errorCode,                    // codigo_error
-    errorMessage,                // mensaje_error
-    retryCount,                  // reintentos = numero de intento
-    now,                         // fecha_creacion
-    now                          // fecha_actualizacion
-)
-        │
-        ▼
-historyRepository.save(record)  → INSERT en historico_documentos
-historyRepository.updateState() → UPDATE en fila de metadatos (caso_uso IS NULL)
-```
+### Escenarios Prácticos de Ejemplo
+
+Para entender mejor cómo se actualizan el Expediente Principal y la Bitácora Detallada, veamos 4 escenarios comunes:
+
+#### Escenario 1: El escenario ideal (Éxito a la primera)
+Subes un paquete `.zip` con 2 archivos: `foto.png` y `contrato.pdf`.
+*   **Qué pasa en el sistema**: Ambos archivos se envían correctamente al primer intento.
+*   **Bitácora Detallada**: Muestra 2 líneas (una por archivo) indicando Éxito en el intento 1.
+*   **Expediente Principal**: Pasa a estado **Procesado (`PROCESSED`)** con contador general en 1.
+
+#### Escenario 2: Tropezón rápido (Falla temporal y recuperación)
+Subes el paquete, pero justo en el momento de enviarlo, hay una pequeña pérdida de conexión en la red.
+*   **Qué pasa en el sistema**: `foto.png` falla, el sistema lo reintenta rapidísimo por segunda vez, y ahí sí funciona.
+*   **Bitácora Detallada**:
+    *   Línea 1: `foto.png` / Error / Intento 1
+    *   Línea 2: `foto.png` / Éxito / Intento 2
+*   **Expediente Principal**: Como al final sí se logró enviar, el paquete pasa a estado **Procesado (`PROCESSED`)** y su contador general se queda en 1. A los ojos del negocio, todo fluyó sin requerir la intervención del ciclo largo del día siguiente.
+
+#### Escenario 3: Problemas de reglas (Rechazo Permanente)
+Subes un `.zip`, pero `contrato.pdf` está dañado o pesa demasiado (por ejemplo, 100MB).
+*   **Qué pasa en el sistema**: El sistema ni siquiera intenta enviarlo, o el servidor destino lo rechaza inmediatamente por violar una política.
+*   **Bitácora Detallada**: Muestra 1 línea para ese archivo indicando **Rechazado (`BUSINESS_REJECTION`)** en el intento 1.
+*   **Expediente Principal**: Automáticamente el paquete entero se marca como **Rechazado (`BUSINESS_REJECTION`)**. El sistema se detiene y no volverá a intentar enviar este paquete automáticamente, porque requiere que un analista humano corrija el documento.
+
+#### Escenario 4: Caída total (Requiere segunda vuelta de negocio)
+Subes el `.zip` con los 2 archivos, pero el servidor destino está completamente caído por un mantenimiento no avisado.
+*   **Qué pasa en el sistema (Hoy)**:
+    *   `foto.png` intenta subir, falla 3 veces rápidas.
+    *   `contrato.pdf` intenta subir, falla 3 veces rápidas.
+*   **Bitácora Detallada (Hoy)**: Se crean 6 líneas en total (intentos 1, 2 y 3 para cada archivo) marcando Error.
+*   **Expediente Principal (Hoy)**: El sistema se rinde por hoy. Pasa a estado **Pendiente (`PENDING`)** y su contador general sube a 2.
+*   **Qué pasa en el sistema (Mañana)**: El sistema automático toma de nuevo el expediente 2. El servidor ya fue arreglado y todo fluye.
+*   **Bitácora Detallada (Mañana)**: Se agregan 2 nuevas líneas de Éxito en el intento 1 (el contador rápido siempre inicia en 1 al empezar una nueva vuelta global).
+*   **Expediente Principal (Mañana)**: Finalmente pasa a **Procesado (`PROCESSED`)**, dejando muy claro en su historia que tomó 2 ciclos largos de negocio lograrlo.
 
 ---
 

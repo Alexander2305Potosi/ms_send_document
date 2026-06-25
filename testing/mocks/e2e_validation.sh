@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-MS_URL="http://localhost:8080"
+MS_URL="http://localhost:8085"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MOCKS_PID_FILE="$SCRIPT_DIR/mocks.pid"
@@ -11,7 +11,7 @@ cleanup() {
     echo "Cleaning up..."
     [ -f "$MOCKS_PID_FILE" ] && kill -9 $(cat "$MOCKS_PID_FILE") 2>/dev/null
     [ -f "$MS_PID_FILE" ] && kill -9 $(cat "$MS_PID_FILE") 2>/dev/null
-    /usr/sbin/lsof -ti :8080,3003,9003 | xargs kill -9 2>/dev/null || true
+    /usr/sbin/lsof -ti :8085,3003,9003 | xargs kill -9 2>/dev/null || true
     rm -f "$MOCKS_PID_FILE" "$MS_PID_FILE"
     sleep 2
 }
@@ -31,7 +31,7 @@ sleep 3
 
 echo "2. Starting Microservice (Profile: dev)..."
 cd "$ROOT_DIR"
-./gradlew bootRun --args='--spring.profiles.active=dev --app.document-rest.endpoint=http://localhost:3003 --app.soap.v2.endpoint=http://localhost:9003/soap/adminDocs' > "$SCRIPT_DIR/ms.log" 2>&1 &
+./gradlew bootRun --args='--spring.profiles.active=dev --server.port=8085 --app.document-rest.endpoint=http://localhost:3003 --app.soap.v2.endpoint=http://localhost:9003/soap/adminDocs' > "$SCRIPT_DIR/ms.log" 2>&1 &
 echo $! > "$MS_PID_FILE"
 
 # Wait for MS

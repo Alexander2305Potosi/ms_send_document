@@ -36,16 +36,20 @@ public final class DocumentHistoryFactory {
     }
 
     public static DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO fileHistory, FileUploadResponse response) {
-        int effectiveRetry = response.getAttemptCount() > 0 ? response.getAttemptCount() : doc.getRetryCountSafe();
+        String traceId = response.getTraceId();
+        String syncMessage = response.getMessage();
+        if (traceId != null && !traceId.isBlank() && !"unknown".equals(traceId)) {
+            syncMessage = (syncMessage != null ? syncMessage : "") + " [TraceID: " + traceId + "]";
+        }
         return fileHistory.toBuilder()
                 .documentId(doc.getId())
                 .state(calculateFileState(response))
                 .useCase(doc.getUseCase())
-                .retryCount(effectiveRetry)
+                .retryCount(response.getAttemptCount() > 0 ? response.getAttemptCount() : doc.getRetryCountSafe())
                 .businessRetryCount(doc.getRetryCountSafe())
-                .filename(response.getFilename() != null ? response.getFilename() : fileHistory.getFilename())
+                .filename(Boolean.TRUE.equals(doc.getIsZip()) ? (response.getFilename() != null ? response.getFilename() : fileHistory.getFilename()) : null)
                 .syncStatus(response.getSyncStatus())
-                .syncMessage(response.getMessage())
+                .syncMessage(syncMessage)
                 .completedAt(Instant.now())
                 .build();
     }
@@ -55,16 +59,35 @@ public final class DocumentHistoryFactory {
             DocumentHistoryDTO history,
             List<FileUploadResponse> responses,
             ProcessingConclusion conclusion) {
-        String representativeStatus = responses.isEmpty() ? null : responses.get(0).getSyncStatus();
+        String representativeStatus = responses.stream()
+                .map(FileUploadResponse::getSyncStatus)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+
+        String traceId = responses.stream()
+                .map(FileUploadResponse::getTraceId)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+
         String syncMessage = aggregateMessages(responses);
+        if (traceId != null && !traceId.isBlank() && !"unknown".equals(traceId)) {
+            syncMessage = (syncMessage != null ? syncMessage : "") + " [TraceID: " + traceId + "]";
+        }
+
+        int attempt = responses.stream()
+                .map(FileUploadResponse::getAttemptCount)
+                .max(Integer::compareTo)
+                .orElse(0);
 
         return history.toBuilder()
                 .documentId(doc.getId())
                 .state(conclusion.nextState())
                 .useCase(doc.getUseCase())
-                .retryCount(doc.getRetryCountSafe())
+                .retryCount(attempt > 0 ? attempt : doc.getRetryCountSafe())
                 .businessRetryCount(conclusion.nextRetryCount())
-                .filename(history.getFilename())
+                .filename(Boolean.TRUE.equals(doc.getIsZip()) ? history.getFilename() : null)
                 .syncStatus(representativeStatus)
                 .syncMessage(syncMessage)
                 .completedAt(Instant.now())
