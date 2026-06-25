@@ -69,9 +69,19 @@ public final class DocumentHistoryFactory {
                 .findFirst()
                 .orElse(null);
 
-        String syncMessage = aggregateMessages(responses);
-        if (traceId != null && !traceId.isBlank() && !"unknown".equals(traceId)) {
-            syncMessage = (syncMessage != null ? syncMessage : "") + " [TraceID: " + traceId + "]";
+        String syncMessage;
+        if (Boolean.TRUE.equals(doc.getIsZip())) {
+            syncMessage = aggregateMessages(responses);
+        } else {
+            if (responses.isEmpty()) {
+                syncMessage = "";
+            } else {
+                FileUploadResponse r = responses.get(0);
+                syncMessage = r.getMessage() != null ? r.getMessage() : (r.isSuccess() ? "SUCCESS" : r.getSyncStatus());
+            }
+            if (traceId != null && !traceId.isBlank() && !"unknown".equals(traceId)) {
+                syncMessage = (syncMessage != null ? syncMessage : "") + " [TraceID: " + traceId + "]";
+            }
         }
 
         int attempt = responses.stream()
@@ -104,10 +114,13 @@ public final class DocumentHistoryFactory {
 
     public static String aggregateMessages(List<FileUploadResponse> responses) {
         return responses.stream()
-                .map(r -> String.format("%s: %s",
-                        r.getFilename() != null ? r.getFilename() : "unknown",
-                        r.getMessage() != null ? r.getMessage() : (r.isSuccess() ? "SUCCESS" : r.getSyncStatus())))
-                .collect(Collectors.joining(" | "));
+                .map(r -> {
+                    String filename = r.getFilename() != null ? r.getFilename() : "unknown";
+                    String trace = (r.getTraceId() != null && !r.getTraceId().isBlank() && !"unknown".equals(r.getTraceId())) ? r.getTraceId() : "N/A";
+                    String detail = r.getMessage() != null ? r.getMessage() : (r.isSuccess() ? "SUCCESS" : r.getSyncStatus());
+                    return String.format("[Archivo: %s | TraceID: %s | Detalle: %s]", filename, trace, detail);
+                })
+                .collect(Collectors.joining(" || "));
     }
 
     /**

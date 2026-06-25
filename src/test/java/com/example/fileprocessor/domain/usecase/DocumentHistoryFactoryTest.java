@@ -92,6 +92,7 @@ class DocumentHistoryFactoryTest {
                 .id(123L)
                 .useCase("SOAP")
                 .retryCount(2)
+                .isZip(true)
                 .build();
         DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder()
                 .filename("inner.xml")
@@ -109,8 +110,8 @@ class DocumentHistoryFactoryTest {
         assertEquals(123L, result.getDocumentId());
         assertEquals(ProcessingResultCodes.PROCESSED.name(), result.getState());
         assertEquals("SOAP", result.getUseCase());
-        assertEquals(2, result.getRetryCount());         // Uses doc.retryCount
-        assertEquals(2, result.getBusinessRetryCount()); // Uses doc.retryCount
+        assertEquals(3, result.getRetryCount());         // Uses response.attemptCount (3)
+        assertEquals(2, result.getBusinessRetryCount()); // Uses doc.retryCount (2)
         assertEquals("inner_updated.xml", result.getFilename());
         assertEquals("OK", result.getSyncStatus());
         assertEquals("Successfully uploaded", result.getSyncMessage());
@@ -146,6 +147,7 @@ class DocumentHistoryFactoryTest {
                 .id(123L)
                 .useCase("S3")
                 .retryCount(1)
+                .isZip(true)
                 .build();
         DocumentHistoryDTO history = DocumentHistoryDTO.builder()
                 .filename("master.zip")
@@ -166,8 +168,8 @@ class DocumentHistoryFactoryTest {
         assertEquals(2, result.getBusinessRetryCount());
         assertEquals("master.zip", result.getFilename());
         assertEquals("SUCCESS", result.getSyncStatus());
-        assertTrue(result.getSyncMessage().contains("f1.xml: SUCCESS"));
-        assertTrue(result.getSyncMessage().contains("f2.xml: GATEWAY_TIMEOUT"));
+        assertTrue(result.getSyncMessage().contains("[Archivo: f1.xml | TraceID: N/A | Detalle: SUCCESS]"));
+        assertTrue(result.getSyncMessage().contains("[Archivo: f2.xml | TraceID: N/A | Detalle: GATEWAY_TIMEOUT]"));
         assertNotNull(result.getCompletedAt());
     }
 
@@ -202,7 +204,7 @@ class DocumentHistoryFactoryTest {
                 FileUploadResponse.builder().success(true).build()
         );
         String message = DocumentHistoryFactory.aggregateMessages(responses);
-        assertEquals("unknown: SUCCESS", message);
+        assertEquals("[Archivo: unknown | TraceID: N/A | Detalle: SUCCESS]", message);
     }
 
     @Test
@@ -352,7 +354,7 @@ class DocumentHistoryFactoryTest {
                         .build()
         );
         String message = DocumentHistoryFactory.aggregateMessages(responses);
-        assertEquals("test.pdf: statusCode: OK, messageId: corr-123, idDocumento: doc-123", message);
+        assertEquals("[Archivo: test.pdf | TraceID: N/A | Detalle: statusCode: OK, messageId: corr-123, idDocumento: doc-123]", message);
     }
 
     @Test
@@ -405,7 +407,7 @@ class DocumentHistoryFactoryTest {
 
     @Test
     void syncHistoryDTOWithNullFilenameFallsBackToFileHistoryFilename() {
-        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        Document doc = Document.builder().id(1L).useCase("SOAP").isZip(true).build();
         DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("fileHistory.pdf").build();
         FileUploadResponse response = FileUploadResponse.builder()
                 .success(true)
@@ -438,7 +440,7 @@ class DocumentHistoryFactoryTest {
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
         DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
-        assertFalse(result.getSyncMessage().contains("TraceID"));
+        assertEquals("SUCCESS", result.getSyncMessage());
     }
 
     @Test
@@ -451,7 +453,7 @@ class DocumentHistoryFactoryTest {
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
         DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
-        assertFalse(result.getSyncMessage().contains("TraceID"));
+        assertEquals("SUCCESS", result.getSyncMessage());
     }
 
     @Test

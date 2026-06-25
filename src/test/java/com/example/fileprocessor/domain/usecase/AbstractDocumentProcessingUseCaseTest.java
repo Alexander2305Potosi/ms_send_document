@@ -579,7 +579,7 @@ class AbstractDocumentProcessingUseCaseTest {
         DocumentHistoryDTO savedHistory = captor.getValue();
         assertEquals("file1.pdf", savedHistory.getFilename());
         assertEquals(ProcessingResultCodes.PROCESSED.name(), savedHistory.getState());
-        assertEquals(0, savedHistory.getRetryCount());
+        assertEquals(2, savedHistory.getRetryCount());
 
         // Master ZIP document should be finalized
         verify(persistencePort, times(1)).finalizeProcessingAtomically(any());
@@ -662,13 +662,13 @@ class AbstractDocumentProcessingUseCaseTest {
                 .filter(h -> "file1.pdf".equals(h.getFilename()))
                 .findFirst()
                 .orElseThrow();
-        assertEquals(0, history1.getRetryCount());
+        assertEquals(1, history1.getRetryCount());
 
         DocumentHistoryDTO history2 = savedHistories.stream()
                 .filter(h -> "file2.pdf".equals(h.getFilename()))
                 .findFirst()
                 .orElseThrow();
-        assertEquals(0, history2.getRetryCount());
+        assertEquals(2, history2.getRetryCount());
 
         // Master ZIP document should be finalized
         verify(persistencePort, times(1)).finalizeProcessingAtomically(any());

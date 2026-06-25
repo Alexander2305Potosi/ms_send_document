@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.rule;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,7 @@ class JsonRuleEvaluatorTest {
 
     @BeforeEach
     void setUp() {
-        evaluator = new JsonRuleEvaluator();
+        evaluator = new JsonRuleEvaluator(new ObjectMapper());
     }
 
     @Test

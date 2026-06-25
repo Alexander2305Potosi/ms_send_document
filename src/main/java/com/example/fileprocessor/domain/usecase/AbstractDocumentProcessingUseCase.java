@@ -126,8 +126,8 @@ public abstract class AbstractDocumentProcessingUseCase {
     }
 
     private Mono<FileUploadResponse> saveInnerHistoryIfZip(Document doc, DocumentHistoryDTO innerFile, FileUploadResponse resp) {
-        // Allow intermediate technical retries to be saved to keep history traceability
-        if (Boolean.TRUE.equals(doc.getIsZip())) {
+        // Do not save intermediate technical retries to avoid duplicate history during retries
+        if (Boolean.TRUE.equals(doc.getIsZip()) && !resp.isTechnicalRetry()) {
             return persistencePort.saveHistory(DocumentHistoryFactory.syncHistoryDTO(doc, innerFile, resp)).thenReturn(resp);
         }
         return Mono.just(resp);
@@ -201,12 +201,14 @@ public abstract class AbstractDocumentProcessingUseCase {
             logPrefix = ProcessingResultCodes.FAILURE.name();
         }
 
+        DocumentHistoryDTO globalHistory = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+
         LOGGER.log(Level.INFO, "[TraceID: {0}] [{1}] Document {2} (Product: {3}) -> {4}. Messages: {5}",
                 new Object[] { traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), conclusion.nextState(),
-                        DocumentHistoryFactory.aggregateMessages(responses) });
+                        globalHistory.getSyncMessage() });
 
         return persistencePort
-                .finalizeProcessingAtomically(DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion))
+                .finalizeProcessingAtomically(globalHistory)
                 .then();
     }
 

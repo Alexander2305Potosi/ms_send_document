@@ -41,7 +41,6 @@ class SyncDocumentsUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new SyncDocumentsUseCase(documentRepository, productMasterRepository, productRestGateway, productLocalRepository);
-        lenient().when(documentRepository.findLastProcessedProductIdInRange()).thenReturn(Mono.empty());
     }
 
     private static ProductMaestro product(String id) {
