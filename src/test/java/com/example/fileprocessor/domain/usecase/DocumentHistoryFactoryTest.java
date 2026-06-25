@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DocumentHistoryFactoryTest {
 
     @Test
-    void calculateNextState_whenResponsesIsEmpty_returnsFailed() {
+    void calculateNextStateWhenResponsesIsEmptyReturnsFailed() {
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(1, Collections.emptyList());
 
@@ -23,7 +23,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void calculateNextState_whenAllResponsesAreSuccess_returnsProcessed() {
+    void calculateNextStateWhenAllResponsesAreSuccessReturnsProcessed() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build(),
                 FileUploadResponse.builder().success(true).build()
@@ -36,7 +36,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void calculateNextState_whenAnyResponseIsBusinessRule_returnsBusinessRejection() {
+    void calculateNextStateWhenAnyResponseIsBusinessRuleReturnsBusinessRejection() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build(),
                 FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.PATTERN_MISMATCH.name()).build()
@@ -49,7 +49,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void calculateNextState_whenHasTransientAndUnderMaxRetries_returnsPendingAndIncrementsRetry() {
+    void calculateNextStateWhenHasTransientAndUnderMaxRetriesReturnsPendingAndIncrementsRetry() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build(),
                 FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name()).build()
@@ -62,7 +62,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void calculateNextState_whenHasTransientAndAtMaxRetries_returnsFailedWithoutIncrement() {
+    void calculateNextStateWhenHasTransientAndAtMaxRetriesReturnsFailedWithoutIncrement() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build(),
                 FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name()).build()
@@ -75,7 +75,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void calculateNextState_whenHasNonTransientNonBusinessError_returnsFailed() {
+    void calculateNextStateWhenHasNonTransientNonBusinessErrorReturnsFailed() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.SOURCE_NOT_FOUND.name()).build()
         );
@@ -87,7 +87,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncHistoryDTO_mapsCorrectData() {
+    void syncHistoryDTOMapsCorrectData() {
         Document doc = Document.builder()
                 .id(123L)
                 .useCase("SOAP")
@@ -118,7 +118,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncHistoryDTO_withZeroAttemptCount_fallsBackToDocRetry() {
+    void syncHistoryDTOWithZeroAttemptCountFallsBackToDocRetry() {
         Document doc = Document.builder()
                 .id(50L)
                 .useCase("S3")
@@ -141,7 +141,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncGlobalHistory_mapsCorrectData_withResponses() {
+    void syncGlobalHistoryMapsCorrectDataWithResponses() {
         Document doc = Document.builder()
                 .id(123L)
                 .useCase("S3")
@@ -172,7 +172,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncGlobalHistory_withEmptyResponses_setsRepresentativeStatusToNull() {
+    void syncGlobalHistoryWithEmptyResponsesSetsRepresentativeStatusToNull() {
         Document doc = Document.builder().id(123L).build();
         DocumentHistoryDTO history = DocumentHistoryDTO.builder().build();
         DocumentHistoryFactory.ProcessingConclusion conclusion =
@@ -185,7 +185,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void calculateFileState_returnsCorrectStates() {
+    void calculateFileStateReturnsCorrectStates() {
         assertEquals(ProcessingResultCodes.PROCESSED.name(),
                 DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(true).build()));
 
@@ -197,7 +197,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void aggregateMessages_withNullFilename_usesUnknown() {
+    void aggregateMessagesWithNullFilenameUsesUnknown() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build()
         );
@@ -206,7 +206,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withProcessingException_returnsErrorCode() {
+    void handleGlobalErrorWithProcessingExceptionReturnsErrorCode() {
         ProcessingException pe = new ProcessingException("Error occurred", "SOME_ERROR_CODE");
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
 
@@ -217,7 +217,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withProcessingExceptionBlankCode_returnsUnknownError() {
+    void handleGlobalErrorWithProcessingExceptionBlankCodeReturnsUnknownError() {
         ProcessingException pe = new ProcessingException("Error", "");
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
 
@@ -226,7 +226,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withProcessingExceptionNullCode_returnsUnknownError() {
+    void handleGlobalErrorWithProcessingExceptionNullCodeReturnsUnknownError() {
         ProcessingException pe = new ProcessingException("Error", null);
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
 
@@ -235,7 +235,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withProcessingExceptionWithFilename_preservesFilename() {
+    void handleGlobalErrorWithProcessingExceptionWithFilenamePreservesFilename() {
         ProcessingException pe = new ProcessingException("File error", "SIZE_EXCEEDED");
         pe.setFilename("bigfile.pdf");
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
@@ -246,7 +246,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withWrappedProcessingException_unwrapsAndUsesCode() {
+    void handleGlobalErrorWithWrappedProcessingExceptionUnwrapsAndUsesCode() {
         ProcessingException pe = new ProcessingException("Inner error", "GATEWAY_TIMEOUT");
         RuntimeException wrapper = new RuntimeException("Outer wrapper", pe);
 
@@ -258,7 +258,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withGenericException_returnsUnknownError() {
+    void handleGlobalErrorWithGenericExceptionReturnsUnknownError() {
         RuntimeException ex = new RuntimeException("Generic exception");
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
 
@@ -269,7 +269,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withNullMessage_usesUnknownErrorDescription() {
+    void handleGlobalErrorWithNullMessageUsesUnknownErrorDescription() {
         RuntimeException ex = new RuntimeException((String) null);
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
 
@@ -278,7 +278,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void mapValidationError_withProcessingExceptionAndValidCode_returnsSame() {
+    void mapValidationErrorWithProcessingExceptionAndValidCodeReturnsSame() {
         ProcessingException pe = new ProcessingException("Error message", "CODE");
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
 
@@ -288,7 +288,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void mapValidationError_withProcessingExceptionAndBlankCode_defaultsToUnknownError() {
+    void mapValidationErrorWithProcessingExceptionAndBlankCodeDefaultsToUnknownError() {
         ProcessingException pe = new ProcessingException("Error message", "");
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
 
@@ -297,7 +297,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void mapValidationError_withGenericException_wrapsAsProcessingException() {
+    void mapValidationErrorWithGenericExceptionWrapsAsProcessingException() {
         IllegalArgumentException ex = new IllegalArgumentException("Invalid arg");
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
 
@@ -308,7 +308,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void mapValidationError_whenMasterIsZip_setsFilenameFromInner() {
+    void mapValidationErrorWhenMasterIsZipSetsFilenameFromInner() {
         ProcessingException pe = new ProcessingException("Err", "CODE");
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(true).build();
         DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
@@ -318,7 +318,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withWrappedSslException_unwrapsToSslMessage() {
+    void handleGlobalErrorWithWrappedSslExceptionUnwrapsToSslMessage() {
         javax.net.ssl.SSLHandshakeException sslEx = new javax.net.ssl.SSLHandshakeException("PKIX path building failed");
         RuntimeException wrapper = new RuntimeException("Request failed", sslEx);
 
@@ -330,7 +330,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withWrappedSslExceptionHavingNullMessage_fallsBackToOuterMessage() {
+    void handleGlobalErrorWithWrappedSslExceptionHavingNullMessageFallsBackToOuterMessage() {
         javax.net.ssl.SSLHandshakeException sslEx = new javax.net.ssl.SSLHandshakeException(null);
         RuntimeException wrapper = new RuntimeException("Request failed due to SSL handshake issue", sslEx);
 
@@ -342,7 +342,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void aggregateMessages_withSuccessMessage_usesDetailedMessage() {
+    void aggregateMessagesWithSuccessMessageUsesDetailedMessage() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder()
                         .filename("test.pdf")
@@ -356,7 +356,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void privateConstructor_canBeCalledViaReflection() throws Exception {
+    void privateConstructorCanBeCalledViaReflection() throws Exception {
         java.lang.reflect.Constructor<DocumentHistoryFactory> constructor = DocumentHistoryFactory.class.getDeclaredConstructor();
         assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
         constructor.setAccessible(true);
@@ -365,7 +365,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncHistoryDTO_withValidTraceIdAndNullMessage_appendsTraceId() {
+    void syncHistoryDTOWithValidTraceIdAndNullMessageAppendsTraceId() {
         Document doc = Document.builder().id(1L).useCase("SOAP").build();
         DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
         FileUploadResponse response = FileUploadResponse.builder()
@@ -378,7 +378,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncHistoryDTO_withBlankTraceId_doesNotAppendTraceId() {
+    void syncHistoryDTOWithBlankTraceIdDoesNotAppendTraceId() {
         Document doc = Document.builder().id(1L).useCase("SOAP").build();
         DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
         FileUploadResponse response = FileUploadResponse.builder()
@@ -391,7 +391,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncHistoryDTO_withUnknownTraceId_doesNotAppendTraceId() {
+    void syncHistoryDTOWithUnknownTraceIdDoesNotAppendTraceId() {
         Document doc = Document.builder().id(1L).useCase("SOAP").build();
         DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
         FileUploadResponse response = FileUploadResponse.builder()
@@ -404,7 +404,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncHistoryDTO_withNullFilename_fallsBackToFileHistoryFilename() {
+    void syncHistoryDTOWithNullFilenameFallsBackToFileHistoryFilename() {
         Document doc = Document.builder().id(1L).useCase("SOAP").build();
         DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("fileHistory.pdf").build();
         FileUploadResponse response = FileUploadResponse.builder()
@@ -416,7 +416,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncGlobalHistory_withValidTraceIdAndNullMessage_appendsTraceId() {
+    void syncGlobalHistoryWithValidTraceIdAndNullMessageAppendsTraceId() {
         Document doc = Document.builder().id(1L).useCase("SOAP").build();
         DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
         List<FileUploadResponse> responses = List.of(
@@ -429,7 +429,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncGlobalHistory_withBlankTraceId_doesNotAppend() {
+    void syncGlobalHistoryWithBlankTraceIdDoesNotAppend() {
         Document doc = Document.builder().id(1L).useCase("SOAP").build();
         DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
         List<FileUploadResponse> responses = List.of(
@@ -442,7 +442,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void syncGlobalHistory_withUnknownTraceId_doesNotAppend() {
+    void syncGlobalHistoryWithUnknownTraceIdDoesNotAppend() {
         Document doc = Document.builder().id(1L).useCase("SOAP").build();
         DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
         List<FileUploadResponse> responses = List.of(
@@ -455,7 +455,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withExceptionHavingSelfAsCause_stopsUnwrapping() {
+    void handleGlobalErrorWithExceptionHavingSelfAsCauseStopsUnwrapping() {
         // Create an exception where getCause() returns itself
         class SelfCausedException extends RuntimeException {
             @Override
@@ -469,14 +469,14 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void handleGlobalError_withBlankMessage_returnsUnknownErrorValue() {
+    void handleGlobalErrorWithBlankMessageReturnsUnknownErrorValue() {
         ProcessingException pe = new ProcessingException("  ", "CODE");
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
         assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.value(), response.getMessage());
     }
 
     @Test
-    void mapValidationError_whenMasterIsZipNull_doesNotSetFilename() {
+    void mapValidationErrorWhenMasterIsZipNullDoesNotSetFilename() {
         ProcessingException pe = new ProcessingException("Err", "CODE");
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(null).build();
         DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
@@ -485,7 +485,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void mapValidationError_whenMasterIsZipFalse_doesNotSetFilename() {
+    void mapValidationErrorWhenMasterIsZipFalseDoesNotSetFilename() {
         ProcessingException pe = new ProcessingException("Err", "CODE");
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
         DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
@@ -494,7 +494,7 @@ class DocumentHistoryFactoryTest {
     }
 
     @Test
-    void calculateNextState_withBusinessRejectionResponse_returnsBusinessRejection() {
+    void calculateNextStateWithBusinessRejectionResponseReturnsBusinessRejection() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.BUSINESS_REJECTION.name()).build()
         );
