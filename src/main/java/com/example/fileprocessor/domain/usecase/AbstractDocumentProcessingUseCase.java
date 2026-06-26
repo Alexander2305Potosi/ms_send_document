@@ -1,4 +1,9 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.EMPTY_CONTENT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.RETRYABLE_ERROR;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
@@ -72,7 +77,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                         .flatMap(masterHistory -> decompressAndValidate(masterHistory)
                                 .flatMap(innerFile -> uploadDocument(innerFile, doc.getId())
                                         .map(resp -> ensureFilename(resp, innerFile, doc.getIsZip()))
-                                        .flatMap(resp -> saveInnerHistoryIfZip(doc, innerFile, resp)), 1
+                                        .flatMap(resp -> saveAttemptHistory(doc, innerFile, resp)), 1
                                 )
                                 .collectList()
                                 .flatMap(responses -> concludeProcessing(doc, masterHistory, responses, traceId))
@@ -102,8 +107,8 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .switchIfEmpty(Flux.defer(() -> {
                     if (Boolean.TRUE.equals(masterHistory.getIsZip())) {
                         return Flux.<DocumentHistoryDTO>error(new ProcessingException(
-                                ProcessingResultCodes.EMPTY_CONTENT.value(),
-                                ProcessingResultCodes.EMPTY_CONTENT.name()));
+                                EMPTY_CONTENT.value(),
+                                EMPTY_CONTENT.name()));
                     }
                     return Flux.<DocumentHistoryDTO>empty();
                 }))
@@ -125,10 +130,10 @@ public abstract class AbstractDocumentProcessingUseCase {
         return resp;
     }
 
-    private Mono<FileUploadResponse> saveInnerHistoryIfZip(Document doc, DocumentHistoryDTO innerFile, FileUploadResponse resp) {
-        // Do not save intermediate technical retries to avoid duplicate history during retries
-        if (Boolean.TRUE.equals(doc.getIsZip()) && !resp.isTechnicalRetry()) {
-            return persistencePort.saveHistory(DocumentHistoryFactory.syncHistoryDTO(doc, innerFile, resp)).thenReturn(resp);
+    private Mono<FileUploadResponse> saveAttemptHistory(Document doc, DocumentHistoryDTO fileHistory, FileUploadResponse resp) {
+        boolean shouldSave = Boolean.TRUE.equals(doc.getIsZip()) || resp.isTechnicalRetry();
+        if (shouldSave) {
+            return persistencePort.saveHistory(DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, resp)).thenReturn(resp);
         }
         return Mono.just(resp);
     }
@@ -145,12 +150,12 @@ public abstract class AbstractDocumentProcessingUseCase {
     private Mono<FileUploadResponse> concludeProcessing(Document doc, DocumentHistoryDTO masterHistory, List<FileUploadResponse> responses, String traceId) {
         if (responses.isEmpty()) {
             return handleGlobalErrorAndConclude(
-                    new ProcessingException("No files processed", ProcessingResultCodes.EMPTY_CONTENT.name()),
+                    new ProcessingException("No files processed", EMPTY_CONTENT.name()),
                     doc, masterHistory, traceId);
         }
 
         List<FileUploadResponse> finalResponses = getFinalResponses(responses);
-        FileUploadResponse representative = finalResponses.get(0);
+        FileUploadResponse representative = finalResponses.getFirst();
         boolean hasTechnicalRetry = finalResponses.stream().anyMatch(FileUploadResponse::isTechnicalRetry);
 
         if (hasTechnicalRetry) {
@@ -194,11 +199,11 @@ public abstract class AbstractDocumentProcessingUseCase {
 
         String logPrefix;
         if (responses.stream().allMatch(FileUploadResponse::isSuccess)) {
-            logPrefix = ProcessingResultCodes.SUCCESS.name();
-        } else if (ProcessingResultCodes.PENDING.name().equals(conclusion.nextState())) {
-            logPrefix = ProcessingResultCodes.RETRYABLE_ERROR.name();
+            logPrefix = SUCCESS.name();
+        } else if (PENDING.name().equals(conclusion.nextState())) {
+            logPrefix = RETRYABLE_ERROR.name();
         } else {
-            logPrefix = ProcessingResultCodes.FAILURE.name();
+            logPrefix = FAILURE.name();
         }
 
         DocumentHistoryDTO globalHistory = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
@@ -217,13 +222,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         int currentRetryCount = doc.getRetryCountSafe();
         LOGGER.log(Level.INFO, "[TraceID: {0}] Recording technical retry audit for Document {1} (Attempt {2})",
                 new Object[] { traceId, doc.getDocumentId(), currentRetryCount });
-        if (Boolean.TRUE.equals(history.getIsZip())) {
-            return Mono.empty();
-        }
-        DocumentHistoryFactory.ProcessingConclusion conclusion = new DocumentHistoryFactory.ProcessingConclusion(
-                doc.getState(), currentRetryCount);
-        return persistencePort
-                .saveHistory(DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion));
+        return Mono.empty();
     }
 
     private Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO history) {

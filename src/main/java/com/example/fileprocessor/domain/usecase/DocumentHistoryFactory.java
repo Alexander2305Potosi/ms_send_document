@@ -1,4 +1,10 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BUSINESS_REJECTION;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
@@ -20,15 +26,15 @@ public final class DocumentHistoryFactory {
     public static ProcessingConclusion calculateNextState(int currentRetry, List<FileUploadResponse> responses) {
         ProcessingConclusion conclusion;
         if (responses.isEmpty()) {
-            conclusion = new ProcessingConclusion(ProcessingResultCodes.FAILED.name(), currentRetry);
+            conclusion = new ProcessingConclusion(FAILED.name(), currentRetry);
         } else if (responses.stream().allMatch(FileUploadResponse::isSuccess)) {
-            conclusion = new ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), currentRetry);
+            conclusion = new ProcessingConclusion(PROCESSED.name(), currentRetry);
         } else if (responses.stream().anyMatch(r -> ProcessingResultCodes.isBusinessRule(r.getSyncStatus()))) {
-            conclusion = new ProcessingConclusion(ProcessingResultCodes.BUSINESS_REJECTION.name(), currentRetry);
+            conclusion = new ProcessingConclusion(BUSINESS_REJECTION.name(), currentRetry);
         } else if (currentRetry < ProcessingResultCodes.MAX_RETRIES && responses.stream().anyMatch(r -> ProcessingResultCodes.isTransient(r.getSyncStatus()))) {
-            conclusion = new ProcessingConclusion(ProcessingResultCodes.PENDING.name(), currentRetry + 1);
+            conclusion = new ProcessingConclusion(PENDING.name(), currentRetry + 1);
         } else {
-            conclusion = new ProcessingConclusion(ProcessingResultCodes.FAILED.name(), currentRetry);
+            conclusion = new ProcessingConclusion(FAILED.name(), currentRetry);
         }
         return conclusion;
     }
@@ -76,7 +82,7 @@ public final class DocumentHistoryFactory {
             if (responses.isEmpty()) {
                 syncMessage = "";
             } else {
-                FileUploadResponse r = responses.get(0);
+                FileUploadResponse r = responses.getFirst();
                 syncMessage = r.getMessage() != null ? r.getMessage() : (r.isSuccess() ? "SUCCESS" : r.getSyncStatus());
             }
             if (traceId != null && !traceId.isBlank() && !"unknown".equals(traceId)) {
@@ -104,12 +110,12 @@ public final class DocumentHistoryFactory {
 
     public static String calculateFileState(FileUploadResponse response) {
         if (response.isSuccess()) {
-            return ProcessingResultCodes.PROCESSED.name();
+            return PROCESSED.name();
         }
         if (ProcessingResultCodes.isBusinessRule(response.getSyncStatus())) {
-            return ProcessingResultCodes.BUSINESS_REJECTION.name();
+            return BUSINESS_REJECTION.name();
         }
-        return ProcessingResultCodes.PENDING.name();
+        return PENDING.name();
     }
 
     public static String aggregateMessages(List<FileUploadResponse> responses) {
@@ -140,14 +146,14 @@ public final class DocumentHistoryFactory {
             root = root.getCause();
         }
 
-        String syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
+        String syncStatus = UNKNOWN_ERROR.name();
         String message = root.getMessage();
         String filename = null;
 
         if (root instanceof ProcessingException pe) {
             syncStatus = pe.getErrorCode() != null && !pe.getErrorCode().isBlank()
                     ? pe.getErrorCode()
-                    : ProcessingResultCodes.UNKNOWN_ERROR.name();
+                    : UNKNOWN_ERROR.name();
             message = pe.getMessage();
             filename = pe.getFilename();
         }
@@ -155,9 +161,9 @@ public final class DocumentHistoryFactory {
         String finalMsg = message != null && !message.isBlank() ? message : error.getMessage();
 
         return FileUploadResponse.builder()
-                .status(ProcessingResultCodes.FAILURE.name())
+                .status(FAILURE.name())
                 .syncStatus(syncStatus)
-                .message(finalMsg != null && !finalMsg.isBlank() ? finalMsg : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .message(finalMsg != null && !finalMsg.isBlank() ? finalMsg : UNKNOWN_ERROR.value())
                 .processedAt(Instant.now())
                 .filename(filename)
                 .success(false)
@@ -170,11 +176,11 @@ public final class DocumentHistoryFactory {
             pe = existingPe;
             if (pe.getErrorCode() == null || pe.getErrorCode().isBlank()) {
                 pe = new ProcessingException(pe.getMessage(),
-                        ProcessingResultCodes.UNKNOWN_ERROR.name(), pe.getCause());
+                        UNKNOWN_ERROR.name(), pe.getCause());
             }
         } else {
             pe = new ProcessingException(e.getMessage(),
-                    ProcessingResultCodes.UNKNOWN_ERROR.name(), e);
+                    UNKNOWN_ERROR.name(), e);
         }
         if (Boolean.TRUE.equals(masterHistory.getIsZip())) {
             pe.setFilename(innerHistory.getFilename());

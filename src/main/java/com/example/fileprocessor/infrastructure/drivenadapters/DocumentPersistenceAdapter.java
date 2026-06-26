@@ -1,4 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.IN_PROGRESS;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
@@ -26,8 +28,8 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     @Override
     public Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay) {
         String[] estados = new String[] {
-            ProcessingResultCodes.PENDING.name(),
-            ProcessingResultCodes.IN_PROGRESS.name()
+            PENDING.name(),
+            IN_PROGRESS.name()
         };
         return documentRepository.findByStatesAndUseCaseToday(estados, useCase, startOfDay);
     }
@@ -36,17 +38,17 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     public Mono<Long> lockDocumentForProcessing(Long id, int currentRetry) {
         Document doc = new Document();
         doc.setId(id);
-        doc.setState(ProcessingResultCodes.IN_PROGRESS.name());
+        doc.setState(IN_PROGRESS.name());
         doc.setRetryCount(currentRetry);
         
         return documentRepository.updateStateAndRetry(doc, 
-                ProcessingResultCodes.PENDING.name(), 
-                ProcessingResultCodes.IN_PROGRESS.name());
+                PENDING.name(), 
+                IN_PROGRESS.name());
     }
 
     @Override
     public Mono<Void> finalizeProcessingAtomically(DocumentHistoryDTO history) {
-        String initialState = ProcessingResultCodes.IN_PROGRESS.name();
+        String initialState = IN_PROGRESS.name();
         
         Document doc = Document.builder()
                 .id(history.getDocumentId())

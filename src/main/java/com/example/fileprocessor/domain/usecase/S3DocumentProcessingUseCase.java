@@ -1,4 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
 
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
@@ -39,8 +41,8 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
                 if (response.isSuccess()) {
                     return FileUploadResponse.builder()
                         .success(true)
-                        .status(ProcessingResultCodes.SUCCESS.name())
-                        .message(ProcessingResultCodes.SUCCESS.value())
+                        .status(SUCCESS.name())
+                        .message(SUCCESS.value())
                         .processedAt(Instant.now())
                         .correlationId(response.getCorrelationId())
                         .externalReference(response.getExternalReference())
@@ -51,7 +53,7 @@ public class S3DocumentProcessingUseCase extends AbstractDocumentProcessingUseCa
             .onErrorResume(e -> {
                 LOGGER.log(Level.SEVERE, "S3 processing failed for docId {0}: {1}", new Object[]{docId, e.getMessage()});
                 return Mono.just(FileUploadResponse.builder()
-                    .status(ProcessingResultCodes.FAILURE.name())
+                    .status(FAILURE.name())
                     .success(false)
                     .message(e.getMessage())
                     .processedAt(Instant.now())

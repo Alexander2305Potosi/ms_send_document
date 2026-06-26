@@ -1,34 +1,48 @@
 package com.example.fileprocessor.domain.util;
 
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.Test;
-
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MimeTypeUtilTest {
 
-    @ParameterizedTest
-    @CsvSource({
-        "file.pdf, application/pdf",
-        "FILE.PDF, application/pdf",
-        "data.csv, text/csv",
-        "config.xml, application/xml",
-        "doc.zip, application/zip",
-        "image.jpg, image/jpeg",
-        "photo.jpeg, image/jpeg",
-        "pic.png, image/png",
-        "report.xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "letter.docx, application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "unknown.ext, application/octet-stream",
-        "'', application/octet-stream"
-    })
-    void getMimeType_variousExtensions_returnsCorrectType(String filename, String expected) {
-        assertEquals(expected, MimeTypeUtil.getMimeType(filename));
+    @Test
+    void getMimeTypeWithNullOrBlankReturnsOctetStream() {
+        assertEquals("application/octet-stream", MimeTypeUtil.getMimeType(null));
+        assertEquals("application/octet-stream", MimeTypeUtil.getMimeType(""));
+        assertEquals("application/octet-stream", MimeTypeUtil.getMimeType("   "));
     }
 
     @Test
-    void getMimeType_nullInput_returnsOctetStream() {
-        assertEquals("application/octet-stream", MimeTypeUtil.getMimeType(null));
+    void getMimeTypeWithVariousExtensionsReturnsCorrectMime() {
+        assertEquals("application/pdf", MimeTypeUtil.getMimeType("test.pdf"));
+        assertEquals("application/pdf", MimeTypeUtil.getMimeType("TEST.PDF"));
+        assertEquals("text/csv", MimeTypeUtil.getMimeType("test.csv"));
+        assertEquals("application/xml", MimeTypeUtil.getMimeType("test.xml"));
+        assertEquals("application/json", MimeTypeUtil.getMimeType("test.json"));
+        assertEquals("text/plain", MimeTypeUtil.getMimeType("test.txt"));
+        assertEquals("application/vnd.openxmlformats-officedocument.wordprocessingml.document", MimeTypeUtil.getMimeType("test.docx"));
+        assertEquals("application/msword", MimeTypeUtil.getMimeType("test.doc"));
+        assertEquals("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", MimeTypeUtil.getMimeType("test.xlsx"));
+        assertEquals("application/vnd.ms-excel", MimeTypeUtil.getMimeType("test.xls"));
+        assertEquals("application/zip", MimeTypeUtil.getMimeType("test.zip"));
+        assertEquals("image/png", MimeTypeUtil.getMimeType("test.png"));
+        assertEquals("image/jpeg", MimeTypeUtil.getMimeType("test.jpg"));
+        assertEquals("image/jpeg", MimeTypeUtil.getMimeType("test.jpeg"));
+    }
+
+    @Test
+    void getMimeTypeWithUnknownExtensionReturnsOctetStream() {
+        assertEquals("application/octet-stream", MimeTypeUtil.getMimeType("test.unknown"));
+    }
+
+    @Test
+    void privateConstructorCanBeCalledViaReflection() throws Exception {
+        Constructor<MimeTypeUtil> constructor = MimeTypeUtil.class.getDeclaredConstructor();
+        assertTrue(Modifier.isPrivate(constructor.getModifiers()));
+        constructor.setAccessible(true);
+        MimeTypeUtil instance = constructor.newInstance();
+        assertNotNull(instance);
     }
 }

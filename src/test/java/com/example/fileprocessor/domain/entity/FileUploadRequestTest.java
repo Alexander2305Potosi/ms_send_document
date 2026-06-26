@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class FileUploadRequestTest {
 
     @Test
-    void builder_createsValidRequest() {
+    void builderCreatesValidRequest() {
         FileUploadRequest request = FileUploadRequest.builder()
             .documentId("doc-1")
             .content(new byte[]{1, 2, 3})
@@ -24,7 +24,7 @@ class FileUploadRequestTest {
     }
 
     @Test
-    void content_whenNull_returnsNull() {
+    void contentWhenNullReturnsNull() {
         FileUploadRequest request = FileUploadRequest.builder()
             .documentId("doc-1")
             .filename("test.pdf")

@@ -1,4 +1,5 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOAP_ERROR;
 
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
@@ -51,7 +52,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe construir el envelope correctamente")
-    void buildEnvelope_withSimpleRequest_returnsXml() {
+    void buildEnvelopeWithSimpleRequestReturnsXml() {
         FileUploadRequest request = FileUploadRequest.builder()
             .filename("test.pdf")
             .content("hello".getBytes())
@@ -68,7 +69,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe escapar caracteres especiales en el XML")
-    void buildEnvelope_withSpecialChars_escapesThem() {
+    void buildEnvelopeWithSpecialCharsEscapesThem() {
         FileUploadRequest request = FileUploadRequest.builder()
             .filename("test & demo < >.pdf")
             .content("".getBytes())
@@ -83,7 +84,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe parsear una respuesta exitosa")
-    void parseResponse_withSuccessXml_returnsResponse() {
+    void parseResponseWithSuccessXmlReturnsResponse() {
         String xml = """
             <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
                <S:Body>
@@ -107,7 +108,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe parsear la respuesta exitosa real")
-    void parseResponse_withRealSuccessXml_returnsResponse() {
+    void parseResponseWithRealSuccessXmlReturnsResponse() {
         String xml = """
             <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
                <S:Header>
@@ -168,7 +169,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe manejar un Fault sin detalle usando faultstring")
-    void parseResponse_withFaultNoDetail_returnsStandardMessage() {
+    void parseResponseWithFaultNoDetailReturnsStandardMessage() {
         String xml = """
             <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
                <S:Body>
@@ -184,12 +185,12 @@ class SoapMapperTest {
 
         assertFalse(response.isSuccess());
         assertEquals("Invalid Request", response.getMessage());
-        assertEquals(ProcessingResultCodes.SOAP_ERROR.name(), response.getCorrelationId());
+        assertEquals(SOAP_ERROR.name(), response.getCorrelationId());
     }
 
     @Test
     @DisplayName("Debe fallar si el XML está mal formado")
-    void parseResponse_withMalformedXml_throwsException() {
+    void parseResponseWithMalformedXmlThrowsException() {
         String xml = "<S:Envelope> BODY UNCLOSED";
         
         assertThrows(ProcessingException.class, () -> 
@@ -199,7 +200,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe generar el bloque de metadatos estáticos correctamente")
-    void buildEnvelope_withMetadata_generatesFixedMetadataBlock() {
+    void buildEnvelopeWithMetadataGeneratesFixedMetadataBlock() {
         FileUploadRequest request = FileUploadRequest.builder().filename("test.pdf").content("".getBytes()).build();
 
         String xml = soapMapper.buildEnvelope(request, "trace-meta");
@@ -210,7 +211,7 @@ class SoapMapperTest {
     }
     @Test
     @DisplayName("Debe mappear manualmente si JAXB falla pero el elemento es el correcto")
-    void parseResponse_withManualMapping_returnsResponse() {
+    void parseResponseWithManualMappingReturnsResponse() {
         String xml = """
             <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
                <S:Body>
@@ -236,7 +237,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe manejar respuestas con cuerpo inesperado")
-    void parseResponse_withUnexpectedBody_throwsException() {
+    void parseResponseWithUnexpectedBodyThrowsException() {
         String xml = """
             <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
                <S:Body>
@@ -252,7 +253,7 @@ class SoapMapperTest {
 
     @Test
     @DisplayName("Debe manejar errores de inicialización del template")
-    void init_withInvalidResource_throwsRuntimeException() {
+    void initWithInvalidResourceThrowsRuntimeException() {
         when(resourceLoader.getResource(anyString())).thenReturn(null);
         SoapMapper mapper = new SoapMapper(props, resourceLoader);
         

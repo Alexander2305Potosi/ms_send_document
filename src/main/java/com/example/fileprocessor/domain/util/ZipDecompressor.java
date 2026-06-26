@@ -1,4 +1,5 @@
 package com.example.fileprocessor.domain.util;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DECOMPRESSION_ERROR;
 
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -45,7 +46,7 @@ public final class ZipDecompressor {
         } catch (IOException e) {
             return Flux.error(new ProcessingException(
                 "Failed to decompress ZIP '" + zipHistory.getFilename() + "': " + e.getMessage(),
-                ProcessingResultCodes.DECOMPRESSION_ERROR.name(),
+                DECOMPRESSION_ERROR.name(),
                 e));
         }
     }
@@ -77,7 +78,7 @@ public final class ZipDecompressor {
             totalEntries++;
             
             if (totalEntries > MAX_ENTRIES) {
-                throw new ProcessingException("Too many entries in ZIP (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+                throw new ProcessingException("Too many entries in ZIP (Zip Bomb protection)", DECOMPRESSION_ERROR.name());
             }
 
             if (entry.isDirectory() || entry.getName() == null || entry.getName().isBlank()) {
@@ -86,7 +87,7 @@ public final class ZipDecompressor {
 
             var entryName = entry.getName();
             if (entryName.contains("..")) {
-                throw new ProcessingException("Zip Slip vulnerability detected: " + entryName, ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+                throw new ProcessingException("Zip Slip vulnerability detected: " + entryName, DECOMPRESSION_ERROR.name());
             }
 
             var decompressed = readEntryContent(zipFile, entry);
@@ -99,7 +100,7 @@ public final class ZipDecompressor {
         try (var is = zipFile.getInputStream(entry)) {
             var decompressed = is.readNBytes((int) MAX_FILE_SIZE + 1);
             if (decompressed.length > MAX_FILE_SIZE) {
-                throw new ProcessingException("ZIP entry exceeds maximum allowed size (Zip Bomb protection)", ProcessingResultCodes.DECOMPRESSION_ERROR.name());
+                throw new ProcessingException("ZIP entry exceeds maximum allowed size (Zip Bomb protection)", DECOMPRESSION_ERROR.name());
             }
             return decompressed;
         }

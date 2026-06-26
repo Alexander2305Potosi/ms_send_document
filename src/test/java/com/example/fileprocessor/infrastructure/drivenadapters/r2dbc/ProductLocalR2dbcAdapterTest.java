@@ -39,7 +39,7 @@ class ProductLocalR2dbcAdapterTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void findBranchByProductId_returnsBranchName() {
+    void findBranchByProductIdReturnsBranchName() {
         when(databaseClient.sql(query)).thenReturn(executeSpec);
         when(executeSpec.bind(eq("productId"), eq("p1"))).thenReturn(executeSpec);
         when(executeSpec.map(any(BiFunction.class))).thenReturn(fetchSpec);
@@ -55,7 +55,7 @@ class ProductLocalR2dbcAdapterTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void findBranchByProductId_whenError_returnsEmpty() {
+    void findBranchByProductIdWhenErrorReturnsEmpty() {
         when(databaseClient.sql(query)).thenReturn(executeSpec);
         when(executeSpec.bind(eq("productId"), eq("p2"))).thenReturn(executeSpec);
         when(executeSpec.map(any(BiFunction.class))).thenReturn(fetchSpec);

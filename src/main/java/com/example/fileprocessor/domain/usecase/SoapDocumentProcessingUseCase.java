@@ -1,4 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
@@ -51,8 +53,8 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                             new Object[] { docId, e.getMessage() });
 
                     return Flux.just(FileUploadResponse.builder()
-                            .status(ProcessingResultCodes.FAILURE.name())
-                            .syncStatus(ProcessingResultCodes.UNKNOWN_ERROR.name())
+                            .status(FAILURE.name())
+                            .syncStatus(UNKNOWN_ERROR.name())
                             .message(e.getMessage())
                             .success(false)
                             .filename(history.getFilename())

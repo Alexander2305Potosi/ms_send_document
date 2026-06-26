@@ -1,4 +1,8 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.ERR_DUPLICATED_DOC;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.NO_SUCURSAL;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
@@ -44,10 +48,10 @@ public class SyncDocumentsUseCase {
                 .switchIfEmpty(Mono.defer(() -> {
                     Document errorDoc = Document.builder()
                             .productId(product.getProductId())
-                            .documentId(ProcessingResultCodes.NO_SUCURSAL.name())
-                            .name(ProcessingResultCodes.NO_SUCURSAL.name())
-                            .state(ProcessingResultCodes.FAILED.name())
-                            .syncMessage(ProcessingResultCodes.NO_SUCURSAL.value())
+                            .documentId(NO_SUCURSAL.name())
+                            .name(NO_SUCURSAL.name())
+                            .state(FAILED.name())
+                            .syncMessage(NO_SUCURSAL.value())
                             .useCase(useCase)
                             .build();
                     return documentRepository.save(errorDoc).then(Mono.empty());
@@ -64,8 +68,8 @@ public class SyncDocumentsUseCase {
                                             .originFolder(product.getOriginFolder())
                                             .originCountry(product.getOriginCountry())
                                             .sucursal(sucursal)
-                                            .state(exists ? ProcessingResultCodes.ERR_DUPLICATED_DOC.name() : ProcessingResultCodes.PENDING.name())
-                                            .syncMessage(exists ? ProcessingResultCodes.ERR_DUPLICATED_DOC.value() : null)
+                                            .state(exists ? ERR_DUPLICATED_DOC.name() : PENDING.name())
+                                            .syncMessage(exists ? ERR_DUPLICATED_DOC.value() : null)
                                             .build();
                                     return documentRepository.save(docToSave);
                                 })))

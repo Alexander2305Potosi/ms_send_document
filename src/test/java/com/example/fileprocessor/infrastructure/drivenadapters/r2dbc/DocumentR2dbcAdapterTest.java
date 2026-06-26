@@ -35,7 +35,7 @@ class DocumentR2dbcAdapterTest {
     }
 
     @Test
-    void save_delegatesToSpringDataRepository() {
+    void saveDelegatesToSpringDataRepository() {
         Document domain = Document.builder().id(1L).name("test.pdf").build();
         DocumentEntity entity = DocumentEntity.builder().id(1L).name("test.pdf").build();
 
@@ -50,7 +50,7 @@ class DocumentR2dbcAdapterTest {
     }
 
     @Test
-    void findByStateAndUseCaseToday_delegatesToSpringDataRepository() {
+    void findByStateAndUseCaseTodayDelegatesToSpringDataRepository() {
         LocalDateTime startOfDay = LocalDateTime.of(2026, 5, 9, 0, 0);
         DocumentEntity entity = DocumentEntity.builder().id(1L).state("PENDING").useCase("SYNC").build();
 
@@ -69,7 +69,7 @@ class DocumentR2dbcAdapterTest {
     }
 
     @Test
-    void updateStateAndRetry_delegatesToSpringDataRepository() {
+    void updateStateAndRetryDelegatesToSpringDataRepository() {
         Document domain = Document.builder()
             .id(1L)
             .state("PROCESSED")
@@ -97,7 +97,7 @@ class DocumentR2dbcAdapterTest {
     }
 
     @Test
-    void existsByProductIdAndDocumentId_delegatesToSpringDataRepository() {
+    void existsByProductIdAndDocumentIdDelegatesToSpringDataRepository() {
         when(springDataRepository.existsByProductIdAndDocumentId("PROD-1", "DOC-1"))
             .thenReturn(Mono.just(true));
 

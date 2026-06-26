@@ -1,4 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
@@ -129,7 +131,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         } catch (Exception e) {
             throw new ProcessingException(
                     "Base64 decode failed for document: " + json.getDocumentId(),
-                    ProcessingResultCodes.INVALID_BASE64.name(), json.getDocumentId());
+                    INVALID_BASE64.name(), json.getDocumentId());
         }
     }
 
@@ -144,7 +146,7 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         }
         String code = AdapterErrorMapper.resolveErrorCode(error);
         return new ProcessingException(
-                error.getMessage() != null ? error.getMessage() : ProcessingResultCodes.UNKNOWN_ERROR.value(),
+                error.getMessage() != null ? error.getMessage() : UNKNOWN_ERROR.value(),
                 code,
                 traceId);
     }

@@ -1,4 +1,6 @@
 package com.example.fileprocessor.domain.service;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PATTERN_MISMATCH;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SIZE_EXCEEDED;
 
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -38,13 +40,13 @@ public class RulesBussinesService implements RulesBussinesGateway {
                 return Mono.error(new ProcessingException(
                     String.format("Size %,d bytes exceeds max %,d bytes for file '%s'",
                         history.getSize(), maxFileSizeBytes, history.getFilename()),
-                    ProcessingResultCodes.SIZE_EXCEEDED.name()));
+                    SIZE_EXCEEDED.name()));
             }
             if (filenamePattern != null && history.getFilename() != null && !filenamePattern.matcher(history.getFilename()).matches()) {
                 return Mono.error(new ProcessingException(
                     String.format("Filename '%s' does not match pattern '%s'",
                         history.getFilename(), filenamePattern.pattern()),
-                    ProcessingResultCodes.PATTERN_MISMATCH.name()));
+                    PATTERN_MISMATCH.name()));
             }
             return Mono.just(history);
         });

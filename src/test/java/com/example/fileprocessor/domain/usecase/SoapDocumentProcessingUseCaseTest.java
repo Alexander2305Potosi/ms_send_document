@@ -46,7 +46,7 @@ class SoapDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withSoap_success() {
+    void executePendingDocumentsWithSoapSuccess() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")
@@ -95,7 +95,7 @@ class SoapDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void uploadDocument_whenSoapGatewayThrowsException_returnsFailureResponse() {
+    void uploadDocumentWhenSoapGatewayThrowsExceptionReturnsFailureResponse() {
         DocumentHistoryDTO history = DocumentHistoryDTO.builder()
                 .filename("test.pdf")
                 .build();
@@ -119,7 +119,7 @@ class SoapDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void uploadDocument_whenHomologationRepositoryThrowsException_returnsFailureResponse() {
+    void uploadDocumentWhenHomologationRepositoryThrowsExceptionReturnsFailureResponse() {
         DocumentHistoryDTO history = DocumentHistoryDTO.builder()
                 .filename("test.pdf")
                 .build();

@@ -1,4 +1,13 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BUSINESS_REJECTION;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PATTERN_MISMATCH;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_NOT_FOUND;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
@@ -18,7 +27,7 @@ class DocumentHistoryFactoryTest {
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(1, Collections.emptyList());
 
-        assertEquals(ProcessingResultCodes.FAILED.name(), conclusion.nextState());
+        assertEquals(FAILED.name(), conclusion.nextState());
         assertEquals(1, conclusion.nextRetryCount());
     }
 
@@ -31,7 +40,7 @@ class DocumentHistoryFactoryTest {
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(1, responses);
 
-        assertEquals(ProcessingResultCodes.PROCESSED.name(), conclusion.nextState());
+        assertEquals(PROCESSED.name(), conclusion.nextState());
         assertEquals(1, conclusion.nextRetryCount());
     }
 
@@ -39,12 +48,12 @@ class DocumentHistoryFactoryTest {
     void calculateNextStateWhenAnyResponseIsBusinessRuleReturnsBusinessRejection() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build(),
-                FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.PATTERN_MISMATCH.name()).build()
+                FileUploadResponse.builder().success(false).syncStatus(PATTERN_MISMATCH.name()).build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(1, responses);
 
-        assertEquals(ProcessingResultCodes.BUSINESS_REJECTION.name(), conclusion.nextState());
+        assertEquals(BUSINESS_REJECTION.name(), conclusion.nextState());
         assertEquals(1, conclusion.nextRetryCount());
     }
 
@@ -52,12 +61,12 @@ class DocumentHistoryFactoryTest {
     void calculateNextStateWhenHasTransientAndUnderMaxRetriesReturnsPendingAndIncrementsRetry() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build(),
-                FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name()).build()
+                FileUploadResponse.builder().success(false).syncStatus(GATEWAY_TIMEOUT.name()).build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(1, responses);
 
-        assertEquals(ProcessingResultCodes.PENDING.name(), conclusion.nextState());
+        assertEquals(PENDING.name(), conclusion.nextState());
         assertEquals(2, conclusion.nextRetryCount());
     }
 
@@ -65,24 +74,24 @@ class DocumentHistoryFactoryTest {
     void calculateNextStateWhenHasTransientAndAtMaxRetriesReturnsFailedWithoutIncrement() {
         List<FileUploadResponse> responses = List.of(
                 FileUploadResponse.builder().success(true).build(),
-                FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name()).build()
+                FileUploadResponse.builder().success(false).syncStatus(GATEWAY_TIMEOUT.name()).build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(3, responses);
 
-        assertEquals(ProcessingResultCodes.FAILED.name(), conclusion.nextState());
+        assertEquals(FAILED.name(), conclusion.nextState());
         assertEquals(3, conclusion.nextRetryCount());
     }
 
     @Test
     void calculateNextStateWhenHasNonTransientNonBusinessErrorReturnsFailed() {
         List<FileUploadResponse> responses = List.of(
-                FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.SOURCE_NOT_FOUND.name()).build()
+                FileUploadResponse.builder().success(false).syncStatus(SOURCE_NOT_FOUND.name()).build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(1, responses);
 
-        assertEquals(ProcessingResultCodes.FAILED.name(), conclusion.nextState());
+        assertEquals(FAILED.name(), conclusion.nextState());
         assertEquals(1, conclusion.nextRetryCount());
     }
 
@@ -108,7 +117,7 @@ class DocumentHistoryFactoryTest {
         DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
 
         assertEquals(123L, result.getDocumentId());
-        assertEquals(ProcessingResultCodes.PROCESSED.name(), result.getState());
+        assertEquals(PROCESSED.name(), result.getState());
         assertEquals("SOAP", result.getUseCase());
         assertEquals(3, result.getRetryCount());         // Uses response.attemptCount (3)
         assertEquals(2, result.getBusinessRetryCount()); // Uses doc.retryCount (2)
@@ -157,12 +166,12 @@ class DocumentHistoryFactoryTest {
                 FileUploadResponse.builder().filename("f2.xml").success(false).syncStatus("GATEWAY_TIMEOUT").build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
-                new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PENDING.name(), 2);
+                new DocumentHistoryFactory.ProcessingConclusion(PENDING.name(), 2);
 
         DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
 
         assertEquals(123L, result.getDocumentId());
-        assertEquals(ProcessingResultCodes.PENDING.name(), result.getState());
+        assertEquals(PENDING.name(), result.getState());
         assertEquals("S3", result.getUseCase());
         assertEquals(1, result.getRetryCount());
         assertEquals(2, result.getBusinessRetryCount());
@@ -188,14 +197,14 @@ class DocumentHistoryFactoryTest {
 
     @Test
     void calculateFileStateReturnsCorrectStates() {
-        assertEquals(ProcessingResultCodes.PROCESSED.name(),
+        assertEquals(PROCESSED.name(),
                 DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(true).build()));
 
-        assertEquals(ProcessingResultCodes.BUSINESS_REJECTION.name(),
-                DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.PATTERN_MISMATCH.name()).build()));
+        assertEquals(BUSINESS_REJECTION.name(),
+                DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(false).syncStatus(PATTERN_MISMATCH.name()).build()));
 
-        assertEquals(ProcessingResultCodes.PENDING.name(),
-                DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.UNKNOWN_ERROR.name()).build()));
+        assertEquals(PENDING.name(),
+                DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(false).syncStatus(UNKNOWN_ERROR.name()).build()));
     }
 
     @Test
@@ -213,7 +222,7 @@ class DocumentHistoryFactoryTest {
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
 
         assertFalse(response.isSuccess());
-        assertEquals(ProcessingResultCodes.FAILURE.name(), response.getStatus());
+        assertEquals(FAILURE.name(), response.getStatus());
         assertEquals("SOME_ERROR_CODE", response.getSyncStatus());
         assertEquals("Error occurred", response.getMessage());
     }
@@ -224,7 +233,7 @@ class DocumentHistoryFactoryTest {
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
 
         assertFalse(response.isSuccess());
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
     }
 
     @Test
@@ -233,7 +242,7 @@ class DocumentHistoryFactoryTest {
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
 
         assertFalse(response.isSuccess());
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
     }
 
     @Test
@@ -265,8 +274,8 @@ class DocumentHistoryFactoryTest {
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
 
         assertFalse(response.isSuccess());
-        assertEquals(ProcessingResultCodes.FAILURE.name(), response.getStatus());
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals(FAILURE.name(), response.getStatus());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
         assertEquals("Generic exception", response.getMessage());
     }
 
@@ -276,7 +285,7 @@ class DocumentHistoryFactoryTest {
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
 
         assertFalse(response.isSuccess());
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.value(), response.getMessage());
+        assertEquals(UNKNOWN_ERROR.value(), response.getMessage());
     }
 
     @Test
@@ -295,7 +304,7 @@ class DocumentHistoryFactoryTest {
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
 
         ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, null);
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), result.getErrorCode());
+        assertEquals(UNKNOWN_ERROR.name(), result.getErrorCode());
     }
 
     @Test
@@ -304,7 +313,7 @@ class DocumentHistoryFactoryTest {
         DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
 
         ProcessingException result = DocumentHistoryFactory.mapValidationError(ex, master, null);
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), result.getErrorCode());
+        assertEquals(UNKNOWN_ERROR.name(), result.getErrorCode());
         assertEquals("Invalid arg", result.getMessage());
         assertEquals(ex, result.getCause());
     }
@@ -327,7 +336,7 @@ class DocumentHistoryFactoryTest {
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
 
         assertFalse(response.isSuccess());
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
         assertEquals("PKIX path building failed", response.getMessage());
     }
 
@@ -339,7 +348,7 @@ class DocumentHistoryFactoryTest {
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
 
         assertFalse(response.isSuccess());
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
         assertEquals("Request failed due to SSL handshake issue", response.getMessage());
     }
 
@@ -425,7 +434,7 @@ class DocumentHistoryFactoryTest {
                 FileUploadResponse.builder().filename("f1.xml").success(true).traceId("trace-abc").build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
-                new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
+                new DocumentHistoryFactory.ProcessingConclusion(PROCESSED.name(), 1);
         DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
         assertTrue(result.getSyncMessage().contains("[TraceID: trace-abc]"));
     }
@@ -438,7 +447,7 @@ class DocumentHistoryFactoryTest {
                 FileUploadResponse.builder().filename("f1.xml").success(true).traceId("   ").build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
-                new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
+                new DocumentHistoryFactory.ProcessingConclusion(PROCESSED.name(), 1);
         DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
         assertEquals("SUCCESS", result.getSyncMessage());
     }
@@ -451,7 +460,7 @@ class DocumentHistoryFactoryTest {
                 FileUploadResponse.builder().filename("f1.xml").success(true).traceId("unknown").build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
-                new DocumentHistoryFactory.ProcessingConclusion(ProcessingResultCodes.PROCESSED.name(), 1);
+                new DocumentHistoryFactory.ProcessingConclusion(PROCESSED.name(), 1);
         DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
         assertEquals("SUCCESS", result.getSyncMessage());
     }
@@ -474,7 +483,7 @@ class DocumentHistoryFactoryTest {
     void handleGlobalErrorWithBlankMessageReturnsUnknownErrorValue() {
         ProcessingException pe = new ProcessingException("  ", "CODE");
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
-        assertEquals(ProcessingResultCodes.UNKNOWN_ERROR.value(), response.getMessage());
+        assertEquals(UNKNOWN_ERROR.value(), response.getMessage());
     }
 
     @Test
@@ -498,12 +507,12 @@ class DocumentHistoryFactoryTest {
     @Test
     void calculateNextStateWithBusinessRejectionResponseReturnsBusinessRejection() {
         List<FileUploadResponse> responses = List.of(
-                FileUploadResponse.builder().success(false).syncStatus(ProcessingResultCodes.BUSINESS_REJECTION.name()).build()
+                FileUploadResponse.builder().success(false).syncStatus(BUSINESS_REJECTION.name()).build()
         );
         DocumentHistoryFactory.ProcessingConclusion conclusion =
                 DocumentHistoryFactory.calculateNextState(1, responses);
 
-        assertEquals(ProcessingResultCodes.BUSINESS_REJECTION.name(), conclusion.nextState());
+        assertEquals(BUSINESS_REJECTION.name(), conclusion.nextState());
         assertEquals(1, conclusion.nextRetryCount());
     }
 }

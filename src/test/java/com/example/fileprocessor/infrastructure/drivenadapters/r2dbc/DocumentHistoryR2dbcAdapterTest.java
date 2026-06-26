@@ -1,4 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
@@ -31,10 +33,10 @@ class DocumentHistoryR2dbcAdapterTest {
     private DocumentHistoryR2dbcAdapter adapter;
 
     @Test
-    void saveHistory_withSuccessfulResponse_savesCorrectEntity() {
+    void saveHistoryWithSuccessfulResponseSavesCorrectEntity() {
         DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
             .documentId(1L)
-            .state(ProcessingResultCodes.PROCESSED.name())
+            .state(PROCESSED.name())
             .useCase("SOAP")
             .retryCount(1)
             .filename("test.pdf")
@@ -55,7 +57,7 @@ class DocumentHistoryR2dbcAdapterTest {
 
         DocumentHistoryEntity saved = captor.getValue();
         assertEquals(1L, saved.getDocumentId());
-        assertEquals(ProcessingResultCodes.SUCCESS.name(), saved.getResult());
+        assertEquals(SUCCESS.name(), saved.getResult());
         assertEquals(1, saved.getRetry());
         assertEquals("SOAP", saved.getUseCase());
         assertEquals("test.pdf", saved.getFilename());

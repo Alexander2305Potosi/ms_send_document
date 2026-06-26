@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SoapPropertiesTest {
 
     @Test
-    void soapProperties_recordCreatesValidProperties() {
+    void soapPropertiesRecordCreatesValidProperties() {
         SoapProperties props = new SoapProperties(
                 "http://localhost:9000/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
                 "token", "dest", "d-ns", "op", "action", "CLASS-1",

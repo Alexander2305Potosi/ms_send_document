@@ -1,4 +1,12 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.aws;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DEST_UNAUTHORIZED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.EMPTY_CONTENT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SERVICE_UNAVAILABLE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_NOT_FOUND;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
@@ -46,10 +54,10 @@ public class S3GatewayAdapter implements S3Gateway {
             if (content == null || content.length == 0) {
                 LOGGER.log(Level.WARNING, "S3 upload skipped for documentId={0} - content is null or empty", new Object[]{request.getDocumentId()});
                 return Mono.just(FileUploadResponse.builder()
-                    .status(ProcessingResultCodes.FAILURE.name())
-                    .syncStatus(ProcessingResultCodes.EMPTY_CONTENT.name())
+                    .status(FAILURE.name())
+                    .syncStatus(EMPTY_CONTENT.name())
                     .traceId(traceId)
-                    .message(ProcessingResultCodes.EMPTY_CONTENT.value())
+                    .message(EMPTY_CONTENT.value())
                     .processedAt(Instant.now())
                     .success(false)
                     .build());
@@ -84,7 +92,7 @@ public class S3GatewayAdapter implements S3Gateway {
                 .map(completed -> {
                     LOGGER.log(Level.INFO, "S3 upload successful: {0} -> {1}/{2}", new Object[]{request.getFilename(), s3Properties.bucketName(), key});
                     return FileUploadResponse.builder()
-                        .status(ProcessingResultCodes.SUCCESS.name())
+                        .status(SUCCESS.name())
                         .message("Uploaded to S3: " + s3Properties.bucketName() + "/" + key)
                         .correlationId(completed.eTag())
                         .traceId(traceId)
@@ -107,7 +115,7 @@ public class S3GatewayAdapter implements S3Gateway {
 
         String syncStatus = categorizeS3Error(actualError);
         return Mono.just(FileUploadResponse.builder()
-            .status(ProcessingResultCodes.FAILURE.name())
+            .status(FAILURE.name())
             .syncStatus(syncStatus)
             .traceId(traceId)
             .message(actualError.getMessage())
@@ -117,17 +125,17 @@ public class S3GatewayAdapter implements S3Gateway {
     }
 
     String categorizeS3Error(Throwable error) {
-        if (error instanceof TimeoutException) return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+        if (error instanceof TimeoutException) return GATEWAY_TIMEOUT.name();
         
         if (error instanceof software.amazon.awssdk.services.s3.model.S3Exception e) {
             Integer statusCode = e.statusCode();
             if (statusCode != null) {
-                if (statusCode == 403) return ProcessingResultCodes.DEST_UNAUTHORIZED.name();
-                if (statusCode == 404) return ProcessingResultCodes.SOURCE_NOT_FOUND.name();
-                if (statusCode == 503) return ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
+                if (statusCode == 403) return DEST_UNAUTHORIZED.name();
+                if (statusCode == 404) return SOURCE_NOT_FOUND.name();
+                if (statusCode == 503) return SERVICE_UNAVAILABLE.name();
             }
         }
-        return ProcessingResultCodes.UNKNOWN_ERROR.name();
+        return UNKNOWN_ERROR.name();
     }
 
     boolean isRetryableException(Throwable throwable) {

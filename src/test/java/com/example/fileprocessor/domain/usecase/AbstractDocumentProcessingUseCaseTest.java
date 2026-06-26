@@ -1,4 +1,11 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BUSINESS_REJECTION;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.EMPTY_CONTENT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PATTERN_MISMATCH;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
@@ -62,13 +69,13 @@ class AbstractDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withTechnicalError_incrementsRetryCount() {
+    void executePendingDocumentsWithTechnicalErrorIncrementsRetryCount() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
-            .state(ProcessingResultCodes.PENDING.name())
+            .state(PENDING.name())
             .retryCount(0)
             .isZip(false)
             .build();
@@ -77,30 +84,30 @@ class AbstractDocumentProcessingUseCaseTest {
             .thenReturn(Flux.just(doc));
         
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.error(new ProcessingException("Timeout error", ProcessingResultCodes.GATEWAY_TIMEOUT.name(), (Throwable) null)));
+            .thenReturn(Mono.error(new ProcessingException("Timeout error", GATEWAY_TIMEOUT.name(), (Throwable) null)));
 
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-tech-error")))
             .assertNext(result -> {
-                assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getSyncStatus());
+                assertEquals(GATEWAY_TIMEOUT.name(), result.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(h -> ProcessingResultCodes.PENDING.name().equals(h.getState()) && h.getRetryCount() == 0 
-                    && h.getSyncStatus().equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name()))
+            argThat(h -> PENDING.name().equals(h.getState()) && h.getRetryCount() == 0 
+                    && h.getSyncStatus().equals(GATEWAY_TIMEOUT.name()))
         );
     }
 
     @Test
-    void executePendingDocuments_withMaxRetriesReached_marksAsFailed() {
+    void executePendingDocumentsWithMaxRetriesReachedMarksAsFailed() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
-            .state(ProcessingResultCodes.PENDING.name())
+            .state(PENDING.name())
             .retryCount(3) 
             .isZip(false)
             .build();
@@ -108,7 +115,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(persistencePort.findPendingDocumentsToday(eq("TEST"), any()))
             .thenReturn(Flux.just(doc));
         when(productRestGateway.getDocument(anyString(), anyString()))
-            .thenReturn(Mono.error(new ProcessingException("Final timeout", ProcessingResultCodes.GATEWAY_TIMEOUT.name(), (Throwable) null)));
+            .thenReturn(Mono.error(new ProcessingException("Final timeout", GATEWAY_TIMEOUT.name(), (Throwable) null)));
 
         StepVerifier.create(useCase.executePendingDocuments()
                 .contextWrite(ctx -> ctx.put("message-id", "test-trace-max-retries")))
@@ -117,18 +124,18 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(10));
 
         verify(persistencePort).finalizeProcessingAtomically(
-            argThat(h -> ProcessingResultCodes.FAILED.name().equals(h.getState()) && h.getRetryCount() == 3)
+            argThat(h -> FAILED.name().equals(h.getState()) && h.getRetryCount() == 3)
         );
     }
 
     @Test
-    void executePendingDocuments_withSuccess_marksAsProcessed() {
+    void executePendingDocumentsWithSuccessMarksAsProcessed() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")
             .productId("prod-1")
             .name("test.pdf")
-            .state(ProcessingResultCodes.PENDING.name())
+            .state(PENDING.name())
             .retryCount(0)
             .isZip(false)
             .build();
@@ -160,12 +167,12 @@ class AbstractDocumentProcessingUseCaseTest {
         
         verify(persistencePort).finalizeProcessingAtomically(historyCaptor.capture());
         
-        assertEquals(ProcessingResultCodes.PROCESSED.name(), historyCaptor.getValue().getState());
+        assertEquals(PROCESSED.name(), historyCaptor.getValue().getState());
         assertNotNull(historyCaptor.getValue().getCompletedAt());
     }
 
     @Test
-    void executePendingDocuments_withMultipleDocuments_processesAllSequentially() {
+    void executePendingDocumentsWithMultipleDocumentsProcessesAllSequentially() {
         Document doc1 = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").isZip(false).build();
         Document doc2 = Document.builder().id(2L).documentId("doc-2").productId("p2").state("PENDING").isZip(false).build();
 
@@ -187,7 +194,7 @@ class AbstractDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withTechnicalRetry_savesAuditOnly() {
+    void executePendingDocumentsWithTechnicalRetrySavesAuditOnly() {
         Document doc = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").isZip(false).retryCount(0).build();
         
         when(persistencePort.findPendingDocumentsToday(anyString(), any()))
@@ -207,7 +214,7 @@ class AbstractDocumentProcessingUseCaseTest {
                         .success(false)
                         .technicalRetry(true)
                         .attemptCount(1)
-                        .syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name())
+                        .syncStatus(GATEWAY_TIMEOUT.name())
                         .message("Technical error")
                         .build());
             }
@@ -224,7 +231,7 @@ class AbstractDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withValidationError_marksAsFailed() {
+    void executePendingDocumentsWithValidationErrorMarksAsFailed() {
         Document doc = Document.builder().id(1L).documentId("doc-1").productId("p1").state("PENDING").isZip(false).build();
         
         when(persistencePort.findPendingDocumentsToday(anyString(), any()))
@@ -234,24 +241,24 @@ class AbstractDocumentProcessingUseCaseTest {
             .thenReturn(Mono.just(ProductDocumentFile.builder().isZip(false).build()));
         
         when(documentValidator.validate(any(), anyBoolean()))
-            .thenReturn(Mono.error(new ProcessingException("Rules failed", ProcessingResultCodes.PATTERN_MISMATCH.name())));
+            .thenReturn(Mono.error(new ProcessingException("Rules failed", PATTERN_MISMATCH.name())));
 
         StepVerifier.create(useCase.executePendingDocuments())
             .assertNext(resp -> {
                 assertFalse(resp.isSuccess());
-                assertEquals(ProcessingResultCodes.PATTERN_MISMATCH.name(), resp.getSyncStatus());
+                assertEquals(PATTERN_MISMATCH.name(), resp.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(5));
 
         verify(persistencePort).finalizeProcessingAtomically(argThat(h -> 
-            ProcessingResultCodes.BUSINESS_REJECTION.name().equals(h.getState()) &&
-            ProcessingResultCodes.PATTERN_MISMATCH.name().equals(h.getSyncStatus())
+            BUSINESS_REJECTION.name().equals(h.getState()) &&
+            PATTERN_MISMATCH.name().equals(h.getSyncStatus())
         ));
     }
 
     @Test
-    void executePendingDocuments_withZipValidationError_setsFilenameInException() throws Exception {
+    void executePendingDocumentsWithZipValidationErrorSetsFilenameInException() throws Exception {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-zip")
@@ -282,20 +289,20 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         
         when(documentValidator.validate(any(), anyBoolean()))
-            .thenReturn(Mono.error(new ProcessingException("Invalid inner file", ProcessingResultCodes.PATTERN_MISMATCH.name())));
+            .thenReturn(Mono.error(new ProcessingException("Invalid inner file", PATTERN_MISMATCH.name())));
 
         StepVerifier.create(useCase.executePendingDocuments())
             .assertNext(resp -> {
                 assertFalse(resp.isSuccess());
                 assertEquals("inner-file.pdf", resp.getFilename());
-                assertEquals(ProcessingResultCodes.PATTERN_MISMATCH.name(), resp.getSyncStatus());
+                assertEquals(PATTERN_MISMATCH.name(), resp.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(5));
     }
 
     @Test
-    void executePendingDocuments_withZipValidationErrorNotBusinessRule_setsFilenameInException() throws Exception {
+    void executePendingDocumentsWithZipValidationErrorNotBusinessRuleSetsFilenameInException() throws Exception {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-zip-non-br")
@@ -339,7 +346,7 @@ class AbstractDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withZipEmpty_throwsEmptyContent() throws Exception {
+    void executePendingDocumentsWithZipEmptyThrowsEmptyContent() throws Exception {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-zip-empty")
@@ -369,21 +376,21 @@ class AbstractDocumentProcessingUseCaseTest {
         StepVerifier.create(useCase.executePendingDocuments())
             .assertNext(resp -> {
                 assertFalse(resp.isSuccess());
-                assertEquals(ProcessingResultCodes.EMPTY_CONTENT.name(), resp.getSyncStatus());
+                assertEquals(EMPTY_CONTENT.name(), resp.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(5));
     }
 
     @Test
-    void executePendingDocuments_withZipMultipleFiles_allSuccess_marksAsProcessed() throws Exception {
+    void executePendingDocumentsWithZipMultipleFilesAllSuccessMarksAsProcessed() throws Exception {
         byte[] zipBytes = createZipBytes("file1.pdf", "file2.pdf");
 
         Document doc = Document.builder()
                 .id(1L)
                 .documentId("doc-zip-multi")
                 .productId("p1")
-                .state(ProcessingResultCodes.PENDING.name())
+                .state(PENDING.name())
                 .isZip(true)
                 .retryCount(0)
                 .build();
@@ -415,20 +422,20 @@ class AbstractDocumentProcessingUseCaseTest {
 
         verify(persistencePort, times(2)).saveHistory(any(DocumentHistoryDTO.class));
         verify(persistencePort).finalizeProcessingAtomically(argThat(h ->
-            ProcessingResultCodes.PROCESSED.name().equals(h.getState()) &&
+            PROCESSED.name().equals(h.getState()) &&
             h.getFilename().equals("archive.zip")
         ));
     }
 
     @Test
-    void executePendingDocuments_withZipPartialFailure_marksAsBusinessRejection() throws Exception {
+    void executePendingDocumentsWithZipPartialFailureMarksAsBusinessRejection() throws Exception {
         byte[] zipBytes = createZipBytes("file1.pdf", "file2.pdf");
 
         Document doc = Document.builder()
                 .id(1L)
                 .documentId("doc-zip-partial")
                 .productId("p1")
-                .state(ProcessingResultCodes.PENDING.name())
+                .state(PENDING.name())
                 .isZip(true)
                 .retryCount(0)
                 .build();
@@ -453,7 +460,7 @@ class AbstractDocumentProcessingUseCaseTest {
                 } else {
                     return Flux.just(FileUploadResponse.builder()
                             .success(false)
-                            .syncStatus(ProcessingResultCodes.PATTERN_MISMATCH.name())
+                            .syncStatus(PATTERN_MISMATCH.name())
                             .build());
                 }
             }
@@ -467,19 +474,19 @@ class AbstractDocumentProcessingUseCaseTest {
 
         verify(persistencePort, times(2)).saveHistory(any(DocumentHistoryDTO.class));
         verify(persistencePort).finalizeProcessingAtomically(argThat(h ->
-            ProcessingResultCodes.BUSINESS_REJECTION.name().equals(h.getState())
+            BUSINESS_REJECTION.name().equals(h.getState())
         ));
     }
 
     @Test
-    void executePendingDocuments_withZipTechnicalRetry_doesNotSaveIntermediateHistory() throws Exception {
+    void executePendingDocumentsWithZipTechnicalRetrySavesIntermediateHistory() throws Exception {
         byte[] zipBytes = createZipBytes("file1.pdf");
 
         Document doc = Document.builder()
                 .id(1L)
                 .documentId("doc-zip-tech-retry")
                 .productId("p1")
-                .state(ProcessingResultCodes.PENDING.name())
+                .state(PENDING.name())
                 .isZip(true)
                 .retryCount(0)
                 .build();
@@ -503,7 +510,7 @@ class AbstractDocumentProcessingUseCaseTest {
                         .success(false)
                         .technicalRetry(true)
                         .attemptCount(1)
-                        .syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name())
+                        .syncStatus(GATEWAY_TIMEOUT.name())
                         .message("Technical retry")
                         .build());
             }
@@ -515,20 +522,20 @@ class AbstractDocumentProcessingUseCaseTest {
                 .expectComplete()
                 .verify(Duration.ofSeconds(10));
 
-        // Since it's a technical retry of a ZIP file, saveHistory should never be called.
-        verify(persistencePort, never()).saveHistory(any(DocumentHistoryDTO.class));
+        // Since it's a technical retry, the intermediate attempt is saved.
+        verify(persistencePort, times(1)).saveHistory(any(DocumentHistoryDTO.class));
         verify(persistencePort, never()).finalizeProcessingAtomically(any());
     }
 
     @Test
-    void executePendingDocuments_withZipTechnicalAndFinalSuccess_savesOnlyFinalHistory() throws Exception {
+    void executePendingDocumentsWithZipTechnicalAndFinalSuccessSavesAllHistory() throws Exception {
         byte[] zipBytes = createZipBytes("file1.pdf");
 
         Document doc = Document.builder()
                 .id(1L)
                 .documentId("doc-zip-mixed")
                 .productId("p1")
-                .state(ProcessingResultCodes.PENDING.name())
+                .state(PENDING.name())
                 .isZip(true)
                 .retryCount(0)
                 .build();
@@ -553,7 +560,7 @@ class AbstractDocumentProcessingUseCaseTest {
                                 .success(false)
                                 .technicalRetry(true)
                                 .attemptCount(1)
-                                .syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name())
+                                .syncStatus(GATEWAY_TIMEOUT.name())
                                 .message("Attempt 1 failure")
                                 .build(),
                         FileUploadResponse.builder()
@@ -573,12 +580,12 @@ class AbstractDocumentProcessingUseCaseTest {
                 .expectComplete()
                 .verify(Duration.ofSeconds(10));
 
-        // Save history should be called EXACTLY ONCE for the final success response of file1.pdf
+        // Save history should be called for BOTH attempts of file1.pdf
         ArgumentCaptor<DocumentHistoryDTO> captor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
-        verify(persistencePort, times(1)).saveHistory(captor.capture());
-        DocumentHistoryDTO savedHistory = captor.getValue();
+        verify(persistencePort, times(2)).saveHistory(captor.capture());
+        DocumentHistoryDTO savedHistory = captor.getAllValues().get(1);
         assertEquals("file1.pdf", savedHistory.getFilename());
-        assertEquals(ProcessingResultCodes.PROCESSED.name(), savedHistory.getState());
+        assertEquals(PROCESSED.name(), savedHistory.getState());
         assertEquals(2, savedHistory.getRetryCount());
 
         // Master ZIP document should be finalized
@@ -586,14 +593,14 @@ class AbstractDocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withZipMultipleFilesMixedRetries_savesCorrectHistory() throws Exception {
+    void executePendingDocumentsWithZipMultipleFilesMixedRetriesSavesCorrectHistory() throws Exception {
         byte[] zipBytes = createZipBytes("file1.pdf", "file2.pdf");
 
         Document doc = Document.builder()
                 .id(1L)
                 .documentId("doc-zip-multi-mixed")
                 .productId("p1")
-                .state(ProcessingResultCodes.PENDING.name())
+                .state(PENDING.name())
                 .isZip(true)
                 .retryCount(0)
                 .build();
@@ -628,7 +635,7 @@ class AbstractDocumentProcessingUseCaseTest {
                                     .success(false)
                                     .technicalRetry(true)
                                     .attemptCount(1)
-                                    .syncStatus(ProcessingResultCodes.GATEWAY_TIMEOUT.name())
+                                    .syncStatus(GATEWAY_TIMEOUT.name())
                                     .message("Attempt 1 failure")
                                     .build(),
                             FileUploadResponse.builder()
@@ -649,14 +656,15 @@ class AbstractDocumentProcessingUseCaseTest {
                 .expectComplete()
                 .verify(Duration.ofSeconds(10));
 
-        // Save history should be called EXACTLY TWICE:
+        // Save history should be called EXACTLY 3 TIMES:
         // 1. Once for file1.pdf (success on attempt 1)
-        // 2. Once for file2.pdf (success on attempt 2)
+        // 2. Once for file2.pdf (failure/retry on attempt 1)
+        // 3. Once for file2.pdf (success on attempt 2)
         ArgumentCaptor<DocumentHistoryDTO> captor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
-        verify(persistencePort, times(2)).saveHistory(captor.capture());
+        verify(persistencePort, times(3)).saveHistory(captor.capture());
         
         java.util.List<DocumentHistoryDTO> savedHistories = captor.getAllValues();
-        assertEquals(2, savedHistories.size());
+        assertEquals(3, savedHistories.size());
 
         DocumentHistoryDTO history1 = savedHistories.stream()
                 .filter(h -> "file1.pdf".equals(h.getFilename()))
@@ -665,7 +673,7 @@ class AbstractDocumentProcessingUseCaseTest {
         assertEquals(1, history1.getRetryCount());
 
         DocumentHistoryDTO history2 = savedHistories.stream()
-                .filter(h -> "file2.pdf".equals(h.getFilename()))
+                .filter(h -> "file2.pdf".equals(h.getFilename()) && h.getRetryCount() == 2)
                 .findFirst()
                 .orElseThrow();
         assertEquals(2, history2.getRetryCount());

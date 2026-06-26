@@ -1,4 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SERVICE_UNAVAILABLE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_NOT_FOUND;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_RATE_LIMIT;
 
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
@@ -59,7 +63,7 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_whenSuccessful_returnsSuccessResult() {
+    void sendWhenSuccessfulReturnsSuccessResult() {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         when(mapper.parseResponse(anyString(), anyString())).thenReturn(
             FileUploadResponse.builder()
@@ -89,7 +93,7 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_whenTimeout_returnsGatewayTimeout() {
+    void sendWhenTimeoutReturnsGatewayTimeout() {
         SoapProperties localProperties = new SoapProperties(
             "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
             "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
@@ -108,7 +112,7 @@ class SoapGatewayAdapterTest {
             .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), result.getSyncStatus());
+                assertEquals(GATEWAY_TIMEOUT.name(), result.getSyncStatus());
                 assertTrue(result.getMessage().contains("Timeout"));
             })
             .expectComplete()
@@ -116,7 +120,7 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_whenHttp500WithSoapFault_parsesFaultFromBody() {
+    void sendWhenHttp500WithSoapFaultParsesFaultFromBody() {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         
         mockWebServer.enqueue(new MockResponse()
@@ -144,7 +148,7 @@ class SoapGatewayAdapterTest {
     }
 
     @Test
-    void send_whenConnectionRefused_returnsServiceUnavailable() throws IOException {
+    void sendWhenConnectionRefusedReturnsServiceUnavailable() throws IOException {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
         
         // Shut down the server to force an immediate Connection Refused error
@@ -155,14 +159,14 @@ class SoapGatewayAdapterTest {
             .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.SERVICE_UNAVAILABLE.name(), result.getSyncStatus());
+                assertEquals(SERVICE_UNAVAILABLE.name(), result.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(10));
     }
 
     @Test
-    void send_whenHttp429_returnsSourceRateLimit() {
+    void sendWhenHttp429ReturnsSourceRateLimit() {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
 
         mockWebServer.enqueue(new MockResponse()
@@ -175,14 +179,14 @@ class SoapGatewayAdapterTest {
             .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.SOURCE_RATE_LIMIT.name(), result.getSyncStatus());
+                assertEquals(SOURCE_RATE_LIMIT.name(), result.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(10));
     }
 
     @Test
-    void send_whenHttp404_returnsSourceNotFound() {
+    void sendWhenHttp404ReturnsSourceNotFound() {
         when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
 
         mockWebServer.enqueue(new MockResponse()
@@ -195,7 +199,7 @@ class SoapGatewayAdapterTest {
             .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals(ProcessingResultCodes.SOURCE_NOT_FOUND.name(), result.getSyncStatus());
+                assertEquals(SOURCE_NOT_FOUND.name(), result.getSyncStatus());
             })
             .expectComplete()
             .verify(Duration.ofSeconds(10));

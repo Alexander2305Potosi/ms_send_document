@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ProcessingExceptionTest {
 
     @Test
-    void constructor_withTraceId() {
+    void constructorWithTraceId() {
         ProcessingException ex = new ProcessingException("error", "ERR_CODE", "trace-123");
 
         assertEquals("error", ex.getMessage());
@@ -19,7 +19,7 @@ class ProcessingExceptionTest {
     }
 
     @Test
-    void constructor_withTraceIdAndDocumentId() {
+    void constructorWithTraceIdAndDocumentId() {
         ProcessingException ex = new ProcessingException("error", "ERR_CODE", "trace-123", "doc-1");
 
         assertEquals("error", ex.getMessage());
@@ -29,7 +29,7 @@ class ProcessingExceptionTest {
     }
 
     @Test
-    void constructor_withCause() {
+    void constructorWithCause() {
         Throwable cause = new RuntimeException("original");
         ProcessingException ex = new ProcessingException("error", "ERR_CODE", "trace-123", cause);
 
@@ -39,14 +39,14 @@ class ProcessingExceptionTest {
     }
 
     @Test
-    void constructor_withNullTraceId_defaultsToUnknown() {
+    void constructorWithNullTraceIdDefaultsToUnknown() {
         ProcessingException ex = new ProcessingException("error", "ERR_CODE", (String) null);
 
         assertEquals("unknown", ex.getTraceId());
     }
 
     @Test
-    void withTraceId_factoryMethod() {
+    void withTraceIdFactoryMethod() {
         ProcessingException ex = ProcessingException.withTraceId("error", "ERR_CODE", "trace-456");
 
         assertTrue(ex.getMessage().contains("trace-456"));
@@ -54,7 +54,7 @@ class ProcessingExceptionTest {
     }
 
     @Test
-    void withTraceId_factoryMethodWithCause() {
+    void withTraceIdFactoryMethodWithCause() {
         Throwable cause = new RuntimeException("original");
         ProcessingException ex = ProcessingException.withTraceId("error", "ERR_CODE", "trace-456", cause);
 
@@ -63,7 +63,7 @@ class ProcessingExceptionTest {
     }
 
     @Test
-    void fromContext_extractsTraceIdFromContext() {
+    void fromContextExtractsTraceIdFromContext() {
         ContextView ctx = Context.of("message-id", "ctx-trace-789");
         ProcessingException ex = ProcessingException.fromContext(ctx, "error", "ERR_CODE");
 
@@ -72,7 +72,7 @@ class ProcessingExceptionTest {
     }
 
     @Test
-    void fromContext_withDocumentId() {
+    void fromContextWithDocumentId() {
         ContextView ctx = Context.of("message-id", "ctx-trace-789");
         ProcessingException ex = ProcessingException.fromContext(ctx, "error", "ERR_CODE", "doc-ctx");
 
@@ -81,7 +81,7 @@ class ProcessingExceptionTest {
     }
 
     @Test
-    void fromContext_whenKeyMissing_defaultsToUnknown() {
+    void fromContextWhenKeyMissingDefaultsToUnknown() {
         ContextView ctx = Context.empty();
         ProcessingException ex = ProcessingException.fromContext(ctx, "error", "ERR_CODE");
 

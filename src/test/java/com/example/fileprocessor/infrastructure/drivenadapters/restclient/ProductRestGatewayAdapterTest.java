@@ -1,4 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BAD_GATEWAY;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_NOT_FOUND;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_RATE_LIMIT;
 
 import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -49,7 +53,7 @@ class ProductRestGatewayAdapterTest {
     }
 
     @Test
-    void getDocument_returnsMappedProductDocumentFile() {
+    void getDocumentReturnsMappedProductDocumentFile() {
         String responseJson = """
             {"documentId":"doc-1","filename":"test.pdf","content":"VGVzdENvbnRlbnQ=","contentType":"application/pdf","size":12,"isZip":false,"originFolder":"origin","originCountry":"AR"}""";
 
@@ -71,7 +75,7 @@ class ProductRestGatewayAdapterTest {
     }
 
     @Test
-    void getDocumentsByProduct_returnsMappedDocuments() {
+    void getDocumentsByProductReturnsMappedDocuments() {
         String responseJson = """
             [{"documentId":"doc-1","filename":"test.pdf","content":"VGVzdENvbnRlbnQ=","contentType":"application/pdf","size":12,"isZip":false,"originFolder":"origin","originCountry":"AR"}]""";
 
@@ -99,7 +103,7 @@ class ProductRestGatewayAdapterTest {
     class GetDocumentErrorMapping {
 
         @Test
-        void whenHttp404_mapsToSourceNotFound() {
+        void whenHttp404MapsToSourceNotFound() {
             mockWebServer.enqueue(new MockResponse().setResponseCode(404));
 
             StepVerifier.create(adapter.getDocument("prod-1", "doc-1")
@@ -107,13 +111,13 @@ class ProductRestGatewayAdapterTest {
                 .expectErrorSatisfies(error -> {
                     assertInstanceOf(ProcessingException.class, error);
                     ProcessingException pe = (ProcessingException) error;
-                    assertEquals(ProcessingResultCodes.SOURCE_NOT_FOUND.name(), pe.getErrorCode());
+                    assertEquals(SOURCE_NOT_FOUND.name(), pe.getErrorCode());
                 })
                 .verify(Duration.ofSeconds(10));
         }
 
         @Test
-        void whenHttp500_mapsToBadGateway() {
+        void whenHttp500MapsToBadGateway() {
             mockWebServer.enqueue(new MockResponse().setResponseCode(500));
 
             StepVerifier.create(adapter.getDocument("prod-1", "doc-1")
@@ -121,13 +125,13 @@ class ProductRestGatewayAdapterTest {
                 .expectErrorSatisfies(error -> {
                     assertInstanceOf(ProcessingException.class, error);
                     ProcessingException pe = (ProcessingException) error;
-                    assertEquals(ProcessingResultCodes.BAD_GATEWAY.name(), pe.getErrorCode());
+                    assertEquals(BAD_GATEWAY.name(), pe.getErrorCode());
                 })
                 .verify(Duration.ofSeconds(10));
         }
 
         @Test
-        void whenHttp429_mapsToSourceRateLimit() {
+        void whenHttp429MapsToSourceRateLimit() {
             mockWebServer.enqueue(new MockResponse().setResponseCode(429));
 
             StepVerifier.create(adapter.getDocument("prod-1", "doc-1")
@@ -135,13 +139,13 @@ class ProductRestGatewayAdapterTest {
                 .expectErrorSatisfies(error -> {
                     assertInstanceOf(ProcessingException.class, error);
                     ProcessingException pe = (ProcessingException) error;
-                    assertEquals(ProcessingResultCodes.SOURCE_RATE_LIMIT.name(), pe.getErrorCode());
+                    assertEquals(SOURCE_RATE_LIMIT.name(), pe.getErrorCode());
                 })
                 .verify(Duration.ofSeconds(10));
         }
 
         @Test
-        void whenTimeout_mapsToGatewayTimeout() {
+        void whenTimeoutMapsToGatewayTimeout() {
             // Use 1-second timeout adapter
             DocumentRestProperties shortTimeout = new DocumentRestProperties(
                 "http://localhost:" + mockWebServer.getPort(),
@@ -161,7 +165,7 @@ class ProductRestGatewayAdapterTest {
                 .expectErrorSatisfies(error -> {
                     assertInstanceOf(ProcessingException.class, error);
                     ProcessingException pe = (ProcessingException) error;
-                    assertEquals(ProcessingResultCodes.GATEWAY_TIMEOUT.name(), pe.getErrorCode());
+                    assertEquals(GATEWAY_TIMEOUT.name(), pe.getErrorCode());
                 })
                 .verify(Duration.ofSeconds(10));
         }
@@ -171,7 +175,7 @@ class ProductRestGatewayAdapterTest {
     class GetDocumentsByProductErrorMapping {
 
         @Test
-        void whenHttp404_mapsToSourceNotFound() {
+        void whenHttp404MapsToSourceNotFound() {
             mockWebServer.enqueue(new MockResponse().setResponseCode(404));
             ProductMaestro product = ProductMaestro.builder().productId("prod-1").name("Product").build();
 
@@ -180,13 +184,13 @@ class ProductRestGatewayAdapterTest {
                 .expectErrorSatisfies(error -> {
                     assertInstanceOf(ProcessingException.class, error);
                     ProcessingException pe = (ProcessingException) error;
-                    assertEquals(ProcessingResultCodes.SOURCE_NOT_FOUND.name(), pe.getErrorCode());
+                    assertEquals(SOURCE_NOT_FOUND.name(), pe.getErrorCode());
                 })
                 .verify(Duration.ofSeconds(10));
         }
 
         @Test
-        void whenHttp500_mapsToBadGateway() {
+        void whenHttp500MapsToBadGateway() {
             mockWebServer.enqueue(new MockResponse().setResponseCode(500));
             ProductMaestro product = ProductMaestro.builder().productId("prod-1").name("Product").build();
 
@@ -195,7 +199,7 @@ class ProductRestGatewayAdapterTest {
                 .expectErrorSatisfies(error -> {
                     assertInstanceOf(ProcessingException.class, error);
                     ProcessingException pe = (ProcessingException) error;
-                    assertEquals(ProcessingResultCodes.BAD_GATEWAY.name(), pe.getErrorCode());
+                    assertEquals(BAD_GATEWAY.name(), pe.getErrorCode());
                 })
                 .verify(Duration.ofSeconds(10));
         }
