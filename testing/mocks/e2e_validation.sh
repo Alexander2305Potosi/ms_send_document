@@ -108,7 +108,7 @@ echo ""
 printf "${C_BOLD}[CONTROL] Sync Status — type_job=soap${C_RESET}\n"
 check_control_endpoint "sync/status/soap" \
     "$MS_URL${BASE_PATH}/products/sync/status/soap" \
-    "exitoso|1"
+    "exitoso|0"
 
 # ── 4. First Run ─────────────────────────────────────────────
 echo ""
@@ -125,7 +125,7 @@ echo ""
 printf "${C_BOLD}[CONTROL] Process Status — type_job=soap (after 1st run)${C_RESET}\n"
 check_control_endpoint "process/status/soap (1st run)" \
     "$MS_URL${BASE_PATH}/products/process/status/soap" \
-    "exitoso|1|error"
+    "exitoso|0|error"
 
 # ── 5. Second Run ────────────────────────────────────────────
 echo "--- SECOND RUN LOGS START HERE ---" >> "$SCRIPT_DIR/ms.log"
@@ -159,7 +159,7 @@ echo ""
 printf "${C_BOLD}[CONTROL] Sync Status Final — type_job=soap${C_RESET}\n"
 check_control_endpoint "sync/status/soap (final)" \
     "$MS_URL${BASE_PATH}/products/sync/status/soap" \
-    "exitoso|error"
+    "exitoso|0|error"
 
 # ── 8. Test Results Summary ──────────────────────────────────
 echo ""

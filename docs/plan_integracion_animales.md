@@ -1,6 +1,6 @@
-# Plan de Integración de Procesamiento de Documentos de Animales (SLP)
+# Plan de Integración de Procesamiento de Documentos de Animales (Animal)
 
-Este documento define el diseño arquitectónico y plan de implementación para el nuevo flujo de negocio de procesamiento diario (`type_job = daily`) y caso de uso SLP (`use-case = slp`). El flujo consiste en leer información de animales desde una base de datos secundaria, consultar servicios REST externos para obtener la estructura de directorios, filtrar documentos basados en el origen (`Source` in `[1, 2, 4]`), descargarlos de la API REST de productos existente y enviarlos mediante el canal SOAP actual, registrando la trazabilidad en un esquema dedicado.
+Este documento define el diseño arquitectónico y plan de implementación para el nuevo flujo de negocio de procesamiento diario (`type_job = daily`) y caso de uso Animal (`use-case = animal`). El flujo consiste en leer información de animales desde una base de datos secundaria, consultar servicios REST externos para obtener la estructura de directorios, filtrar documentos basados en el origen (`Source` in `[1, 2, 4]`), descargarlos de la API REST de productos existente y enviarlos mediante el canal SOAP actual, registrando la trazabilidad en un esquema dedicado.
 
 ---
 
@@ -14,8 +14,7 @@ Dado que la base de datos física puede contener múltiples esquemas, mapearemos
 
 1. **Tabla de Origen**: `schemAnimals.animals_maestro`
    Representa la tabla maestra de donde se extraerán los animales para procesamiento diario.
-2. **Tabla de Trazabilidad**: `schemAnimals.historico_animales` (equivalente a `historico_documentos`)
-   Almacenará el resultado del procesamiento diario de los documentos de cada animal.
+   *(La trazabilidad se registrará en la tabla `historico_documentos` existente, reutilizando la lógica del caso de uso base)*
 
 ---
 
@@ -25,8 +24,8 @@ Seguiremos la estructura actual del proyecto basada en Puertos y Adaptadores (Ar
 
 ```mermaid
 graph TD
-    Entrypoint["ProductHandler / Router"] -->|processDailySlp| UseCase[SlpDocumentProcessingUseCase]
-    Entrypoint -->|getDailySlpStatus| StatusUseCase[GetStatusUseCase]
+    Entrypoint["ProductHandler / Router"] -->|processDailyAnimal| UseCase[AnimalDocumentProcessingUseCase]
+    Entrypoint -->|getDailyAnimalStatus| StatusUseCase[GetStatusUseCase]
 
     UseCase --> PortDb[AnimalRepository]
     UseCase --> PortRest[AnimalRestGateway]
@@ -67,9 +66,9 @@ public class AnimalMaestro {
 }
 ```
 
-##### `com/example/fileprocessor/domain/entity/animal/DirectoryNode.java`
+##### `com/example/fileprocessor/infrastructure/drivenadapters/restclient/dto/DirectoryNode.java` *(Movido a infraestructura — es detalle interno del Adapter)*
 ```java
-package com.example.fileprocessor.domain.entity.animal;
+package com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto;
 
 import lombok.Builder;
 import lombok.Value;
@@ -77,53 +76,21 @@ import java.util.List;
 
 @Value
 @Builder
+/**
+ * DTO interno del Adapter REST para deserializar la respuesta del árbol de directorios.
+ * No es entidad de dominio — la conversión a Document ocurre dentro del Adapter.
+ */
 public class DirectoryNode {
     String id;
     String name;
-    Integer source; // Campo a filtrar: 1, 2 o 4
-    String productId; // Mapeado para descarga
-    String businessDocumentId; // Mapeado para descarga
+    Integer source;
+    String productId;
+    String businessDocumentId;
     List<DirectoryNode> children;
 }
 ```
 
-##### `com/example/fileprocessor/domain/entity/animal/AnimalHistory.java`
-```java
-package com.example.fileprocessor.domain.entity.animal;
 
-import lombok.Builder;
-import lombok.Value;
-import java.time.Instant;
-
-@Value
-@Builder
-public class AnimalHistory {
-    Long id;
-    Long animalId;
-    String documentId;
-    String filename;
-    String status;
-    String syncMessage;
-    Instant processedAt;
-}
-```
-
-##### `com/example/fileprocessor/domain/entity/animal/AnimalProcessingStatus.java`
-```java
-package com.example.fileprocessor.domain.entity.animal;
-
-/**
- * Estados posibles del procesamiento diario de documentos de animales (SLP).
- * Equivalente al ProcessingResultCodes del flujo principal.
- */
-public enum AnimalProcessingStatus {
-    PENDING,
-    IN_PROGRESS,
-    SUCCESS,
-    FAILED,
-    ERROR;
-}
-```
 
 #### Puertos de Salida (Ports Out)
 
@@ -138,7 +105,7 @@ import reactor.core.publisher.Mono;
 
 public interface AnimalRepository {
     Flux<AnimalMaestro> findAllAnimals();
-    Mono<AnimalHistory> saveHistory(AnimalHistory history);
+
 }
 ```
 
@@ -146,138 +113,101 @@ public interface AnimalRepository {
 ```java
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.animal.DirectoryNode;
-import reactor.core.publisher.Mono;
+import com.example.fileprocessor.domain.entity.product.Document;
+import reactor.core.publisher.Flux;
 
+/**
+ * Puerto de salida para consultar documentos pendientes de animales.
+ * La complejidad de obtener directorios, aplanar el árbol y filtrar
+ * por Source queda encapsulada en el Adapter de infraestructura.
+ */
 public interface AnimalRestGateway {
-    Mono<String> getDirectoryIdByAnimalId(Long animalId);
-    Mono<DirectoryNode> getDirectoryTree(String directoryId);
+    Flux<Document> getPendingDocumentsForAnimal(Long animalId);
 }
 ```
 
 #### Caso de Uso (UseCase)
 
-##### `com/example/fileprocessor/domain/usecase/SlpDocumentProcessingUseCase.java`
+##### `com/example/fileprocessor/domain/usecase/AnimalDocumentProcessingUseCase.java`
 ```java
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.animal.AnimalHistory;
-import com.example.fileprocessor.domain.entity.animal.AnimalProcessingStatus;
-import com.example.fileprocessor.domain.entity.animal.DirectoryNode;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
-import com.example.fileprocessor.domain.port.out.AnimalRepository;
-import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
+import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
-@Slf4j
-@RequiredArgsConstructor
-public class SlpDocumentProcessingUseCase {
-
-    /** Valores de Source permitidos para procesamiento — definidos como constante de dominio */
-    private static final Set<Integer> VALID_SOURCES = Set.of(1, 2, 4);
-    /** El flujo SLP no tiene doc_id en BD local — se diferencia explícitamente de un 0 accidental */
-    private static final Long NO_DB_DOC_ID = null;
-    /** Nombre de archivo por defecto cuando la descarga falla antes de obtener metadatos */
-    private static final String FILENAME_UNKNOWN = "UNKNOWN";
+/**
+ * Caso de uso específico para las reglas de negocio de carga (upload) de Animales.
+ * Se mantiene limpio y enfocado al igual que S3 y Soap, definiendo solo el canal de envío.
+ */
+public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
 
     private final AnimalRepository animalRepository;
     private final AnimalRestGateway animalRestGateway;
-    private final ProductRestGateway productRestGateway;
     private final SoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
 
-    public Flux<AnimalHistory> executeSlpProcessing() {
-        log.info("Iniciando procesamiento diario SLP...");
-        return animalRepository.findAllAnimals()
-                .flatMap(animal -> animalRestGateway.getDirectoryIdByAnimalId(animal.getId())
-                        .flatMap(animalRestGateway::getDirectoryTree)
-                        .flatMapMany(tree -> Flux.fromIterable(flattenAndFilterTree(tree)))
-                        .flatMap(node -> processNodeDocument(animal.getId(), node))
-                );
+    public AnimalDocumentProcessingUseCase(
+            DocumentPersistenceGateway persistencePort,
+            ProductRestGateway productRestGateway,
+            RulesBussinesGateway documentValidator,
+            String tempDirPath,
+            AnimalRepository animalRepository,
+            AnimalRestGateway animalRestGateway,
+            SoapGateway soapGateway,
+            HomologationRepository homologationRepository) {
+        super(persistencePort, productRestGateway, documentValidator, tempDirPath);
+        this.animalRepository = animalRepository;
+        this.animalRestGateway = animalRestGateway;
+        this.soapGateway = soapGateway;
+        this.homologationRepository = homologationRepository;
     }
 
-    private List<DirectoryNode> flattenAndFilterTree(DirectoryNode root) {
-        List<DirectoryNode> result = new ArrayList<>();
-        traverse(root, result);
-        return result;
+    @Override
+    protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
+        return homologationRepository.resolve(history)
+                .flatMapMany(homologation -> {
+                    FileUploadRequest uploadReq = FileUploadRequest.from(history, null, homologation);
+                    return soapGateway.send(uploadReq);
+                });
     }
 
-    private void traverse(DirectoryNode node, List<DirectoryNode> result) {
-        if (node == null) return;
-
-        // Filtro de Source: valores permitidos definidos en VALID_SOURCES (evitar magic numbers)
-        if (node.getSource() != null && VALID_SOURCES.contains(node.getSource())) {
-            result.add(node);
-        }
-
-        if (node.getChildren() != null) {
-            for (DirectoryNode child : node.getChildren()) {
-                traverse(child, result);
-            }
-        }
-    }
-
-    private Mono<AnimalHistory> processNodeDocument(Long animalId, DirectoryNode node) {
-        log.info("Procesando documento del nodo: {}, Source: {}", node.getName(), node.getSource());
-
-        // 1. Descargar documento utilizando la infraestructura existente
-        return productRestGateway.getDocument(node.getProductId(), node.getBusinessDocumentId())
-                .flatMap(file -> {
-                    // Mapear a DocumentHistoryDTO compatible con el flujo de Homologacion y SOAP existente
-                    DocumentHistoryDTO historyDTO = DocumentHistoryDTO.builder()
-                            .productId(node.getProductId())
-                            .businessDocumentId(node.getBusinessDocumentId())
-                            .filename(file.getFilename())
-                            .content(file.getContent())
-                            .size(file.getSize())
-                            .contentType(file.getContentType())
-                            .build();
-
-                    // 2. Resolver homologación y enviar a SOAP
-                    return homologationRepository.resolve(historyDTO)
-                            .flatMap(homologation -> {
-                                // NO_DB_DOC_ID indica que este docId no existe en la BD local del servicio
-                                FileUploadRequest uploadReq = FileUploadRequest.from(historyDTO, NO_DB_DOC_ID, homologation);
-                                return soapGateway.send(uploadReq);
-                            })
-                            .map(response -> AnimalHistory.builder()
-                                    .animalId(animalId)
-                                    .documentId(node.getBusinessDocumentId())
-                                    .filename(file.getFilename())
-                                    .status(response.isSuccess()
-                                            ? AnimalProcessingStatus.SUCCESS.name()
-                                            : AnimalProcessingStatus.FAILED.name())
-                                    .syncMessage(response.getMessage())
-                                    .processedAt(Instant.now())
-                                    .build());
-                })
-                .onErrorResume(error -> {
-                    log.error("Error procesando nodo {} para animalId {}: {}", node.getId(), animalId, error.getMessage());
-                    return Mono.just(AnimalHistory.builder()
-                            .animalId(animalId)
-                            .documentId(node.getBusinessDocumentId())
-                            .filename(FILENAME_UNKNOWN)
-                            .status(AnimalProcessingStatus.ERROR.name())
-                            .syncMessage(error.getMessage())
-                            .processedAt(Instant.now())
-                            .build());
-                })
-                // 3. Persistir trazabilidad en schemAnimals
-                .flatMap(animalRepository::saveHistory);
+    @Override
+    protected String implementationName() {
+        return "Animal";
     }
 }
+```
+
+#### 2.2.3. Nuevo método limpio en `AbstractDocumentProcessingUseCase`
+**Archivo a modificar:** `src/main/java/com/example/fileprocessor/domain/usecase/AbstractDocumentProcessingUseCase.java`
+
+Se deben inyectar las dependencias `AnimalRepository` y `AnimalRestGateway` en el constructor de la clase base (los hijos S3 y SOAP inyectarán instancias o nulos según su configuración).
+
+La lógica de aplanar, filtrar e iterar el árbol de directorios se delegará completamente al Adapter (Infraestructura), dejando en la clase abstracta un único método limpio para orquestar:
+
+```java
+    /**
+     * Orquesta el flujo diario de Animales de forma limpia.
+     * Toda la complejidad de aplanar y filtrar el árbol reside en el Adapter del Gateway.
+     */
+    public Flux<FileUploadResponse> executeAnimalProcessing() {
+        LOGGER.info("Iniciando procesamiento diario Animal...");
+        return animalRepository.findAllAnimals()
+                .flatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId()) // Retorna un Flux<Document> ya aplanado y filtrado
+                        .flatMap(doc -> {
+                            String traceId = "Animal-" + animal.getId() + "-" + doc.getDocumentId();
+                            return processWithTracking(doc, traceId); // processWithTracking guarda el historial en historico_documentos
+                        })
+                );
+    }
 ```
 
 ---
@@ -313,101 +243,7 @@ public class AnimalMaestroEntity {
 }
 ```
 
-##### `com/example/fileprocessor/infrastructure/drivenadapters/r2dbc/entity/AnimalHistoryEntity.java`
-```java
-package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.relational.core.mapping.Column;
-import org.springframework.data.relational.core.mapping.Table;
-import lombok.*;
-import java.time.Instant;
-
-@Table("schemAnimals.historico_animales")
-@Getter
-@Setter
-@Builder
-@AllArgsConstructor
-@NoArgsConstructor
-public class AnimalHistoryEntity {
-    @Id
-    private Long id;
-    
-    @Column("id_animal")
-    private Long animalId;
-    
-    @Column("id_documento")
-    private String documentId;
-    
-    @Column("nombre_archivo")
-    private String filename;
-    
-    @Column("estado")
-    private String status;
-    
-    @Column("mensaje_error")
-    private String syncMessage;
-    
-    @Column("fecha_procesamiento")
-    private Instant processedAt;
-}
-```
-
-#### Spring Data Repositories
-
-##### `com/example/fileprocessor/infrastructure/drivenadapters/r2dbc/repository/AnimalMaestroRepository.java`
-```java
-package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository;
-
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalMaestroEntity;
-import org.springframework.data.r2dbc.repository.R2dbcRepository;
-import org.springframework.stereotype.Repository;
-
-@Repository
-public interface AnimalMaestroRepository extends R2dbcRepository<AnimalMaestroEntity, Long> {
-}
-```
-
-##### `com/example/fileprocessor/infrastructure/drivenadapters/r2dbc/repository/AnimalHistoryRepository.java`
-```java
-package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository;
-
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalHistoryEntity;
-import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.projection.AnimalStatusCount;
-import org.springframework.data.r2dbc.repository.Query;
-import org.springframework.data.r2dbc.repository.R2dbcRepository;
-import org.springframework.stereotype.Repository;
-import reactor.core.publisher.Flux;
-import java.time.LocalDateTime;
-
-@Repository
-public interface AnimalHistoryRepository extends R2dbcRepository<AnimalHistoryEntity, Long> {
-
-    /**
-     * Agrupa los registros de hoy por estado para el endpoint de monitoreo.
-     * Nota: Spring Data R2DBC NO deriva GROUP BY por convencion de nombre;
-     *       se requiere @Query explicita.
-     */
-    @Query("SELECT estado AS status, COUNT(*) AS total " +
-           "FROM schemAnimals.historico_animales " +
-           "WHERE fecha_procesamiento >= :startOfDay " +
-           "GROUP BY estado")
-    Flux<AnimalStatusCount> countGroupedByStatusSince(LocalDateTime startOfDay);
-}
-```
-
-##### `com/example/fileprocessor/infrastructure/drivenadapters/r2dbc/projection/AnimalStatusCount.java`
-```java
-package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.projection;
-
-/**
- * Proyeccion R2DBC para mapear el resultado del GROUP BY de historico_animales.
- */
-public interface AnimalStatusCount {
-    String getStatus();
-    Long getTotal();
-}
-```
 
 #### Adaptador R2DBC
 
@@ -437,7 +273,6 @@ import java.time.LocalDateTime;
 public class AnimalR2dbcAdapter implements AnimalRepository {
 
     private final AnimalMaestroRepository maestroRepository;
-    private final AnimalHistoryRepository historyRepository;
 
     @Override
     public Flux<AnimalMaestro> findAllAnimals() {
@@ -449,93 +284,129 @@ public class AnimalR2dbcAdapter implements AnimalRepository {
                         .build());
     }
 
-    @Override
-    public Mono<AnimalHistory> saveHistory(AnimalHistory history) {
-        AnimalHistoryEntity entity = AnimalHistoryEntity.builder()
-                .animalId(history.getAnimalId())
-                .documentId(history.getDocumentId())
-                .filename(history.getFilename())
-                .status(history.getStatus())
-                .syncMessage(history.getSyncMessage())
-                .processedAt(history.getProcessedAt())
-                .build();
-
-        return historyRepository.save(entity)
-                .doOnSuccess(saved -> log.debug(
-                        "Historial persistido: animalId={}, documentId={}, status={}",
-                        saved.getAnimalId(), saved.getDocumentId(), saved.getStatus()))
-                .doOnError(e -> log.error(
-                        "Error persistiendo historial para animalId={}: {}",
-                        history.getAnimalId(), e.getMessage()))
-                .map(saved -> AnimalHistory.builder()
-                        .id(saved.getId())
-                        .animalId(saved.getAnimalId())
-                        .documentId(saved.getDocumentId())
-                        .filename(saved.getFilename())
-                        .status(saved.getStatus())
-                        .syncMessage(saved.getSyncMessage())
-                        .processedAt(saved.getProcessedAt())
-                        .build());
-    }
-
-    @Override
-    public Flux<StateCount> countAnimalsGroupedByStateToday(LocalDateTime startOfDay) {
-        return historyRepository.countGroupedByStatusSince(startOfDay)
-                .map(row -> new StateCount(row.getStatus(), row.getTotal()));
-    }
 }
 ```
 
 #### Adaptador REST de API de Animales y Directorios
 
+##### Nuevo record de propiedades: `com/example/fileprocessor/infrastructure/entrypoints/rest/config/AnimalRestProperties.java`
+```java
+package com.example.fileprocessor.infrastructure.entrypoints.rest.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+
+@Validated
+@ConfigurationProperties(prefix = "app.animal-rest")
+public record AnimalRestProperties(
+    @NotBlank String endpoint,
+    @NotBlank String animalDirectoryPath,
+    @NotBlank String directoryTreePath,
+    @Min(1) int timeoutSeconds
+) {}
+```
+
 ##### `com/example/fileprocessor/infrastructure/drivenadapters/restclient/AnimalRestGatewayAdapter.java`
 ```java
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.animal.DirectoryNode;
+import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import com.example.fileprocessor.infrastructure.drivenadapters.AdapterErrorMapper;
+import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.DirectoryNode;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.config.AnimalRestProperties;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-@Slf4j
 @Component
-@RequiredArgsConstructor
 public class AnimalRestGatewayAdapter implements AnimalRestGateway {
 
-    private final WebClient animalWebClient; // bean dedicado con baseUrl para APIs de animal/directorio
-    private final long animalApiTimeoutSeconds; // inyectado desde app.animal-rest.timeout-seconds
+    private static final Logger LOGGER = Logger.getLogger(AnimalRestGatewayAdapter.class.getName());
+    private static final Set<Integer> VALID_SOURCES = Set.of(1, 2, 4);
+
+    private final WebClient webClient;
+    private final AnimalRestProperties properties;
+
+    public AnimalRestGatewayAdapter(WebClient.Builder webClientBuilder, AnimalRestProperties properties) {
+        this.properties = properties;
+        HttpClient httpClient = HttpClient.create()
+                .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
+        this.webClient = webClientBuilder
+                .baseUrl(properties.endpoint())
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
+    }
 
     @Override
-    public Mono<String> getDirectoryIdByAnimalId(Long animalId) {
-        return animalWebClient.get()
-                .uri("/api/animals/{animalId}/directory", animalId)
+    public Flux<Document> getPendingDocumentsForAnimal(Long animalId) {
+        return getDirectoryIdByAnimalId(animalId)
+                .flatMap(this::getDirectoryTree)
+                .flatMapMany(tree -> Flux.fromIterable(flattenAndFilter(tree)))
+                .map(node -> Document.builder()
+                        .documentId(node.getBusinessDocumentId())
+                        .productId(node.getProductId())
+                        .nombreDocumento(node.getName())
+                        .esZip(false)
+                        .casoUso("Animal")
+                        .retryCount(0)
+                        .build())
+                .onErrorResume(error -> {
+                    LOGGER.log(Level.SEVERE, "Error obteniendo documentos para animalId={0}: {1}",
+                            new Object[]{animalId, error.getMessage()});
+                    return Flux.empty();
+                });
+    }
+
+    private Mono<String> getDirectoryIdByAnimalId(Long animalId) {
+        return webClient.get()
+                .uri(properties.animalDirectoryPath(), animalId)
                 .retrieve()
-                .onStatus(status -> status.isError(), AdapterErrorMapper::mapResponseError)
                 .bodyToMono(DirectoryResponse.class)
                 .map(DirectoryResponse::getDirectoryId)
-                .timeout(Duration.ofSeconds(animalApiTimeoutSeconds))
-                .onErrorMap(AdapterErrorMapper::mapError)
-                .doOnError(e -> log.error("Error obteniendo directoryId para animalId={}: {}", animalId, e.getMessage()));
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .doOnError(e -> LOGGER.log(Level.SEVERE, "Error obteniendo directoryId para animalId={0}: {1}",
+                        new Object[]{animalId, e.getMessage()}));
     }
 
-    @Override
-    public Mono<DirectoryNode> getDirectoryTree(String directoryId) {
-        return animalWebClient.get()
-                .uri("/api/directories/{directoryId}/tree", directoryId)
+    private Mono<DirectoryNode> getDirectoryTree(String directoryId) {
+        return webClient.get()
+                .uri(properties.directoryTreePath(), directoryId)
                 .retrieve()
-                .onStatus(status -> status.isError(), AdapterErrorMapper::mapResponseError)
                 .bodyToMono(DirectoryNode.class)
-                .timeout(Duration.ofSeconds(animalApiTimeoutSeconds))
-                .onErrorMap(AdapterErrorMapper::mapError)
-                .doOnError(e -> log.error("Error obteniendo arbol de directorios para directoryId={}: {}", directoryId, e.getMessage()));
+                .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                .doOnError(e -> LOGGER.log(Level.SEVERE, "Error obteniendo arbol para directoryId={0}: {1}",
+                        new Object[]{directoryId, e.getMessage()}));
     }
 
-    // DTO Helper interno — no expuesto fuera del adaptador
+    private List<DirectoryNode> flattenAndFilter(DirectoryNode root) {
+        List<DirectoryNode> result = new ArrayList<>();
+        traverse(root, result);
+        return result;
+    }
+
+    private void traverse(DirectoryNode node, List<DirectoryNode> result) {
+        if (node == null) return;
+        if (node.getSource() != null && VALID_SOURCES.contains(node.getSource())) {
+            result.add(node);
+        }
+        if (node.getChildren() != null) {
+            node.getChildren().forEach(child -> traverse(child, result));
+        }
+    }
+
     @lombok.Data
     private static class DirectoryResponse {
         private String directoryId;
@@ -555,56 +426,75 @@ Se agregará una ruta bajo `app.paths.API_V1_PRODUCTS` (o una variante similar):
 
 ```java
     @Bean
-    public RouterFunction<ServerResponse> processDailySlpProducts(ProductHandler handler) {
+    public RouterFunction<ServerResponse> processDailyAnimalProducts(ProductHandler handler) {
         return nest(
             path(pathProperties.basePath()),
-            route(GET("/products/daily/slp"), handler::processDailySlpProducts)
+            route(GET(pathProperties.API_V1_PRODUCTS_DAILY_ANIMAL()), handler::processDailyAnimalProducts)
         );
     }
 
     @Bean
-    public RouterFunction<ServerResponse> processDailySlpStatusRoute(ProductHandler handler) {
+    public RouterFunction<ServerResponse> processDailyAnimalStatusRoute(ProductHandler handler) {
         return nest(
             path(pathProperties.basePath()),
-            route(GET("/products/process/status/daily"), handler::getDailySlpProcessStatus)
+            route(GET(pathProperties.API_V1_PRODUCTS_PROCESS_STATUS_DAILY()), handler::getDailyAnimalProcessStatus)
         );
     }
 ```
 
-#### Nuevos Métodos en `ProductHandler.java`
-```java
-    // Agregar la inyección del nuevo UseCase
-    private final SlpDocumentProcessingUseCase slpDocumentProcessingUseCase;
+#### Modificación del constructor en `ProductHandler.java`
+**Archivo a modificar:** `src/main/java/com/example/fileprocessor/infrastructure/entrypoints/rest/handler/ProductHandler.java`
 
-    public Mono<ServerResponse> processDailySlpProducts(ServerRequest request) {
+Agregar `AnimalDocumentProcessingUseCase` como 5to parámetro del constructor existente:
+```java
+    private final AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase; // NUEVO
+
+    public ProductHandler(
+            SoapDocumentProcessingUseCase soapDocumentUseCase,
+            ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider,
+            SyncDocumentsUseCase syncDocumentsUseCase,
+            GetStatusUseCase getStatusUseCase,
+            AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase) { // NUEVO
+        this.soapDocumentUseCase = soapDocumentUseCase;
+        this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
+        this.syncDocumentsUseCase = syncDocumentsUseCase;
+        this.getStatusUseCase = getStatusUseCase;
+        this.animalDocumentProcessingUseCase = animalDocumentProcessingUseCase; // NUEVO
+    }
+```
+
+#### Nuevos métodos en `ProductHandler.java`
+```java
+
+    public Mono<ServerResponse> processDailyAnimalProducts(ServerRequest request) {
         var headers = request.headers().asHttpHeaders().toSingleValueMap();
         
         Context context = Context.of(
             TYPE_JOB, "daily",
             HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
-            HEADER_USE_CASE, "slp"
+            HEADER_USE_CASE, "animal"
         );
 
         return Mono.deferContextual(ctx -> {
             String traceId = ctx.get(HEADER_TRACE_ID);
-            LOGGER.log(Level.INFO, "Starting Daily SLP Animal Processing, traceId: {0}", traceId);
+            LOGGER.log(Level.INFO, "Starting Daily Animal Processing, traceId: {0}", traceId);
 
-            slpDocumentProcessingUseCase.executeSlpProcessing()
-                .doOnNext(history -> LOGGER.log(Level.INFO, "Animal Document Processed: animal={0}, file={1}, status={2}",
-                    new Object[]{history.getAnimalId(), history.getFilename(), history.getStatus()}))
-                .doOnError(error -> LOGGER.log(Level.SEVERE, "SLP Daily processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
-                .doOnComplete(() -> LOGGER.log(Level.INFO, "SLP Daily processing completed for traceId: {0}", traceId))
+            animalDocumentProcessingUseCase.executeAnimalProcessing()
+                .doOnNext(response -> LOGGER.log(Level.INFO, "Animal Document Processed: file={0}, success={1}",
+                    new Object[]{response.getFilename(), response.isSuccess()}))
+                .doOnError(error -> LOGGER.log(Level.SEVERE, "Animal Daily processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
+                .doOnComplete(() -> LOGGER.log(Level.INFO, "Animal Daily processing completed for traceId: {0}", traceId))
                 .contextWrite(ctx)
                 .subscribe();
 
             return ServerResponse.accepted()
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(java.util.Map.of("status", "OK", "message", "Daily SLP processing initiated"));
+                .bodyValue(java.util.Map.of("status", "OK", "message", "Daily Animal processing initiated"));
         }).contextWrite(context);
     }
 
-    public Mono<ServerResponse> getDailySlpProcessStatus(ServerRequest request) {
-        return getStatusUseCase.getDailySlpProcessStatus()
+    public Mono<ServerResponse> getAnimalProcessStatus(ServerRequest request) {
+        return getStatusUseCase.getProcessStatus("Animal")
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status));
@@ -612,91 +502,35 @@ Se agregará una ruta bajo `app.paths.API_V1_PRODUCTS` (o una variante similar):
 ```
 
 #### Modificación en `DomainConfig.java`
-Instanciar el bean de `SlpDocumentProcessingUseCase` y actualizar `GetStatusUseCase` para recibir `AnimalRepository`:
+**Archivo a modificar:** `src/main/java/com/example/fileprocessor/application/service/config/DomainConfig.java`
+
+Agregar el bean de `AnimalDocumentProcessingUseCase` (con `ProcessorsProperties.animal()` para las reglas de negocio) y actualizar el bean de `GetStatusUseCase` para recibir `AnimalRepository`:
+
 ```java
     @Bean
-    public SlpDocumentProcessingUseCase slpDocumentProcessingUseCase(
+    public AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase(
+            DocumentPersistenceGateway persistencePort,
+            ProductRestGateway productRestGateway,
             AnimalRepository animalRepository,
             AnimalRestGateway animalRestGateway,
-            ProductRestGateway productRestGateway,
             SoapGateway soapGateway,
-            HomologationRepository homologationRepository) {
-        return new SlpDocumentProcessingUseCase(
+            HomologationRepository homologationRepository,
+            ProcessorsProperties properties) {
+        return new AnimalDocumentProcessingUseCase(
+            persistencePort,
+            productRestGateway,
+            new RulesBussinesService(properties.animal()),  // Reutiliza RulesBussinesService existente
+            properties.zipTempDir(),
             animalRepository,
             animalRestGateway,
-            productRestGateway,
             soapGateway,
             homologationRepository
         );
     }
 
-    @Bean
-    public GetStatusUseCase getStatusUseCase(
-            ProductMasterRepository productMasterRepository,
-            DocumentRepository documentRepository,
-            AnimalRepository animalRepository) { // Nuevo puerto inyectado
-        return new GetStatusUseCase(productMasterRepository, documentRepository, animalRepository);
-    }
+    // El bean GetStatusUseCase permanece intacto ya que reutilizaremos el método getProcessStatus("Animal")
 ```
-
----
-
-### 3.4. Endpoint de Control para SLP (Caso de Uso de Monitoreo)
-
-Se extenderá `GetStatusUseCase` para que pueda consultar la trazabilidad de la ejecución diaria de SLP en `schemAnimals.historico_animales`.
-
-#### Firma de consulta en `AnimalRepository.java`
-```java
-    Flux<StateCount> countAnimalsGroupedByStateToday(LocalDateTime startOfDay);
-```
-
-#### Implementación en `AnimalR2dbcAdapter.java`
-```java
-    @Override
-    public Flux<StateCount> countAnimalsGroupedByStateToday(LocalDateTime startOfDay) {
-        return historyRepository.countByProcessedAtAfterGroupedByStatus(startOfDay)
-                .map(row -> new StateCount(row.getStatus(), row.getTotal()));
-    }
-```
-
-#### Lógica en `GetStatusUseCase.java`
-```java
-    public Mono<String> getDailySlpProcessStatus() {
-        LocalDateTime startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-
-        return animalRepository.countAnimalsGroupedByStateToday(startOfDay)
-                .collectList()
-                .map(list -> {
-                    long pendingCount = 0;
-                    long errorCount = 0;
-                    long totalCount = 0;
-
-                    for (var row : list) {
-                        String status = row.getState();
-                        long count = row.getTotal();
-                        totalCount += count;
-
-                        if (AnimalProcessingStatus.PENDING.name().equals(status)
-                                || AnimalProcessingStatus.IN_PROGRESS.name().equals(status)) {
-                            pendingCount += count;
-                        } else if (!AnimalProcessingStatus.SUCCESS.name().equals(status)) {
-                            // Cualquier estado que no sea SUCCESS ni PENDING/IN_PROGRESS es un error
-                            errorCount += count;
-                        }
-                    }
-
-                    if (totalCount == 0) {
-                        return ApiConstants.STATUS_COMPLETED;
-                    }
-                    if (pendingCount > 0) {
-                        return ApiConstants.STATUS_IN_PROGRESS;
-                    }
-                    return (errorCount > 0)
-                            ? ApiConstants.STATUS_ERROR
-                            : ApiConstants.STATUS_COMPLETED;
-                });
-    }
-```
+> **Nota:** Se debe agregar `ProcessorConfig animal` al record `ProcessorsProperties` existente y configurar `app.processors.animal.max-file-size-bytes` y `app.processors.animal.filename-pattern` en `application.yml`.
 
 ---
 
@@ -706,7 +540,7 @@ Para garantizar la estabilidad y confiabilidad de esta nueva implementación, se
 
 ### 4.1. Pruebas Unitarias
 
-#### Escenarios de Prueba para `SlpDocumentProcessingUseCaseTest`
+#### Escenarios de Prueba para `AnimalDocumentProcessingUseCaseTest`
 Se deben crear pruebas unitarias exhaustivas utilizando JUnit 5 y Mockito para cubrir los siguientes escenarios:
 - **Flujo Exitoso Completo**: Validar la obtención de la lista de animales, el ID de directorio y el árbol de carpetas. Probar el aplanamiento correcto del árbol y verificar que se procesan y envían a SOAP solo los documentos con `Source` igual a `1`, `2` o `4`.
 - **Filtro de Nodos Inactivos**: Validar que los nodos del directorio con `Source` diferente de `1, 2, 4` (por ejemplo, `3`, `5` o `null`) sean explícitamente ignorados y no generen llamadas de descarga ni envíos SOAP.
@@ -726,7 +560,7 @@ El proyecto cuenta con el plugin **Pitest** (`info.solidsoft.pitest`) integrado 
 
 #### Configuración del Mutation Testing
 Las nuevas clases deberán alinearse a los límites y umbrales definidos en la configuración de Pitest del proyecto:
-- **Clases Objetivo (targetClasses)**: Pitest analizará el dominio (`com.example.fileprocessor.domain.*`) y los adaptadores (`com.example.fileprocessor.infrastructure.drivenadapters.*`). Las clases del caso de uso SLP y el adaptador R2DBC de animales serán evaluadas automáticamente.
+- **Clases Objetivo (targetClasses)**: Pitest analizará el dominio (`com.example.fileprocessor.domain.*`) y los adaptadores (`com.example.fileprocessor.infrastructure.drivenadapters.*`). Las clases del caso de uso Animal y el adaptador R2DBC de animales serán evaluadas automáticamente.
 - **Umbral de Mutación (mutationThreshold)**: Configurado en **60%**. Se requiere que al menos el 60% de los mutantes generados en las nuevas clases sean "eliminados" (killed) por las pruebas unitarias.
 - **Umbral de Cobertura de Líneas (coverageThreshold)**: Configurado en **80%**.
 - **Mutadores Activos**: Se evaluarán mutaciones críticas como:

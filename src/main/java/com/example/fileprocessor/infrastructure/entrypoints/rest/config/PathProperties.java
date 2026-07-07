@@ -15,7 +15,11 @@ public record PathProperties(
 
         @NotBlank String API_V1_PRODUCTS_SYNC_STATUS,
 
-        @NotBlank String API_V1_PRODUCTS_PROCESS_STATUS) {
+        @NotBlank String API_V1_PRODUCTS_PROCESS_STATUS,
+        
+        @NotBlank String API_V1_PRODUCTS_DAILY_ANIMAL,
+        
+        @NotBlank String API_V1_PRODUCTS_PROCESS_STATUS_DAILY) {
     public PathProperties {
         if (basePath == null) {
             basePath = "/api/v1";
@@ -31,6 +35,12 @@ public record PathProperties(
         }
         if (API_V1_PRODUCTS_PROCESS_STATUS == null) {
             API_V1_PRODUCTS_PROCESS_STATUS = "/products/process/status/{type_job}";
+        }
+        if (API_V1_PRODUCTS_DAILY_ANIMAL == null) {
+            API_V1_PRODUCTS_DAILY_ANIMAL = "/products/daily/animal";
+        }
+        if (API_V1_PRODUCTS_PROCESS_STATUS_DAILY == null) {
+            API_V1_PRODUCTS_PROCESS_STATUS_DAILY = "/products/process/status/daily/animal";
         }
     }
 }

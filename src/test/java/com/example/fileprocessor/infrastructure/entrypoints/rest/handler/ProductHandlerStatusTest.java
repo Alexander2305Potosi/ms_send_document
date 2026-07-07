@@ -28,7 +28,7 @@ class ProductHandlerStatusTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ProductHandler(null, null, null, getStatusUseCase);
+        handler = new ProductHandler(null, null, null, getStatusUseCase, null);
     }
 
     private void mockRequestHeaders() {

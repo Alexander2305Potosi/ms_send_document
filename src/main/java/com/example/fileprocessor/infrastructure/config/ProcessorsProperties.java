@@ -8,6 +8,7 @@ import org.springframework.validation.annotation.Validated;
 public record ProcessorsProperties(
     ProcessorConfig s3,
     ProcessorConfig soap,
+    ProcessorConfig animal,
     String zipTempDir
 ) {
     public record ProcessorConfig(

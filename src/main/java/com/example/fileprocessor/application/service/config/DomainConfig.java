@@ -13,6 +13,9 @@ import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
 import com.example.fileprocessor.domain.usecase.GetStatusUseCase;
+import com.example.fileprocessor.domain.usecase.AnimalDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.port.out.AnimalRepository;
+import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -76,5 +79,26 @@ public class DomainConfig {
             ProductMasterRepository productMasterRepository,
             DocumentRepository documentRepository) {
         return new GetStatusUseCase(productMasterRepository, documentRepository);
+    }
+
+    @Bean
+    public AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase(
+            DocumentPersistenceGateway persistencePort,
+            ProductRestGateway productRestGateway,
+            AnimalRepository animalRepository,
+            AnimalRestGateway animalRestGateway,
+            SoapGateway soapGateway,
+            HomologationRepository homologationRepository,
+            ProcessorsProperties properties) {
+        return new AnimalDocumentProcessingUseCase(
+            persistencePort,
+            productRestGateway,
+            new RulesBussinesService(properties.animal()),
+            properties.zipTempDir(),
+            animalRepository,
+            animalRestGateway,
+            soapGateway,
+            homologationRepository
+        );
     }
 }

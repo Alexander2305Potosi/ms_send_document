@@ -89,6 +89,15 @@ app:
     soap:
       max-file-size-bytes: 10485760
       filename-pattern: ".*\\.(pdf|docx|txt)$"
+    animal:
+      max-file-size-bytes: 10485760
+      filename-pattern: ".*\\.(pdf|docx|txt)$"
+
+  animal-rest:
+    endpoint: ${ANIMAL_REST_ENDPOINT:http://localhost:3002}
+    animal-directory-path: /api/animals/{animalId}/directory
+    directory-tree-path: /api/directories/{directoryId}/tree
+    timeout-seconds: 15
 
   sync:
     sucursal-query: "SELECT sucursal FROM otro_esquema.tabla_maestra WHERE id_producto = :productId"

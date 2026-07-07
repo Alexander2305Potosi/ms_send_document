@@ -51,7 +51,7 @@ class ProcessorsPropertiesTest {
         ProcessorsProperties.ProcessorConfig s3 = new ProcessorsProperties.ProcessorConfig(52428800L, ".*");
         ProcessorsProperties.ProcessorConfig soap = new ProcessorsProperties.ProcessorConfig(10485760L, ".*\\.pdf$");
 
-        ProcessorsProperties props = new ProcessorsProperties(s3, soap, null);
+        ProcessorsProperties props = new ProcessorsProperties(s3, soap, null, null);
 
         assertEquals(52428800L, props.s3().maxFileSizeBytes());
         assertEquals(10485760L, props.soap().maxFileSizeBytes());

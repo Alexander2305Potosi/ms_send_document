@@ -63,7 +63,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .concatMap(doc -> processWithTracking(doc, traceId)));
     }
 
-    private Mono<FileUploadResponse> processWithTracking(Document doc, String traceId) {
+    protected Mono<FileUploadResponse> processWithTracking(Document doc, String traceId) {
         DocumentHistoryDTO baseHistory = DocumentHistoryDTO.fromDocument(doc);
         return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
                 .filter(rows -> rows > 0)

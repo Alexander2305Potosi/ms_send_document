@@ -20,7 +20,7 @@ public final class ApiConstants {
     public static final String TYPE_JOB = "type_job";
 
     // Respuestas de estado del proceso
-    public static final String STATUS_IN_PROGRESS = "1";
+    public static final String STATUS_IN_PROGRESS = "0";
     public static final String STATUS_COMPLETED = "exitoso";
     public static final String STATUS_ERROR = "error";
 

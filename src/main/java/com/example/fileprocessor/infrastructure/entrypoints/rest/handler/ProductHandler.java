@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.GetStatusUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
+import com.example.fileprocessor.domain.usecase.AnimalDocumentProcessingUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
@@ -31,16 +32,19 @@ public class ProductHandler {
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
     private final SyncDocumentsUseCase syncDocumentsUseCase;
     private final GetStatusUseCase getStatusUseCase;
+    private final AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase;
 
     public ProductHandler(
             SoapDocumentProcessingUseCase soapDocumentUseCase,
             ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider,
             SyncDocumentsUseCase syncDocumentsUseCase,
-            GetStatusUseCase getStatusUseCase) {
+            GetStatusUseCase getStatusUseCase,
+            AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase) {
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
         this.syncDocumentsUseCase = syncDocumentsUseCase;
         this.getStatusUseCase = getStatusUseCase;
+        this.animalDocumentProcessingUseCase = animalDocumentProcessingUseCase;
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
@@ -134,6 +138,40 @@ public class ProductHandler {
         String useCase = request.pathVariable(TYPE_JOB);
 
         return getStatusUseCase.getProcessStatus(useCase)
+                .flatMap(status -> ServerResponse.ok()
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .bodyValue(status));
+    }
+
+    public Mono<ServerResponse> processDailyAnimalProducts(ServerRequest request) {
+        var headers = request.headers().asHttpHeaders().toSingleValueMap();
+        
+        Context context = Context.of(
+            TYPE_JOB, "daily",
+            HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
+            HEADER_USE_CASE, "animal"
+        );
+
+        return Mono.deferContextual(ctx -> {
+            String traceId = ctx.get(HEADER_TRACE_ID);
+            LOGGER.log(Level.INFO, "Starting Daily Animal Processing, traceId: {0}", traceId);
+
+            animalDocumentProcessingUseCase.executeAnimalProcessing()
+                .doOnNext(response -> LOGGER.log(Level.INFO, "Animal Document Processed: file={0}, success={1}",
+                    new Object[]{response.getFilename(), response.isSuccess()}))
+                .doOnError(error -> LOGGER.log(Level.SEVERE, "Animal Daily processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
+                .doOnComplete(() -> LOGGER.log(Level.INFO, "Animal Daily processing completed for traceId: {0}", traceId))
+                .contextWrite(ctx)
+                .subscribe();
+
+            return ServerResponse.accepted()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(java.util.Map.of("status", "OK", "message", "Daily Animal processing initiated"));
+        }).contextWrite(context);
+    }
+
+    public Mono<ServerResponse> getAnimalProcessStatus(ServerRequest request) {
+        return getStatusUseCase.getProcessStatus("Animal")
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status));

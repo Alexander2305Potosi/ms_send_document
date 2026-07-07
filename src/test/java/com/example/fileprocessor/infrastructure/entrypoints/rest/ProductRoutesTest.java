@@ -33,7 +33,9 @@ class ProductRoutesTest {
                                 "/products/{type_job}",
                                 "/products/sync/{type_job}",
                                 "/products/sync/status/{type_job}",
-                                "/products/process/status/{type_job}");
+                                "/products/process/status/{type_job}",
+                                "/products/daily/animal",
+                                "/products/process/status/daily/animal");
                 ProductRoutes productRoutes = new ProductRoutes(pathProperties);
 
                 RouterFunction<ServerResponse> combinedRouter = productRoutes.processPendingProducts(productHandler)
