@@ -45,7 +45,7 @@ class ProductRoutesTest {
         }
 
         @Test
-        void processPendingProductsRoute_shouldRouteToHandler() {
+        void processPendingProductsRouteShouldRouteToHandler() {
                 when(productHandler.processPendingProducts(any(ServerRequest.class)))
                                 .thenReturn(ServerResponse.ok().build());
 
@@ -58,7 +58,7 @@ class ProductRoutesTest {
         }
 
         @Test
-        void syncProductsRoute_shouldRouteToHandler() {
+        void syncProductsRouteShouldRouteToHandler() {
                 Mono<ServerResponse> mockResponse = ServerResponse.accepted()
                                 .contentType(MediaType.TEXT_PLAIN)
                                 .bodyValue("1");
@@ -75,7 +75,7 @@ class ProductRoutesTest {
         }
 
         @Test
-        void syncStatusRoute_shouldRouteToHandler() {
+        void syncStatusRouteShouldRouteToHandler() {
                 Mono<ServerResponse> mockResponse = ServerResponse.ok().bodyValue("exitoso");
                 when(productHandler.getSyncStatus(any(ServerRequest.class)))
                                 .thenReturn(mockResponse);
@@ -90,7 +90,7 @@ class ProductRoutesTest {
         }
 
         @Test
-        void processStatusRoute_shouldRouteToHandler() {
+        void processStatusRouteShouldRouteToHandler() {
                 Mono<ServerResponse> mockResponse = ServerResponse.ok().bodyValue("1");
                 when(productHandler.getProcessStatus(any(ServerRequest.class)))
                                 .thenReturn(mockResponse);

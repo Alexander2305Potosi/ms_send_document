@@ -1,4 +1,9 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.mapper;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_RESPONSE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOAP_ERROR;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
@@ -102,7 +107,7 @@ public class SoapMapper {
                     .replace(SoapConstants.T_CONTENT, base64Content);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error building SOAP envelope", e);
-            throw ProcessingException.withTraceId("Build failed", ProcessingResultCodes.UNKNOWN_ERROR.name(), traceId,
+            throw ProcessingException.withTraceId("Build failed", UNKNOWN_ERROR.name(), traceId,
                     e);
         }
     }
@@ -137,13 +142,13 @@ public class SoapMapper {
             }
 
             throw new ProcessingException("Unknown SOAP response structure",
-                    ProcessingResultCodes.INVALID_RESPONSE.name());
+                    INVALID_RESPONSE.name());
 
         } catch (ProcessingException e) {
             throw e;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fatal error parsing SOAP response for traceId=" + traceId, e);
-            throw ProcessingException.withTraceId("Parse failed", ProcessingResultCodes.INVALID_RESPONSE.name(),
+            throw ProcessingException.withTraceId("Parse failed", INVALID_RESPONSE.name(),
                     traceId, e);
         }
     }
@@ -169,9 +174,9 @@ public class SoapMapper {
         }
 
         boolean isSuccess = SoapConstants.STATUS_OK.equalsIgnoreCase(status)
-                || ProcessingResultCodes.SUCCESS.name().equalsIgnoreCase(status);
+                || SUCCESS.name().equalsIgnoreCase(status);
 
-        String finalStatus = status != null ? status : ProcessingResultCodes.SUCCESS.name();
+        String finalStatus = status != null ? status : SUCCESS.name();
         String finalCorrelationId = correlationId != null ? correlationId : "N/A";
         String finalExternalReference = externalReference != null ? externalReference : "N/A";
 
@@ -185,7 +190,7 @@ public class SoapMapper {
                         finalStatus, finalCorrelationId, finalExternalReference);
             }
         } else {
-            finalMessage = message != null ? message : ProcessingResultCodes.FAILURE.name();
+            finalMessage = message != null ? message : FAILURE.name();
         }
 
         return FileUploadResponse.builder()
@@ -223,12 +228,12 @@ public class SoapMapper {
         String finalMessage = extractedCode.isBlank() ? faultString : extractedCode + " - " + faultString;
 
         return FileUploadResponse.builder()
-                .status(ProcessingResultCodes.FAILURE.name())
+                .status(FAILURE.name())
                 .message(finalMessage)
-                .correlationId(extractedCode.isBlank() ? ProcessingResultCodes.SOAP_ERROR.name() : extractedCode)
+                .correlationId(extractedCode.isBlank() ? SOAP_ERROR.name() : extractedCode)
                 .processedAt(Instant.now())
                 .success(false)
-                .syncStatus(ProcessingResultCodes.SOAP_ERROR.name())
+                .syncStatus(SOAP_ERROR.name())
                 .traceId(traceId)
                 .build();
     }

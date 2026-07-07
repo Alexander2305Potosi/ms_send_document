@@ -1,4 +1,11 @@
 package com.example.fileprocessor.infrastructure.drivenadapters;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BAD_GATEWAY;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SERVICE_UNAVAILABLE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_NOT_FOUND;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_RATE_LIMIT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -75,20 +82,20 @@ public final class AdapterErrorMapper {
             syncStatus = mapHttpStatus(wce);
             message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
         } else if (isTimeout(root)) {
-            syncStatus = ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+            syncStatus = GATEWAY_TIMEOUT.name();
             message = "Timeout: El servicio no respondió a tiempo";
         } else if (root instanceof ConnectException) {
-            syncStatus = ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
+            syncStatus = SERVICE_UNAVAILABLE.name();
             message = "Connection refused: El servicio no está disponible";
         } else {
-            syncStatus = ProcessingResultCodes.UNKNOWN_ERROR.name();
+            syncStatus = UNKNOWN_ERROR.name();
             message = root.getMessage() != null && !root.getMessage().isBlank() ? root.getMessage() : error.getMessage();
         }
 
         return FileUploadResponse.builder()
-                .status(ProcessingResultCodes.FAILURE.name())
+                .status(FAILURE.name())
                 .syncStatus(syncStatus)
-                .message(message != null && !message.isBlank() ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .message(message != null && !message.isBlank() ? message : UNKNOWN_ERROR.value())
                 .traceId(traceId)
                 .processedAt(Instant.now())
                 .success(false)
@@ -112,12 +119,12 @@ public final class AdapterErrorMapper {
             return mapHttpStatus(wce);
         }
         if (isTimeout(root)) {
-            return ProcessingResultCodes.GATEWAY_TIMEOUT.name();
+            return GATEWAY_TIMEOUT.name();
         }
         if (root instanceof ConnectException) {
-            return ProcessingResultCodes.SERVICE_UNAVAILABLE.name();
+            return SERVICE_UNAVAILABLE.name();
         }
-        return ProcessingResultCodes.UNKNOWN_ERROR.name();
+        return UNKNOWN_ERROR.name();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -142,10 +149,10 @@ public final class AdapterErrorMapper {
 
     private static String mapHttpStatus(WebClientResponseException wce) {
         int status = wce.getStatusCode().value();
-        if (status == 404) return ProcessingResultCodes.SOURCE_NOT_FOUND.name();
-        if (status == 429) return ProcessingResultCodes.SOURCE_RATE_LIMIT.name();
-        if (wce.getStatusCode().is5xxServerError()) return ProcessingResultCodes.BAD_GATEWAY.name();
-        return ProcessingResultCodes.UNKNOWN_ERROR.name();
+        if (status == 404) return SOURCE_NOT_FOUND.name();
+        if (status == 429) return SOURCE_RATE_LIMIT.name();
+        if (wce.getStatusCode().is5xxServerError()) return BAD_GATEWAY.name();
+        return UNKNOWN_ERROR.name();
     }
 
     private static boolean isTimeout(Throwable t) {

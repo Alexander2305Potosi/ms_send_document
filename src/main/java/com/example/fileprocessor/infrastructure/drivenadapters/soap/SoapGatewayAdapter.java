@@ -1,4 +1,8 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_RESPONSE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
@@ -17,6 +21,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,7 +50,9 @@ public class SoapGatewayAdapter implements SoapGateway {
     @Override
     public Flux<FileUploadResponse> send(FileUploadRequest request) {
         return Flux.deferContextual(ctx -> {
-            final String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
+            final String messageId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown");
+            final String traceId = UUID.randomUUID().toString();
+            LOGGER.log(Level.INFO, "message id: {0} : {1}",new Object[]{messageId, request});
             return sendWithRetry(request, traceId, 1);
         });
     }
@@ -59,9 +66,10 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .switchIfEmpty(Mono.error(new com.example.fileprocessor.domain.exception.ProcessingException(
-                        ProcessingResultCodes.INVALID_RESPONSE.value(),
-                        ProcessingResultCodes.INVALID_RESPONSE.name(), traceId)))
+                        INVALID_RESPONSE.value(),
+                        INVALID_RESPONSE.name(), traceId)))
                 .map(xml -> mapper.parseResponse(xml, traceId).toBuilder()
+                        .traceId(traceId)
                         .attemptCount(attempt)
                         .build())
                 .onErrorResume(error -> handleFinalError(error, traceId)
@@ -112,7 +120,7 @@ public class SoapGatewayAdapter implements SoapGateway {
 
         if (root instanceof WebClientResponseException wce) {
             message = String.format("HTTP %d - %s", wce.getStatusCode().value(), wce.getStatusText());
-        } else if (syncStatus.equals(ProcessingResultCodes.GATEWAY_TIMEOUT.name())) {
+        } else if (syncStatus.equals(GATEWAY_TIMEOUT.name())) {
             message = "Timeout: El servicio no respondió en " + properties.timeoutSeconds() + " segundos";
         } else if (root instanceof java.net.ConnectException) {
             message = "Connection refused: El servicio no está disponible";
@@ -123,8 +131,8 @@ public class SoapGatewayAdapter implements SoapGateway {
         }
 
         return Mono.just(FileUploadResponse.builder()
-                .status(ProcessingResultCodes.FAILED.name())
-                .message(message != null && !message.isBlank() ? message : ProcessingResultCodes.UNKNOWN_ERROR.value())
+                .status(FAILED.name())
+                .message(message != null && !message.isBlank() ? message : UNKNOWN_ERROR.value())
                 .syncStatus(syncStatus)
                 .traceId(traceId)
                 .processedAt(Instant.now())

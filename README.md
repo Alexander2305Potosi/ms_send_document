@@ -25,6 +25,7 @@ Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos co
 17. [Visualizacion de Escenarios de Data en BD](#visualizacion-de-escenarios-de-data-en-bd)
 18. [Excepciones](#excepciones)
 19. [Testing](#testing)
+20. [Reportes y Consultas SQL (Guía Administrativa)](#reportes-y-consultas-sql-guia-administrativa)
 
 ---
 
@@ -401,7 +402,7 @@ Almacena la auditoria y trazabilidad detallada de cada intento de envio de un do
 |---------|------|-------------|
 | `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
 | `documento_id` | BIGINT (FK) | Referencia al documento en la tabla `documentos` |
-| `nombre_archivo` | VARCHAR(255) | Nombre del archivo en el momento del envio |
+| `nombre_archivo` | VARCHAR(255) | Nombre del archivo procesado (Se registra tanto para documentos individuales como para archivos internos de un `.zip`) |
 | `operacion` | VARCHAR(50) | Operacion realizada (ej. UPLOAD_SOAP, UPLOAD_S3) |
 | `resultado` | VARCHAR(50) | Resultado del intento: SUCCESS / FAILURE |
 | `codigo_error` | VARCHAR(50) | Codigo de error (si fallo) |
@@ -1002,52 +1003,81 @@ Definidos en `infrastructure/drivenadapters/aws/S3ErrorCodes.java`:
 | `SERVICE_UNAVAILABLE` | S3Exception 503, SdkException, throttling |
 | `UNKNOWN_ERROR` | Cualquier otra excepcion no mapeada |
 
----
+## Seguimiento, Estados y Reintentos (Guía Funcional)
 
-## Trazabilidad de Envios
+Para garantizar que no se pierda información y saber exactamente qué pasó con cada documento enviado, el sistema lleva un registro en dos niveles: un **"Expediente Principal"** (vista global) y una **"Bitácora Detallada"** (vista minuciosa). Esto es especialmente útil cuando se procesan paquetes (archivos `.zip`) que contienen múltiples documentos adentro.
 
-Cada documento procesado deja un registro en `historico_documentos` con el `caso_uso` que lo envio (SOAP o S3), lo que permite tracking por caso de uso y analisis de reintentos.
+### 1. Expediente Principal (Tabla `documentos`)
+Esta es la vista general. Muestra cómo va el trámite completo del paquete que se subió, sin entrar a ver el historial de cada archivo pequeño. 
 
-### Estructura de la tabla unificada
+- **¿En qué estado está el paquete? (`estado`)**
+  - **Pendiente (`PENDING`)**: El paquete está en fila esperando su turno para ser procesado, o tuvo un problema temporal (como una caída de internet) y el sistema lo volverá a intentar más tarde.
+  - **En Progreso (`IN_PROGRESS`)**: El sistema está trabajando con los archivos en este momento.
+  - **Procesado (`PROCESSED`)**: Todo fue un éxito. Todos los documentos dentro del paquete llegaron a su destino.
+  - **Fallido (`FAILED`)**: El sistema intentó enviarlo varias veces (agotó todas sus oportunidades) y no pudo por un problema de conexión recurrente.
+  - **Rechazado (`BUSINESS_REJECTION`)**: Fue rechazado porque no cumple con las reglas del negocio (por ejemplo, el documento pesa más de lo permitido o no es válido). El sistema no lo volverá a intentar porque requiere que una persona corrija el archivo.
+- **Contador de intentos generales (`reintentos`)**: Indica cuántas "oportunidades" o ciclos generales le ha dado el sistema a este paquete. Solo suma +1 cuando el paquete entero falla y pasa a estado Pendiente para intentar en el futuro.
+- **Mensaje de Error**: Un resumen fácil de leer sobre cuál fue el problema principal.
 
-La tabla `historico_documentos` contiene dos tipos de filas:
+### 2. Bitácora Detallada (Tabla `historico_documentos`)
+Esta es la vista con lupa. Es un diario que anota cada pequeño paso que da el sistema. **Nunca se borra nada**, y se agregan nuevas líneas para saber exactamente qué pasó, cuándo y cuántas veces para cada envío.
 
-- **Filas de metadatos** (`caso_uso IS NULL`): Representan el estado actual del documento. Se crean durante la sincronizacion y se actualizan durante el procesamiento.
-- **Filas de trazabilidad** (`caso_uso IS NOT NULL`): Registran cada intento de envio a un gateway. Son append-only para auditoria.
+- **Nombre exacto del archivo (`nombre_archivo`)**: Se registra tanto para los documentos individuales (no-zip) como para cada uno de los archivos internos extraídos si el original es un `.zip` (por ejemplo: `cedula.pdf` o `contrato.pdf`). Esto asegura una visibilidad total de los nombres de los archivos procesados.
+- **Resultado de cada envío**: Indica el resultado del intento en ese momento (Exitoso, Error o Rechazado).
+- **Intentos rápidos o internos (`reintentos`)**: Si el sistema nota que la red falló al intentar realizar un envío, hará intentos rápidos e inmediatos (por ejemplo, hasta 3 reintentos). En esta bitácora verás registrado **cada uno de los intentos** por separado (intento 1, 2, 3, etc.), demostrando la trazabilidad completa del procesamiento de cada archivo.
+- **Detalle del problema (`mensaje_error`)**: La respuesta o código de error exacto retornado por el destino externo para ese intento en específico.
 
-### Campos clave
+### ¿Cómo funciona en la práctica cuando procesas documentos y paquetes (.zip)?
 
-- **`caso_uso`**: Identifica el gateway usado ("SOAP" o "S3"). NULL en filas de metadatos.
-- **`reintentos`**: Numero de intento actual (0 = primer intento, 1 = primer reintento, etc.). Se consulta `getRetryCount()` desde `historico_documentos` antes de cada intento.
-- **`id_documento`**: Incluye la ruta cuando el documento viene de un ZIP (ej: `doc-1/test.pdf`).
+Imagina que procesas un paquete llamado `documentos_cliente.zip` que contiene dos archivos: `cedula.pdf` y `contrato.pdf`.
 
-### Flujo de Persistencia
+1. **Apertura del paquete:** El sistema abre el `.zip` automáticamente en memoria y toma los archivos para enviarlos individualmente.
+2. **Intentos individuales (Registro en la Bitácora Detallada):**
+   - El sistema intenta enviar `cedula.pdf`. Falla por un pequeño corte de red (intento 1). Automáticamente insiste. El segundo intento falla (intento 2). El tercer intento tiene éxito (intento 3). La **Bitácora Detallada** registrará 3 líneas:
+     - *`cedula.pdf` | Error | Intento 1 | GATEWAY_TIMEOUT*
+     - *`cedula.pdf` | Error | Intento 2 | GATEWAY_TIMEOUT*
+     - *`cedula.pdf` | Éxito | Intento 3 | SUCCESS*
+   - Luego, intenta enviar `contrato.pdf`. Sube exitosamente a la primera. La **Bitácora** registra:
+     - *`contrato.pdf` | Éxito | Intento 1 | SUCCESS*
+3. **Decisión Final (Expediente Principal):**
+   Al terminar de intentar con todos los archivos, el sistema actualiza la vista global (tabla `documentos`). Si todos los archivos llegaron a su destino final, el paquete completo pasa a **Procesado (`PROCESSED`)**. Si algún archivo del paquete quedó en error reintentable después de todos sus reintentos automáticos, el paquete completo vuelve a **Pendiente (`PENDING`)** para una próxima vuelta del scheduler.
+4. **La segunda vuelta (El reintento):**
+   Más tarde, el sistema vuelve a tomar el expediente. Los contadores rápidos de la Bitácora Detallada inician de nuevo desde 1 para esta nueva ejecución, y cada intento fallido o exitoso se vuelve a anexar con su correspondiente fecha y hora.
 
-```
-uploadDocument() → FileUploadResult
-        │
-        ▼
-handleUploadSuccess() o handleUploadError()
-        │
-        ▼
-DocumentHistory (
-    null,                          // id (auto-generado)
-    document.documentId(),        // id_documento
-    document.productId(),         // id_producto
-    ...metadata fields...,        // nombre, propietario, ruta, etc.
-    implementationName(),         // caso_uso = "SOAP" o "S3"
-    isSuccess ? "SUCCESS" : "FAILURE", // resultado
-    errorCode,                    // codigo_error
-    errorMessage,                // mensaje_error
-    retryCount,                  // reintentos = numero de intento
-    now,                         // fecha_creacion
-    now                          // fecha_actualizacion
-)
-        │
-        ▼
-historyRepository.save(record)  → INSERT en historico_documentos
-historyRepository.updateState() → UPDATE en fila de metadatos (caso_uso IS NULL)
-```
+### Escenarios Prácticos de Ejemplo
+
+Para entender mejor cómo se actualizan el Expediente Principal y la Bitácora Detallada, veamos 4 escenarios comunes:
+
+#### Escenario 1: El escenario ideal (Éxito a la primera)
+Subes un paquete `.zip` con 2 archivos: `foto.png` y `contrato.pdf`.
+*   **Qué pasa en el sistema**: Ambos archivos se envían correctamente al primer intento.
+*   **Bitácora Detallada**: Muestra 2 líneas (una por archivo) indicando Éxito en el intento 1.
+*   **Expediente Principal**: Pasa a estado **Procesado (`PROCESSED`)** con contador general en 1.
+
+#### Escenario 2: Tropezón rápido (Falla temporal y recuperación)
+Subes el paquete, pero justo en el momento de enviarlo, hay una pequeña pérdida de conexión en la red.
+*   **Qué pasa en el sistema**: `foto.png` falla, el sistema lo reintenta rapidísimo por segunda vez, y ahí sí funciona.
+*   **Bitácora Detallada**:
+    *   Línea 1: `foto.png` / Error / Intento 1
+    *   Línea 2: `foto.png` / Éxito / Intento 2
+*   **Expediente Principal**: Como al final sí se logró enviar, el paquete pasa a estado **Procesado (`PROCESSED`)** y su contador general se queda en 1. A los ojos del negocio, todo fluyó sin requerir la intervención del ciclo largo del día siguiente.
+
+#### Escenario 3: Problemas de reglas (Rechazo Permanente)
+Subes un `.zip`, pero `contrato.pdf` está dañado o pesa demasiado (por ejemplo, 100MB).
+*   **Qué pasa en el sistema**: El sistema ni siquiera intenta enviarlo, o el servidor destino lo rechaza inmediatamente por violar una política.
+*   **Bitácora Detallada**: Muestra 1 línea para ese archivo indicando **Rechazado (`BUSINESS_REJECTION`)** en el intento 1.
+*   **Expediente Principal**: Automáticamente el paquete entero se marca como **Rechazado (`BUSINESS_REJECTION`)**. El sistema se detiene y no volverá a intentar enviar este paquete automáticamente, porque requiere que un analista humano corrija el documento.
+
+#### Escenario 4: Caída total (Requiere segunda vuelta de negocio)
+Subes el `.zip` con los 2 archivos, pero el servidor destino está completamente caído por un mantenimiento no avisado.
+*   **Qué pasa en el sistema (Hoy)**:
+    *   `foto.png` intenta subir, falla 3 veces rápidas.
+    *   `contrato.pdf` intenta subir, falla 3 veces rápidas.
+*   **Bitácora Detallada (Hoy)**: Se crean 6 líneas en total (intentos 1, 2 y 3 para cada archivo) marcando Error.
+*   **Expediente Principal (Hoy)**: El sistema se rinde por hoy. Pasa a estado **Pendiente (`PENDING`)** y su contador general sube a 2.
+*   **Qué pasa en el sistema (Mañana)**: El sistema automático toma de nuevo el expediente 2. El servidor ya fue arreglado y todo fluye.
+*   **Bitácora Detallada (Mañana)**: Se agregan 2 nuevas líneas de Éxito en el intento 1 (el contador rápido siempre inicia en 1 al empezar una nueva vuelta global).
+*   **Expediente Principal (Mañana)**: Finalmente pasa a **Procesado (`PROCESSED`)**, dejando muy claro en su historia que tomó 2 ciclos largos de negocio lograrlo.
 
 ---
 
@@ -1362,3 +1392,99 @@ Dado que es un script Bash (`.sh`), Windows no puede ejecutarlo directamente des
 | **Validacion SOAP** | JAXB (jakarta.xml.bind) + DOM Parser seguro |
 | **Testing** | JUnit 5, Mockito, Reactor Test, MockWebServer |
 | **Calidad** | JaCoCo, PiTest (mutation testing) |
+
+---
+
+## Reportes y Consultas SQL (Guía Administrativa)
+
+Esta sección contiene consultas SQL optimizadas para la base de datos del microservicio (H2 en desarrollo, PostgreSQL en producción). Los reportes están diseñados para ser interpretados por personal administrativo, convirtiendo los códigos de error técnicos en descripciones claras en lenguaje de negocios.
+
+### 1. Reporte de Documentos Rechazados por Reglas de Negocio
+Este reporte muestra los documentos que fueron rechazados porque no cumplen con las políticas del negocio (como tamaño límite superado, extensión de archivo inválida o contenido vacío). Estos casos **requieren corrección del archivo** y no se solucionan con reintentos de red.
+
+```sql
+SELECT 
+    d.id_documento AS "Código del Documento",
+    h.nombre_archivo AS "Nombre del Archivo",
+    d.sucursal AS "Sucursal",
+    CASE h.codigo_error
+        WHEN 'PATTERN_MISMATCH' THEN 'Formato de archivo no permitido (extensión o tipo MIME incorrecto)'
+        WHEN 'SIZE_EXCEEDED' THEN 'El archivo supera el tamaño máximo permitido'
+        WHEN 'INVALID_BASE64' THEN 'El contenido del archivo está corrupto (decodificación Base64 fallida)'
+        WHEN 'EMPTY_CONTENT' THEN 'El archivo está vacío (0 bytes)'
+        WHEN 'DECOMPRESSION_ERROR' THEN 'El archivo comprimido ZIP está corrupto o protegido con contraseña'
+        ELSE 'Incumplimiento de regla de negocio general'
+    END AS "Motivo del Rechazo",
+    h.fecha_fin AS "Fecha de Rechazo"
+FROM documentos d
+JOIN historico_documentos h ON d.id = h.documento_id
+WHERE d.estado = 'BUSINESS_REJECTION' 
+   OR h.codigo_error IN ('PATTERN_MISMATCH', 'SIZE_EXCEEDED', 'INVALID_BASE64', 'EMPTY_CONTENT', 'DECOMPRESSION_ERROR')
+ORDER BY h.fecha_fin DESC;
+```
+
+---
+
+### 2. Reporte de Fallos de Envío o Conexión (Errores de API)
+Este reporte lista las transacciones que fallaron debido a problemas en los servidores externos de origen o destino (como caídas de red, indisponibilidad del servicio SOAP/S3 o timeouts).
+
+```sql
+SELECT 
+    d.id_documento AS "Código del Documento",
+    h.nombre_archivo AS "Nombre del Archivo",
+    d.caso_uso AS "Canal de Envío (SOAP/S3)",
+    d.sucursal AS "Sucursal",
+    h.reintentos AS "Intento de Envío",
+    CASE h.codigo_error
+        WHEN 'GATEWAY_TIMEOUT' THEN 'Tiempo de espera agotado (el servidor destino tardó demasiado en responder)'
+        WHEN 'BAD_GATEWAY' THEN 'Error en el servidor de destino (respondió con error técnico 5xx)'
+        WHEN 'SERVICE_UNAVAILABLE' THEN 'El servicio externo está fuera de línea temporalmente'
+        WHEN 'SOURCE_NOT_FOUND' THEN 'El documento no existe en el sistema que origina el archivo (Error 404)'
+        WHEN 'SOURCE_RATE_LIMIT' THEN 'Saturación en el origen (Límite de peticiones por minuto sumado)'
+        WHEN 'DEST_BAD_REQUEST' THEN 'Los datos del documento fueron rechazados por el destino (Error 400)'
+        WHEN 'DEST_UNAUTHORIZED' THEN 'Problema de acceso (Credenciales o permisos incorrectos en el destino)'
+        WHEN 'UNKNOWN_ERROR' THEN 'Error de sistema no clasificado'
+        ELSE 'Fallo de comunicación con la API'
+    END AS "Descripción del Problema",
+    h.mensaje_error AS "Detalle Técnico para Soporte",
+    h.fecha_fin AS "Fecha del Fallo"
+FROM documentos d
+JOIN historico_documentos h ON d.id = h.documento_id
+WHERE h.resultado = 'FAILURE'
+  AND h.codigo_error NOT IN ('PATTERN_MISMATCH', 'SIZE_EXCEEDED', 'INVALID_BASE64', 'EMPTY_CONTENT', 'DECOMPRESSION_ERROR')
+ORDER BY h.fecha_fin DESC;
+```
+
+---
+
+### 3. Panel de Control General (Resumen para Administrativos)
+Esta consulta genera un estado consolidado y limpio de todos los documentos y paquetes procesados, facilitando el seguimiento del estado del trámite de manera no técnica.
+
+```sql
+SELECT 
+    d.id_documento AS "Documento Principal",
+    COALESCE(h.nombre_archivo, d.nombre) AS "Nombre del Archivo",
+    d.sucursal AS "Sucursal",
+    CASE 
+        WHEN d.estado = 'PROCESSED' THEN 'Completado con Éxito'
+        WHEN d.estado = 'BUSINESS_REJECTION' THEN 'Rechazado (Requiere corregir archivo)'
+        WHEN d.estado = 'FAILED' THEN 'Fallido Definitivo (Error de Conexión)'
+        WHEN d.estado = 'PENDING' THEN 'En Espera (Pendiente de procesar o reintentar)'
+        WHEN d.estado = 'IN_PROGRESS' THEN 'En Proceso de Envío'
+        ELSE d.estado
+    END AS "Estado del Trámite",
+    CASE 
+        WHEN h.resultado = 'SUCCESS' THEN 'Ninguna (Trámite finalizado con éxito)'
+        WHEN h.codigo_error IN ('PATTERN_MISMATCH', 'SIZE_EXCEEDED', 'INVALID_BASE64', 'EMPTY_CONTENT', 'DECOMPRESSION_ERROR') 
+            THEN 'Revisar y corregir archivo (tamaño, nombre o formato) y volver a subir'
+        ELSE 'Esperar reintento automático de red o reportar a soporte técnico'
+    END AS "Acción Requerida",
+    d.fecha_actualizacion AS "Última Actualización"
+FROM documentos d
+LEFT JOIN (
+    SELECT documento_id, nombre_archivo, resultado, codigo_error, fecha_fin,
+           ROW_NUMBER() OVER (PARTITION BY documento_id, nombre_archivo ORDER BY fecha_fin DESC) as rn
+    FROM historico_documentos
+) h ON d.id = h.documento_id AND h.rn = 1
+ORDER BY d.fecha_actualizacion DESC;
+```

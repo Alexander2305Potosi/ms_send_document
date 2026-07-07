@@ -21,9 +21,9 @@ public interface DocumentRepository {
     /**
      * Updates document state and retry count.
      * @param doc The document with new values.
-     * @param expectedState The previous state required for the update to succeed.
+     * @param expectedStates The previous state(s) required for the update to succeed.
      */
-    Mono<Long> updateStateAndRetry(Document doc, String expectedState);
+    Mono<Long> updateStateAndRetry(Document doc, String... expectedStates);
 
     /**
      * Checks if a document with the given productId and documentId already exists.
@@ -38,6 +38,4 @@ public interface DocumentRepository {
     /** Agrupa documentos por estado hoy por caso de uso (process status) */
     Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
 
-    /** Obtiene el último ID de producto procesado dentro del rango de fechas leído del contexto reactivo */
-    Mono<String> findLastProcessedProductIdInRange();
 }

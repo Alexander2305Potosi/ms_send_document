@@ -1,6 +1,12 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BUSINESS_REJECTION;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.ERROR;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.ERR_DUPLICATED_DOC;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.IN_PROGRESS;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SKIPPED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
 
-import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.DocumentHistoryEntity;
@@ -18,14 +24,17 @@ public class DocumentHistoryR2dbcAdapter {
     public Mono<DocumentHistoryEntity> saveHistory(DocumentHistoryDTO historyDTO) {
         String resultStatus;
         
-        if (ProcessingResultCodes.IN_PROGRESS.name().equals(historyDTO.getState())) {
-            resultStatus = ProcessingResultCodes.IN_PROGRESS.name();
+        if (IN_PROGRESS.name().equals(historyDTO.getState())) {
+            resultStatus = IN_PROGRESS.name();
         } else {
-            resultStatus = ProcessingResultCodes.PROCESSED.name().equals(historyDTO.getState()) ? 
-                          ProcessingResultCodes.SUCCESS.name() : ProcessingResultCodes.ERROR.name();
-            
-            if (ProcessingResultCodes.ERR_DUPLICATED_DOC.name().equals(historyDTO.getState())) {
-                resultStatus = ProcessingResultCodes.SKIPPED.name();
+            if (PROCESSED.name().equals(historyDTO.getState())) {
+                resultStatus = SUCCESS.name();
+            } else if (ERR_DUPLICATED_DOC.name().equals(historyDTO.getState())) {
+                resultStatus = SKIPPED.name();
+            } else if (BUSINESS_REJECTION.name().equals(historyDTO.getState())) {
+                resultStatus = BUSINESS_REJECTION.name();
+            } else {
+                resultStatus = ERROR.name();
             }
         }
 

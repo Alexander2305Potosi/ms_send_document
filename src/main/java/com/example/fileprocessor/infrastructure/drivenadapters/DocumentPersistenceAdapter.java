@@ -1,4 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.IN_PROGRESS;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
@@ -25,22 +27,28 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
 
     @Override
     public Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay) {
-        return documentRepository.findByStateAndUseCaseToday(ProcessingResultCodes.PENDING.name(), useCase, startOfDay);
+        String[] estados = new String[] {
+            PENDING.name(),
+            IN_PROGRESS.name()
+        };
+        return documentRepository.findByStatesAndUseCaseToday(estados, useCase, startOfDay);
     }
 
     @Override
     public Mono<Long> lockDocumentForProcessing(Long id, int currentRetry) {
         Document doc = new Document();
         doc.setId(id);
-        doc.setState(ProcessingResultCodes.IN_PROGRESS.name());
+        doc.setState(IN_PROGRESS.name());
         doc.setRetryCount(currentRetry);
         
-        return documentRepository.updateStateAndRetry(doc, ProcessingResultCodes.PENDING.name());
+        return documentRepository.updateStateAndRetry(doc, 
+                PENDING.name(), 
+                IN_PROGRESS.name());
     }
 
     @Override
     public Mono<Void> finalizeProcessingAtomically(DocumentHistoryDTO history) {
-        String initialState = ProcessingResultCodes.IN_PROGRESS.name();
+        String initialState = IN_PROGRESS.name();
         
         Document doc = Document.builder()
                 .id(history.getDocumentId())
@@ -54,13 +62,16 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
 
         Mono<Void> updateDb = documentRepository.updateStateAndRetry(doc, initialState).then();
         
+        // Para ZIPs no se guarda el resumen en historico_documentos porque la trazabilidad
+        // individual de cada archivo interno ya fue registrada y la tabla documentos
+        // almacena el estado consolidado.
         if (Boolean.TRUE.equals(history.getIsZip())) {
-            return updateDb.as(transactionalOperator::transactional);
-        } else {
-            return updateDb.then(historyRepository.saveHistory(history))
-                    .as(transactionalOperator::transactional)
-                    .then();
+            return updateDb.as(transactionalOperator::transactional).then();
         }
+
+        return updateDb.then(historyRepository.saveHistory(history))
+                .as(transactionalOperator::transactional)
+                .then();
     }
 
     @Override

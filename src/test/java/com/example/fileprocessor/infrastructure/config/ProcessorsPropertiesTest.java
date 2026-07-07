@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ProcessorsPropertiesTest {
 
     @Test
-    void processorConfig_withBothValues() {
+    void processorConfigWithBothValues() {
         ProcessorsProperties.ProcessorConfig config = new ProcessorsProperties.ProcessorConfig(
             52428800L, ".*\\.pdf$"
         );
@@ -17,7 +17,7 @@ class ProcessorsPropertiesTest {
     }
 
     @Test
-    void processorConfig_withNullValues() {
+    void processorConfigWithNullValues() {
         ProcessorsProperties.ProcessorConfig config = new ProcessorsProperties.ProcessorConfig(
             null, null
         );
@@ -27,7 +27,7 @@ class ProcessorsPropertiesTest {
     }
 
     @Test
-    void processorConfig_withOnlySize() {
+    void processorConfigWithOnlySize() {
         ProcessorsProperties.ProcessorConfig config = new ProcessorsProperties.ProcessorConfig(
             1000L, null
         );
@@ -37,7 +37,7 @@ class ProcessorsPropertiesTest {
     }
 
     @Test
-    void processorConfig_withOnlyPattern() {
+    void processorConfigWithOnlyPattern() {
         ProcessorsProperties.ProcessorConfig config = new ProcessorsProperties.ProcessorConfig(
             null, ".*\\.csv$"
         );
@@ -47,7 +47,7 @@ class ProcessorsPropertiesTest {
     }
 
     @Test
-    void properties_withBothProcessors() {
+    void propertiesWithBothProcessors() {
         ProcessorsProperties.ProcessorConfig s3 = new ProcessorsProperties.ProcessorConfig(52428800L, ".*");
         ProcessorsProperties.ProcessorConfig soap = new ProcessorsProperties.ProcessorConfig(10485760L, ".*\\.pdf$");
 

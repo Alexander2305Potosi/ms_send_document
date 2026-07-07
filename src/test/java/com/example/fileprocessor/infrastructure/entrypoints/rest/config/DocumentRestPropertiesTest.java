@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DocumentRestPropertiesTest {
 
     @Test
-    void record_createsValidProperties() {
+    void recordCreatesValidProperties() {
         DocumentRestProperties props = new DocumentRestProperties(
             "http://localhost:3001",
             "/api/products",
@@ -22,7 +22,7 @@ class DocumentRestPropertiesTest {
     }
 
     @Test
-    void productDocumentsPath_withReplacement() {
+    void productDocumentsPathWithReplacement() {
         DocumentRestProperties props = new DocumentRestProperties(
             "http://localhost:3001",
             "/api/products",

@@ -27,7 +27,7 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_singleRule_passes() {
+    void validateSingleRulePasses() {
         RulesBussinesService validator = new RulesBussinesService(
             config(null, ".*\\.pdf$")
         );
@@ -38,7 +38,7 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_patternFails() {
+    void validatePatternFails() {
         RulesBussinesService validator = new RulesBussinesService(
             config(null, ".*\\.pdf$")
         );
@@ -48,7 +48,7 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_multipleRules_allPass() {
+    void validateMultipleRulesAllPass() {
         RulesBussinesService validator = new RulesBussinesService(
             config(null, ".*\\.(pdf|docx)$")
         );
@@ -59,7 +59,7 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_multipleRules_oneFails() {
+    void validateMultipleRulesOneFails() {
         RulesBussinesService validator = new RulesBussinesService(
             config(null, ".*\\.pdf$")
         );
@@ -69,7 +69,7 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_sizeExceeded_throwsProcessingException() {
+    void validateSizeExceededThrowsProcessingException() {
         RulesBussinesService validator = new RulesBussinesService(
             config(100L, null)
         );
@@ -79,7 +79,7 @@ class DocumentValidatorTest {
     }
 
     @Test
-    void validate_noPattern_passes() {
+    void validateNoPatternPasses() {
         RulesBussinesService validator = new RulesBussinesService(
             config(null, null)
         );

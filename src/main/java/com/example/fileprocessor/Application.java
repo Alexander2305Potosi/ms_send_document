@@ -9,7 +9,10 @@ import org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguratio
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.ComponentScan;
 
-@SpringBootApplication(exclude = {WebMvcAutoConfiguration.class})
+@SpringBootApplication(exclude = {
+    WebMvcAutoConfiguration.class,
+    org.springframework.boot.autoconfigure.data.r2dbc.R2dbcRepositoriesAutoConfiguration.class
+})
 @EnableConfigurationProperties({SoapProperties.class, DocumentRestProperties.class, PathProperties.class})
 public class Application {
     public static void main(String[] args) {

@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class FileUploadResponseTest {
 
     @Test
-    void builder_shouldCreateInstance() {
+    void builderShouldCreateInstance() {
         Instant now = Instant.now();
 
         FileUploadResponse result = FileUploadResponse.builder()
@@ -32,7 +32,7 @@ class FileUploadResponseTest {
     }
 
     @Test
-    void builder_withFailure_shouldSetSuccessFalse() {
+    void builderWithFailureShouldSetSuccessFalse() {
         FileUploadResponse result = FileUploadResponse.builder()
             .status("FAILURE")
             .message("Upload failed")

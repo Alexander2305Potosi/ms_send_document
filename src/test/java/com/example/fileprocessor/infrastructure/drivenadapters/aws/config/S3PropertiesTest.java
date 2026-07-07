@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class S3PropertiesTest {
 
     @Test
-    void s3Properties_recordCreatesValidProperties() {
+    void s3PropertiesRecordCreatesValidProperties() {
         S3Properties props = new S3Properties(
             "test-bucket",
             "us-east-1",
@@ -34,7 +34,7 @@ class S3PropertiesTest {
     }
 
     @Test
-    void s3Properties_withEmptyEndpoint() {
+    void s3PropertiesWithEmptyEndpoint() {
         S3Properties props = new S3Properties(
             "bucket", "region", "", false, "key", "secret", 3, 100, 10, "prefix/"
         );

@@ -30,15 +30,28 @@ public class DocumentR2dbcAdapter
         return doQueryMany(() -> repository.findByStateAndUseCaseToday(state, useCase, startOfDay));
     }
 
+    public Flux<Document> findByStatesAndUseCaseToday(String[] estados, String useCase, LocalDateTime startOfDay) {
+        return doQueryMany(() -> repository.findByStatesAndUseCaseToday(estados, useCase, startOfDay));
+    }
+
     @Override
-    public Mono<Long> updateStateAndRetry(Document doc, String expectedState) {
+    public Mono<Long> updateStateAndRetry(Document doc, String... expectedStates) {
         return repository.findById(doc.getId())
             .flatMap(entity -> {
-                // Atomic state validation
-                if (!expectedState.equals(entity.getState())) {
+                boolean stateMatches = false;
+                if (expectedStates != null) {
+                    for (String expectedState : expectedStates) {
+                        if (expectedState != null && expectedState.equals(entity.getState())) {
+                            stateMatches = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!stateMatches) {
                     return Mono.error(new com.example.fileprocessor.domain.exception.ProcessingException(
                         "No se pudo actualizar el documento: el estado actual [" + entity.getState() + 
-                        "] no coincide con el esperado [" + expectedState + "]", 
+                        "] no coincide con los esperados " + java.util.Arrays.toString(expectedStates), 
                         "STATE_MISMATCH"));
                 }
 
@@ -72,27 +85,7 @@ public class DocumentR2dbcAdapter
         return repository.countDocumentsGroupedByStateToday(startOfDay, useCase);
     }
 
-    // Implementación del método de reanudación utilizando constantes límites.
-    @Override
-    public Mono<String> findLastProcessedProductIdInRange() {
-        return Mono.deferContextual(ctx -> {
-            String dateInitVal = ctx.getOrDefault(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_DATE_INIT, "");
-            String dateEndVal  = ctx.getOrDefault(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.HEADER_DATE_END,  "");
 
-            // Parseo defensivo
-            java.time.LocalDate start = com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.parseDateOrToday(dateInitVal);
-            java.time.LocalDate end   = com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.parseDateOrToday(dateEndVal);
-
-            // Conversión a LocalDateTime con las horas límite
-            LocalDateTime startDateTime = start.atTime(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.START_OF_DAY_TIME);
-            LocalDateTime endDateTime   = end.atTime(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.END_OF_DAY_TIME);
-
-            LOGGER.info(() -> "Buscando último producto sincronizado en rango: ["
-                    + startDateTime + " - " + endDateTime + "]");
-
-            return repository.findLastProcessedProductIdInRange(startDateTime, endDateTime);
-        });
-    }
 
     private static final java.util.logging.Logger LOGGER =
             java.util.logging.Logger.getLogger(DocumentR2dbcAdapter.class.getName());

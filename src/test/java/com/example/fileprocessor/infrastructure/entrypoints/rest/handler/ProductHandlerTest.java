@@ -1,4 +1,5 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
 
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
@@ -95,7 +96,7 @@ class ProductHandlerTest {
 
     private static FileUploadResponse successResult() {
         return FileUploadResponse.builder()
-            .status(ProcessingResultCodes.SUCCESS.name())
+            .status(SUCCESS.name())
             .success(true)
             .correlationId("corr-123")
             .traceId("trace-1")
@@ -106,18 +107,18 @@ class ProductHandlerTest {
     // getProcessor tests
 
     @Test
-    void getProcessor_withSoap_returnsSoapUseCase() {
+    void getProcessorWithSoapReturnsSoapUseCase() {
         assertSame(soapDocumentUseCase, handler.getProcessor("soap"));
     }
 
     @Test
-    void getProcessor_withS3Available_returnsS3UseCase() {
+    void getProcessorWithS3AvailableReturnsS3UseCase() {
         when(s3DocumentUseCaseProvider.getIfAvailable()).thenReturn(s3DocumentUseCase);
         assertSame(s3DocumentUseCase, handler.getProcessor("s3"));
     }
 
     @Test
-    void getProcessor_withS3NotAvailable_throws503() {
+    void getProcessorWithS3NotAvailableThrows503() {
         when(s3DocumentUseCaseProvider.getIfAvailable()).thenReturn(null);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -127,7 +128,7 @@ class ProductHandlerTest {
     }
 
     @Test
-    void getProcessor_withUnknownType_throws400() {
+    void getProcessorWithUnknownTypeThrows400() {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
             () -> handler.getProcessor("ftp"));
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
@@ -137,7 +138,7 @@ class ProductHandlerTest {
     // processPendingProducts tests
 
     @Test
-    void processPendingProducts_defaultsToSoap_returnsAccepted() {
+    void processPendingProductsDefaultsToSoapReturnsAccepted() {
         ServerRequest request = mockRequestForProcessing(null, "trace-1");
         when(soapDocumentUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
 
@@ -152,7 +153,7 @@ class ProductHandlerTest {
     }
 
     @Test
-    void processPendingProducts_withS3Param_returnsAccepted() {
+    void processPendingProductsWithS3ParamReturnsAccepted() {
         ServerRequest request = mockRequestForProcessing("s3", "trace-1");
         when(s3DocumentUseCaseProvider.getIfAvailable()).thenReturn(s3DocumentUseCase);
         when(s3DocumentUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
@@ -170,7 +171,7 @@ class ProductHandlerTest {
     // syncProducts tests
 
     @Test
-    void syncProducts_returnsImmediateOk() {
+    void syncProductsReturnsImmediateOk() {
         ServerRequest request = mockRequestForSync("trace-1");
         when(syncDocumentsUseCase.execute("retention")).thenReturn(Mono.just("completed"));
 
@@ -187,7 +188,7 @@ class ProductHandlerTest {
     }
 
     @Test
-    void syncProducts_whenExecuteFails_stillReturnsOk() {
+    void syncProductsWhenExecuteFailsStillReturnsOk() {
         ServerRequest request = mockRequestForSync("trace-1");
         when(syncDocumentsUseCase.execute("retention")).thenReturn(Mono.error(new RuntimeException("fail")));
 

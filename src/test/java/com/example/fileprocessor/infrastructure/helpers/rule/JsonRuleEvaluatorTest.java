@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.helpers.rule;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -13,11 +14,11 @@ class JsonRuleEvaluatorTest {
 
     @BeforeEach
     void setUp() {
-        evaluator = new JsonRuleEvaluator();
+        evaluator = new JsonRuleEvaluator(new ObjectMapper());
     }
 
     @Test
-    void evaluate_withNullOrEmptyRule_returnsTrue() {
+    void evaluateWithNullOrEmptyRuleReturnsTrue() {
         Map<String, String> dto = Map.of("name", "test");
         assertTrue(evaluator.evaluate(null, dto));
         assertTrue(evaluator.evaluate("{}", dto));
@@ -25,7 +26,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_withEqOperator_matchesExactly() {
+    void evaluateWithEqOperatorMatchesExactly() {
         String rule = "{\"name\": {\"$eq\": \"TEST\"}}";
         
         Map<String, String> matchingDto = Map.of("name", "test");
@@ -36,7 +37,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_withContainsOperator_matchesSubstring() {
+    void evaluateWithContainsOperatorMatchesSubstring() {
         String rule = "{\"folder\": {\"$contains\": \"docs\"}}";
         
         Map<String, String> matchingDto = Map.of("folder", "/shared/docs/public");
@@ -47,7 +48,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_withRegexOperator_matchesPattern() {
+    void evaluateWithRegexOperatorMatchesPattern() {
         String rule = "{\"filename\": {\"$regex\": \"^prod_[0-9]{4}\\\\.pdf$\"}}";
         
         Map<String, String> matchingDto = Map.of("filename", "prod_2023.pdf");
@@ -58,7 +59,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_withInOperator_matchesAnyInList() {
+    void evaluateWithInOperatorMatchesAnyInList() {
         String rule = "{\"country\": {\"$in\": [\"co\", \"pe\", \"cl\"]}}";
         
         Map<String, String> matchingDto = Map.of("country", "PE");
@@ -69,7 +70,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_withContainsAnyOperator_matchesAnySubstring() {
+    void evaluateWithContainsAnyOperatorMatchesAnySubstring() {
         String rule = "{\"folder\": {\"$containsAny\": [\"garantia\", \"oficina\"]}}";
         
         Map<String, String> matchingDto1 = Map.of("folder", "/docs/oficina/ventas");
@@ -83,7 +84,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_withMultipleConditions_actsAsAnd() {
+    void evaluateWithMultipleConditionsActsAsAnd() {
         String rule = "{\"folder\": {\"$contains\": \"docs\"}, \"country\": {\"$eq\": \"co\"}}";
         
         Map<String, String> matchingDto = Map.of("folder", "/docs/", "country", "CO");
@@ -97,7 +98,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_withAccents_ignoresAccentsAndCase() {
+    void evaluateWithAccentsIgnoresAccentsAndCase() {
         String rule = "{\"city\": {\"$eq\": \"bogotá\"}, \"department\": {\"$containsAny\": [\"antioquía\", \"boyacá\"]}}";
         
         // DTO without accents, uppercase
@@ -114,7 +115,7 @@ class JsonRuleEvaluatorTest {
     }
 
     @Test
-    void evaluate_whenFieldIsMissingInDto_returnsFalse() {
+    void evaluateWhenFieldIsMissingInDtoReturnsFalse() {
         String rule = "{\"name\": {\"$eq\": \"test\"}}";
         Map<String, String> dto = Map.of(); // Empty DTO
         assertFalse(evaluator.evaluate(rule, dto));

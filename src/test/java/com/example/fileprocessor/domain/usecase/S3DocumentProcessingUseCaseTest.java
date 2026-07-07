@@ -42,7 +42,7 @@ class S3DocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withS3_success() {
+    void executePendingDocumentsWithS3Success() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")
@@ -80,7 +80,7 @@ class S3DocumentProcessingUseCaseTest {
     }
 
     @Test
-    void executePendingDocuments_withS3_failure() {
+    void executePendingDocumentsWithS3Failure() {
         Document doc = Document.builder()
             .id(1L)
             .documentId("doc-1")

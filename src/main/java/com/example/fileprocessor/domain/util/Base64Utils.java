@@ -1,4 +1,6 @@
 package com.example.fileprocessor.domain.util;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.EMPTY_CONTENT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64;
 
 import com.example.fileprocessor.domain.exception.InvalidBase64Exception;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
@@ -16,7 +18,7 @@ public final class Base64Utils {
         if (encoded == null || encoded.isBlank()) {
             throw new InvalidBase64Exception(
                 "Empty Base64 content for document: " + filename + " (documentId=" + documentId + ")",
-                ProcessingResultCodes.EMPTY_CONTENT.name());
+                EMPTY_CONTENT.name());
         }
         try {
             return Base64.getDecoder().decode(encoded);
@@ -24,7 +26,7 @@ public final class Base64Utils {
             throw new InvalidBase64Exception(
                 "Invalid Base64 content for document: " + filename
                 + " (documentId=" + documentId + "): " + e.getMessage(),
-                ProcessingResultCodes.INVALID_BASE64.name(), e);
+                INVALID_BASE64.name(), e);
         }
     }
 

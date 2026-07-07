@@ -40,7 +40,7 @@ class ProductHandlerStatusTest {
     }
 
     @Test
-    void getSyncStatus_returnsHttp200() {
+    void getSyncStatusReturnsHttp200() {
         mockRequestHeaders();
         Mockito.lenient().when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
         when(getSyncStatusUseCase.execute(anyString(), anyString()))
@@ -52,7 +52,7 @@ class ProductHandlerStatusTest {
     }
 
     @Test
-    void getProcessStatus_returnsHttp200() {
+    void getProcessStatusReturnsHttp200() {
         mockRequestHeaders();
         Mockito.lenient().when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
         when(getProcessStatusUseCase.execute(anyString(), anyString()))

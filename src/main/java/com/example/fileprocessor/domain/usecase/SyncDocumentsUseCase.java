@@ -1,4 +1,8 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.ERR_DUPLICATED_DOC;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.NO_SUCURSAL;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
@@ -33,23 +37,10 @@ public class SyncDocumentsUseCase {
     }
 
     public Mono<String> execute(String useCase) {
-        return Mono.deferContextual(ctx -> {
-            String lastProductId = ctx.getOrDefault("last_product_id", "");
-            
-            if (lastProductId.isEmpty()) {
-                LOGGER.info("[SYNC] Iniciando sincronización completa (sin registros previos en el rango).");
-            } else {
-                LOGGER.info("[SYNC] Reanudando sincronización a partir del id_producto: " + lastProductId);
-            }
-            
-            // Inyectar el cursor en el contexto reactivo solo cuando existe un ID previo
-            return productMasterRepository.getAllProducts()
-                    .contextWrite(c -> lastProductId.isEmpty()
-                            ? c
-                            : c.put("last_product_id", lastProductId))
-                    .flatMap(product -> syncDocumentsForProduct(product, useCase))
-                    .then(Mono.just("Document sync completed"));
-        });
+        LOGGER.info("[SYNC] Iniciando sincronización de documentos.");
+        return productMasterRepository.getAllProducts()
+                .flatMap(product -> syncDocumentsForProduct(product, useCase))
+                .then(Mono.just("Document sync completed"));
     }
 
     private Flux<Document> syncDocumentsForProduct(ProductMaestro product, String useCase) {
@@ -57,10 +48,10 @@ public class SyncDocumentsUseCase {
                 .switchIfEmpty(Mono.defer(() -> {
                     Document errorDoc = Document.builder()
                             .productId(product.getProductId())
-                            .documentId(ProcessingResultCodes.NO_SUCURSAL.name())
-                            .name(ProcessingResultCodes.NO_SUCURSAL.name())
-                            .state(ProcessingResultCodes.FAILED.name())
-                            .syncMessage(ProcessingResultCodes.NO_SUCURSAL.value())
+                            .documentId(NO_SUCURSAL.name())
+                            .name(NO_SUCURSAL.name())
+                            .state(FAILED.name())
+                            .syncMessage(NO_SUCURSAL.value())
                             .useCase(useCase)
                             .build();
                     return documentRepository.save(errorDoc).then(Mono.empty());
@@ -68,17 +59,19 @@ public class SyncDocumentsUseCase {
                 .flatMapMany(sucursal -> productRestGateway.getDocumentsByProduct(product)
                         .flatMap(doc -> documentRepository.existsByProductIdAndDocumentId(doc.getProductId(), doc.getDocumentId())
                                 .flatMap(exists -> {
-                                    doc.setUseCase(useCase);
-                                    doc.setOriginFolder(product.getOriginFolder());
-                                    doc.setOriginCountry(product.getOriginCountry());
-                                    doc.setSucursal(sucursal);
-                                    if (exists) {
-                                        doc.setState(ProcessingResultCodes.ERR_DUPLICATED_DOC.name());
-                                        doc.setSyncMessage(ProcessingResultCodes.ERR_DUPLICATED_DOC.value());
-                                    } else {
-                                        doc.setState(ProcessingResultCodes.PENDING.name());
-                                    }
-                                    return documentRepository.save(doc);
+                                    Document docToSave = Document.builder()
+                                            .productId(doc.getProductId())
+                                            .documentId(doc.getDocumentId())
+                                            .name(doc.getName())
+                                            .isZip(doc.getIsZip())
+                                            .useCase(useCase)
+                                            .originFolder(product.getOriginFolder())
+                                            .originCountry(product.getOriginCountry())
+                                            .sucursal(sucursal)
+                                            .state(exists ? ERR_DUPLICATED_DOC.name() : PENDING.name())
+                                            .syncMessage(exists ? ERR_DUPLICATED_DOC.value() : null)
+                                            .build();
+                                    return documentRepository.save(docToSave);
                                 })))
                 .onErrorResume(e -> {
                     LOGGER.severe("Error syncing documents for product " + product.getProductId() + ": " + e.getMessage());

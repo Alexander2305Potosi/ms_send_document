@@ -1,4 +1,8 @@
 package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.IN_PROGRESS;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.NO_SUCURSAL;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
 
 import com.example.fileprocessor.domain.entity.product.StateCount;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
@@ -29,16 +33,16 @@ public class GetProcessStatusUseCase {
                         long count = row.getTotal();
 
                         // isBusinessRule() incluye ERR_DUPLICATED_DOC; NO_SUCURSAL se excluye explícitamente
-                        if (ProcessingResultCodes.NO_SUCURSAL.name().equals(state)
+                        if (NO_SUCURSAL.name().equals(state)
                                 || ProcessingResultCodes.isBusinessRule(state)) {
                             continue;
                         }
 
                         // Los estados activos/en progreso son PENDING e IN_PROGRESS
-                        if (ProcessingResultCodes.PENDING.name().equals(state)
-                                || ProcessingResultCodes.IN_PROGRESS.name().equals(state)) {
+                        if (PENDING.name().equals(state)
+                                || IN_PROGRESS.name().equals(state)) {
                             pending += count;
-                        } else if (ProcessingResultCodes.PROCESSED.name().equals(state)) {
+                        } else if (PROCESSED.name().equals(state)) {
                             processed += count;
                         } else {
                             technicalFailures += count;
