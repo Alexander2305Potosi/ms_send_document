@@ -11,15 +11,13 @@ import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.port.out.AnimalRepository;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import reactor.core.publisher.Flux;
-import java.util.logging.Logger;
+import java.util.logging.Level;
 
 /**
  * Caso de uso específico para las reglas de negocio de carga (upload) de Animales.
  * Se mantiene limpio y enfocado al igual que S3 y Soap, definiendo solo el canal de envío.
  */
 public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
-
-    private static final Logger LOGGER = Logger.getLogger(AnimalDocumentProcessingUseCase.class.getName());
 
     private final AnimalRepository animalRepository;
     private final AnimalRestGateway animalRestGateway;
@@ -46,7 +44,7 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
         return homologationRepository.resolve(history)
                 .flatMapMany(homologation -> {
-                    FileUploadRequest uploadReq = FileUploadRequest.from(history, null, homologation);
+                    FileUploadRequest uploadReq = FileUploadRequest.from(history, docId, homologation);
                     return soapGateway.send(uploadReq);
                 });
     }
@@ -57,17 +55,18 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     }
 
     /**
-     * Orquesta el flujo diario de Animales de forma limpia.
+     * Orquesta el flujo diario de Animales de forma limpia y secuencial.
      * Toda la complejidad de aplanar y filtrar el árbol reside en el Adapter del Gateway.
      */
     public Flux<FileUploadResponse> executeAnimalProcessing() {
         LOGGER.info("Iniciando procesamiento diario Animal...");
         return animalRepository.findAllAnimals()
-                .flatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId()) // Retorna un Flux<Document> ya aplanado y filtrado
-                        .flatMap(doc -> {
+                .concatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId()) // Retorna un Flux<Document> ya aplanado y filtrado
+                        .concatMap(doc -> {
                             String traceId = "Animal-" + animal.getId() + "-" + doc.getDocumentId();
                             return processWithTracking(doc, traceId); // processWithTracking guarda el historial en historico_documentos
                         })
                 );
     }
 }
+

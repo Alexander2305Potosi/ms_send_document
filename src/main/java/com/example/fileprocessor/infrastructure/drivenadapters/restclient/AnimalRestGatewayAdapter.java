@@ -62,7 +62,9 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
                 .uri(properties.animalDirectoryPath(), animalId)
                 .retrieve()
                 .bodyToMono(DirectoryResponse.class)
-                .map(DirectoryResponse::getDirectoryId)
+                .flatMap(resp -> resp.getDirectoryId() != null
+                        ? Mono.just(resp.getDirectoryId())
+                        : Mono.error(new IllegalStateException("DirectoryId es nulo para el animalId=" + animalId)))
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                 .doOnError(e -> LOGGER.log(Level.SEVERE, "Error obteniendo directoryId para animalId={0}: {1}",
                         new Object[]{animalId, e.getMessage()}));
@@ -86,7 +88,8 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
 
     private void traverse(DirectoryNode node, List<DirectoryNode> result) {
         if (node == null) return;
-        if (node.getSource() != null && VALID_SOURCES.contains(node.getSource())) {
+        if (node.getSource() != null && VALID_SOURCES.contains(node.getSource())
+                && node.getBusinessDocumentId() != null && node.getProductId() != null) {
             result.add(node);
         }
         if (node.getChildren() != null) {
