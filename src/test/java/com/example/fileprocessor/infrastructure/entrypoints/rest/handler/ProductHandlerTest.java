@@ -48,7 +48,7 @@ class ProductHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ProductHandler(soapDocumentUseCase, s3DocumentUseCaseProvider, syncDocumentsUseCase, null, null);
+        handler = new ProductHandler(soapDocumentUseCase, s3DocumentUseCaseProvider, syncDocumentsUseCase, null);
     }
 
     private static ServerRequest mockRequestForProcessing(String processorParam, String traceIdHeader) {

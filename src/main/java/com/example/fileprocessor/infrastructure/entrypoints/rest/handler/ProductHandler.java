@@ -3,8 +3,7 @@ package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
-import com.example.fileprocessor.domain.usecase.GetSyncStatusUseCase;
-import com.example.fileprocessor.domain.usecase.GetProcessStatusUseCase;
+import com.example.fileprocessor.domain.usecase.GetStatusUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.beans.factory.ObjectProvider;
@@ -31,20 +30,17 @@ public class ProductHandler {
     private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
     private final SyncDocumentsUseCase syncDocumentsUseCase;
-    private final GetSyncStatusUseCase getSyncStatusUseCase;
-    private final GetProcessStatusUseCase getProcessStatusUseCase;
+    private final GetStatusUseCase getStatusUseCase;
 
     public ProductHandler(
             SoapDocumentProcessingUseCase soapDocumentUseCase,
             ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider,
             SyncDocumentsUseCase syncDocumentsUseCase,
-            GetSyncStatusUseCase getSyncStatusUseCase,
-            GetProcessStatusUseCase getProcessStatusUseCase) {
+            GetStatusUseCase getStatusUseCase) {
         this.soapDocumentUseCase = soapDocumentUseCase;
         this.s3DocumentUseCaseProvider = s3DocumentUseCaseProvider;
         this.syncDocumentsUseCase = syncDocumentsUseCase;
-        this.getSyncStatusUseCase = getSyncStatusUseCase;
-        this.getProcessStatusUseCase = getProcessStatusUseCase;
+        this.getStatusUseCase = getStatusUseCase;
     }
 
     public Mono<ServerResponse> processPendingProducts(ServerRequest request) {
@@ -125,7 +121,7 @@ public class ProductHandler {
                 HEADER_DATE_END, request.queryParam(ApiConstants.HEADER_DATE_END).orElse("")
         ).put(HEADER_PRODUCT_STATUS, request.queryParam(ApiConstants.HEADER_PRODUCT_STATUS).orElse(""));
 
-        return getSyncStatusUseCase.execute(useCase, traceId)
+        return getStatusUseCase.getSyncStatus(useCase)
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status))
@@ -137,7 +133,7 @@ public class ProductHandler {
         String traceId = headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString());
         String useCase = request.pathVariable(TYPE_JOB);
 
-        return getProcessStatusUseCase.execute(useCase, traceId)
+        return getStatusUseCase.getProcessStatus(useCase)
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status));

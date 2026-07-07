@@ -1,7 +1,6 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
-import com.example.fileprocessor.domain.usecase.GetProcessStatusUseCase;
-import com.example.fileprocessor.domain.usecase.GetSyncStatusUseCase;
+import com.example.fileprocessor.domain.usecase.GetStatusUseCase;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,15 +21,14 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ProductHandlerStatusTest {
 
-    @Mock private GetSyncStatusUseCase getSyncStatusUseCase;
-    @Mock private GetProcessStatusUseCase getProcessStatusUseCase;
+    @Mock private GetStatusUseCase getStatusUseCase;
     @Mock private ServerRequest serverRequest;
 
     private ProductHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new ProductHandler(null, null, null, getSyncStatusUseCase, getProcessStatusUseCase);
+        handler = new ProductHandler(null, null, null, getStatusUseCase);
     }
 
     private void mockRequestHeaders() {
@@ -43,7 +41,7 @@ class ProductHandlerStatusTest {
     void getSyncStatusReturnsHttp200() {
         mockRequestHeaders();
         Mockito.lenient().when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
-        when(getSyncStatusUseCase.execute(anyString(), anyString()))
+        when(getStatusUseCase.getSyncStatus(anyString()))
                 .thenReturn(Mono.just(ApiConstants.STATUS_COMPLETED));
 
         StepVerifier.create(handler.getSyncStatus(serverRequest))
@@ -55,7 +53,7 @@ class ProductHandlerStatusTest {
     void getProcessStatusReturnsHttp200() {
         mockRequestHeaders();
         Mockito.lenient().when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
-        when(getProcessStatusUseCase.execute(anyString(), anyString()))
+        when(getStatusUseCase.getProcessStatus(anyString()))
                 .thenReturn(Mono.just(ApiConstants.STATUS_ERROR));
 
         StepVerifier.create(handler.getProcessStatus(serverRequest))
