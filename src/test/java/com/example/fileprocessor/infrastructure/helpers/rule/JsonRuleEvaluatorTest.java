@@ -120,4 +120,11 @@ class JsonRuleEvaluatorTest {
         Map<String, String> dto = Map.of(); // Empty DTO
         assertFalse(evaluator.evaluate(rule, dto));
     }
+
+    @Test
+    void sanitizeKeepingTextPreservesCasingAndAccentsWhileRemovingSpecialChars() {
+        assertNull(evaluator.sanitizeKeepingText(null));
+        assertEquals("ÁrbolVerde 100", evaluator.sanitizeKeepingText("  Árbol-Verde, $100!  "));
+        assertEquals("ATENCIÓN El niño de la España del siglo XXI", evaluator.sanitizeKeepingText("¡ATENCIÓN! El niño de la España del siglo XXI."));
+    }
 }
