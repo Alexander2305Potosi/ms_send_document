@@ -5,12 +5,12 @@ import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PEN
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.RETRYABLE_ERROR;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
 
-import com.example.fileprocessor.domain.entity.product.Document;
-import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.BaseDocument;
+import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.ProcessingContext;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
-import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.util.ZipDecompressor;
 import reactor.core.publisher.Flux;
@@ -23,28 +23,25 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Base use case for document processing.
- * Refactored: DocumentHistoryDTO is now the main information carrier.
- * Processing is STRICTLY SEQUENTIAL to protect external endpoints (like SOAP).
+ * Generic base use case for document processing.
+ * Parametrized on T (BaseDocument) and H (BaseDocumentHistoryDTO).
+ * Decoupled from direct database structure and client details.
  */
-public abstract class AbstractDocumentProcessingUseCase {
+public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, H extends BaseDocumentHistoryDTO> {
 
     protected final Logger LOGGER = Logger.getLogger(getClass().getName());
     private static final String DEFAULT_TRACE = "unknown-trace";
     private static final String TRACE_KEY = ProcessingException.HEADER_TRACE_ID;
 
-    private final DocumentPersistenceGateway persistencePort;
-    private final ProductRestGateway productRestGateway;
-    private final RulesBussinesGateway documentValidator;
+    private final PersistenceGateway<T, H> persistencePort;
+    private final RulesBussinesGateway<H> documentValidator;
     private final String tempDirPath;
 
     protected AbstractDocumentProcessingUseCase(
-            DocumentPersistenceGateway persistencePort,
-            ProductRestGateway productRestGateway,
-            RulesBussinesGateway documentValidator,
+            PersistenceGateway<T, H> persistencePort,
+            RulesBussinesGateway<H> documentValidator,
             String tempDirPath) {
         this.persistencePort = persistencePort;
-        this.productRestGateway = productRestGateway;
         this.documentValidator = documentValidator;
         this.tempDirPath = tempDirPath;
     }
@@ -57,15 +54,27 @@ public abstract class AbstractDocumentProcessingUseCase {
             LOGGER.log(Level.INFO, "[TraceID: {0}] Starting SEQUENTIAL execution for: {1}",
                     new Object[] { traceId, implementationName() });
             return Mono.just(traceId);
-        }).flatMapMany(traceId -> persistencePort.findPendingDocumentsToday(implementationName(), startOfDay)
+        }).flatMapMany(traceId -> getPendingDocuments(startOfDay)
                 .collectList()
                 .flatMapMany(Flux::fromIterable)
                 .concatMap(doc -> processWithTracking(doc, traceId)));
     }
 
-    protected Mono<FileUploadResponse> processWithTracking(Document doc, String traceId) {
-        DocumentHistoryDTO baseHistory = DocumentHistoryDTO.fromDocument(doc);
-        return persistencePort.lockDocumentForProcessing(doc.getId(), doc.getRetryCountSafe())
+    protected abstract Flux<T> getPendingDocuments(LocalDateTime startOfDay);
+
+    protected abstract H buildInitialHistory(T doc);
+
+    protected abstract Mono<ProcessingContext<H>> downloadDocumentContent(H baseHistory);
+
+    protected abstract Flux<FileUploadResponse> uploadDocument(ProcessingContext<H> context, Long docId);
+
+    protected abstract H buildDecompressedEntryHistory(H zipHistory, String entryName);
+
+    protected abstract String implementationName();
+
+    protected Mono<FileUploadResponse> processWithTracking(T doc, String traceId) {
+        H baseHistory = buildInitialHistory(doc);
+        return persistencePort.lockDocumentForProcessing(doc, doc.getRetryCountSafe())
                 .filter(rows -> rows > 0)
                 .switchIfEmpty(Mono.defer(() -> {
                     LOGGER.log(Level.WARNING,
@@ -74,43 +83,36 @@ public abstract class AbstractDocumentProcessingUseCase {
                     return Mono.empty();
                 }))
                 .flatMap(unused -> downloadDocument(baseHistory)
-                        .flatMap(masterHistory -> decompressAndValidate(masterHistory)
-                                .flatMap(innerFile -> uploadDocument(innerFile, doc.getId())
-                                        .map(resp -> ensureFilename(resp, innerFile, doc.getIsZip()))
-                                        .flatMap(resp -> saveAttemptHistory(doc, innerFile, resp)), 1
+                        .flatMap(masterContext -> decompressAndValidate(masterContext)
+                                .flatMap(innerContext -> uploadDocument(innerContext, doc.getId())
+                                        .map(resp -> ensureFilename(resp, innerContext.getHistory(), doc.getIsZip()))
+                                        .flatMap(resp -> saveAttemptHistory(doc, innerContext.getHistory(), resp)), 1
                                 )
                                 .collectList()
-                                .flatMap(responses -> concludeProcessing(doc, masterHistory, responses, traceId))
-                                .onErrorResume(error -> handleGlobalErrorAndConclude(error, doc, masterHistory, traceId))
+                                .flatMap(responses -> concludeProcessing(doc, masterContext.getHistory(), responses, traceId))
+                                .onErrorResume(error -> handleGlobalErrorAndConclude(error, doc, masterContext.getHistory(), traceId))
                         )
                 )
                 .onErrorResume(error -> handleGlobalErrorAndConclude(error, doc, baseHistory, traceId));
     }
 
-    private Mono<DocumentHistoryDTO> downloadDocument(DocumentHistoryDTO baseHistory) {
-        return productRestGateway.getDocument(baseHistory.getProductId(), baseHistory.getBusinessDocumentId())
-                .map(file -> baseHistory.toBuilder()
-                        .content(file.getContent())
-                        .size(file.getSize())
-                        .contentType(file.getContentType())
-                        .filename(file.getFilename())
-                        .originFolder(file.getOriginFolder())
-                        .originCountry(file.getOriginCountry())
-                        .isZip(file.getIsZip())
-                        .build());
+    private Mono<ProcessingContext<H>> downloadDocument(H baseHistory) {
+        return downloadDocumentContent(baseHistory);
     }
 
-    private Flux<DocumentHistoryDTO> decompressAndValidate(DocumentHistoryDTO masterHistory) {
-        return decompress(masterHistory)
-                .concatMap(h -> documentValidator.validate(h, true)
-                        .onErrorMap(e -> DocumentHistoryFactory.mapValidationError(e, masterHistory, h)))
+    private Flux<ProcessingContext<H>> decompressAndValidate(ProcessingContext<H> masterContext) {
+        H masterHistory = masterContext.getHistory();
+        return decompress(masterContext)
+                .concatMap(ctx -> documentValidator.validate(ctx.getHistory(), true)
+                        .map(h -> ctx.toBuilder().history(h).build())
+                        .onErrorMap(e -> DocumentHistoryFactory.mapValidationError(e, masterHistory, ctx.getHistory())))
                 .switchIfEmpty(Flux.defer(() -> {
                     if (Boolean.TRUE.equals(masterHistory.getIsZip())) {
-                        return Flux.<DocumentHistoryDTO>error(new ProcessingException(
+                        return Flux.<ProcessingContext<H>>error(new ProcessingException(
                                 EMPTY_CONTENT.value(),
                                 EMPTY_CONTENT.name()));
                     }
-                    return Flux.<DocumentHistoryDTO>empty();
+                    return Flux.<ProcessingContext<H>>empty();
                 }))
                 .onErrorResume(ProcessingException.class, e -> {
                     if (ProcessingResultCodes.isBusinessRule(e.getErrorCode())) {
@@ -123,14 +125,14 @@ public abstract class AbstractDocumentProcessingUseCase {
                 });
     }
 
-    private FileUploadResponse ensureFilename(FileUploadResponse resp, DocumentHistoryDTO innerFile, Boolean isZip) {
+    private FileUploadResponse ensureFilename(FileUploadResponse resp, H innerHistory, Boolean isZip) {
         if (resp.getFilename() == null) {
-            return resp.toBuilder().filename(innerFile.getFilename()).build();
+            return resp.toBuilder().filename(innerHistory.getFilename()).build();
         }
         return resp;
     }
 
-    private Mono<FileUploadResponse> saveAttemptHistory(Document doc, DocumentHistoryDTO fileHistory, FileUploadResponse resp) {
+    private Mono<FileUploadResponse> saveAttemptHistory(BaseDocument doc, H fileHistory, FileUploadResponse resp) {
         boolean shouldSave = Boolean.TRUE.equals(doc.getIsZip()) || resp.isTechnicalRetry();
         if (shouldSave) {
             return persistencePort.saveHistory(DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, resp)).thenReturn(resp);
@@ -147,7 +149,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return new java.util.ArrayList<>(finalMap.values());
     }
 
-    private Mono<FileUploadResponse> concludeProcessing(Document doc, DocumentHistoryDTO masterHistory, List<FileUploadResponse> responses, String traceId) {
+    private Mono<FileUploadResponse> concludeProcessing(BaseDocument doc, H masterHistory, List<FileUploadResponse> responses, String traceId) {
         if (responses.isEmpty()) {
             return handleGlobalErrorAndConclude(
                     new ProcessingException("No files processed", EMPTY_CONTENT.name()),
@@ -165,7 +167,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         }
     }
 
-    private Mono<FileUploadResponse> handleGlobalErrorAndConclude(Throwable error, Document doc, DocumentHistoryDTO masterHistory, String traceId) {
+    private Mono<FileUploadResponse> handleGlobalErrorAndConclude(Throwable error, BaseDocument doc, H masterHistory, String traceId) {
         LOGGER.log(Level.SEVERE, String.format("[TraceID: %s] Error processing document %s: %s", traceId, doc.getDocumentId(), error.getMessage()), error);
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(error);
         if (error instanceof ProcessingException pe && pe.getFilename() != null) {
@@ -173,9 +175,14 @@ public abstract class AbstractDocumentProcessingUseCase {
         }
         final FileUploadResponse finalResponse = response;
 
-        final DocumentHistoryDTO errorFileHistoryDto = finalResponse.getFilename() != null
-                ? masterHistory.toBuilder().filename(finalResponse.getFilename()).isZip(false).build()
-                : null;
+        final H errorFileHistoryDto;
+        if (finalResponse.getFilename() != null) {
+            masterHistory.setFilename(finalResponse.getFilename());
+            masterHistory.setIsZip(false);
+            errorFileHistoryDto = masterHistory;
+        } else {
+            errorFileHistoryDto = null;
+        }
 
         Mono<Void> saveErrorHistory = Mono.empty();
         if (Boolean.TRUE.equals(doc.getIsZip()) && errorFileHistoryDto != null) {
@@ -192,7 +199,7 @@ public abstract class AbstractDocumentProcessingUseCase {
         return saveErrorHistory.then(finalizeMono).thenReturn(finalResponse);
     }
 
-    private Mono<Void> finalizeProcessing(Document doc, DocumentHistoryDTO history,
+    private Mono<Void> finalizeProcessing(BaseDocument doc, H history,
             List<FileUploadResponse> responses, String traceId) {
         int currentRetryCount = doc.getRetryCountSafe();
         DocumentHistoryFactory.ProcessingConclusion conclusion = DocumentHistoryFactory.calculateNextState(currentRetryCount, responses);
@@ -206,7 +213,7 @@ public abstract class AbstractDocumentProcessingUseCase {
             logPrefix = FAILURE.name();
         }
 
-        DocumentHistoryDTO globalHistory = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        H globalHistory = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
 
         LOGGER.log(Level.INFO, "[TraceID: {0}] [{1}] Document {2} (Product: {3}) -> {4}. Messages: {5}",
                 new Object[] { traceId, logPrefix, doc.getDocumentId(), doc.getProductId(), conclusion.nextState(),
@@ -217,7 +224,7 @@ public abstract class AbstractDocumentProcessingUseCase {
                 .then();
     }
 
-    private Mono<Void> saveAuditOnly(Document doc, DocumentHistoryDTO history, List<FileUploadResponse> responses,
+    private Mono<Void> saveAuditOnly(BaseDocument doc, H history, List<FileUploadResponse> responses,
             String traceId) {
         int currentRetryCount = doc.getRetryCountSafe();
         LOGGER.log(Level.INFO, "[TraceID: {0}] Recording technical retry audit for Document {1} (Attempt {2})",
@@ -225,19 +232,16 @@ public abstract class AbstractDocumentProcessingUseCase {
         return Mono.empty();
     }
 
-    private Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO history) {
+    private Flux<ProcessingContext<H>> decompress(ProcessingContext<H> context) {
+        H history = context.getHistory();
         if (!Boolean.TRUE.equals(history.getIsZip()) || history.getFilename() == null
                 || history.getFilename().isBlank()) {
-            return Flux.just(history);
+            return Flux.just(context);
         }
-        return ZipDecompressor.decompress(history, tempDirPath);
+        return ZipDecompressor.decompress(context, tempDirPath, this::buildDecompressedEntryHistory);
     }
 
     private String extractTraceId(ContextView ctx) {
         return ctx.getOrDefault(TRACE_KEY, DEFAULT_TRACE);
     }
-
-    protected abstract Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId);
-
-    protected abstract String implementationName();
 }

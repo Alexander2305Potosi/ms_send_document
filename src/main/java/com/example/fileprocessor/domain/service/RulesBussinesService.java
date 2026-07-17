@@ -2,19 +2,18 @@ package com.example.fileprocessor.domain.service;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PATTERN_MISMATCH;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SIZE_EXCEEDED;
 
-import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
 import reactor.core.publisher.Mono;
 
 import java.util.regex.Pattern;
 
 /**
- * Default implementation of document validation gateway using DTO.
+ * Default implementation of document validation gateway using generic BaseDocumentHistoryDTO.
  */
-public class RulesBussinesService implements RulesBussinesGateway {
+public class RulesBussinesService<H extends BaseDocumentHistoryDTO> implements RulesBussinesGateway<H> {
 
     private final Long maxFileSizeBytes;
     private final Pattern filenamePattern;
@@ -29,12 +28,12 @@ public class RulesBussinesService implements RulesBussinesGateway {
     }
 
     @Override
-    public Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history) {
+    public Mono<H> validate(H history) {
         return validate(history, false);
     }
 
     @Override
-    public Mono<DocumentHistoryDTO> validate(DocumentHistoryDTO history, boolean includeSizeCheck) {
+    public Mono<H> validate(H history, boolean includeSizeCheck) {
         return Mono.defer(() -> {
             if (includeSizeCheck && maxFileSizeBytes != null && history.getSize() != null && history.getSize() > maxFileSizeBytes) {
                 return Mono.error(new ProcessingException(

@@ -1,9 +1,10 @@
 package com.example.fileprocessor.domain.util;
+
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DECOMPRESSION_ERROR;
 
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.ProcessingContext;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import reactor.test.StepVerifier;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.nio.file.Path;
+import java.util.function.BiFunction;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -22,6 +24,13 @@ class ZipDecompressorTest {
 
     @TempDir
     Path tempDir;
+
+    private final BiFunction<DocumentHistoryDTO, String, DocumentHistoryDTO> entryMapper = (zipHistory, entryName) -> 
+        zipHistory.toBuilder()
+            .businessDocumentId(zipHistory.getBusinessDocumentId() + "/" + entryName)
+            .filename(entryName)
+            .isZip(false)
+            .build();
 
     private byte[] createTestZip(String entryName, String contentStr) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -55,9 +64,10 @@ class ZipDecompressorTest {
                 .isZip(false)
                 .filename("test.txt")
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, new byte[]{1});
 
-        StepVerifier.create(ZipDecompressor.decompress(dto, tempDir.toString()))
-                .expectNext(dto)
+        StepVerifier.create(ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper))
+                .expectNext(ctx)
                 .verifyComplete();
     }
 
@@ -66,11 +76,11 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("test.zip")
-                .content(null)
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, null);
 
-        StepVerifier.create(ZipDecompressor.decompress(dto, tempDir.toString()))
-                .expectNext(dto)
+        StepVerifier.create(ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper))
+                .expectNext(ctx)
                 .verifyComplete();
     }
 
@@ -80,16 +90,16 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("test.zip")
-                .content(zipBytes)
                 .businessDocumentId("doc-1")
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, zipBytes);
 
-        StepVerifier.create(ZipDecompressor.decompress(dto, tempDir.toString()))
+        StepVerifier.create(ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper))
                 .assertNext(extracted -> {
-                    assertEquals("inner.txt", extracted.getFilename());
-                    assertEquals("Hello inside ZIP", new String(extracted.getContent()));
-                    assertFalse(extracted.getIsZip());
-                    assertEquals("doc-1/inner.txt", extracted.getBusinessDocumentId());
+                    assertEquals("inner.txt", extracted.getHistory().getFilename());
+                    assertEquals("Hello inside ZIP", new String(extracted.getFileContent()));
+                    assertFalse(extracted.getHistory().getIsZip());
+                    assertEquals("doc-1/inner.txt", extracted.getHistory().getBusinessDocumentId());
                 })
                 .verifyComplete();
     }
@@ -100,14 +110,14 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("test.zip")
-                .content(zipBytes)
                 .businessDocumentId("doc-1")
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, zipBytes);
 
-        StepVerifier.create(ZipDecompressor.decompress(dto, tempDir.toString()))
+        StepVerifier.create(ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper))
                 .assertNext(extracted -> {
-                    assertEquals("some-dir/inner.txt", extracted.getFilename());
-                    assertEquals("Hello inside ZIP", new String(extracted.getContent()));
+                    assertEquals("some-dir/inner.txt", extracted.getHistory().getFilename());
+                    assertEquals("Hello inside ZIP", new String(extracted.getFileContent()));
                 })
                 .verifyComplete();
     }
@@ -118,12 +128,12 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("test.zip")
-                .content(zipBytes)
                 .businessDocumentId("doc-1")
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, zipBytes);
 
         ProcessingException ex = assertThrows(ProcessingException.class, () -> {
-            ZipDecompressor.decompress(dto, tempDir.toString());
+            ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper).blockLast();
         });
         assertTrue(ex.getMessage().contains("Zip Slip vulnerability detected"));
         assertEquals(DECOMPRESSION_ERROR.name(), ex.getErrorCode());
@@ -131,12 +141,10 @@ class ZipDecompressorTest {
 
     @Test
     void decompressWithZipBombSizeTooBigThrowsProcessingException() throws IOException {
-        // Create an entry that exceeds max allowed size (50MB) by mocking/writing larger payload
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {
             ZipEntry entry = new ZipEntry("huge.txt");
             zos.putNextEntry(entry);
-            // write 51MB
             byte[] chunk = new byte[1024 * 1024];
             for (int i = 0; i < 51; i++) {
                 zos.write(chunk);
@@ -148,12 +156,12 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("test.zip")
-                .content(zipBytes)
                 .businessDocumentId("doc-1")
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, zipBytes);
 
         ProcessingException ex = assertThrows(ProcessingException.class, () -> {
-            ZipDecompressor.decompress(dto, tempDir.toString());
+            ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper).blockLast();
         });
         assertTrue(ex.getMessage().contains("ZIP entry exceeds maximum allowed size"));
         assertEquals(DECOMPRESSION_ERROR.name(), ex.getErrorCode());
@@ -175,12 +183,12 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("bomb.zip")
-                .content(zipBytes)
                 .businessDocumentId("doc-1")
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, zipBytes);
 
         ProcessingException ex = assertThrows(ProcessingException.class, () -> {
-            ZipDecompressor.decompress(dto, tempDir.toString());
+            ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper).blockLast();
         });
         assertTrue(ex.getMessage().contains("Too many entries in ZIP"));
         assertEquals(DECOMPRESSION_ERROR.name(), ex.getErrorCode());
@@ -192,10 +200,10 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("corrupt.zip")
-                .content(corruptBytes)
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, corruptBytes);
 
-        StepVerifier.create(ZipDecompressor.decompress(dto, tempDir.toString()))
+        StepVerifier.create(ZipDecompressor.decompress(ctx, tempDir.toString(), entryMapper))
                 .expectErrorMatches(throwable -> throwable instanceof ProcessingException
                         && throwable.getMessage().contains("Failed to decompress ZIP")
                         && DECOMPRESSION_ERROR.name().equals(((ProcessingException) throwable).getErrorCode()))
@@ -208,17 +216,16 @@ class ZipDecompressorTest {
         DocumentHistoryDTO dto = DocumentHistoryDTO.builder()
                 .isZip(true)
                 .filename("test.zip")
-                .content(zipBytes)
                 .businessDocumentId("doc-1")
                 .build();
+        ProcessingContext<DocumentHistoryDTO> ctx = new ProcessingContext<>(dto, zipBytes);
 
-        // Pass null or empty temp directory to trigger candidate fallbacks
-        StepVerifier.create(ZipDecompressor.decompress(dto, null))
-                .assertNext(extracted -> assertEquals("inner.txt", extracted.getFilename()))
+        StepVerifier.create(ZipDecompressor.decompress(ctx, null, entryMapper))
+                .assertNext(extracted -> assertEquals("inner.txt", extracted.getHistory().getFilename()))
                 .verifyComplete();
 
-        StepVerifier.create(ZipDecompressor.decompress(dto, "   "))
-                .assertNext(extracted -> assertEquals("inner.txt", extracted.getFilename()))
+        StepVerifier.create(ZipDecompressor.decompress(ctx, "   ", entryMapper))
+                .assertNext(extracted -> assertEquals("inner.txt", extracted.getHistory().getFilename()))
                 .verifyComplete();
     }
 

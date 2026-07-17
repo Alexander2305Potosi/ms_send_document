@@ -32,7 +32,7 @@ class S3DocumentProcessingUseCaseTest {
     @Mock
     private S3Gateway s3Gateway;
     @Mock
-    private RulesBussinesGateway documentValidator;
+    private RulesBussinesGateway<DocumentHistoryDTO> documentValidator;
 
     private S3DocumentProcessingUseCase useCase;
 
@@ -61,7 +61,7 @@ class S3DocumentProcessingUseCaseTest {
             .build();
 
         when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
-        when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt())).thenReturn(Mono.just(1L));
+        when(persistencePort.lockDocumentForProcessing(any(Document.class), anyInt())).thenReturn(Mono.just(1L));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
@@ -99,7 +99,7 @@ class S3DocumentProcessingUseCaseTest {
             .build();
 
         when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
-        when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt())).thenReturn(Mono.just(1L));
+        when(persistencePort.lockDocumentForProcessing(any(Document.class), anyInt())).thenReturn(Mono.just(1L));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));

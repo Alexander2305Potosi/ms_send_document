@@ -42,11 +42,17 @@ public class DebugRoutes {
         return Mono.zip(
             dumpTable(databaseClient, "documentos"),
             dumpTable(databaseClient, "historico_documentos"),
-            dumpTable(masterDatabaseClient, "productos_maestros")
+            dumpTable(masterDatabaseClient, "productos_maestros"),
+            dumpTable(databaseClient, "esquema_animales.documentos"),
+            dumpTable(databaseClient, "esquema_animales.historico_documentos"),
+            dumpTable(databaseClient, "schemAnimals.animals_maestro")
         ).flatMap(tuple -> ServerResponse.ok().bodyValue(Map.of(
             "documentos", tuple.getT1(),
             "historico_documentos", tuple.getT2(),
-            "productos_maestros", tuple.getT3()
+            "productos_maestros", tuple.getT3(),
+            "animal_documentos", tuple.getT4(),
+            "animal_historico", tuple.getT5(),
+            "animal_maestro", tuple.getT6()
         )));
     }
 

@@ -1,9 +1,9 @@
 package com.example.fileprocessor.domain.util;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.DECOMPRESSION_ERROR;
 
-import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.ProcessingContext;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
@@ -11,15 +11,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 /**
- * Utility class for decompressing ZIP archives into individual DocumentHistoryDTO instances.
- * Restored the previous file-based ZipFile logic, with robust temporary directory path fallback options.
- * Refactored to reduce control statement nesting to at most 3 levels to improve readability and complexity.
- * Adheres to Sonar code quality guidelines (using var, L suffixes on long literals, and class constants).
+ * Generic utility class for decompressing ZIP archives into individual ProcessingContext instances.
  */
 public final class ZipDecompressor {
 
@@ -28,17 +26,24 @@ public final class ZipDecompressor {
 
     private ZipDecompressor() {}
 
-    public static Flux<DocumentHistoryDTO> decompress(DocumentHistoryDTO zipHistory, String tempDirPath) {
-        if (!Boolean.TRUE.equals(zipHistory.getIsZip()) || zipHistory.getContent() == null) {
-            return Flux.just(zipHistory);
+    public static <H extends BaseDocumentHistoryDTO> Flux<ProcessingContext<H>> decompress(
+            ProcessingContext<H> zipCtx,
+            String tempDirPath,
+            BiFunction<H, String, H> entryMapper) {
+        
+        H zipHistory = zipCtx.getHistory();
+        byte[] zipContent = zipCtx.getFileContent();
+
+        if (!Boolean.TRUE.equals(zipHistory.getIsZip()) || zipContent == null) {
+            return Flux.just(zipCtx);
         }
 
         try {
             var tempFilePath = createTempFileWithFallback(tempDirPath);
             var tempFile = tempFilePath.toFile();
             try {
-                Files.write(tempFile.toPath(), zipHistory.getContent());
-                var entries = processZipFile(tempFile, zipHistory);
+                Files.write(tempFile.toPath(), zipContent);
+                var entries = processZipFile(tempFile, zipHistory, entryMapper);
                 return Flux.fromIterable(entries);
             } finally {
                 Files.deleteIfExists(tempFile.toPath());
@@ -51,10 +56,13 @@ public final class ZipDecompressor {
         }
     }
 
-    private static List<DocumentHistoryDTO> processZipFile(File tempFile, DocumentHistoryDTO zipHistory) throws IOException {
+    private static <H extends BaseDocumentHistoryDTO> List<ProcessingContext<H>> processZipFile(
+            File tempFile, 
+            H zipHistory,
+            BiFunction<H, String, H> entryMapper) throws IOException {
         var zipFile = openZipFile(tempFile);
         try {
-            return extractEntries(zipFile, zipHistory);
+            return extractEntries(zipFile, zipHistory, entryMapper);
         } finally {
             zipFile.close();
         }
@@ -68,8 +76,11 @@ public final class ZipDecompressor {
         }
     }
 
-    private static List<DocumentHistoryDTO> extractEntries(ZipFile zipFile, DocumentHistoryDTO zipHistory) throws IOException {
-        var entries = new ArrayList<DocumentHistoryDTO>();
+    private static <H extends BaseDocumentHistoryDTO> List<ProcessingContext<H>> extractEntries(
+            ZipFile zipFile, 
+            H zipHistory,
+            BiFunction<H, String, H> entryMapper) throws IOException {
+        var entries = new ArrayList<ProcessingContext<H>>();
         var totalEntries = 0;
 
         var enumeration = zipFile.entries();
@@ -91,7 +102,10 @@ public final class ZipDecompressor {
             }
 
             var decompressed = readEntryContent(zipFile, entry);
-            entries.add(buildHistoryEntry(entryName, decompressed, zipHistory));
+            H entryHistory = entryMapper.apply(zipHistory, entryName);
+            entryHistory.setSize((long) decompressed.length);
+
+            entries.add(new ProcessingContext<>(entryHistory, decompressed));
         }
         return entries;
     }
@@ -109,26 +123,22 @@ public final class ZipDecompressor {
     private static java.nio.file.Path createTempFileWithFallback(String tempDirPath) throws IOException {
         var candidates = new ArrayList<java.nio.file.Path>();
 
-        // 1. Configured path
         if (tempDirPath != null && !tempDirPath.trim().isEmpty()) {
             try {
                 candidates.add(java.nio.file.Paths.get(tempDirPath));
             } catch (Exception ignored) {}
         }
 
-        // 2. Default System tmpdir
         var sysTemp = System.getProperty("java.io.tmpdir");
         if (sysTemp != null && !sysTemp.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(sysTemp));
         }
 
-        // 3. User Home subdirectory
         var userHome = System.getProperty("user.home");
         if (userHome != null && !userHome.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(userHome).resolve(".temp-zip-dir"));
         }
 
-        // 4. Current working directory subdirectory
         var userDir = System.getProperty("user.dir");
         if (userDir != null && !userDir.trim().isEmpty()) {
             candidates.add(java.nio.file.Paths.get(userDir).resolve("tmp"));
@@ -146,7 +156,6 @@ public final class ZipDecompressor {
             }
         }
 
-        // Final fallback using system default TempFile behavior
         try {
             return java.nio.file.Files.createTempFile("decompress-", ".zip");
         } catch (IOException e) {
@@ -155,16 +164,5 @@ public final class ZipDecompressor {
             }
             throw e;
         }
-    }
-
-    private static DocumentHistoryDTO buildHistoryEntry(String filename, byte[] content, DocumentHistoryDTO original) {
-        return original.toBuilder()
-            .businessDocumentId(original.getBusinessDocumentId() + "/" + filename)
-            .filename(filename)
-            .contentType(MimeTypeUtil.getMimeType(filename))
-            .size((long) content.length)
-            .isZip(false)
-            .content(content)
-            .build();
     }
 }

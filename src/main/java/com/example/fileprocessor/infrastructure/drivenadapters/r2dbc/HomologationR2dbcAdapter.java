@@ -5,6 +5,7 @@ import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.entity.homologation.CategoryManual;
 import com.example.fileprocessor.domain.entity.homologation.PaisHomologado;
+import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.PaisHomologadoEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository.CategoryManualRepository;
@@ -37,14 +38,14 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
     private boolean cacheLoaded = false;
 
     @Override
-    public Mono<HomologationResult> resolve(DocumentHistoryDTO history) {
+    public Mono<HomologationResult> resolve(BaseDocumentHistoryDTO history) {
         if (!cacheLoaded) {
             return loadCache().then(Mono.defer(() -> resolveFromCache(history)));
         }
         return resolveFromCache(history);
     }
 
-    private Mono<HomologationResult> resolveFromCache(DocumentHistoryDTO history) {
+    private Mono<HomologationResult> resolveFromCache(BaseDocumentHistoryDTO history) {
         String documentId = history.getBusinessDocumentId() != null ? history.getBusinessDocumentId() : "";
 
         // 1. Resolve Category by prefix

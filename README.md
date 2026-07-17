@@ -52,6 +52,7 @@ com.example.fileprocessor/
 │   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base (procesa y descomprime ZIP en runtime)
 │   │   ├── SoapDocumentProcessingUseCase.java       # Implementacion SOAP
 │   │   ├── S3DocumentProcessingUseCase.java         # Implementacion S3
+│   │   ├── AnimalDocumentProcessingUseCase.java     # Implementacion para animales (esquema y flujos independientes)
 │   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y documentos (sin validacion)
 │   │   └── ProcessingResultCodes.java               # Constantes de codigos de error
 │   ├── service/
@@ -63,6 +64,9 @@ com.example.fileprocessor/
 │   ├── port/out/
 │   │   ├── DocumentHistoryRepository.java        # Puerto unificado: CRUD de documentos, consulta por state, trazabilidad
 │   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
+│   │   ├── AnimalRestGateway.java                 # Puerto: API REST externa de animales
+│   │   ├── AnimalSoapGateway.java                 # Puerto: Envio SOAP de animales
+│   │   ├── AnimalRepository.java                  # Puerto: DB de animales
 │   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
 │   │   ├── S3Gateway.java                         # Puerto: envio a S3
 │   │   ├── SoapGateway.java                       # Puerto: envio a SOAP
@@ -83,24 +87,34 @@ com.example.fileprocessor/
     ├── drivenadapters/
     │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
     │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository (tabla unificada)
+    │   │   ├── AnimalPersistenceR2dbcAdapter.java  # Implementa PersistenceGateway para animales
+    │   │   ├── AnimalR2dbcAdapter.java            # Implementa AnimalRepository
     │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (cache en memoria)
     │   │   ├── entity/
     │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos") — tabla unificada
     │   │   │   ├── CategoryManualEntity.java       # @Entity @Table("categoria_manual")
-    │   │   │   └── CountryHomologatedEntity.java  # @Entity @Table("pais_homologado")
+    │   │   │   ├── CountryHomologatedEntity.java  # @Entity @Table("pais_homologado")
+    │   │   │   ├── AnimalDocumentEntity.java       # @Entity @Table("esquema_animales.documentos")
+    │   │   │   ├── AnimalDocumentHistoryEntity.java # @Entity @Table("esquema_animales.historico_documentos")
+    │   │   │   └── AnimalMaestroEntity.java       # @Entity @Table("schemAnimals.animals_maestro")
     │   │   ├── mapper/
     │   │   │   └── DocumentHistoryMapper.java     # DocumentHistory <-> DocumentHistoryEntity
     │   │   └── repository/
     │   │       ├── DocumentHistoryRepository.java # R2dbcRepository<DocumentHistoryEntity, Long>
     │   │       ├── CategoryManualRepository.java  # R2dbcRepository<CategoryManualEntity, Long>
-    │   │       └── CountryHomologatedRepository.java # R2dbcRepository<CountryHomologatedEntity, Long>
+    │   │       ├── CountryHomologatedRepository.java # R2dbcRepository<CountryHomologatedEntity, Long>
+    │   │       ├── AnimalDocumentRepository.java  # R2dbcRepository<AnimalDocumentEntity, Long>
+    │   │       ├── AnimalDocumentHistoryRepository.java # R2dbcRepository<AnimalDocumentHistoryEntity, Long>
+    │   │       └── AnimalRepository.java          # R2dbcRepository<AnimalMaestroEntity, Long>
     │   ├── restclient/
     │   │   ├── ProductRestGatewayAdapter.java     # WebClient a API REST externa (isZip inferido en dominio)
+    │   │   ├── AnimalRestGatewayAdapter.java      # WebClient para directorios y árboles de animales
     │   │   └── dto/
     │   │       ├── ProductResponse.java            # DTO JSON de producto
     │   │       └── ProductDocumentResponse.java    # DTO JSON de documento (Base64)
     │   ├── soap/
     │   │   ├── SoapGatewayAdapter.java            # Envio SOAP con reintentos + backoff
+    │   │   ├── AnimalSoapGatewayAdapter.java      # Envio SOAP para animales
     │   │   ├── SoapErrorCodes.java                # Constantes de error SOAP
     │   │   └── config/
     │   │       └── SoapProperties.java            # @ConfigurationProperties("app.soap")
@@ -115,7 +129,8 @@ com.example.fileprocessor/
     │   ├── handler/
     │   │   └── ProductHandler.java                # Handler de endpoints REST
     │   ├── config/
-    │   │   └── DocumentRestProperties.java        # @ConfigurationProperties("app.document-rest")
+    │   │   ├── DocumentRestProperties.java        # @ConfigurationProperties("app.document-rest")
+    │   │   └── AnimalRestProperties.java          # @ConfigurationProperties("app.animal-rest")
     │   └── constants/
     │       ├── RestApiPaths.java                  # Rutas de la API
     │       └── ApiConstants.java                  # Constantes (headers, parametros)
@@ -180,6 +195,27 @@ Sincroniza productos y documentos desde la API REST externa hacia la base de dat
 {"status":"OK","message":"Document sync initiated"}
 ```
 
+### GET /api/v1/products/daily/animal
+
+Inicia de forma asíncrona el procesamiento diario de animales maestros registrados en la base de datos local. Por cada animal, obtiene los documentos pendientes desde la API REST externa (directorio y árbol de directorios), valida las reglas del negocio, los envía por SOAP y registra la trazabilidad en `esquema_animales.documentos` y `esquema_animales.historico_documentos`.
+
+**Headers:**
+- `message-id`: (opcional) Trace ID para correlación.
+
+**Response:** HTTP 202 (fire-and-forget)
+```json
+{"status":"OK","message":"Daily Animal processing initiated"}
+```
+
+### GET /api/v1/products/process/status/daily/animal
+
+Obtiene la respuesta del estado del procesamiento diario del canal de animales.
+
+**Response:** HTTP 200 (texto plano)
+```
+exitoso
+```
+
 ### GET /actuator/health
 
 Health check. Expone health, info, metrics, loggers y prometheus.
@@ -240,6 +276,33 @@ graph TD
     R --> S
     L -.->|No inserta en historial| T[Stream NDJSON al cliente]
     S --> T
+```
+
+### Flujo de Procesamiento Diario de Animales (GET /api/v1/products/daily/animal)
+
+```mermaid
+graph TD
+    A[Cliente] -->|GET /api/v1/products/daily/animal| B(AnimalDocumentProcessingUseCase)
+    B -->|1. findAllAnimals| C[(Base de Datos: schemAnimals.animals_maestro)]
+    C -->|Retorna lista de animales| B
+    
+    B --> D{Por cada animal}
+    D -->|2. getPendingDocumentsForAnimal| E[AnimalRestGatewayAdapter]
+    E -->|2.1 GET /api/animals/:id/directory| F[REST API Externa]
+    F -->|Retorna directoryId| E
+    E -->|2.2 GET /api/directories/:dirId/tree| F
+    F -->|Retorna árbol DirectoryNode| E
+    E -->|Filtra y aplana nodos válidos| B
+    
+    B --> G{Por cada documento del animal}
+    G -->|3. processWithTracking| H(AbstractDocumentProcessingUseCase)
+    H -->|3.1 getDocument| F
+    F -->|Descarga archivo Base64| H
+    H -->|3.2 valida reglas de negocio| I[RulesBussinesGateway]
+    I -->|3.3 envía por SOAP| J[SoapGateway]
+    J -->|3.4 registra trazabilidad| K[(Base de Datos: esquema_animales)]
+    
+    B -.->|HTTP 202 Inmediato| A
 ```
 
 **Nota:** la descompresion ZIP se aplica tanto en procesamiento como en el dominio. La validacion de nombre y tamano solo se aplica en procesamiento.
@@ -447,6 +510,50 @@ Almacena los productos sincronizados desde la API REST externa.
 | `fecha_carga` | TIMESTAMP | Fecha en que se cargo el producto al sistema |
 | `estado` | VARCHAR(20) | Estado actual (ej. PENDING) |
 | `mensaje_error` | VARCHAR(2000)| Mensaje de error si la carga o sincronizacion fallo |
+
+### Tabla: schemAnimals.animals_maestro
+
+Almacena los animales maestros que se procesan en el nuevo canal.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGINT (PK) | Identificador único del animal |
+| `name` | VARCHAR(255) | Nombre del animal (ej: Cow, Dog) |
+| `category` | VARCHAR(255) | Categoría del animal (ej: Mammal) |
+
+### Tabla: esquema_animales.documentos
+
+Almacena los metadatos y el estado actual de cada documento del canal de animales.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGINT (PK) | Identificador único auto-generado |
+| `id_documento` | VARCHAR(100) | ID del documento |
+| `id_animal` | VARCHAR(100) | ID del animal padre |
+| `nombre_documento` | VARCHAR(255) | Nombre del archivo |
+| `estado_sincronizacion` | VARCHAR(50) | Estado: PENDING / IN_PROGRESS / PROCESSED / FAILED |
+| `mensaje_sincronizacion` | CLOB | Detalle o mensaje de error de sincronización |
+| `es_zip` | BOOLEAN | Si es un archivo ZIP comprimido |
+| `caso_uso` | VARCHAR(50) | Canal (siempre "Animal") |
+| `reintentos` | INT | Contador de intentos actuales |
+| `fecha_carga` | TIMESTAMP | Fecha de creación del registro |
+
+### Tabla: esquema_animales.historico_documentos
+
+Almacena la auditoría y trazabilidad detallada de cada intento de envío de un documento de animal.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGINT (PK) | Identificador único auto-generado |
+| `id_documentos` | BIGINT (FK) | Referencia al documento de animal |
+| `nombre_documento` | VARCHAR(255) | Nombre del archivo procesado |
+| `caso_uso` | VARCHAR(50) | Canal (siempre "Animal") |
+| `resultado` | VARCHAR(50) | Resultado: SUCCESS / FAILURE |
+| `estado_sincronizacion` | VARCHAR(100) | Estado detallado tras el intento |
+| `mensaje_sincronizacion` | CLOB | Mensaje de error retornado |
+| `reintentos` | INT | Número de intento |
+| `fecha_inicio_procesamiento` | TIMESTAMP | Inicio de envío |
+| `fecha_fin_procesamiento` | TIMESTAMP | Fin de envío |
 
 ### Indices
 
@@ -1276,6 +1383,13 @@ curl "http://localhost:8080/api/v1/products?processor=soap" \
 # Procesar documentos pendientes via S3
 curl "http://localhost:8080/api/v1/products?processor=s3" \
   -H "message-id: my-trace-789"
+
+# Procesar documentos diarios de animales (Canal Animales)
+curl http://localhost:8080/api/v1/products/daily/animal \
+  -H "message-id: animal-trace-123"
+
+# Obtener estado de procesamiento diario de animales
+curl http://localhost:8080/api/v1/products/process/status/daily/animal
 
 # Health check
 curl -s http://localhost:8080/actuator/health | jq .

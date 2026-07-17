@@ -79,7 +79,7 @@ sleep 3
 # ── 2. Microservice ──────────────────────────────────────────
 echo "2. Starting Microservice (Profile: dev)..."
 cd "$ROOT_DIR"
-./gradlew bootRun --args='--spring.profiles.active=dev --server.port=8085 --app.document-rest.endpoint=http://localhost:3003 --app.soap.v2.endpoint=http://localhost:9003/soap/adminDocs' > "$SCRIPT_DIR/ms.log" 2>&1 &
+./gradlew bootRun --args='--spring.profiles.active=dev --server.port=8085 --app.document-rest.endpoint=http://localhost:3003 --app.animal-rest.endpoint=http://localhost:3003 --app.soap.v2.endpoint=http://localhost:9003/soap/adminDocs' > "$SCRIPT_DIR/ms.log" 2>&1 &
 echo $! > "$MS_PID_FILE"
 
 until curl -s $MS_URL/actuator/health | grep -q "UP"; do
@@ -161,7 +161,23 @@ check_control_endpoint "sync/status/soap (final)" \
     "$MS_URL${BASE_PATH}/products/sync/status/soap" \
     "exitoso|0|error"
 
-# ── 8. Test Results Summary ──────────────────────────────────
+# ── 8. Animal Processing ──────────────────────────────────────
+echo ""
+echo "8. Processing Animal Documents (GET /products/daily/animal)..."
+curl -s "$MS_URL${BASE_PATH}/products/daily/animal" > /dev/null
+info "Waiting for animal processing to complete..."
+until grep -q "Animal Daily processing completed" "$SCRIPT_DIR/ms.log"; do
+    sleep 2
+done
+echo "   Animal processing completed!"
+
+echo ""
+printf "${C_BOLD}[CONTROL] Animal Process Status — daily${C_RESET}\n"
+check_control_endpoint "process/status/daily/animal" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal" \
+    "exitoso"
+
+# ── 9. Test Results Summary ──────────────────────────────────
 echo ""
 printf "${C_BOLD}====================================================\n"
 printf "                TEST RESULTS SUMMARY                \n"
@@ -186,7 +202,7 @@ done
 
 echo "------------------------------------------------------------------------------------"
 
-# ── 9. DB Dump ───────────────────────────────────────────────
+# ── 10. DB Dump ───────────────────────────────────────────────
 echo ""
 printf "${C_BOLD}====================================================\n"
 printf "           DETAILED DATABASE TABLES                 \n"
@@ -205,7 +221,7 @@ rm -f "$SCRIPT_DIR/db_dump.json"
 
 info "Detailed tables written to: testing/mocks/ms.log"
 
-# ── 10. Final Validation Summary ─────────────────────────────
+# ── 11. Final Validation Summary ─────────────────────────────
 echo ""
 printf "${C_BOLD}====================================================\n"
 printf "         CONTROL ENDPOINTS VALIDATION SUMMARY       \n"

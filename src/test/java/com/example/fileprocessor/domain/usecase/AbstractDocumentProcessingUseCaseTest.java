@@ -1,4 +1,5 @@
 package com.example.fileprocessor.domain.usecase;
+
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BUSINESS_REJECTION;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.EMPTY_CONTENT;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
@@ -9,6 +10,7 @@ import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PRO
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.ProcessingContext;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
 import com.example.fileprocessor.domain.exception.ProcessingException;
@@ -25,6 +27,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -38,18 +41,46 @@ class AbstractDocumentProcessingUseCaseTest {
     @Mock
     private ProductRestGateway productRestGateway;
     @Mock
-    private RulesBussinesGateway documentValidator;
+    private RulesBussinesGateway<DocumentHistoryDTO> documentValidator;
 
-    private AbstractDocumentProcessingUseCase useCase;
+    private AbstractDocumentProcessingUseCase<Document, DocumentHistoryDTO> useCase;
 
-    @BeforeEach
-    void setUp() {
-        useCase = new AbstractDocumentProcessingUseCase(
-            persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir"
+    interface UploadFunc {
+        Flux<FileUploadResponse> apply(DocumentHistoryDTO h, Long id);
+    }
+
+    private AbstractDocumentProcessingUseCase<Document, DocumentHistoryDTO> createUseCase(UploadFunc uploadFunc) {
+        return new AbstractDocumentProcessingUseCase<Document, DocumentHistoryDTO>(
+            persistencePort, documentValidator, "/tmp/test-zip-dir"
         ) {
             @Override
-            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
-                return Flux.just(FileUploadResponse.builder().success(true).build());
+            protected Flux<Document> getPendingDocuments(java.time.LocalDateTime startOfDay) {
+                return persistencePort.findPendingDocumentsToday(implementationName(), startOfDay);
+            }
+
+            @Override
+            protected DocumentHistoryDTO buildInitialHistory(Document doc) {
+                return DocumentHistoryDTO.fromDocument(doc);
+            }
+
+            @Override
+            protected Mono<ProcessingContext<DocumentHistoryDTO>> downloadDocumentContent(DocumentHistoryDTO baseHistory) {
+                return productRestGateway.getDocument(baseHistory.getProductId(), baseHistory.getBusinessDocumentId())
+                        .map(file -> new ProcessingContext<>(baseHistory, file.getContent()));
+            }
+
+            @Override
+            protected Flux<FileUploadResponse> uploadDocument(ProcessingContext<DocumentHistoryDTO> context, Long docId) {
+                return uploadFunc.apply(context.getHistory(), docId);
+            }
+
+            @Override
+            protected DocumentHistoryDTO buildDecompressedEntryHistory(DocumentHistoryDTO zipHistory, String entryName) {
+                return zipHistory.toBuilder()
+                        .businessDocumentId(zipHistory.getBusinessDocumentId() + "/" + entryName)
+                        .filename(entryName)
+                        .isZip(false)
+                        .build();
             }
 
             @Override
@@ -57,8 +88,13 @@ class AbstractDocumentProcessingUseCaseTest {
                 return "TEST";
             }
         };
+    }
 
-        lenient().when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt()))
+    @BeforeEach
+    void setUp() {
+        useCase = createUseCase((h, id) -> Flux.just(FileUploadResponse.builder().success(true).build()));
+
+        lenient().when(persistencePort.lockDocumentForProcessing(any(Document.class), anyInt()))
             .thenReturn(Mono.just(1L));
 
         lenient().when(persistencePort.finalizeProcessingAtomically(any()))
@@ -66,6 +102,9 @@ class AbstractDocumentProcessingUseCaseTest {
             
         lenient().when(persistencePort.saveHistory(any()))
             .thenReturn(Mono.empty());
+
+        lenient().when(documentValidator.validate(any()))
+            .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
     }
 
     @Test
@@ -206,20 +245,13 @@ class AbstractDocumentProcessingUseCaseTest {
         when(documentValidator.validate(any(), anyBoolean()))
             .thenReturn(Mono.just(DocumentHistoryDTO.builder().build()));
 
-        // We need to override uploadDocument to return a technical retry response
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
-            @Override
-            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
-                return Flux.just(FileUploadResponse.builder()
-                        .success(false)
-                        .technicalRetry(true)
-                        .attemptCount(1)
-                        .syncStatus(GATEWAY_TIMEOUT.name())
-                        .message("Technical error")
-                        .build());
-            }
-            @Override protected String implementationName() { return "TEST"; }
-        };
+        useCase = createUseCase((history, docId) -> Flux.just(FileUploadResponse.builder()
+                .success(false)
+                .technicalRetry(true)
+                .attemptCount(1)
+                .syncStatus(GATEWAY_TIMEOUT.name())
+                .message("Technical error")
+                .build()));
 
         StepVerifier.create(useCase.executePendingDocuments())
             .expectNextCount(1)
@@ -265,9 +297,9 @@ class AbstractDocumentProcessingUseCaseTest {
             .productId("p1")
             .state("PENDING")
             .isZip(true)
+            .name("archive.zip")
             .build();
 
-        // Create a valid zip with one file entry
         java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
         try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
             java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry("inner-file.pdf");
@@ -309,6 +341,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .productId("p1")
             .state("PENDING")
             .isZip(true)
+            .name("archive.zip")
             .build();
 
         java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
@@ -353,12 +386,11 @@ class AbstractDocumentProcessingUseCaseTest {
             .productId("p1")
             .state("PENDING")
             .isZip(true)
+            .name("archive.zip")
             .build();
 
-        // Create an empty zip (no file entries)
         java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
         try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
-            // no entries
         }
         byte[] zipBytes = baos.toByteArray();
 
@@ -392,6 +424,7 @@ class AbstractDocumentProcessingUseCaseTest {
                 .productId("p1")
                 .state(PENDING.name())
                 .isZip(true)
+                .name("archive.zip")
                 .retryCount(0)
                 .build();
 
@@ -407,13 +440,7 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
-            @Override
-            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
-                return Flux.just(FileUploadResponse.builder().success(true).syncStatus("SUCCESS").build());
-            }
-            @Override protected String implementationName() { return "TEST"; }
-        };
+        useCase = createUseCase((h, id) -> Flux.just(FileUploadResponse.builder().success(true).syncStatus("SUCCESS").build()));
 
         StepVerifier.create(useCase.executePendingDocuments())
                 .expectNextCount(1)
@@ -437,6 +464,7 @@ class AbstractDocumentProcessingUseCaseTest {
                 .productId("p1")
                 .state(PENDING.name())
                 .isZip(true)
+                .name("archive.zip")
                 .retryCount(0)
                 .build();
 
@@ -452,20 +480,16 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
-            @Override
-            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
-                if (h.getFilename().equals("file1.pdf")) {
-                    return Flux.just(FileUploadResponse.builder().success(true).syncStatus("SUCCESS").build());
-                } else {
-                    return Flux.just(FileUploadResponse.builder()
-                            .success(false)
-                            .syncStatus(PATTERN_MISMATCH.name())
-                            .build());
-                }
+        useCase = createUseCase((h, id) -> {
+            if (h.getFilename().equals("file1.pdf")) {
+                return Flux.just(FileUploadResponse.builder().success(true).syncStatus("SUCCESS").build());
+            } else {
+                return Flux.just(FileUploadResponse.builder()
+                        .success(false)
+                        .syncStatus(PATTERN_MISMATCH.name())
+                        .build());
             }
-            @Override protected String implementationName() { return "TEST"; }
-        };
+        });
 
         StepVerifier.create(useCase.executePendingDocuments())
                 .expectNextCount(1)
@@ -488,6 +512,7 @@ class AbstractDocumentProcessingUseCaseTest {
                 .productId("p1")
                 .state(PENDING.name())
                 .isZip(true)
+                .name("archive.zip")
                 .retryCount(0)
                 .build();
 
@@ -503,26 +528,19 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
-            @Override
-            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
-                return Flux.just(FileUploadResponse.builder()
-                        .success(false)
-                        .technicalRetry(true)
-                        .attemptCount(1)
-                        .syncStatus(GATEWAY_TIMEOUT.name())
-                        .message("Technical retry")
-                        .build());
-            }
-            @Override protected String implementationName() { return "TEST"; }
-        };
+        useCase = createUseCase((h, id) -> Flux.just(FileUploadResponse.builder()
+                .success(false)
+                .technicalRetry(true)
+                .attemptCount(1)
+                .syncStatus(GATEWAY_TIMEOUT.name())
+                .message("Technical retry")
+                .build()));
 
         StepVerifier.create(useCase.executePendingDocuments())
                 .expectNextCount(1)
                 .expectComplete()
                 .verify(Duration.ofSeconds(10));
 
-        // Since it's a technical retry, the intermediate attempt is saved.
         verify(persistencePort, times(1)).saveHistory(any(DocumentHistoryDTO.class));
         verify(persistencePort, never()).finalizeProcessingAtomically(any());
     }
@@ -537,6 +555,7 @@ class AbstractDocumentProcessingUseCaseTest {
                 .productId("p1")
                 .state(PENDING.name())
                 .isZip(true)
+                .name("archive.zip")
                 .retryCount(0)
                 .build();
 
@@ -552,9 +571,75 @@ class AbstractDocumentProcessingUseCaseTest {
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
-            @Override
-            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
+        useCase = createUseCase((h, id) -> Flux.just(
+                FileUploadResponse.builder()
+                        .success(false)
+                        .technicalRetry(true)
+                        .attemptCount(1)
+                        .syncStatus(GATEWAY_TIMEOUT.name())
+                        .message("Attempt 1 failure")
+                        .build(),
+                FileUploadResponse.builder()
+                        .success(true)
+                        .technicalRetry(false)
+                        .attemptCount(2)
+                        .syncStatus("SUCCESS")
+                        .message("Attempt 2 success")
+                        .build()
+        ));
+
+        StepVerifier.create(useCase.executePendingDocuments())
+                .expectNextCount(1)
+                .expectComplete()
+                .verify(Duration.ofSeconds(10));
+
+        ArgumentCaptor<DocumentHistoryDTO> captor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
+        verify(persistencePort, times(2)).saveHistory(captor.capture());
+        DocumentHistoryDTO savedHistory = captor.getAllValues().get(1);
+        assertEquals("file1.pdf", savedHistory.getFilename());
+        assertEquals(PROCESSED.name(), savedHistory.getState());
+        assertEquals(2, savedHistory.getRetryCount());
+
+        verify(persistencePort, times(1)).finalizeProcessingAtomically(any());
+    }
+
+    @Test
+    void executePendingDocumentsWithZipMultipleFilesMixedRetriesSavesCorrectHistory() throws Exception {
+        byte[] zipBytes = createZipBytes("file1.pdf", "file2.pdf");
+
+        Document doc = Document.builder()
+                .id(1L)
+                .documentId("doc-zip-multi-mixed")
+                .productId("p1")
+                .state(PENDING.name())
+                .isZip(true)
+                .name("archive.zip")
+                .retryCount(0)
+                .build();
+
+        ProductDocumentFile file = ProductDocumentFile.builder()
+                .productId("p1")
+                .documentId("doc-zip-multi-mixed")
+                .filename("archive.zip")
+                .content(zipBytes)
+                .isZip(true)
+                .build();
+
+        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any())).thenReturn(Flux.just(doc));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        useCase = createUseCase((h, id) -> {
+            if (h.getFilename().equals("file1.pdf")) {
+                return Flux.just(
+                        FileUploadResponse.builder()
+                                .success(true)
+                                .technicalRetry(false)
+                                .attemptCount(1)
+                                .syncStatus("SUCCESS")
+                                .build()
+                );
+            } else {
                 return Flux.just(
                         FileUploadResponse.builder()
                                 .success(false)
@@ -572,98 +657,17 @@ class AbstractDocumentProcessingUseCaseTest {
                                 .build()
                 );
             }
-            @Override protected String implementationName() { return "TEST"; }
-        };
+        });
 
         StepVerifier.create(useCase.executePendingDocuments())
                 .expectNextCount(1)
                 .expectComplete()
                 .verify(Duration.ofSeconds(10));
 
-        // Save history should be called for BOTH attempts of file1.pdf
-        ArgumentCaptor<DocumentHistoryDTO> captor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
-        verify(persistencePort, times(2)).saveHistory(captor.capture());
-        DocumentHistoryDTO savedHistory = captor.getAllValues().get(1);
-        assertEquals("file1.pdf", savedHistory.getFilename());
-        assertEquals(PROCESSED.name(), savedHistory.getState());
-        assertEquals(2, savedHistory.getRetryCount());
-
-        // Master ZIP document should be finalized
-        verify(persistencePort, times(1)).finalizeProcessingAtomically(any());
-    }
-
-    @Test
-    void executePendingDocumentsWithZipMultipleFilesMixedRetriesSavesCorrectHistory() throws Exception {
-        byte[] zipBytes = createZipBytes("file1.pdf", "file2.pdf");
-
-        Document doc = Document.builder()
-                .id(1L)
-                .documentId("doc-zip-multi-mixed")
-                .productId("p1")
-                .state(PENDING.name())
-                .isZip(true)
-                .retryCount(0)
-                .build();
-
-        ProductDocumentFile file = ProductDocumentFile.builder()
-                .productId("p1")
-                .documentId("doc-zip-multi-mixed")
-                .filename("archive.zip")
-                .content(zipBytes)
-                .isZip(true)
-                .build();
-
-        when(persistencePort.findPendingDocumentsToday(eq("TEST"), any())).thenReturn(Flux.just(doc));
-        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
-        when(documentValidator.validate(any(), anyBoolean())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-
-        useCase = new AbstractDocumentProcessingUseCase(persistencePort, productRestGateway, documentValidator, "/tmp/test-zip-dir") {
-            @Override
-            protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO h, Long id) {
-                if (h.getFilename().equals("file1.pdf")) {
-                    return Flux.just(
-                            FileUploadResponse.builder()
-                                    .success(true)
-                                    .technicalRetry(false)
-                                    .attemptCount(1)
-                                    .syncStatus("SUCCESS")
-                                    .build()
-                    );
-                } else {
-                    return Flux.just(
-                            FileUploadResponse.builder()
-                                    .success(false)
-                                    .technicalRetry(true)
-                                    .attemptCount(1)
-                                    .syncStatus(GATEWAY_TIMEOUT.name())
-                                    .message("Attempt 1 failure")
-                                    .build(),
-                            FileUploadResponse.builder()
-                                    .success(true)
-                                    .technicalRetry(false)
-                                    .attemptCount(2)
-                                    .syncStatus("SUCCESS")
-                                    .message("Attempt 2 success")
-                                    .build()
-                    );
-                }
-            }
-            @Override protected String implementationName() { return "TEST"; }
-        };
-
-        StepVerifier.create(useCase.executePendingDocuments())
-                .expectNextCount(1)
-                .expectComplete()
-                .verify(Duration.ofSeconds(10));
-
-        // Save history should be called EXACTLY 3 TIMES:
-        // 1. Once for file1.pdf (success on attempt 1)
-        // 2. Once for file2.pdf (failure/retry on attempt 1)
-        // 3. Once for file2.pdf (success on attempt 2)
         ArgumentCaptor<DocumentHistoryDTO> captor = ArgumentCaptor.forClass(DocumentHistoryDTO.class);
         verify(persistencePort, times(3)).saveHistory(captor.capture());
         
-        java.util.List<DocumentHistoryDTO> savedHistories = captor.getAllValues();
+        List<DocumentHistoryDTO> savedHistories = captor.getAllValues();
         assertEquals(3, savedHistories.size());
 
         DocumentHistoryDTO history1 = savedHistories.stream()
@@ -678,7 +682,6 @@ class AbstractDocumentProcessingUseCaseTest {
                 .orElseThrow();
         assertEquals(2, history2.getRetryCount());
 
-        // Master ZIP document should be finalized
         verify(persistencePort, times(1)).finalizeProcessingAtomically(any());
     }
 

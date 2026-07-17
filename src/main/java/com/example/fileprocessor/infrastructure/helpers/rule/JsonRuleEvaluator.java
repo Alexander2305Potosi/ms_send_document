@@ -1,10 +1,10 @@
 package com.example.fileprocessor.infrastructure.helpers.rule;
 
+import com.example.fileprocessor.domain.util.SanitizationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
-import java.text.Normalizer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -76,13 +76,13 @@ public class JsonRuleEvaluator {
             return false;
         }
         
-        String value = sanitize(actualValue);
+        String value = SanitizationUtils.sanitize(actualValue);
         
-        if (ruleCriteria.has("$eq") && !value.equals(sanitize(ruleCriteria.get("$eq").asText()))) {
+        if (ruleCriteria.has("$eq") && !value.equals(SanitizationUtils.sanitize(ruleCriteria.get("$eq").asText()))) {
             return false;
         }
         
-        if (ruleCriteria.has("$contains") && !value.contains(sanitize(ruleCriteria.get("$contains").asText()))) {
+        if (ruleCriteria.has("$contains") && !value.contains(SanitizationUtils.sanitize(ruleCriteria.get("$contains").asText()))) {
             return false;
         }
         
@@ -93,7 +93,7 @@ public class JsonRuleEvaluator {
         if (ruleCriteria.has("$in")) {
             boolean matchIn = false;
             for (JsonNode allowedValue : ruleCriteria.get("$in")) {
-                if (value.equals(sanitize(allowedValue.asText()))) {
+                if (value.equals(SanitizationUtils.sanitize(allowedValue.asText()))) {
                     matchIn = true;
                     break;
                 }
@@ -104,7 +104,7 @@ public class JsonRuleEvaluator {
         if (ruleCriteria.has("$containsAny")) {
             boolean matchContainsAny = false;
             for (JsonNode keyword : ruleCriteria.get("$containsAny")) {
-                if (value.contains(sanitize(keyword.asText()))) {
+                if (value.contains(SanitizationUtils.sanitize(keyword.asText()))) {
                     matchContainsAny = true;
                     break;
                 }
@@ -113,18 +113,5 @@ public class JsonRuleEvaluator {
         }
         
         return true;
-    }
-
-    private String sanitize(String text) {
-        if (text == null) return null;
-        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD);
-        return normalized.replaceAll("\\p{M}", "").toLowerCase();
-    }
-
-    public String sanitizeKeepingText(String text) {
-        if (text == null) return null;
-        // Conserva todas las letras (incluyendo mayúsculas, minúsculas y caracteres acentuados),
-        // números y espacios. Elimina todo lo demás.
-        return text.replaceAll("[^\\p{L}\\p{N} ]", "").trim();
     }
 }

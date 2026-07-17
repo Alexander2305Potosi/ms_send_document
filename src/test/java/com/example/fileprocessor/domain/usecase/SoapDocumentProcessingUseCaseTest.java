@@ -2,6 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.ProcessingContext;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
@@ -34,7 +35,7 @@ class SoapDocumentProcessingUseCaseTest {
     @Mock
     private SoapGateway soapGateway;
     @Mock
-    private RulesBussinesGateway documentValidator;
+    private RulesBussinesGateway<DocumentHistoryDTO> documentValidator;
     @Mock
     private HomologationRepository homologationRepository;
 
@@ -67,7 +68,7 @@ class SoapDocumentProcessingUseCaseTest {
             .build();
 
         when(persistencePort.findPendingDocumentsToday(anyString(), any())).thenReturn(Flux.just(doc));
-        when(persistencePort.lockDocumentForProcessing(anyLong(), anyInt())).thenReturn(Mono.just(1L));
+        when(persistencePort.lockDocumentForProcessing(any(Document.class), anyInt())).thenReturn(Mono.just(1L));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
@@ -100,6 +101,8 @@ class SoapDocumentProcessingUseCaseTest {
                 .filename("test.pdf")
                 .build();
         
+        ProcessingContext<DocumentHistoryDTO> context = new ProcessingContext<>(history, new byte[0]);
+
         when(homologationRepository.resolve(any()))
                 .thenReturn(Mono.just(HomologationResult.builder()
                         .categoriaDocument("mocked-categoria")
@@ -108,7 +111,7 @@ class SoapDocumentProcessingUseCaseTest {
         when(soapGateway.send(any(FileUploadRequest.class)))
                 .thenReturn(Flux.error(new RuntimeException("SOAP failure")));
 
-        StepVerifier.create(useCase.uploadDocument(history, 1L))
+        StepVerifier.create(useCase.uploadDocument(context, 1L))
                 .expectNextMatches(resp -> !resp.isSuccess() 
                         && "FAILURE".equals(resp.getStatus())
                         && "UNKNOWN_ERROR".equals(resp.getSyncStatus())
@@ -124,10 +127,12 @@ class SoapDocumentProcessingUseCaseTest {
                 .filename("test.pdf")
                 .build();
 
+        ProcessingContext<DocumentHistoryDTO> context = new ProcessingContext<>(history, new byte[0]);
+
         when(homologationRepository.resolve(any()))
                 .thenReturn(Mono.error(new RuntimeException("Homologation failure")));
 
-        StepVerifier.create(useCase.uploadDocument(history, 1L))
+        StepVerifier.create(useCase.uploadDocument(context, 1L))
                 .expectNextMatches(resp -> !resp.isSuccess() 
                         && "FAILURE".equals(resp.getStatus())
                         && "UNKNOWN_ERROR".equals(resp.getSyncStatus())

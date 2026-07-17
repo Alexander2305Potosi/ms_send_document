@@ -16,6 +16,17 @@ def get_ordered_keys(data, table_name):
         ],
         "PRODUCTOS_MAESTROS": [
             "ID", "ID_PRODUCTO", "NOMBRE", "ESTADO", "FECHA_CARGUE"
+        ],
+        "ANIMAL_DOCUMENTOS": [
+            "ID", "ID_DOCUMENTO", "ID_ANIMAL", "NOMBRE_DOCUMENTO", "ESTADO_SINCRONIZACION",
+            "ES_ZIP", "CASO_USO", "REINTENTOS", "MENSAJE_SINCRONIZACION", "FECHA_CARGA"
+        ],
+        "ANIMAL_HISTORICO": [
+            "ID", "ID_DOCUMENTOS", "NOMBRE_DOCUMENTO", "CASO_USO", "RESULTADO",
+            "ESTADO_SINCRONIZACION", "REINTENTOS", "MENSAJE_SINCRONIZACION", "FECHA_INICIO_PROCESAMIENTO", "FECHA_FIN_PROCESAMIENTO"
+        ],
+        "ANIMAL_MAESTROS": [
+            "ID", "NAME", "CATEGORY"
         ]
     }
     
@@ -66,14 +77,23 @@ if __name__ == "__main__":
             
         full_dump = json.loads(raw_data)
         
-        # 1. Documentos
-        print_table("TABLE: DOCUMENTOS", full_dump.get("documentos", []), "DOCUMENTOS")
+        # 1. Documentos (Productos)
+        print_table("TABLE: PRODUCTO_DOCUMENTOS", full_dump.get("documentos", []), "DOCUMENTOS")
         
-        # 2. Historico Documentos
-        print_table("TABLE: HISTORICO_DOCUMENTOS", full_dump.get("historico_documentos", []), "HISTORICO_DOCUMENTOS")
+        # 2. Historico Documentos (Productos)
+        print_table("TABLE: PRODUCTO_HISTORICO_DOCUMENTOS", full_dump.get("historico_documentos", []), "HISTORICO_DOCUMENTOS")
         
-        # 3. Master Products
+        # 3. Master Products (Productos)
         print_table("TABLE: PRODUCTOS_MAESTROS", full_dump.get("productos_maestros", []), "PRODUCTOS_MAESTROS")
+
+        # 4. Documentos (Animales)
+        print_table("TABLE: ANIMAL_DOCUMENTOS (esquema_animales.documentos)", full_dump.get("animal_documentos", []), "ANIMAL_DOCUMENTOS")
+
+        # 5. Historico Documentos (Animales)
+        print_table("TABLE: ANIMAL_HISTORICO_DOCUMENTOS (esquema_animales.historico_documentos)", full_dump.get("animal_historico", []), "ANIMAL_HISTORICO")
+
+        # 6. Master Animals (Animales)
+        print_table("TABLE: ANIMALES_MAESTROS (schemAnimals.animals_maestro)", full_dump.get("animal_maestro", []), "ANIMAL_MAESTROS")
         
     except Exception as e:
         print(f"Error formatting table: {e}")

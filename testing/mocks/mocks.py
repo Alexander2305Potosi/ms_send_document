@@ -27,7 +27,66 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 class ProductRestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path_parts = self.path.split('/')
-        if "/api/products/" in self.path and path_parts[-1] == "documents":
+        if "/api/animals/" in self.path and "directory" in path_parts:
+            animal_id = path_parts[path_parts.index("animals") + 1]
+            self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(json.dumps({"directoryId": f"DIR-ANIMAL-{animal_id}"}).encode())
+            return
+            
+        elif "/api/directories/" in self.path and "tree" in path_parts:
+            dir_id = path_parts[path_parts.index("directories") + 1]
+            animal_id = dir_id.split("-")[-1]
+            if animal_id == "300":
+                children = [
+                    {
+                        "id": "doc-animal-300-ok-retry",
+                        "name": "retry_timeout.pdf",
+                        "source": 1,
+                        "businessDocumentId": "DOC-ANIMAL-300-04",
+                        "productId": "300",
+                        "children": []
+                    },
+                    {
+                        "id": "doc-animal-300-unsupported",
+                        "name": "bird_unsupported.exe",
+                        "source": 1,
+                        "businessDocumentId": "DOC-ANIMAL-300-02",
+                        "productId": "300",
+                        "children": []
+                    },
+                    {
+                        "id": "doc-animal-300-oversized",
+                        "name": "bird_oversized.pdf",
+                        "source": 1,
+                        "businessDocumentId": "DOC-ANIMAL-300-03",
+                        "productId": "300",
+                        "children": []
+                    }
+                ]
+            else:
+                children = [
+                    {
+                        "id": f"doc-animal-{animal_id}",
+                        "name": f"animal_{animal_id}_health.pdf",
+                        "source": 1,
+                        "businessDocumentId": f"DOC-ANIMAL-{animal_id}-01",
+                        "productId": str(animal_id),
+                        "children": []
+                    }
+                ]
+            tree = {
+                "id": f"node-{dir_id}",
+                "name": f"directory-{dir_id}",
+                "source": None,
+                "businessDocumentId": None,
+                "productId": None,
+                "children": children
+            }
+            self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(json.dumps(tree).encode())
+            return
+
+        elif "/api/products/" in self.path and path_parts[-1] == "documents":
             product_id = path_parts[path_parts.index("products") + 1]
             
             # Simulated HTTP errors on Sync
@@ -134,7 +193,10 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
                 "DOC-BR-10": "empty_inner.zip", "DOC-BR-11": "corrupted.zip", "DOC-BR-12": "no_sucursal.pdf",
                 "DOC-TE-08": "persistent_500.pdf", "DOC-TE-09": "persistent_503.pdf", "DOC-TE-10": "persistent_504.pdf",
                 "DOC-TE-13": "download_500.pdf", "DOC-TE-14": "download_404.pdf",
-                "DOC-TE-15": "malformed_xml.pdf", "DOC-TE-16": "soap_timeout_persistent.pdf"
+                "DOC-TE-15": "malformed_xml.pdf", "DOC-TE-16": "soap_timeout_persistent.pdf",
+                "DOC-ANIMAL-100-01": "animal_100_health.pdf", "DOC-ANIMAL-200-01": "animal_200_health.pdf",
+                "DOC-ANIMAL-300-02": "bird_unsupported.exe", "DOC-ANIMAL-300-03": "bird_oversized.pdf",
+                "DOC-ANIMAL-300-04": "retry_timeout.pdf"
             }
             filename = filename_map.get(doc_id, f"{doc_id}.pdf")
 
@@ -176,10 +238,11 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
                 filename = "corrupted.zip"
             elif "DOC-OK-02" in doc_id:
                 size = 9 * 1024 * 1024 
-            elif "DOC-BR-01" in doc_id:
+            elif "DOC-BR-01" in doc_id or "DOC-ANIMAL-300-03" in doc_id:
                 size = 20 * 1024 * 1024 
             elif "DOC-BR-02" in doc_id: filename = "virus.exe"
             elif "DOC-BR-03" in doc_id: filename = "script.sh"
+            elif "DOC-ANIMAL-300-02" in doc_id: filename = "bird_unsupported.exe"
             elif "DOC-TE-07" in doc_id: content = "NOT_BASE64_AT_ALL_!!!!"
 
             # Determine dynamic origin and pais for homologation
@@ -204,6 +267,12 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
             elif "SC-OK-10" in product_id or "DOC-OK-10" in doc_id:
                 origin = "qa"
                 pais = "PE"
+            elif "DOC-ANIMAL-100-01" in doc_id or "DOC-ANIMAL-300-03" in doc_id or "DOC-ANIMAL-300-04" in doc_id:
+                origin = "garantia"
+                pais = "CO"
+            elif "DOC-ANIMAL-200-01" in doc_id or "DOC-ANIMAL-300-02" in doc_id:
+                origin = "user"
+                pais = "MX"
 
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(json.dumps({

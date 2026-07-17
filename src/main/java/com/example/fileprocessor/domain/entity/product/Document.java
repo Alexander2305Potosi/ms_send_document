@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Document {
+public class Document implements BaseDocument {
     private Long id;
     private String documentId;
     private String productId;

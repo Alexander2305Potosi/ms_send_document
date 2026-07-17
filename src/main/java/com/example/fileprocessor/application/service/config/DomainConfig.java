@@ -1,12 +1,17 @@
 package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
+import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.ProductLocalRepository;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.AnimalSoapGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
@@ -38,7 +43,7 @@ public class DomainConfig {
             persistencePort,
             productRestGateway,
             soapGateway,
-            new RulesBussinesService(properties.soap()),
+            new RulesBussinesService<>(properties.soap()),
             homologationRepository,
             properties.zipTempDir()
         );
@@ -55,7 +60,7 @@ public class DomainConfig {
             persistencePort,
             productRestGateway,
             s3Gateway,
-            new RulesBussinesService(properties.s3()),
+            new RulesBussinesService<>(properties.s3()),
             properties.zipTempDir()
         );
     }
@@ -83,17 +88,17 @@ public class DomainConfig {
 
     @Bean
     public AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase(
-            DocumentPersistenceGateway persistencePort,
+            PersistenceGateway<Document, AnimalDocumentHistoryDTO> animalPersistencePort,
             ProductRestGateway productRestGateway,
             AnimalRepository animalRepository,
             AnimalRestGateway animalRestGateway,
-            SoapGateway soapGateway,
+            AnimalSoapGateway soapGateway,
             HomologationRepository homologationRepository,
             ProcessorsProperties properties) {
         return new AnimalDocumentProcessingUseCase(
-            persistencePort,
+            animalPersistencePort,
             productRestGateway,
-            new RulesBussinesService(properties.animal()),
+            new RulesBussinesService<>(properties.animal()),
             properties.zipTempDir(),
             animalRepository,
             animalRestGateway,

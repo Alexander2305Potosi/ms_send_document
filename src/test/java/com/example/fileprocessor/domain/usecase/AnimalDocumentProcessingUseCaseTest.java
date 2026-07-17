@@ -1,18 +1,18 @@
 package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.product.Document;
-import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.animal.AnimalMaestro;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
 import com.example.fileprocessor.domain.port.out.AnimalRepository;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
-import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
+import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.AnimalSoapGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,13 +33,13 @@ import static org.mockito.Mockito.times;
 class AnimalDocumentProcessingUseCaseTest {
 
     @Mock
-    private DocumentPersistenceGateway persistencePort;
+    private PersistenceGateway<Document, AnimalDocumentHistoryDTO> persistencePort;
     @Mock
     private ProductRestGateway productRestGateway;
     @Mock
-    private SoapGateway soapGateway;
+    private AnimalSoapGateway soapGateway;
     @Mock
-    private RulesBussinesGateway documentValidator;
+    private RulesBussinesGateway<AnimalDocumentHistoryDTO> documentValidator;
     @Mock
     private HomologationRepository homologationRepository;
     @Mock
@@ -88,9 +88,9 @@ class AnimalDocumentProcessingUseCaseTest {
         when(animalRepository.findAllAnimals()).thenReturn(Flux.just(animal));
         when(animalRestGateway.getPendingDocumentsForAnimal(100L)).thenReturn(Flux.just(doc));
         
-        when(persistencePort.lockDocumentForProcessing(any(), anyInt())).thenReturn(Mono.just(1L));
+        when(persistencePort.lockDocumentForProcessing(any(Document.class), anyInt())).thenReturn(Mono.just(1L));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
-        when(documentValidator.validate(any(DocumentHistoryDTO.class), anyBoolean()))
+        when(documentValidator.validate(any(AnimalDocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         
         when(homologationRepository.resolve(any()))

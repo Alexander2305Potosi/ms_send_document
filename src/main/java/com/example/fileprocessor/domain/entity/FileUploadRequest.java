@@ -1,14 +1,14 @@
 package com.example.fileprocessor.domain.entity;
 
 import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
-import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
 /**
  * Request object for file upload operations with optional homologation support.
- * Uses DocumentHistoryDTO to extract transient processing metadata.
+ * Uses BaseDocumentHistoryDTO to extract transient processing metadata.
  */
 @Getter
 @Setter
@@ -25,10 +25,10 @@ public class FileUploadRequest {
     private String homologationCountry;
     private Long docId;
 
-    public static FileUploadRequest from(DocumentHistoryDTO history, Long docId, HomologationResult h) {
+    public static FileUploadRequest from(BaseDocumentHistoryDTO history, byte[] content, Long docId, HomologationResult h) {
         return FileUploadRequest.builder()
             .documentId(history.getBusinessDocumentId())
-            .content(history.getContent() != null ? history.getContent() : new byte[0])
+            .content(content != null ? content : new byte[0])
             .filename(history.getFilename())
             .contentType(history.getContentType())
             .fileSize(history.getSize() != null ? history.getSize() : 0)

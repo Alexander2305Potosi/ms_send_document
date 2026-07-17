@@ -1,5 +1,7 @@
-package com.example.fileprocessor.domain.entity.product;
+package com.example.fileprocessor.domain.entity.animal;
 
+import com.example.fileprocessor.domain.entity.product.BaseDocument;
+import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
 import com.example.fileprocessor.domain.util.SanitizationUtils;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -9,29 +11,31 @@ import lombok.experimental.SuperBuilder;
 import java.time.Instant;
 
 /**
- * DTO for transporting product document processing audit information.
+ * DTO for transporting animal document processing audit information.
  */
 @Getter
 @SuperBuilder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class DocumentHistoryDTO extends BaseDocumentHistoryDTO {
+public class AnimalDocumentHistoryDTO extends BaseDocumentHistoryDTO {
     
-    private String productId;
+    private String animalId;
+    private String raza;
+    private String tipo;
 
     @Override
     public String getProductId() {
-        return productId;
+        return animalId; // Maps parent entity ID to animalId
     }
 
     /**
      * Factory method to initialize DTO from the base Document.
      */
-    public static DocumentHistoryDTO fromDocument(BaseDocument doc) {
-        return DocumentHistoryDTO.builder()
+    public static AnimalDocumentHistoryDTO fromDocument(BaseDocument doc) {
+        return AnimalDocumentHistoryDTO.builder()
                 .documentId(doc.getId())
                 .businessDocumentId(SanitizationUtils.sanitizeKeepingText(doc.getDocumentId()))
-                .productId(doc.getProductId())
+                .animalId(doc.getProductId()) // The productId field in Document carries the animalId in this use case
                 .filename(doc.getName())
                 .useCase(doc.getUseCase())
                 .retryCount(doc.getRetryCountSafe())

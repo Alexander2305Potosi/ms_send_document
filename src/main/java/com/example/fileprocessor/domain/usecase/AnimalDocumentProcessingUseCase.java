@@ -2,49 +2,102 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
-import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.ProcessingContext;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
+import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.port.out.SoapGateway;
+import com.example.fileprocessor.domain.port.out.AnimalSoapGateway;
 import com.example.fileprocessor.domain.port.out.AnimalRepository;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import reactor.core.publisher.Flux;
-import java.util.logging.Level;
+import reactor.core.publisher.Mono;
+
+import java.time.LocalDateTime;
 
 /**
  * Caso de uso específico para las reglas de negocio de carga (upload) de Animales.
- * Se mantiene limpio y enfocado al igual que S3 y Soap, definiendo solo el canal de envío.
+ * Extiende del UseCase base genérico.
  */
-public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase {
+public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase<Document, AnimalDocumentHistoryDTO> {
 
     private final AnimalRepository animalRepository;
     private final AnimalRestGateway animalRestGateway;
-    private final SoapGateway soapGateway;
+    private final ProductRestGateway productRestGateway;
+    private final AnimalSoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
 
     public AnimalDocumentProcessingUseCase(
-            DocumentPersistenceGateway persistencePort,
+            PersistenceGateway<Document, AnimalDocumentHistoryDTO> persistencePort,
             ProductRestGateway productRestGateway,
-            RulesBussinesGateway documentValidator,
+            RulesBussinesGateway<AnimalDocumentHistoryDTO> documentValidator,
             String tempDirPath,
             AnimalRepository animalRepository,
             AnimalRestGateway animalRestGateway,
-            SoapGateway soapGateway,
+            AnimalSoapGateway soapGateway,
             HomologationRepository homologationRepository) {
-        super(persistencePort, productRestGateway, documentValidator, tempDirPath);
+        super(persistencePort, documentValidator, tempDirPath);
         this.animalRepository = animalRepository;
         this.animalRestGateway = animalRestGateway;
+        this.productRestGateway = productRestGateway;
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
     }
 
     @Override
-    protected Flux<FileUploadResponse> uploadDocument(DocumentHistoryDTO history, Long docId) {
+    protected Flux<Document> getPendingDocuments(LocalDateTime startOfDay) {
+        return Flux.empty(); // Fiel al flujo dinámico REST de animales
+    }
+
+    @Override
+    protected AnimalDocumentHistoryDTO buildInitialHistory(Document doc) {
+        return AnimalDocumentHistoryDTO.builder()
+                .documentId(doc.getId())
+                .businessDocumentId(doc.getDocumentId())
+                .state(doc.getState())
+                .useCase(doc.getUseCase())
+                .retryCount(doc.getRetryCountSafe())
+                .filename(doc.getName())
+                .startedAt(java.time.Instant.now())
+                .animalId(doc.getProductId()) // Mapeo de animal ID
+                .isZip(doc.getIsZip())
+                .build();
+    }
+
+    @Override
+    protected Mono<ProcessingContext<AnimalDocumentHistoryDTO>> downloadDocumentContent(AnimalDocumentHistoryDTO baseHistory) {
+        return productRestGateway.getDocument(baseHistory.getProductId(), baseHistory.getBusinessDocumentId())
+                .map(file -> {
+                    AnimalDocumentHistoryDTO updatedHistory = baseHistory.toBuilder()
+                            .size(file.getSize())
+                            .contentType(file.getContentType())
+                            .filename(file.getFilename())
+                            .originFolder(file.getOriginFolder())
+                            .originCountry(file.getOriginCountry())
+                            .isZip(file.getIsZip())
+                            .build();
+                    return new ProcessingContext<>(updatedHistory, file.getContent());
+                });
+    }
+
+    @Override
+    protected AnimalDocumentHistoryDTO buildDecompressedEntryHistory(AnimalDocumentHistoryDTO zipHistory, String entryName) {
+        return zipHistory.toBuilder()
+                .businessDocumentId(zipHistory.getBusinessDocumentId() + "/" + entryName)
+                .filename(entryName)
+                .contentType(com.example.fileprocessor.domain.util.MimeTypeUtil.getMimeType(entryName))
+                .isZip(false)
+                .build();
+    }
+
+    @Override
+    protected Flux<FileUploadResponse> uploadDocument(ProcessingContext<AnimalDocumentHistoryDTO> context, Long docId) {
+        AnimalDocumentHistoryDTO history = context.getHistory();
         return homologationRepository.resolve(history)
                 .flatMapMany(homologation -> {
-                    FileUploadRequest uploadReq = FileUploadRequest.from(history, docId, homologation);
+                    FileUploadRequest uploadReq = FileUploadRequest.from(history, context.getFileContent(), docId, homologation);
                     return soapGateway.send(uploadReq);
                 });
     }
@@ -61,12 +114,11 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     public Flux<FileUploadResponse> executeAnimalProcessing() {
         LOGGER.info("Iniciando procesamiento diario Animal...");
         return animalRepository.findAllAnimals()
-                .concatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId()) // Retorna un Flux<Document> ya aplanado y filtrado
+                .concatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId())
                         .concatMap(doc -> {
                             String traceId = "Animal-" + animal.getId() + "-" + doc.getDocumentId();
-                            return processWithTracking(doc, traceId); // processWithTracking guarda el historial en historico_documentos
+                            return processWithTracking(doc, traceId);
                         })
                 );
     }
 }
-

@@ -143,4 +143,55 @@ INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-TE-16
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-15', 'Sucursal Bogota');
 INSERT INTO otro_esquema.tabla_maestra (id_producto, sucursal) VALUES ('SC-OK-16', 'Sucursal Bogota');
 
+-- ─────────────────────────────────────────────────────────────
+--  ESQUEMAS Y TABLAS PARA ANIMALES (NUEVO CANAL)
+-- ─────────────────────────────────────────────────────────────
+CREATE SCHEMA IF NOT EXISTS schemAnimals;
+CREATE TABLE IF NOT EXISTS schemAnimals.animals_maestro (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255),
+    category VARCHAR(255)
+);
+
+DELETE FROM schemAnimals.animals_maestro;
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (100, 'Cow', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (200, 'Dog', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (300, 'Bird', 'Aves');
+
+CREATE SCHEMA IF NOT EXISTS esquema_animales;
+
+CREATE TABLE IF NOT EXISTS esquema_animales.documentos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id_documento VARCHAR(100),
+    id_animal VARCHAR(100),
+    nombre_documento VARCHAR(255),
+    estado_sincronizacion VARCHAR(50),
+    mensaje_sincronizacion CLOB,
+    es_zip BOOLEAN DEFAULT FALSE,
+    caso_uso VARCHAR(50),
+    carpeta_origen VARCHAR(255),
+    pais_origen VARCHAR(100),
+    carpeta_homologada VARCHAR(255),
+    pais_homologado VARCHAR(100),
+    categoria_homologado VARCHAR(100),
+    sucursal VARCHAR(255),
+    reintentos INT DEFAULT 0,
+    fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_carga_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS esquema_animales.historico_documentos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id_documentos BIGINT,
+    nombre_documento VARCHAR(255),
+    caso_uso VARCHAR(50),
+    resultado VARCHAR(50),
+    estado_sincronizacion VARCHAR(100),
+    mensaje_sincronizacion CLOB,
+    reintentos INT DEFAULT 0,
+    fecha_inicio_procesamiento TIMESTAMP,
+    fecha_fin_procesamiento TIMESTAMP
+);
+
+
 

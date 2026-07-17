@@ -1,5 +1,7 @@
 package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.usecase.AbstractDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
@@ -28,7 +30,7 @@ public class ProductHandler {
 
     private static final Logger LOGGER = Logger.getLogger(ProductHandler.class.getName());
 
-    private final AbstractDocumentProcessingUseCase soapDocumentUseCase;
+    private final AbstractDocumentProcessingUseCase<Document, DocumentHistoryDTO> soapDocumentUseCase;
     private final ObjectProvider<S3DocumentProcessingUseCase> s3DocumentUseCaseProvider;
     private final SyncDocumentsUseCase syncDocumentsUseCase;
     private final GetStatusUseCase getStatusUseCase;
@@ -177,7 +179,7 @@ public class ProductHandler {
                         .bodyValue(status));
     }
 
-    AbstractDocumentProcessingUseCase getProcessor(String processorType) {
+    AbstractDocumentProcessingUseCase<Document, DocumentHistoryDTO> getProcessor(String processorType) {
         return switch (processorType) {
             case ApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
             case ApiConstants.PROCESSOR_S3 -> {

@@ -6,8 +6,8 @@ import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PEN
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
-import com.example.fileprocessor.domain.entity.product.Document;
-import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.BaseDocument;
+import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 
@@ -39,28 +39,31 @@ public final class DocumentHistoryFactory {
         return conclusion;
     }
 
-    public static DocumentHistoryDTO syncHistoryDTO(Document doc, DocumentHistoryDTO fileHistory, FileUploadResponse response) {
+    public static <H extends BaseDocumentHistoryDTO> H syncHistoryDTO(BaseDocument doc, H fileHistory, FileUploadResponse response) {
         String traceId = response.getTraceId();
         String syncMessage = response.getMessage();
         if (traceId != null && !traceId.isBlank() && !"unknown".equals(traceId)) {
             syncMessage = (syncMessage != null ? syncMessage : "") + " [TraceID: " + traceId + "]";
         }
-        return fileHistory.toBuilder()
-                .documentId(doc.getId())
-                .state(calculateFileState(response))
-                .useCase(doc.getUseCase())
-                .retryCount(response.getAttemptCount() > 0 ? response.getAttemptCount() : doc.getRetryCountSafe())
-                .businessRetryCount(doc.getRetryCountSafe())
-                .filename(Boolean.TRUE.equals(doc.getIsZip()) ? (response.getFilename() != null ? response.getFilename() : fileHistory.getFilename()) : null)
-                .syncStatus(response.getSyncStatus())
-                .syncMessage(syncMessage)
-                .completedAt(Instant.now())
-                .build();
+        fileHistory.setDocumentId(doc.getId());
+        fileHistory.setState(calculateFileState(response));
+        fileHistory.setUseCase(doc.getUseCase());
+        fileHistory.setRetryCount(response.getAttemptCount() > 0 ? response.getAttemptCount() : doc.getRetryCountSafe());
+        fileHistory.setBusinessRetryCount(doc.getRetryCountSafe());
+        if (Boolean.TRUE.equals(doc.getIsZip())) {
+            fileHistory.setFilename(response.getFilename() != null ? response.getFilename() : fileHistory.getFilename());
+        } else {
+            fileHistory.setFilename(null);
+        }
+        fileHistory.setSyncStatus(response.getSyncStatus());
+        fileHistory.setSyncMessage(syncMessage);
+        fileHistory.setCompletedAt(Instant.now());
+        return fileHistory;
     }
 
-    public static DocumentHistoryDTO syncGlobalHistory(
-            Document doc,
-            DocumentHistoryDTO history,
+    public static <H extends BaseDocumentHistoryDTO> H syncGlobalHistory(
+            BaseDocument doc,
+            H history,
             List<FileUploadResponse> responses,
             ProcessingConclusion conclusion) {
         String representativeStatus = responses.stream()
@@ -95,17 +98,18 @@ public final class DocumentHistoryFactory {
                 .max(Integer::compareTo)
                 .orElse(0);
 
-        return history.toBuilder()
-                .documentId(doc.getId())
-                .state(conclusion.nextState())
-                .useCase(doc.getUseCase())
-                .retryCount(attempt > 0 ? attempt : doc.getRetryCountSafe())
-                .businessRetryCount(conclusion.nextRetryCount())
-                .filename(Boolean.TRUE.equals(doc.getIsZip()) ? history.getFilename() : null)
-                .syncStatus(representativeStatus)
-                .syncMessage(syncMessage)
-                .completedAt(Instant.now())
-                .build();
+        history.setDocumentId(doc.getId());
+        history.setState(conclusion.nextState());
+        history.setUseCase(doc.getUseCase());
+        history.setRetryCount(attempt > 0 ? attempt : doc.getRetryCountSafe());
+        history.setBusinessRetryCount(conclusion.nextRetryCount());
+        if (!Boolean.TRUE.equals(doc.getIsZip())) {
+            history.setFilename(null);
+        }
+        history.setSyncStatus(representativeStatus);
+        history.setSyncMessage(syncMessage);
+        history.setCompletedAt(Instant.now());
+        return history;
     }
 
     public static String calculateFileState(FileUploadResponse response) {
@@ -129,15 +133,7 @@ public final class DocumentHistoryFactory {
                 .collect(Collectors.joining(" || "));
     }
 
-    /**
-     * Builds a failure {@link FileUploadResponse} from any error that escaped adapter-level
-     * handling. At this point, network/HTTP errors should already have been translated into
-     * {@link ProcessingException} by the adapter layer (via {@code AdapterErrorMapper}).
-     *
-     * <p>This method is responsible only for domain-level error extraction.</p>
-     */
     public static FileUploadResponse handleGlobalError(Throwable error) {
-        // Unwrap until we find a recognized domain exception
         Throwable root = error;
         while (root.getCause() != null && root != root.getCause()) {
             if (root instanceof ProcessingException) {
@@ -170,7 +166,7 @@ public final class DocumentHistoryFactory {
                 .build();
     }
 
-    public static ProcessingException mapValidationError(Throwable e, DocumentHistoryDTO masterHistory, DocumentHistoryDTO innerHistory) {
+    public static ProcessingException mapValidationError(Throwable e, BaseDocumentHistoryDTO masterHistory, BaseDocumentHistoryDTO innerHistory) {
         ProcessingException pe;
         if (e instanceof ProcessingException existingPe) {
             pe = existingPe;

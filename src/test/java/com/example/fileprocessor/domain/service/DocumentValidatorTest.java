@@ -18,7 +18,6 @@ class DocumentValidatorTest {
             .contentType(contentType)
             .size(size)
             .originFolder("origin")
-            .content(new byte[0])
             .build();
     }
 
@@ -28,7 +27,7 @@ class DocumentValidatorTest {
 
     @Test
     void validateSingleRulePasses() {
-        RulesBussinesService validator = new RulesBussinesService(
+        RulesBussinesService<DocumentHistoryDTO> validator = new RulesBussinesService<>(
             config(null, ".*\\.pdf$")
         );
 
@@ -39,7 +38,7 @@ class DocumentValidatorTest {
 
     @Test
     void validatePatternFails() {
-        RulesBussinesService validator = new RulesBussinesService(
+        RulesBussinesService<DocumentHistoryDTO> validator = new RulesBussinesService<>(
             config(null, ".*\\.pdf$")
         );
 
@@ -49,7 +48,7 @@ class DocumentValidatorTest {
 
     @Test
     void validateMultipleRulesAllPass() {
-        RulesBussinesService validator = new RulesBussinesService(
+        RulesBussinesService<DocumentHistoryDTO> validator = new RulesBussinesService<>(
             config(null, ".*\\.(pdf|docx)$")
         );
 
@@ -60,7 +59,7 @@ class DocumentValidatorTest {
 
     @Test
     void validateMultipleRulesOneFails() {
-        RulesBussinesService validator = new RulesBussinesService(
+        RulesBussinesService<DocumentHistoryDTO> validator = new RulesBussinesService<>(
             config(null, ".*\\.pdf$")
         );
 
@@ -70,7 +69,7 @@ class DocumentValidatorTest {
 
     @Test
     void validateSizeExceededThrowsProcessingException() {
-        RulesBussinesService validator = new RulesBussinesService(
+        RulesBussinesService<DocumentHistoryDTO> validator = new RulesBussinesService<>(
             config(100L, null)
         );
 
@@ -80,7 +79,7 @@ class DocumentValidatorTest {
 
     @Test
     void validateNoPatternPasses() {
-        RulesBussinesService validator = new RulesBussinesService(
+        RulesBussinesService<DocumentHistoryDTO> validator = new RulesBussinesService<>(
             config(null, null)
         );
 

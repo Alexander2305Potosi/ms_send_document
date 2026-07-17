@@ -35,9 +35,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     }
 
     @Override
-    public Mono<Long> lockDocumentForProcessing(Long id, int currentRetry) {
-        Document doc = new Document();
-        doc.setId(id);
+    public Mono<Long> lockDocumentForProcessing(Document doc, int currentRetry) {
         doc.setState(IN_PROGRESS.name());
         doc.setRetryCount(currentRetry);
         
