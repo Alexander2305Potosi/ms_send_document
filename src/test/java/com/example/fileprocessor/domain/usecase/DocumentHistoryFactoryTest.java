@@ -515,4 +515,43 @@ class DocumentHistoryFactoryTest {
         assertEquals(BUSINESS_REJECTION.name(), conclusion.nextState());
         assertEquals(1, conclusion.nextRetryCount());
     }
+
+    @Test
+    void testDocumentHistoryDTOClone() {
+        DocumentHistoryDTO original = DocumentHistoryDTO.builder()
+                .documentId(123L)
+                .productId("SC-OK-01")
+                .filename("original.pdf")
+                .build();
+        DocumentHistoryDTO cloned = original.clone();
+        assertNotNull(cloned);
+        assertEquals(original.getDocumentId(), cloned.getDocumentId());
+        assertEquals(original.getProductId(), cloned.getProductId());
+        assertEquals(original.getFilename(), cloned.getFilename());
+        
+        // Verify independent mutation
+        cloned.setFilename("cloned.pdf");
+        assertEquals("original.pdf", original.getFilename());
+        assertEquals("cloned.pdf", cloned.getFilename());
+    }
+
+    @Test
+    void testAnimalDocumentHistoryDTOClone() {
+        com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO original =
+                com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO.builder()
+                        .documentId(456L)
+                        .animalId("301")
+                        .filename("animal_original.pdf")
+                        .build();
+        com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO cloned = original.clone();
+        assertNotNull(cloned);
+        assertEquals(original.getDocumentId(), cloned.getDocumentId());
+        assertEquals(original.getAnimalId(), cloned.getAnimalId());
+        assertEquals(original.getFilename(), cloned.getFilename());
+
+        // Verify independent mutation
+        cloned.setFilename("animal_cloned.pdf");
+        assertEquals("animal_original.pdf", original.getFilename());
+        assertEquals("animal_cloned.pdf", cloned.getFilename());
+    }
 }

@@ -259,7 +259,7 @@ class AbstractDocumentProcessingUseCaseTest {
             .verify(Duration.ofSeconds(5));
 
         verify(persistencePort).saveHistory(any());
-        verify(persistencePort, never()).finalizeProcessingAtomically(any());
+        verify(persistencePort).finalizeProcessingAtomically(any());
     }
 
     @Test
@@ -542,7 +542,7 @@ class AbstractDocumentProcessingUseCaseTest {
                 .verify(Duration.ofSeconds(10));
 
         verify(persistencePort, times(1)).saveHistory(any(DocumentHistoryDTO.class));
-        verify(persistencePort, never()).finalizeProcessingAtomically(any());
+        verify(persistencePort, times(1)).finalizeProcessingAtomically(any());
     }
 
     @Test
