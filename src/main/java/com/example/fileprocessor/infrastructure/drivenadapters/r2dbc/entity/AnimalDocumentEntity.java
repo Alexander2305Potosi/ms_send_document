@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 /**
  * R2DBC entity for the 'documentos' table under 'esquema_animales' schema.
  */
-@Table("esquema_animales.documentos")
+@Table(schema = "esquema_animales", name = "documentos")
 @Getter
 @Setter
 @Builder

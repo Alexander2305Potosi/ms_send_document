@@ -47,4 +47,9 @@ public class AnimalDocumentHistoryDTO extends BaseDocumentHistoryDTO {
                 .categoriaHomologada(doc.getCategoriaHomologada())
                 .build();
     }
+
+    @Override
+    public AnimalDocumentHistoryDTO clone() {
+        return this.toBuilder().build();
+    }
 }

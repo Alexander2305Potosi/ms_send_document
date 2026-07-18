@@ -37,4 +37,7 @@ public abstract class BaseDocumentHistoryDTO {
     private Boolean isZip;
 
     public abstract String getProductId(); // Abstract getter for parent entity ID
+    
+    @Override
+    public abstract BaseDocumentHistoryDTO clone();
 }

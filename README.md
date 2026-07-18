@@ -960,6 +960,20 @@ saveHistory() → INSERT en historico_documentos (errorCode=INVALID_BASE64)
 documento no se guarda / no se procesa
 ```
 
+### 6. Reintento Técnico (Errores Transitorios SOAP)
+Cuando un envío a SOAP falla debido a un error transitorio (ej: Timeout de Red, HTTP 503, ConnectException, etc.), el sistema realiza reintentos automáticos a nivel de red sin abortar el procesamiento global.
+```
+Intento 1: Fallo transitorio (Timeout / 503 / 504)
+  → saveHistory() en historico_documentos con resultado=PENDING/resultado=FAILURE, marcando reintentos=1 y guardar auditoría técnica (saveAuditOnly).
+  → Espera de backoff configurada (ej. 500ms).
+Intento 2: Fallo transitorio (Timeout / 503 / 504)
+  → saveHistory() en historico_documentos con resultado=PENDING/resultado=FAILURE, marcando reintentos=2 y guardar auditoría técnica.
+  → Espera de backoff.
+Intento 3: Éxito (Respuesta 200 OK de SOAP)
+  → finalizeProcessing() consolida el éxito y actualiza el metadato del documento principal en la base de datos a estado=PROCESSED.
+  → Guarda historial en historico_documentos con resultado=PROCESSED y reintentos=3.
+```
+
 ---
 
 ## Visualizacion de Escenarios de Data en BD
@@ -1067,6 +1081,23 @@ El documento `doc-7` se obtiene correctamente, pero su contenido Base64 es corru
 | id | documento_id | operacion | resultado | codigo_error | reintentos |
 |----|--------------|-----------|-----------|--------------|------------|
 | 8  | 9            | UPLOAD_SOAP | FAILURE   | INVALID_BASE64| 0         |
+
+### 8. Escenario de Reintento Técnico Exitoso en Animales (SOAP)
+El documento de animal `DOC-ANIMAL-300-04` falla por Timeout en sus dos primeros intentos pero se procesa exitosamente en el tercer intento.
+
+**Tabla: `esquema_animales.documentos`**
+
+| id | id_documento | id_animal | nombre_documento | estado_sincronizacion | caso_uso | reintentos | mensaje_sincronizacion |
+|----|--------------|-----------|------------------|-----------------------|----------|------------|------------------------|
+| 3  | DOC-ANIMAL-300-04 | 300       | animal_retry_timeout.pdf | PROCESSED | Animal | 0 | statusCode: OK, messageId: MOCK-1784335715, idDocumento: N/A | message: Exito tras 2 reintentos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
+
+**Tabla: `esquema_animales.historico_documentos`**
+
+| id | id_documentos | nombre_documento | caso_uso | resultado | estado_sincronizacion | reintentos | mensaje_sincronizacion |
+|----|---------------|------------------|----------|-----------|-----------------------|------------|------------------------|
+| 3  | 3             | animal_retry_timeout.pdf | Animal | PENDING | PENDING | 1 | Timeout: El servicio no respondió en 5 segundos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
+| 4  | 3             | animal_retry_timeout.pdf | Animal | PENDING | PENDING | 2 | Timeout: El servicio no respondió en 5 segundos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
+| 5  | 3             | *NULL*           | Animal | PROCESSED | PROCESSED | 3 | statusCode: OK, messageId: MOCK-1784335715, idDocumento: N/A | message: Exito tras 2 reintentos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
 
 ---
 
@@ -1601,4 +1632,49 @@ LEFT JOIN (
     FROM historico_documentos
 ) h ON d.id = h.documento_id AND h.rn = 1
 ORDER BY d.fecha_actualizacion DESC;
+
+---
+
+## Guía de Ejecución E2E y Validación de Estabilidad
+
+Esta sección detalla los pasos y comandos necesarios para volver a ejecutar las pruebas End-to-End (E2E) y validar que el microservicio mantenga un comportamiento estable a nivel de persistencia de datos (H2) y logs.
+
+### 1. Ejecutar la Suite E2E Completa
+Para limpiar las tablas, levantar los mocks (REST y SOAP), procesar todos los escenarios (tanto de productos como de animales) y generar el reporte final de base de datos, ejecuta en la terminal:
+```bash
+./testing/mocks/e2e_validation.sh
+```
+*Nota: Este proceso toma alrededor de 2.5 minutos para dar tiempo a que ocurran todos los reintentos automáticos programados por exponential backoff.*
+
+### 2. Comandos de Validación de Estabilidad
+Una vez que el script finaliza, los resultados de la base de datos y resúmenes quedan escritos en el archivo `testing/mocks/ms.log`. Utiliza los siguientes comandos para validar el estado de la información contra las reglas de transición y negocio documentadas en este README:
+
+#### A. Verificar Ausencia de Fugas de Estado (IN_PROGRESS)
+Ningún registro debe quedar bloqueado de forma indefinida en estado `IN_PROGRESS` al finalizar el procesamiento diario. Valida esto ejecutando:
+```bash
+grep -E "IN_PROGRESS" testing/mocks/ms.log
+```
+* **Resultado Correcto:** La terminal no debe retornar ninguna línea. Si retorna registros, indica que hay un bloqueo o proceso inconcluso.
+
+#### B. Inspeccionar Tabla de Documentos de Productos
+Para comprobar el estado final de los documentos de productos procesados y verificar que solo tengan estado `PROCESSED`, `FAILED`, `PENDING` o `BUSINESS_REJECTION`:
+```bash
+sed -n '/--- TABLE: PRODUCTO_DOCUMENTOS ---/,/--- TABLE: PRODUCTOS_MAESTROS ---/p' testing/mocks/ms.log | head -n 60
+```
+
+#### C. Inspeccionar Tabla de Documentos de Animales
+Para verificar el correcto registro de auditoría en el esquema de animales y la correspondencia con los 50 escenarios:
+```bash
+sed -n '/--- TABLE: ANIMAL_DOCUMENTOS/,/--- TABLE: ANIMALES_MAESTROS/p' testing/mocks/ms.log | head -n 60
+```
+
+#### D. Confirmar Resumen de Aprobación de Endpoints
+Para verificar que todas las aserciones automáticas de los endpoints de control pasaron con éxito:
+```bash
+grep -A 4 "CONTROL ENDPOINTS VALIDATION SUMMARY" testing/mocks/ms.log
+```
+* **Resultado Correcto:** Debe mostrar el mensaje consolidado de aprobación:
+  ```text
+  ✔ ALL CONTROL ENDPOINTS PASSED
+  ```
 ```

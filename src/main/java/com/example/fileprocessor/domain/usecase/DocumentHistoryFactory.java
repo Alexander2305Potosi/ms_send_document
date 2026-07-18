@@ -40,25 +40,28 @@ public final class DocumentHistoryFactory {
     }
 
     public static <H extends BaseDocumentHistoryDTO> H syncHistoryDTO(BaseDocument doc, H fileHistory, FileUploadResponse response) {
+        @SuppressWarnings("unchecked")
+        H clonedHistory = (H) fileHistory.clone();
+        
         String traceId = response.getTraceId();
         String syncMessage = response.getMessage();
         if (traceId != null && !traceId.isBlank() && !"unknown".equals(traceId)) {
             syncMessage = (syncMessage != null ? syncMessage : "") + " [TraceID: " + traceId + "]";
         }
-        fileHistory.setDocumentId(doc.getId());
-        fileHistory.setState(calculateFileState(response));
-        fileHistory.setUseCase(doc.getUseCase());
-        fileHistory.setRetryCount(response.getAttemptCount() > 0 ? response.getAttemptCount() : doc.getRetryCountSafe());
-        fileHistory.setBusinessRetryCount(doc.getRetryCountSafe());
+        clonedHistory.setDocumentId(doc.getId());
+        clonedHistory.setState(calculateFileState(response));
+        clonedHistory.setUseCase(doc.getUseCase());
+        clonedHistory.setRetryCount(response.getAttemptCount() > 0 ? response.getAttemptCount() : doc.getRetryCountSafe());
+        clonedHistory.setBusinessRetryCount(doc.getRetryCountSafe());
         if (Boolean.TRUE.equals(doc.getIsZip())) {
-            fileHistory.setFilename(response.getFilename() != null ? response.getFilename() : fileHistory.getFilename());
+            clonedHistory.setFilename(response.getFilename() != null ? response.getFilename() : clonedHistory.getFilename());
         } else {
-            fileHistory.setFilename(null);
+            clonedHistory.setFilename(null);
         }
-        fileHistory.setSyncStatus(response.getSyncStatus());
-        fileHistory.setSyncMessage(syncMessage);
-        fileHistory.setCompletedAt(Instant.now());
-        return fileHistory;
+        clonedHistory.setSyncStatus(response.getSyncStatus());
+        clonedHistory.setSyncMessage(syncMessage);
+        clonedHistory.setCompletedAt(Instant.now());
+        return clonedHistory;
     }
 
     public static <H extends BaseDocumentHistoryDTO> H syncGlobalHistory(

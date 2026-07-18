@@ -229,7 +229,13 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         int currentRetryCount = doc.getRetryCountSafe();
         LOGGER.log(Level.INFO, "[TraceID: {0}] Recording technical retry audit for Document {1} (Attempt {2})",
                 new Object[] { traceId, doc.getDocumentId(), currentRetryCount });
-        return Mono.empty();
+        
+        DocumentHistoryFactory.ProcessingConclusion conclusion = 
+                new DocumentHistoryFactory.ProcessingConclusion(PENDING.name(), currentRetryCount + 1);
+                
+        H globalHistory = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        
+        return persistencePort.finalizeProcessingAtomically(globalHistory).then();
     }
 
     private Flux<ProcessingContext<H>> decompress(ProcessingContext<H> context) {

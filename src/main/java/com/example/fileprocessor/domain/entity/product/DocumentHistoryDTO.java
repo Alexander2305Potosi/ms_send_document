@@ -43,4 +43,9 @@ public class DocumentHistoryDTO extends BaseDocumentHistoryDTO {
                 .categoriaHomologada(doc.getCategoriaHomologada())
                 .build();
     }
+
+    @Override
+    public DocumentHistoryDTO clone() {
+        return this.toBuilder().build();
+    }
 }

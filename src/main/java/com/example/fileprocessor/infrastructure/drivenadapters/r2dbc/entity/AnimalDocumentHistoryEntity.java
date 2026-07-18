@@ -14,7 +14,7 @@ import java.time.Instant;
 /**
  * R2DBC entity for the 'historico_documentos' table under 'esquema_animales' schema.
  */
-@Table("esquema_animales.historico_documentos")
+@Table(schema = "esquema_animales", name = "historico_documentos")
 @Getter
 @Setter
 @Builder

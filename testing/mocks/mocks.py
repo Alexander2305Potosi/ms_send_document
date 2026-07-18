@@ -8,9 +8,43 @@ import base64
 import zipfile
 import io
 
-# State management
 retry_lock = threading.Lock()
 retry_counts = {}
+
+FILENAME_MAP = {
+    "DOC-RT-01": "retry_timeout.pdf", "DOC-RT-02": "retry_500.pdf",
+    "DOC-RT-03": "retry_503.pdf", "DOC-RT-04": "retry_429.pdf", "DOC-RT-05": "retry_504.pdf",
+    "DOC-RT-06": "retry_503_success.pdf",
+    "DOC-TE-01": "soap_fault.pdf", "DOC-TE-02": "malformed.pdf", "DOC-TE-03": "empty_resp.pdf",
+    "DOC-TE-04": "unauthorized.pdf", "DOC-TE-05": "forbidden.pdf", "DOC-TE-06": "bad_request.pdf",
+    "DOC-TE-07": "corrupted.pdf", "DOC-BR-02": "virus.exe", "DOC-BR-03": "script.sh",
+    "DOC-BR-04": "WRONG_NAME.pdf", "DOC-OK-01": "manual.pdf", "DOC-OK-02": "large_valid.pdf",
+    "DOC-OK-03": "guide.docx", "DOC-OK-04": "notes.txt", "DOC-OK-05": "bundle.zip",
+    "DOC-OK-06": "user_manual.pdf", "DOC-OK-07": "brazil_tech.docx", "DOC-OK-08": "arg_setup.txt",
+    "DOC-OK-09": "chile_safe.pdf", "DOC-OK-10": "peru_qa.pdf", "DOC-OK-11": "multi_type.zip",
+    "DOC-OK-12": "nested.zip", "DOC-OK-13": "mexico_user.docx", "DOC-OK-14": "col_compressed.zip",
+    "DOC-OK-15": "partial.zip", "DOC-OK-16": "fail_all.zip",
+    "DOC-BR-07": "duplicate.pdf", "DOC-BR-08": "oversized_inner.zip", "DOC-BR-09": "unsupported_inner.zip",
+    "DOC-BR-10": "empty_inner.zip", "DOC-BR-11": "corrupted.zip", "DOC-BR-12": "no_sucursal.pdf",
+    "DOC-TE-08": "persistent_500.pdf", "DOC-TE-09": "persistent_503.pdf", "DOC-TE-10": "persistent_504.pdf",
+    "DOC-TE-13": "download_500.pdf", "DOC-TE-14": "download_404.pdf",
+    "DOC-TE-15": "malformed_xml.pdf", "DOC-TE-16": "soap_timeout_persistent.pdf",
+    "DOC-ANIMAL-100-01": "animal_100_health.pdf", "DOC-ANIMAL-200-01": "animal_200_health.pdf",
+    "DOC-ANIMAL-300-02": "bird_unsupported.exe", "DOC-ANIMAL-300-03": "bird_oversized.pdf",
+    "DOC-ANIMAL-300-04": "animal_retry_timeout.pdf"
+}
+
+FILENAME_MAP_CLEAN = {k.replace("-", "").upper(): v for k, v in FILENAME_MAP.items()}
+
+def get_filename_for_doc(doc_id):
+    doc_id_upper = doc_id.upper()
+    if "ANIMAL" in doc_id_upper:
+        clean = doc_id_upper.replace("-", "")
+        product_key = clean.replace("ANIMAL", "")
+        filename = FILENAME_MAP_CLEAN.get(product_key, None)
+        if filename:
+            return filename
+    return FILENAME_MAP_CLEAN.get(doc_id_upper.replace("-", ""), f"{doc_id}.pdf")
 
 def create_mock_zip(files):
     buf = io.BytesIO()
@@ -36,11 +70,31 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
         elif "/api/directories/" in self.path and "tree" in path_parts:
             dir_id = path_parts[path_parts.index("directories") + 1]
             animal_id = dir_id.split("-")[-1]
-            if animal_id == "300":
+            
+            try:
+                animal_id_int = int(animal_id)
+            except ValueError:
+                animal_id_int = 0
+                
+            # Dynamic document tree generation for animal scenarios
+            if 101 <= animal_id_int <= 116:
+                idx = animal_id_int - 100
+                doc_id = f"DOC-ANIMAL-OK-{idx:02d}"
+            elif 201 <= animal_id_int <= 206:
+                idx = animal_id_int - 200
+                doc_id = f"DOC-ANIMAL-RT-{idx:02d}"
+            elif 301 <= animal_id_int <= 312:
+                idx = animal_id_int - 300
+                doc_id = f"DOC-ANIMAL-BR-{idx:02d}"
+            elif 401 <= animal_id_int <= 416:
+                idx = animal_id_int - 400
+                doc_id = f"DOC-ANIMAL-TE-{idx:02d}"
+            elif animal_id == "300":
+                # Fallback / keeping original bird scenarios
                 children = [
                     {
                         "id": "doc-animal-300-ok-retry",
-                        "name": "retry_timeout.pdf",
+                        "name": "animal_retry_timeout.pdf",
                         "source": 1,
                         "businessDocumentId": "DOC-ANIMAL-300-04",
                         "productId": "300",
@@ -63,17 +117,54 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
                         "children": []
                     }
                 ]
+                tree = {
+                    "id": f"node-{dir_id}",
+                    "name": f"directory-{dir_id}",
+                    "source": None,
+                    "businessDocumentId": None,
+                    "productId": None,
+                    "children": children
+                }
+                self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+                self.wfile.write(json.dumps(tree).encode())
+                return
             else:
+                doc_id = f"DOC-ANIMAL-{animal_id}-01"
+                
+            filename = get_filename_for_doc(doc_id)
+            
+            # Special case: BR-07 is a duplicate document (2 duplicates)
+            if animal_id_int == 307:
                 children = [
                     {
-                        "id": f"doc-animal-{animal_id}",
-                        "name": f"animal_{animal_id}_health.pdf",
+                        "id": "doc-animal-307-1",
+                        "name": filename,
                         "source": 1,
-                        "businessDocumentId": f"DOC-ANIMAL-{animal_id}-01",
+                        "businessDocumentId": doc_id,
+                        "productId": str(animal_id),
+                        "children": []
+                    },
+                    {
+                        "id": "doc-animal-307-2",
+                        "name": filename,
+                        "source": 1,
+                        "businessDocumentId": doc_id,
                         "productId": str(animal_id),
                         "children": []
                     }
                 ]
+            else:
+                children = [
+                    {
+                        "id": f"doc-animal-{animal_id}",
+                        "name": filename,
+                        "source": 1,
+                        "businessDocumentId": doc_id,
+                        "productId": str(animal_id),
+                        "children": []
+                    }
+                ]
+                
             tree = {
                 "id": f"node-{dir_id}",
                 "name": f"directory-{dir_id}",
@@ -160,14 +251,15 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
             
         elif "/api/products/" in self.path and "documents" in path_parts:
             doc_id = path_parts[-1]
+            doc_id_clean = doc_id.replace("-", "").upper()
             
             # Simulated HTTP errors on Download
-            if doc_id == "DOC-TE-13":
+            if doc_id_clean == "DOCTE13":
                 self.send_response(500)
                 self.end_headers()
                 self.wfile.write(b"Download internal server error")
                 return
-            if doc_id == "DOC-TE-14":
+            if doc_id_clean == "DOCTE14":
                 self.send_response(404)
                 self.end_headers()
                 self.wfile.write(b"Download not found")
@@ -196,54 +288,55 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
                 "DOC-TE-15": "malformed_xml.pdf", "DOC-TE-16": "soap_timeout_persistent.pdf",
                 "DOC-ANIMAL-100-01": "animal_100_health.pdf", "DOC-ANIMAL-200-01": "animal_200_health.pdf",
                 "DOC-ANIMAL-300-02": "bird_unsupported.exe", "DOC-ANIMAL-300-03": "bird_oversized.pdf",
-                "DOC-ANIMAL-300-04": "retry_timeout.pdf"
+                "DOC-ANIMAL-300-04": "animal_retry_timeout.pdf"
             }
-            filename = filename_map.get(doc_id, f"{doc_id}.pdf")
-
-            if "DOC-OK-05" in doc_id:
+            
+            filename = get_filename_for_doc(doc_id)
+            
+            if "DOCOK05" in doc_id_clean:
                 content = create_mock_zip({"f1.pdf": b"c1", "f2.pdf": b"c2", "f3.pdf": b"c3"})
                 filename = "bundle.zip"
-            elif "DOC-OK-11" in doc_id:
+            elif "DOCOK11" in doc_id_clean:
                 content = create_mock_zip({"f1.pdf": b"c1", "f2.docx": b"c2", "f3.txt": b"c3"})
                 filename = "multi_type.zip"
-            elif "DOC-OK-12" in doc_id:
+            elif "DOCOK12" in doc_id_clean:
                 content = create_mock_zip({"docs/subfolder/file.pdf": b"c1"})
                 filename = "nested.zip"
-            elif "DOC-OK-14" in doc_id:
+            elif "DOCOK14" in doc_id_clean:
                 content = create_mock_zip({"inner1.pdf": b"inner_content_1", "inner2.pdf": b"inner_content_2"})
                 filename = "col_compressed.zip"
-            elif "DOC-OK-15" in doc_id:
+            elif "DOCOK15" in doc_id_clean:
                 content = create_mock_zip({"inner_ok.pdf": b"c1", "inner_fail_soap.pdf": b"c2"})
                 filename = "partial.zip"
-            elif "DOC-OK-16" in doc_id:
+            elif "DOCOK16" in doc_id_clean:
                 content = create_mock_zip({"inner_fail_soap1.pdf": b"c1", "inner_fail_soap2.pdf": b"c2"})
                 filename = "fail_all.zip"
-            elif "DOC-BR-06" in doc_id:
+            elif "DOCBR06" in doc_id_clean:
                 content = create_mock_zip({"f1.exe": b"virus", "f2.sh": b"script"})
                 filename = "mixed_content.zip"
-            elif "DOC-BR-05" in doc_id:
+            elif "DOCBR05" in doc_id_clean:
                 content = create_mock_zip({})
                 filename = "empty.zip"
-            elif "DOC-BR-08" in doc_id:
+            elif "DOCBR08" in doc_id_clean:
                 content = create_mock_zip({"large_inner.pdf": b"a" * 11 * 1024 * 1024}) # 11MB file (exceeds 10MB limit)
                 filename = "oversized_inner.zip"
-            elif "DOC-BR-09" in doc_id:
+            elif "DOCBR09" in doc_id_clean:
                 content = create_mock_zip({"malicious.exe": b"virus"})
                 filename = "unsupported_inner.zip"
-            elif "DOC-BR-10" in doc_id:
+            elif "DOCBR10" in doc_id_clean:
                 content = create_mock_zip({"empty.pdf": b""})
                 filename = "empty_inner.zip"
-            elif "DOC-BR-11" in doc_id:
+            elif "DOCBR11" in doc_id_clean:
                 content = base64.b64encode(b"invalid_zip_container_data").decode('utf-8')
                 filename = "corrupted.zip"
-            elif "DOC-OK-02" in doc_id:
+            elif "DOCOK02" in doc_id_clean:
                 size = 9 * 1024 * 1024 
-            elif "DOC-BR-01" in doc_id or "DOC-ANIMAL-300-03" in doc_id:
+            elif "DOCBR01" in doc_id_clean or "DOCANIMAL30003" in doc_id_clean:
                 size = 20 * 1024 * 1024 
-            elif "DOC-BR-02" in doc_id: filename = "virus.exe"
-            elif "DOC-BR-03" in doc_id: filename = "script.sh"
-            elif "DOC-ANIMAL-300-02" in doc_id: filename = "bird_unsupported.exe"
-            elif "DOC-TE-07" in doc_id: content = "NOT_BASE64_AT_ALL_!!!!"
+            elif "DOCBR02" in doc_id_clean: filename = "virus.exe"
+            elif "DOCBR03" in doc_id_clean: filename = "script.sh"
+            elif "DOCANIMAL30002" in doc_id_clean: filename = "bird_unsupported.exe"
+            elif "DOCTE07" in doc_id_clean: content = "NOT_BASE64_AT_ALL_!!!!"
 
             # Determine dynamic origin and pais for homologation
             origin = "PORTAL"
@@ -251,26 +344,27 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
             product_id = "unknown"
             if "products" in path_parts:
                 product_id = path_parts[path_parts.index("products") + 1]
+            product_id_clean = product_id.replace("-", "").upper()
 
-            if "SC-OK-06" in product_id or "DOC-OK-06" in doc_id or "DOC-OK-13" in doc_id:
+            if "SCOK06" in product_id_clean or "DOCOK06" in doc_id_clean or "DOCOK13" in doc_id_clean:
                 origin = "usuario"
                 pais = "MX"
-            elif "SC-OK-07" in product_id or "DOC-OK-07" in doc_id:
+            elif "SCOK07" in product_id_clean or "DOCOK07" in doc_id_clean:
                 origin = "tecnico"
                 pais = "BR"
-            elif "SC-OK-08" in product_id or "DOC-OK-08" in doc_id:
+            elif "SCOK08" in product_id_clean or "DOCOK08" in doc_id_clean:
                 origin = "setup"
                 pais = "AR"
-            elif "SC-OK-09" in product_id or "DOC-OK-09" in doc_id:
+            elif "SCOK09" in product_id_clean or "DOCOK09" in doc_id_clean:
                 origin = "safe"
                 pais = "CL"
-            elif "SC-OK-10" in product_id or "DOC-OK-10" in doc_id:
+            elif "SCOK10" in product_id_clean or "DOCOK10" in doc_id_clean:
                 origin = "qa"
                 pais = "PE"
-            elif "DOC-ANIMAL-100-01" in doc_id or "DOC-ANIMAL-300-03" in doc_id or "DOC-ANIMAL-300-04" in doc_id:
+            elif "DOCANIMAL10001" in doc_id_clean or "DOCANIMAL30003" in doc_id_clean or "DOCANIMAL30004" in doc_id_clean:
                 origin = "garantia"
                 pais = "CO"
-            elif "DOC-ANIMAL-200-01" in doc_id or "DOC-ANIMAL-300-02" in doc_id:
+            elif "DOCANIMAL20001" in doc_id_clean or "DOCANIMAL30002" in doc_id_clean:
                 origin = "user"
                 pais = "MX"
 

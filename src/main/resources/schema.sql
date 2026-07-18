@@ -154,9 +154,60 @@ CREATE TABLE IF NOT EXISTS schemAnimals.animals_maestro (
 );
 
 DELETE FROM schemAnimals.animals_maestro;
-INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (100, 'Cow', 'Mammal');
-INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (200, 'Dog', 'Mammal');
-INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (300, 'Bird', 'Aves');
+-- OK Animals
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (101, 'Cow_OK_01', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (102, 'Cow_OK_02', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (103, 'Cow_OK_03', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (104, 'Cow_OK_04', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (105, 'Cow_OK_05', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (106, 'Cow_OK_06', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (107, 'Cow_OK_07', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (108, 'Cow_OK_08', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (109, 'Cow_OK_09', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (110, 'Cow_OK_10', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (111, 'Cow_OK_11', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (112, 'Cow_OK_12', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (113, 'Cow_OK_13', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (114, 'Cow_OK_14', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (115, 'Cow_OK_15', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (116, 'Cow_OK_16', 'Mammal');
+-- RT Animals
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (201, 'Cow_RT_01', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (202, 'Cow_RT_02', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (203, 'Cow_RT_03', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (204, 'Cow_RT_04', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (205, 'Cow_RT_05', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (206, 'Cow_RT_06', 'Mammal');
+-- BR Animals
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (301, 'Cow_BR_01', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (302, 'Cow_BR_02', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (303, 'Cow_BR_03', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (304, 'Cow_BR_04', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (305, 'Cow_BR_05', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (306, 'Cow_BR_06', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (307, 'Cow_BR_07', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (308, 'Cow_BR_08', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (309, 'Cow_BR_09', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (310, 'Cow_BR_10', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (311, 'Cow_BR_11', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (312, 'Cow_BR_12', 'Mammal');
+-- TE Animals
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (401, 'Cow_TE_01', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (402, 'Cow_TE_02', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (403, 'Cow_TE_03', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (404, 'Cow_TE_04', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (405, 'Cow_TE_05', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (406, 'Cow_TE_06', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (407, 'Cow_TE_07', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (408, 'Cow_TE_08', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (409, 'Cow_TE_09', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (410, 'Cow_TE_10', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (411, 'Cow_TE_11', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (412, 'Cow_TE_12', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (413, 'Cow_TE_13', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (414, 'Cow_TE_14', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (415, 'Cow_TE_15', 'Mammal');
+INSERT INTO schemAnimals.animals_maestro (id, name, category) VALUES (416, 'Cow_TE_16', 'Mammal');
 
 CREATE SCHEMA IF NOT EXISTS esquema_animales;
 
