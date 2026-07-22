@@ -31,15 +31,9 @@ public final class SoapConstants {
     public static final String T_CAT_HOM     = "{{categoriaHomologada}}";
     public static final String T_PAIS_HOM    = "{{paisHomologado}}";
     public static final String T_CARP_HOM    = "{{carpetaHomologada}}";
-    public static final String T_FECHA       = "{{fecha}}";
-    public static final String T_COMENTARIO  = "{{comentario}}";
-    public static final String T_META_NAME_FECHA = "{{metaNameFecha}}";
-    public static final String T_META_NAME_COMENTARIO = "{{metaNameComentario}}";
 
-    // Valores fijos
-    public static final String VAL_META_NAME_FECHA = "Bfecha";
-    public static final String VAL_META_NAME_COMENTARIO = "Bcomentario";
-    public static final String VAL_DEFAULT_COMENTARIO = "Procesamiento automatico";
+    // Marcador dinámico de metadata — reemplazado por MetadataStrategy
+    public static final String T_METADATA_BLOCK = "{{METADA_BLOCK}}";
     // Elementos XML (Solo los necesarios para el Envelope y Response)
     public static final String EL_ENVELOPE = "Envelope";
     public static final String EL_HEADER = "Header";

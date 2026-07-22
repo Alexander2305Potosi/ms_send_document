@@ -1,9 +1,11 @@
 package com.example.fileprocessor.application.service.config;
 
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
+import com.example.fileprocessor.domain.port.out.MetadataStrategy;
 import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.DocumentRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -22,6 +24,7 @@ import com.example.fileprocessor.domain.usecase.AnimalDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.port.out.AnimalRepository;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -88,12 +91,13 @@ public class DomainConfig {
 
     @Bean
     public AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase(
-            PersistenceGateway<Document, AnimalDocumentHistoryDTO> animalPersistencePort,
+            PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> animalPersistencePort,
             ProductRestGateway productRestGateway,
             AnimalRepository animalRepository,
             AnimalRestGateway animalRestGateway,
             AnimalSoapGateway soapGateway,
             HomologationRepository homologationRepository,
+            @Qualifier("animalMetadataStrategy") MetadataStrategy animalMetadataStrategy,
             ProcessorsProperties properties) {
         return new AnimalDocumentProcessingUseCase(
             animalPersistencePort,
@@ -103,7 +107,8 @@ public class DomainConfig {
             animalRepository,
             animalRestGateway,
             soapGateway,
-            homologationRepository
+            homologationRepository,
+            animalMetadataStrategy
         );
     }
 }

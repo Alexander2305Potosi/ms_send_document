@@ -7,6 +7,7 @@ import com.example.fileprocessor.domain.entity.product.ProcessingContext;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
+import com.example.fileprocessor.domain.port.out.MetadataStrategy;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.AnimalSoapGateway;
@@ -28,6 +29,7 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     private final ProductRestGateway productRestGateway;
     private final AnimalSoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
+    private final MetadataStrategy metadataStrategy;
 
     public AnimalDocumentProcessingUseCase(
             PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> persistencePort,
@@ -37,13 +39,15 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
             AnimalRepository animalRepository,
             AnimalRestGateway animalRestGateway,
             AnimalSoapGateway soapGateway,
-            HomologationRepository homologationRepository) {
+            HomologationRepository homologationRepository,
+            MetadataStrategy metadataStrategy) {
         super(persistencePort, documentValidator, tempDirPath);
         this.animalRepository = animalRepository;
         this.animalRestGateway = animalRestGateway;
         this.productRestGateway = productRestGateway;
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
+        this.metadataStrategy = metadataStrategy;
     }
 
     @Override
@@ -99,7 +103,8 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
         AnimalDocumentHistoryDTO history = context.getHistory();
         return homologationRepository.resolve(history)
                 .flatMapMany(homologation -> {
-                    FileUploadRequest uploadReq = FileUploadRequest.from(history, context.getFileContent(), docId, homologation);
+                    FileUploadRequest uploadReq = FileUploadRequest.fromAnimal(
+                            history, context.getFileContent(), docId, homologation, metadataStrategy);
                     return soapGateway.send(uploadReq);
                 });
     }

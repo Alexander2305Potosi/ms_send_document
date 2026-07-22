@@ -9,9 +9,11 @@ import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
+import com.example.fileprocessor.domain.port.out.MetadataStrategy;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -43,11 +45,14 @@ public class SoapMapper {
 
     private final SoapProperties props;
     private final ResourceLoader resourceLoader;
+    private final MetadataStrategy defaultMetadataStrategy;
     private String xmlTemplate;
 
-    public SoapMapper(SoapProperties props, ResourceLoader resourceLoader) {
+    public SoapMapper(SoapProperties props, ResourceLoader resourceLoader,
+                      @Qualifier("productMetadataStrategy") MetadataStrategy defaultMetadataStrategy) {
         this.props = props;
         this.resourceLoader = resourceLoader;
+        this.defaultMetadataStrategy = defaultMetadataStrategy;
     }
 
     @PostConstruct
@@ -89,8 +94,11 @@ public class SoapMapper {
             String paisHom = request.getHomologationCountry() != null ? request.getHomologationCountry() : "";
             String carpHom = request.getHomologationFolder() != null ? request.getHomologationFolder() : "";
 
-            String fecha = java.time.LocalDate.now().toString();
-            String comentario = SoapConstants.VAL_DEFAULT_COMENTARIO;
+            // Delegate metadata block to the strategy (use request's strategy or default)
+            MetadataStrategy strategy = request.getMetadataStrategy() != null
+                    ? request.getMetadataStrategy()
+                    : defaultMetadataStrategy;
+            String metadataBlock = strategy.buildMetadataBlock(request);
 
             return this.xmlTemplate
                     .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
@@ -100,10 +108,7 @@ public class SoapMapper {
                     .replace(SoapConstants.T_CAT_HOM, escapeXml(catHom))
                     .replace(SoapConstants.T_PAIS_HOM, escapeXml(paisHom))
                     .replace(SoapConstants.T_CARP_HOM, escapeXml(carpHom))
-                    .replace(SoapConstants.T_META_NAME_FECHA, SoapConstants.VAL_META_NAME_FECHA)
-                    .replace(SoapConstants.T_FECHA, escapeXml(fecha))
-                    .replace(SoapConstants.T_META_NAME_COMENTARIO, SoapConstants.VAL_META_NAME_COMENTARIO)
-                    .replace(SoapConstants.T_COMENTARIO, escapeXml(comentario))
+                    .replace(SoapConstants.T_METADATA_BLOCK, metadataBlock)
                     .replace(SoapConstants.T_CONTENT, base64Content);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error building SOAP envelope", e);

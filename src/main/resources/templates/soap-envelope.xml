@@ -29,14 +29,7 @@
             <paisHomologado>{{paisHomologado}}</paisHomologado>
             <carpetaHomologada>{{carpetaHomologada}}</carpetaHomologada>
             <metaData>
-                <tiposMetaData>
-                    <nombre>{{metaNameFecha}}</nombre>
-                    <valor>{{fecha}}</valor>
-                </tiposMetaData>
-                <tiposMetaData>
-                    <nombre>{{metaNameComentario}}</nombre>
-                    <valor>{{comentario}}</valor>
-                </tiposMetaData>
+                {{METADA_BLOCK}}
             </metaData>
         </v1:transmitirDocumentoRequest>
     </soapenv:Body>
