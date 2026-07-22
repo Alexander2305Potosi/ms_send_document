@@ -3,7 +3,6 @@ package com.example.fileprocessor.domain.entity;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
 import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
-import com.example.fileprocessor.domain.port.out.MetadataStrategy;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,14 +25,12 @@ public class FileUploadRequest {
     private String homologationFolder;
     private String homologationCountry;
     private Long docId;
+    private String useCase;
 
     // Optional fields per use case (Animal)
     private String animalId;
     private String raza;
     private String tipo;
-
-    // Strategy that determines what <metaData> block to generate
-    private MetadataStrategy metadataStrategy;
 
     public static FileUploadRequest from(BaseDocumentHistoryDTO history, byte[] content, Long docId, HomologationResult h) {
         return FileUploadRequest.builder()
@@ -47,6 +44,7 @@ public class FileUploadRequest {
             .homologationFolder(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationFolder() : history.getOriginFolder())
             .homologationCountry(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationCountry() : history.getOriginCountry())
             .docId(docId)
+            .useCase(history.getUseCase())
             .build();
     }
 
@@ -54,7 +52,7 @@ public class FileUploadRequest {
      * Factory method for Animal use case — maps animal-specific fields.
      */
     public static FileUploadRequest fromAnimal(AnimalDocumentHistoryDTO history, byte[] content, Long docId,
-                                                HomologationResult h, MetadataStrategy metadataStrategy) {
+                                                HomologationResult h) {
         return FileUploadRequest.builder()
             .documentId(history.getBusinessDocumentId())
             .content(content != null ? content : new byte[0])
@@ -66,10 +64,10 @@ public class FileUploadRequest {
             .homologationFolder(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationFolder() : history.getOriginFolder())
             .homologationCountry(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationCountry() : history.getOriginCountry())
             .docId(docId)
+            .useCase(history.getUseCase())
             .animalId(history.getAnimalId())
             .raza(history.getRaza())
             .tipo(history.getTipo())
-            .metadataStrategy(metadataStrategy)
             .build();
     }
 }

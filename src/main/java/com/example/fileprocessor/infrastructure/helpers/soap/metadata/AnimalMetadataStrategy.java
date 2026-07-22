@@ -1,7 +1,7 @@
 package com.example.fileprocessor.infrastructure.helpers.soap.metadata;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
-import com.example.fileprocessor.domain.port.out.MetadataStrategy;
+import com.example.fileprocessor.infrastructure.helpers.soap.metadata.MetadataStrategy;
 import org.springframework.stereotype.Component;
 
 /**

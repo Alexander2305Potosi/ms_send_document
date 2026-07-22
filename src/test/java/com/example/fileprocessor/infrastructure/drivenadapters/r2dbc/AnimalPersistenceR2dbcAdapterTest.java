@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 
-import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalDocumentEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalDocumentHistoryEntity;
@@ -82,14 +82,14 @@ class AnimalPersistenceR2dbcAdapterTest {
 
     @Test
     void testLockDocumentForProcessingWhenDoesNotExist() {
-        Document doc = Document.builder().productId("animal-1").documentId("doc-1").isZip(false).build();
+        AnimalDocument doc = AnimalDocument.builder().animalId("animal-1").documentId("doc-1").isZip(false).build();
         AnimalDocumentEntity savedEntity = AnimalDocumentEntity.builder().id(20L).build();
 
         when(documentRepository.existsByProductIdAndDocumentId("animal-1", "doc-1")).thenReturn(Mono.just(false));
         when(documentRepository.save(any(AnimalDocumentEntity.class))).thenReturn(Mono.just(savedEntity));
 
         StepVerifier.create(adapter.lockDocumentForProcessing(doc, 2))
-                .expectNext(1L)
+                .expectNext(20L)
                 .expectComplete()
                 .verify();
 

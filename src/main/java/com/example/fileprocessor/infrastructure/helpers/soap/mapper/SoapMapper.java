@@ -9,7 +9,8 @@ import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.domain.port.out.MetadataStrategy;
+import com.example.fileprocessor.infrastructure.helpers.soap.metadata.MetadataStrategy;
+import java.util.Map;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
 import jakarta.annotation.PostConstruct;
@@ -45,14 +46,14 @@ public class SoapMapper {
 
     private final SoapProperties props;
     private final ResourceLoader resourceLoader;
-    private final MetadataStrategy defaultMetadataStrategy;
+    private final Map<String, MetadataStrategy> metadataStrategies;
     private String xmlTemplate;
 
     public SoapMapper(SoapProperties props, ResourceLoader resourceLoader,
-                      @Qualifier("productMetadataStrategy") MetadataStrategy defaultMetadataStrategy) {
+                      Map<String, MetadataStrategy> metadataStrategies) {
         this.props = props;
         this.resourceLoader = resourceLoader;
-        this.defaultMetadataStrategy = defaultMetadataStrategy;
+        this.metadataStrategies = metadataStrategies;
     }
 
     @PostConstruct
@@ -95,9 +96,10 @@ public class SoapMapper {
             String carpHom = request.getHomologationFolder() != null ? request.getHomologationFolder() : "";
 
             // Delegate metadata block to the strategy (use request's strategy or default)
-            MetadataStrategy strategy = request.getMetadataStrategy() != null
-                    ? request.getMetadataStrategy()
-                    : defaultMetadataStrategy;
+            String useCase = request.getUseCase() != null ? request.getUseCase().toLowerCase() : "product";
+            String strategyKey = useCase + "MetadataStrategy";
+            MetadataStrategy strategy = metadataStrategies.getOrDefault(strategyKey, metadataStrategies.get("productMetadataStrategy"));
+            
             String metadataBlock = strategy.buildMetadataBlock(request);
 
             return this.xmlTemplate

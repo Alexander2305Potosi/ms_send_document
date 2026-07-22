@@ -3,7 +3,7 @@ package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.IN_PROGRESS;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
 
-import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalDocumentEntity;
@@ -23,21 +23,21 @@ import java.time.LocalDateTime;
  */
 @Component
 @RequiredArgsConstructor
-public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<Document, AnimalDocumentHistoryDTO> {
+public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> {
 
     private final AnimalDocumentRepository documentRepository;
     private final AnimalDocumentHistoryRepository historyRepository;
     private final TransactionalOperator transactionalOperator;
 
     @Override
-    public Flux<Document> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay) {
+    public Flux<AnimalDocument> findPendingDocumentsToday(String useCase, LocalDateTime startOfDay) {
         String[] estados = new String[] { PENDING.name(), IN_PROGRESS.name() };
         return documentRepository.findByStatesAndUseCaseToday(estados, useCase, startOfDay)
                 .map(this::toDomainDocument);
     }
 
     @Override
-    public Mono<Long> lockDocumentForProcessing(Document doc, int currentRetry) {
+    public Mono<Long> lockDocumentForProcessing(AnimalDocument doc, int currentRetry) {
         return documentRepository.existsByProductIdAndDocumentId(doc.getProductId(), doc.getDocumentId())
                 .flatMap(exists -> {
                     if (exists) {
@@ -56,7 +56,7 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<Documen
                     } else {
                         AnimalDocumentEntity newEntity = AnimalDocumentEntity.builder()
                                 .documentId(doc.getDocumentId())
-                                .productId(doc.getProductId())
+                                .productId(doc.getAnimalId())
                                 .name(doc.getName())
                                 .state(IN_PROGRESS.name())
                                 .isZip(doc.getIsZip())
@@ -129,11 +129,11 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<Documen
         return historyRepository.save(historyEntity).then();
     }
 
-    private Document toDomainDocument(AnimalDocumentEntity entity) {
-        return Document.builder()
+    private AnimalDocument toDomainDocument(AnimalDocumentEntity entity) {
+        return AnimalDocument.builder()
                 .id(entity.getId())
                 .documentId(entity.getDocumentId())
-                .productId(entity.getProductId())
+                .animalId(entity.getProductId())
                 .name(entity.getName())
                 .state(entity.getState())
                 .syncMessage(entity.getSyncMessage())

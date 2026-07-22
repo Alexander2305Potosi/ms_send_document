@@ -1,4 +1,4 @@
-package com.example.fileprocessor.domain.port.out;
+package com.example.fileprocessor.infrastructure.helpers.soap.metadata;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 
