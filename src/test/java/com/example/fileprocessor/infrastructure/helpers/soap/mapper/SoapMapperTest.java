@@ -4,8 +4,8 @@ import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOA
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
-import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.helpers.soap.metadata.MetadataStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,11 +42,14 @@ class SoapMapperTest {
         when(props.metaData()).thenReturn(Map.of());
 
         // Template mock
-        String template = "TEMPLATE {{traceId}} {{filename}} {{base64Content}} {{subTipo}} {{categoriaHomologada}} {{paisHomologado}} {{carpetaHomologada}} {{metaNameFecha}} {{fecha}} {{metaNameComentario}} {{comentario}}";
+        String template = "TEMPLATE {{traceId}} {{filename}} {{base64Content}} {{subTipo}} {{categoriaHomologada}} {{paisHomologado}} {{carpetaHomologada}} {{METADA_BLOCK}}";
         Resource res = new ByteArrayResource(template.getBytes());
         when(resourceLoader.getResource(anyString())).thenReturn(res);
 
-        soapMapper = new SoapMapper(props, resourceLoader);
+        MetadataStrategy mockStrategy = org.mockito.Mockito.mock(MetadataStrategy.class);
+        org.mockito.Mockito.when(mockStrategy.buildMetadataBlock(org.mockito.ArgumentMatchers.any())).thenReturn("<metadato><nombre>Bfecha</nombre></metadato><metadato><nombre>Bcomentario</nombre><valor>Procesamiento automatico</valor></metadato>");
+
+        soapMapper = new SoapMapper(props, resourceLoader, Map.of("productMetadataStrategy", mockStrategy));
         soapMapper.init();
     }
 
@@ -255,7 +258,7 @@ class SoapMapperTest {
     @DisplayName("Debe manejar errores de inicialización del template")
     void initWithInvalidResourceThrowsRuntimeException() {
         when(resourceLoader.getResource(anyString())).thenReturn(null);
-        SoapMapper mapper = new SoapMapper(props, resourceLoader);
+        SoapMapper mapper = new SoapMapper(props, resourceLoader, Map.of());
         
         assertThrows(RuntimeException.class, mapper::init);
     }

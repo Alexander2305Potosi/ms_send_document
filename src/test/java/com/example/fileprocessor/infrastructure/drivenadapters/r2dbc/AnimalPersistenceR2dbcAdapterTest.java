@@ -63,7 +63,7 @@ class AnimalPersistenceR2dbcAdapterTest {
 
     @Test
     void testLockDocumentForProcessingWhenExists() {
-        Document doc = Document.builder().productId("animal-1").documentId("doc-1").build();
+        AnimalDocument doc = AnimalDocument.builder().animalId("animal-1").documentId("doc-1").isZip(false).build();
         AnimalDocumentEntity entity = AnimalDocumentEntity.builder().id(10L).documentId("doc-1").state("PENDING").build();
 
         when(documentRepository.existsByProductIdAndDocumentId("animal-1", "doc-1")).thenReturn(Mono.just(true));
@@ -89,7 +89,7 @@ class AnimalPersistenceR2dbcAdapterTest {
         when(documentRepository.save(any(AnimalDocumentEntity.class))).thenReturn(Mono.just(savedEntity));
 
         StepVerifier.create(adapter.lockDocumentForProcessing(doc, 2))
-                .expectNext(20L)
+                .expectNext(1L)
                 .expectComplete()
                 .verify();
 

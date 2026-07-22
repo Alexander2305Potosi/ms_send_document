@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.usecase;
 
-import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.animal.AnimalMaestro;
@@ -33,7 +33,7 @@ import static org.mockito.Mockito.times;
 class AnimalDocumentProcessingUseCaseTest {
 
     @Mock
-    private PersistenceGateway<Document, AnimalDocumentHistoryDTO> persistencePort;
+    private PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> persistencePort;
     @Mock
     private ProductRestGateway productRestGateway;
     @Mock
@@ -65,10 +65,10 @@ class AnimalDocumentProcessingUseCaseTest {
     @Test
     void executeAnimalProcessingSuccess() {
         AnimalMaestro animal = AnimalMaestro.builder().id(100L).name("Cow").build();
-        Document doc = Document.builder()
+        AnimalDocument doc = AnimalDocument.builder()
                 .id(1L)
                 .documentId("doc-1")
-                .productId("prod-1")
+                .animalId("prod-1")
                 .name("test.pdf")
                 .retryCount(0)
                 .isZip(false)
@@ -88,7 +88,7 @@ class AnimalDocumentProcessingUseCaseTest {
         when(animalRepository.findAllAnimals()).thenReturn(Flux.just(animal));
         when(animalRestGateway.getPendingDocumentsForAnimal(100L)).thenReturn(Flux.just(doc));
         
-        when(persistencePort.lockDocumentForProcessing(any(Document.class), anyInt())).thenReturn(Mono.just(1L));
+        when(persistencePort.lockDocumentForProcessing(any(AnimalDocument.class), anyInt())).thenReturn(Mono.just(1L));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
         when(documentValidator.validate(any(AnimalDocumentHistoryDTO.class), anyBoolean()))
             .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
