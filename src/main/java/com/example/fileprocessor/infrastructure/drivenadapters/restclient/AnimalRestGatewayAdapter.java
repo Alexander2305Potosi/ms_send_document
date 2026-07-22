@@ -1,6 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
 
-import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.DirectoryNode;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.AnimalRestProperties;
@@ -38,22 +38,22 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
     }
 
     @Override
-    public Flux<Document> getPendingDocumentsForAnimal(Long animalId) {
+    public Flux<AnimalDocument> getPendingDocumentsForAnimal(Long animalId) {
         return getDirectoryIdByAnimalId(animalId)
                 .flatMap(this::getDirectoryTree)
                 .flatMapMany(tree -> Flux.fromIterable(flattenAndFilter(tree)))
-                .map(node -> Document.builder()
+                .map(node -> AnimalDocument.builder()
                         .documentId(node.getBusinessDocumentId())
-                        .productId(node.getProductId())
+                        .animalId(node.getProductId())
                         .name(node.getName())
                         .isZip(false)
-                        .useCase("Animal")
+                        .useCase(AnimalDocument.USE_CASE_NAME)
                         .retryCount(0)
                         .build())
                 .onErrorResume(error -> {
                     LOGGER.log(Level.SEVERE, "Error obteniendo documentos para animalId={0}: {1}",
                             new Object[]{animalId, error.getMessage()});
-                    return Flux.<Document>empty();
+                    return Flux.<AnimalDocument>empty();
                 });
     }
 

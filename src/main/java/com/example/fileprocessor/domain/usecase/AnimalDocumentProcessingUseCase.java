@@ -2,7 +2,7 @@ package com.example.fileprocessor.domain.usecase;
 
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
-import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.domain.entity.product.ProcessingContext;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.port.out.PersistenceGateway;
@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
  * Caso de uso específico para las reglas de negocio de carga (upload) de Animales.
  * Extiende del UseCase base genérico.
  */
-public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase<Document, AnimalDocumentHistoryDTO> {
+public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase<AnimalDocument, AnimalDocumentHistoryDTO> {
 
     private final AnimalRepository animalRepository;
     private final AnimalRestGateway animalRestGateway;
@@ -30,7 +30,7 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     private final HomologationRepository homologationRepository;
 
     public AnimalDocumentProcessingUseCase(
-            PersistenceGateway<Document, AnimalDocumentHistoryDTO> persistencePort,
+            PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> persistencePort,
             ProductRestGateway productRestGateway,
             RulesBussinesGateway<AnimalDocumentHistoryDTO> documentValidator,
             String tempDirPath,
@@ -47,12 +47,12 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     }
 
     @Override
-    protected Flux<Document> getPendingDocuments(LocalDateTime startOfDay) {
+    protected Flux<AnimalDocument> getPendingDocuments(LocalDateTime startOfDay) {
         return Flux.empty(); // Fiel al flujo dinámico REST de animales
     }
 
     @Override
-    protected AnimalDocumentHistoryDTO buildInitialHistory(Document doc) {
+    protected AnimalDocumentHistoryDTO buildInitialHistory(AnimalDocument doc) {
         return AnimalDocumentHistoryDTO.builder()
                 .documentId(doc.getId())
                 .businessDocumentId(doc.getDocumentId())
@@ -61,7 +61,9 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
                 .retryCount(doc.getRetryCountSafe())
                 .filename(doc.getName())
                 .startedAt(java.time.Instant.now())
-                .animalId(doc.getProductId()) // Mapeo de animal ID
+                .animalId(doc.getAnimalId()) // Mapeo directo
+                .raza(doc.getRaza())
+                .tipo(doc.getTipo())
                 .isZip(doc.getIsZip())
                 .build();
     }
@@ -104,7 +106,7 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
 
     @Override
     protected String implementationName() {
-        return "Animal";
+        return AnimalDocument.USE_CASE_NAME;
     }
 
     /**

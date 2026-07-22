@@ -1,6 +1,6 @@
 package com.example.fileprocessor.domain.port.out;
 
-import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import reactor.core.publisher.Flux;
 
 /**
@@ -9,5 +9,5 @@ import reactor.core.publisher.Flux;
  * por Source queda encapsulada en el Adapter de infraestructura.
  */
 public interface AnimalRestGateway {
-    Flux<Document> getPendingDocumentsForAnimal(Long animalId);
+    Flux<AnimalDocument> getPendingDocumentsForAnimal(Long animalId);
 }

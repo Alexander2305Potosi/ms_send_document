@@ -29,13 +29,15 @@ public class AnimalDocumentHistoryDTO extends BaseDocumentHistoryDTO {
     }
 
     /**
-     * Factory method to initialize DTO from the base Document.
+     * Factory method to initialize DTO from the AnimalDocument entity.
      */
-    public static AnimalDocumentHistoryDTO fromDocument(BaseDocument doc) {
+    public static AnimalDocumentHistoryDTO fromDocument(AnimalDocument doc) {
         return AnimalDocumentHistoryDTO.builder()
                 .documentId(doc.getId())
                 .businessDocumentId(SanitizationUtils.sanitizeKeepingText(doc.getDocumentId()))
-                .animalId(doc.getProductId()) // The productId field in Document carries the animalId in this use case
+                .animalId(doc.getAnimalId()) 
+                .raza(doc.getRaza())
+                .tipo(doc.getTipo())
                 .filename(doc.getName())
                 .useCase(doc.getUseCase())
                 .retryCount(doc.getRetryCountSafe())
