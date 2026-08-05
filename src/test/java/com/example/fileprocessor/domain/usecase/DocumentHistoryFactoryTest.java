@@ -1,0 +1,557 @@
+package com.example.fileprocessor.domain.usecase;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.BUSINESS_REJECTION;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.FAILURE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PATTERN_MISMATCH;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PENDING;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PROCESSED;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_NOT_FOUND;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
+
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.exception.ProcessingException;
+import org.junit.jupiter.api.Test;
+
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class DocumentHistoryFactoryTest {
+
+    @Test
+    void calculateNextStateWhenResponsesIsEmptyReturnsFailed() {
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(1, Collections.emptyList());
+
+        assertEquals(FAILED.name(), conclusion.nextState());
+        assertEquals(1, conclusion.nextRetryCount());
+    }
+
+    @Test
+    void calculateNextStateWhenAllResponsesAreSuccessReturnsProcessed() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(true).build(),
+                FileUploadResponse.builder().success(true).build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(1, responses);
+
+        assertEquals(PROCESSED.name(), conclusion.nextState());
+        assertEquals(1, conclusion.nextRetryCount());
+    }
+
+    @Test
+    void calculateNextStateWhenAnyResponseIsBusinessRuleReturnsBusinessRejection() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(true).build(),
+                FileUploadResponse.builder().success(false).syncStatus(PATTERN_MISMATCH.name()).build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(1, responses);
+
+        assertEquals(BUSINESS_REJECTION.name(), conclusion.nextState());
+        assertEquals(1, conclusion.nextRetryCount());
+    }
+
+    @Test
+    void calculateNextStateWhenHasTransientAndUnderMaxRetriesReturnsPendingAndIncrementsRetry() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(true).build(),
+                FileUploadResponse.builder().success(false).syncStatus(GATEWAY_TIMEOUT.name()).build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(1, responses);
+
+        assertEquals(PENDING.name(), conclusion.nextState());
+        assertEquals(2, conclusion.nextRetryCount());
+    }
+
+    @Test
+    void calculateNextStateWhenHasTransientAndAtMaxRetriesReturnsFailedWithoutIncrement() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(true).build(),
+                FileUploadResponse.builder().success(false).syncStatus(GATEWAY_TIMEOUT.name()).build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(3, responses);
+
+        assertEquals(FAILED.name(), conclusion.nextState());
+        assertEquals(3, conclusion.nextRetryCount());
+    }
+
+    @Test
+    void calculateNextStateWhenHasNonTransientNonBusinessErrorReturnsFailed() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(false).syncStatus(SOURCE_NOT_FOUND.name()).build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(1, responses);
+
+        assertEquals(FAILED.name(), conclusion.nextState());
+        assertEquals(1, conclusion.nextRetryCount());
+    }
+
+    @Test
+    void syncHistoryDTOMapsCorrectData() {
+        Document doc = Document.builder()
+                .id(123L)
+                .useCase("SOAP")
+                .retryCount(2)
+                .isZip(true)
+                .build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder()
+                .filename("inner.xml")
+                .build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .filename("inner_updated.xml")
+                .syncStatus("OK")
+                .message("Successfully uploaded")
+                .attemptCount(3)
+                .build();
+
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+
+        assertEquals(123L, result.getDocumentId());
+        assertEquals(PROCESSED.name(), result.getState());
+        assertEquals("SOAP", result.getUseCase());
+        assertEquals(3, result.getRetryCount());         // Uses response.attemptCount (3)
+        assertEquals(2, result.getBusinessRetryCount()); // Uses doc.retryCount (2)
+        assertEquals("inner_updated.xml", result.getFilename());
+        assertEquals("OK", result.getSyncStatus());
+        assertEquals("Successfully uploaded", result.getSyncMessage());
+        assertNotNull(result.getCompletedAt());
+    }
+
+    @Test
+    void syncHistoryDTOWithZeroAttemptCountFallsBackToDocRetry() {
+        Document doc = Document.builder()
+                .id(50L)
+                .useCase("S3")
+                .retryCount(2)
+                .build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder()
+                .filename("report.pdf")
+                .build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .filename("report.pdf")
+                .syncStatus("SUCCESS")
+                .attemptCount(0)
+                .build();
+
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+
+        assertEquals(2, result.getRetryCount());          // Fallback to doc.retryCount
+        assertEquals(2, result.getBusinessRetryCount());
+    }
+
+    @Test
+    void syncGlobalHistoryMapsCorrectDataWithResponses() {
+        Document doc = Document.builder()
+                .id(123L)
+                .useCase("S3")
+                .retryCount(1)
+                .isZip(true)
+                .build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder()
+                .filename("master.zip")
+                .build();
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().filename("f1.xml").success(true).syncStatus("SUCCESS").build(),
+                FileUploadResponse.builder().filename("f2.xml").success(false).syncStatus("GATEWAY_TIMEOUT").build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion(PENDING.name(), 2);
+
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+
+        assertEquals(123L, result.getDocumentId());
+        assertEquals(PENDING.name(), result.getState());
+        assertEquals("S3", result.getUseCase());
+        assertEquals(1, result.getRetryCount());
+        assertEquals(2, result.getBusinessRetryCount());
+        assertEquals("master.zip", result.getFilename());
+        assertEquals("SUCCESS", result.getSyncStatus());
+        assertTrue(result.getSyncMessage().contains("[Archivo: f1.xml | TraceID: N/A | Detalle: SUCCESS]"));
+        assertTrue(result.getSyncMessage().contains("[Archivo: f2.xml | TraceID: N/A | Detalle: GATEWAY_TIMEOUT]"));
+        assertNotNull(result.getCompletedAt());
+    }
+
+    @Test
+    void syncGlobalHistoryWithEmptyResponsesSetsRepresentativeStatusToNull() {
+        Document doc = Document.builder().id(123L).build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder().build();
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion("FAILED", 3);
+
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, Collections.emptyList(), conclusion);
+
+        assertNull(result.getSyncStatus());
+        assertEquals("", result.getSyncMessage());
+    }
+
+    @Test
+    void calculateFileStateReturnsCorrectStates() {
+        assertEquals(PROCESSED.name(),
+                DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(true).build()));
+
+        assertEquals(BUSINESS_REJECTION.name(),
+                DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(false).syncStatus(PATTERN_MISMATCH.name()).build()));
+
+        assertEquals(PENDING.name(),
+                DocumentHistoryFactory.calculateFileState(FileUploadResponse.builder().success(false).syncStatus(UNKNOWN_ERROR.name()).build()));
+    }
+
+    @Test
+    void aggregateMessagesWithNullFilenameUsesUnknown() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(true).build()
+        );
+        String message = DocumentHistoryFactory.aggregateMessages(responses);
+        assertEquals("[Archivo: unknown | TraceID: N/A | Detalle: SUCCESS]", message);
+    }
+
+    @Test
+    void handleGlobalErrorWithProcessingExceptionReturnsErrorCode() {
+        ProcessingException pe = new ProcessingException("Error occurred", "SOME_ERROR_CODE");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+
+        assertFalse(response.isSuccess());
+        assertEquals(FAILURE.name(), response.getStatus());
+        assertEquals("SOME_ERROR_CODE", response.getSyncStatus());
+        assertEquals("Error occurred", response.getMessage());
+    }
+
+    @Test
+    void handleGlobalErrorWithProcessingExceptionBlankCodeReturnsUnknownError() {
+        ProcessingException pe = new ProcessingException("Error", "");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+
+        assertFalse(response.isSuccess());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
+    }
+
+    @Test
+    void handleGlobalErrorWithProcessingExceptionNullCodeReturnsUnknownError() {
+        ProcessingException pe = new ProcessingException("Error", null);
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+
+        assertFalse(response.isSuccess());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
+    }
+
+    @Test
+    void handleGlobalErrorWithProcessingExceptionWithFilenamePreservesFilename() {
+        ProcessingException pe = new ProcessingException("File error", "SIZE_EXCEEDED");
+        pe.setFilename("bigfile.pdf");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+
+        assertFalse(response.isSuccess());
+        assertEquals("SIZE_EXCEEDED", response.getSyncStatus());
+        assertEquals("bigfile.pdf", response.getFilename());
+    }
+
+    @Test
+    void handleGlobalErrorWithWrappedProcessingExceptionUnwrapsAndUsesCode() {
+        ProcessingException pe = new ProcessingException("Inner error", "GATEWAY_TIMEOUT");
+        RuntimeException wrapper = new RuntimeException("Outer wrapper", pe);
+
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
+
+        assertFalse(response.isSuccess());
+        assertEquals("GATEWAY_TIMEOUT", response.getSyncStatus());
+        assertEquals("Inner error", response.getMessage());
+    }
+
+    @Test
+    void handleGlobalErrorWithGenericExceptionReturnsUnknownError() {
+        RuntimeException ex = new RuntimeException("Generic exception");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
+
+        assertFalse(response.isSuccess());
+        assertEquals(FAILURE.name(), response.getStatus());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals("Generic exception", response.getMessage());
+    }
+
+    @Test
+    void handleGlobalErrorWithNullMessageUsesUnknownErrorDescription() {
+        RuntimeException ex = new RuntimeException((String) null);
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
+
+        assertFalse(response.isSuccess());
+        assertEquals(UNKNOWN_ERROR.value(), response.getMessage());
+    }
+
+    @Test
+    void mapValidationErrorWithProcessingExceptionAndValidCodeReturnsSame() {
+        ProcessingException pe = new ProcessingException("Error message", "CODE");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
+
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, null);
+        assertEquals("CODE", result.getErrorCode());
+        assertEquals("Error message", result.getMessage());
+    }
+
+    @Test
+    void mapValidationErrorWithProcessingExceptionAndBlankCodeDefaultsToUnknownError() {
+        ProcessingException pe = new ProcessingException("Error message", "");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
+
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, null);
+        assertEquals(UNKNOWN_ERROR.name(), result.getErrorCode());
+    }
+
+    @Test
+    void mapValidationErrorWithGenericExceptionWrapsAsProcessingException() {
+        IllegalArgumentException ex = new IllegalArgumentException("Invalid arg");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
+
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(ex, master, null);
+        assertEquals(UNKNOWN_ERROR.name(), result.getErrorCode());
+        assertEquals("Invalid arg", result.getMessage());
+        assertEquals(ex, result.getCause());
+    }
+
+    @Test
+    void mapValidationErrorWhenMasterIsZipSetsFilenameFromInner() {
+        ProcessingException pe = new ProcessingException("Err", "CODE");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(true).build();
+        DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
+
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, inner);
+        assertEquals("inner.xml", result.getFilename());
+    }
+
+    @Test
+    void handleGlobalErrorWithWrappedSslExceptionUnwrapsToSslMessage() {
+        javax.net.ssl.SSLHandshakeException sslEx = new javax.net.ssl.SSLHandshakeException("PKIX path building failed");
+        RuntimeException wrapper = new RuntimeException("Request failed", sslEx);
+
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
+
+        assertFalse(response.isSuccess());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals("PKIX path building failed", response.getMessage());
+    }
+
+    @Test
+    void handleGlobalErrorWithWrappedSslExceptionHavingNullMessageFallsBackToOuterMessage() {
+        javax.net.ssl.SSLHandshakeException sslEx = new javax.net.ssl.SSLHandshakeException(null);
+        RuntimeException wrapper = new RuntimeException("Request failed due to SSL handshake issue", sslEx);
+
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(wrapper);
+
+        assertFalse(response.isSuccess());
+        assertEquals(UNKNOWN_ERROR.name(), response.getSyncStatus());
+        assertEquals("Request failed due to SSL handshake issue", response.getMessage());
+    }
+
+    @Test
+    void aggregateMessagesWithSuccessMessageUsesDetailedMessage() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder()
+                        .filename("test.pdf")
+                        .success(true)
+                        .syncStatus("OK")
+                        .message("statusCode: OK, messageId: corr-123, idDocumento: doc-123")
+                        .build()
+        );
+        String message = DocumentHistoryFactory.aggregateMessages(responses);
+        assertEquals("[Archivo: test.pdf | TraceID: N/A | Detalle: statusCode: OK, messageId: corr-123, idDocumento: doc-123]", message);
+    }
+
+    @Test
+    void privateConstructorCanBeCalledViaReflection() throws Exception {
+        java.lang.reflect.Constructor<DocumentHistoryFactory> constructor = DocumentHistoryFactory.class.getDeclaredConstructor();
+        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        constructor.setAccessible(true);
+        DocumentHistoryFactory instance = constructor.newInstance();
+        assertNotNull(instance);
+    }
+
+    @Test
+    void syncHistoryDTOWithValidTraceIdAndNullMessageAppendsTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .traceId("trace-xyz")
+                .message(null)
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals(" [TraceID: trace-xyz]", result.getSyncMessage());
+    }
+
+    @Test
+    void syncHistoryDTOWithBlankTraceIdDoesNotAppendTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .traceId("   ")
+                .message("Message")
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals("Message", result.getSyncMessage());
+    }
+
+    @Test
+    void syncHistoryDTOWithUnknownTraceIdDoesNotAppendTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("doc.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .traceId("unknown")
+                .message("Message")
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals("Message", result.getSyncMessage());
+    }
+
+    @Test
+    void syncHistoryDTOWithNullFilenameFallsBackToFileHistoryFilename() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").isZip(true).build();
+        DocumentHistoryDTO fileHistory = DocumentHistoryDTO.builder().filename("fileHistory.pdf").build();
+        FileUploadResponse response = FileUploadResponse.builder()
+                .success(true)
+                .filename(null)
+                .build();
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncHistoryDTO(doc, fileHistory, response);
+        assertEquals("fileHistory.pdf", result.getFilename());
+    }
+
+    @Test
+    void syncGlobalHistoryWithValidTraceIdAndNullMessageAppendsTraceId() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().filename("f1.xml").success(true).traceId("trace-abc").build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion(PROCESSED.name(), 1);
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        assertTrue(result.getSyncMessage().contains("[TraceID: trace-abc]"));
+    }
+
+    @Test
+    void syncGlobalHistoryWithBlankTraceIdDoesNotAppend() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().filename("f1.xml").success(true).traceId("   ").build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion(PROCESSED.name(), 1);
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        assertEquals("SUCCESS", result.getSyncMessage());
+    }
+
+    @Test
+    void syncGlobalHistoryWithUnknownTraceIdDoesNotAppend() {
+        Document doc = Document.builder().id(1L).useCase("SOAP").build();
+        DocumentHistoryDTO history = DocumentHistoryDTO.builder().filename("archive.zip").build();
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().filename("f1.xml").success(true).traceId("unknown").build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                new DocumentHistoryFactory.ProcessingConclusion(PROCESSED.name(), 1);
+        DocumentHistoryDTO result = DocumentHistoryFactory.syncGlobalHistory(doc, history, responses, conclusion);
+        assertEquals("SUCCESS", result.getSyncMessage());
+    }
+
+    @Test
+    void handleGlobalErrorWithExceptionHavingSelfAsCauseStopsUnwrapping() {
+        // Create an exception where getCause() returns itself
+        class SelfCausedException extends RuntimeException {
+            @Override
+            public synchronized Throwable getCause() {
+                return this;
+            }
+        }
+        SelfCausedException ex = new SelfCausedException();
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(ex);
+        assertNotNull(response);
+    }
+
+    @Test
+    void handleGlobalErrorWithBlankMessageReturnsUnknownErrorValue() {
+        ProcessingException pe = new ProcessingException("  ", "CODE");
+        FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(pe);
+        assertEquals(UNKNOWN_ERROR.value(), response.getMessage());
+    }
+
+    @Test
+    void mapValidationErrorWhenMasterIsZipNullDoesNotSetFilename() {
+        ProcessingException pe = new ProcessingException("Err", "CODE");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(null).build();
+        DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, inner);
+        assertNull(result.getFilename());
+    }
+
+    @Test
+    void mapValidationErrorWhenMasterIsZipFalseDoesNotSetFilename() {
+        ProcessingException pe = new ProcessingException("Err", "CODE");
+        DocumentHistoryDTO master = DocumentHistoryDTO.builder().isZip(false).build();
+        DocumentHistoryDTO inner = DocumentHistoryDTO.builder().filename("inner.xml").build();
+        ProcessingException result = DocumentHistoryFactory.mapValidationError(pe, master, inner);
+        assertNull(result.getFilename());
+    }
+
+    @Test
+    void calculateNextStateWithBusinessRejectionResponseReturnsBusinessRejection() {
+        List<FileUploadResponse> responses = List.of(
+                FileUploadResponse.builder().success(false).syncStatus(BUSINESS_REJECTION.name()).build()
+        );
+        DocumentHistoryFactory.ProcessingConclusion conclusion =
+                DocumentHistoryFactory.calculateNextState(1, responses);
+
+        assertEquals(BUSINESS_REJECTION.name(), conclusion.nextState());
+        assertEquals(1, conclusion.nextRetryCount());
+    }
+
+    @Test
+    void testDocumentHistoryDTOClone() {
+        DocumentHistoryDTO original = DocumentHistoryDTO.builder()
+                .documentId(123L)
+                .productId("SC-OK-01")
+                .filename("original.pdf")
+                .build();
+        DocumentHistoryDTO cloned = original.clone();
+        assertNotNull(cloned);
+        assertEquals(original.getDocumentId(), cloned.getDocumentId());
+        assertEquals(original.getProductId(), cloned.getProductId());
+        assertEquals(original.getFilename(), cloned.getFilename());
+        
+        // Verify independent mutation
+        cloned.setFilename("cloned.pdf");
+        assertEquals("original.pdf", original.getFilename());
+        assertEquals("cloned.pdf", cloned.getFilename());
+    }
+
+    @Test
+    void testAnimalDocumentHistoryDTOClone() {
+        com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO original =
+                com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO.builder()
+                        .documentId(456L)
+                        .animalId("301")
+                        .filename("animal_original.pdf")
+                        .build();
+        com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO cloned = original.clone();
+        assertNotNull(cloned);
+        assertEquals(original.getDocumentId(), cloned.getDocumentId());
+        assertEquals(original.getAnimalId(), cloned.getAnimalId());
+        assertEquals(original.getFilename(), cloned.getFilename());
+
+        // Verify independent mutation
+        cloned.setFilename("animal_cloned.pdf");
+        assertEquals("animal_original.pdf", original.getFilename());
+        assertEquals("animal_cloned.pdf", cloned.getFilename());
+    }
+}

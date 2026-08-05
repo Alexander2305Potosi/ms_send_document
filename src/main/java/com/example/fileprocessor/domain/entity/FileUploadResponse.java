@@ -1,0 +1,34 @@
+package com.example.fileprocessor.domain.entity;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.time.Instant;
+
+/**
+ * Result of a file upload operation.
+ * This is returned by the use case to avoid dependency on infrastructure DTOs.
+ */
+@Getter
+@Builder(toBuilder = true)
+public class FileUploadResponse {
+    private final String status;
+    private final String message;
+    private final String correlationId;
+    private final String traceId;
+    private final Instant processedAt;
+    private final String externalReference;
+    private final boolean success;
+    private final String filename;
+    private final String syncStatus;
+    private final int attemptCount;
+    private final boolean technicalRetry;
+    private final String homologationFolder;
+    private final String homologationCountry;
+    private final String categoriaHomologada;
+
+    // Helper method to check success status
+    public boolean isSuccess() {
+        return success;
+    }
+}

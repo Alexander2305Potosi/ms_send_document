@@ -1,1236 +1,1680 @@
 # File Processor Service
 
-Microservicio reactivo basado en Spring WebFlux que obtiene productos con sus documentos asociados desde una API REST externa y los envia a un servicio SOAP externo o AWS S3.
+Microservicio reactivo basado en Spring WebFlux + R2DBC que obtiene productos con sus documentos asociados desde una API REST externa, los persiste en base de datos H2 (desarrollo) o PostgreSQL (produccion) y los envia a un servicio SOAP externo o AWS S3.
 
-## Arquitectura (Clean Architecture Light)
+---
 
-El proyecto sigue **Clean Architecture simplificada** con 2 capas principales. La capa de **dominio es pura Java** (sin dependencias de frameworks), y la capa de **infraestructura** provee los beans Spring.
+## Tabla de Contenidos
+
+1. [Arquitectura (Clean Architecture)](#arquitectura-clean-architecture)
+2. [API Endpoints](#api-endpoints)
+3. [Flujo de Datos](#flujo-de-datos)
+4. [Diagramas de Secuencia](#diagramas-de-secuencia)
+5. [Base de Datos](#base-de-datos)
+6. [Descompresion de archivos ZIP](#descompresion-de-archivos-zip)
+7. [Estados de Documentos (ProductState)](#estados-de-documentos-productstate)
+8. [Validacion de Documentos (RulesBussinesService)](#validacion-de-documentos-rulesbussinesservice)
+9. [Escenarios de Procesamiento](#escenarios-de-procesamiento)
+10. [Codigos de Error](#codigos-de-error)
+11. [Trazabilidad de Envios](#trazabilidad-de-envios)
+12. [Template Method Pattern](#template-method-pattern)
+13. [Perfiles de Ejecucion](#perfiles-de-ejecucion)
+14. [Variables de Entorno](#variables-de-entorno)
+15. [Compilacion y Ejecucion](#compilacion-y-ejecucion)
+16. [Ejemplos de curl](#ejemplos-de-curl)
+17. [Visualizacion de Escenarios de Data en BD](#visualizacion-de-escenarios-de-data-en-bd)
+18. [Excepciones](#excepciones)
+19. [Testing](#testing)
+20. [Reportes y Consultas SQL (Guía Administrativa)](#reportes-y-consultas-sql-guia-administrativa)
+
+---
+
+## Arquitectura (Clean Architecture)
+
+El proyecto sigue **Clean Architecture** con capas estrictamente separadas. La capa de dominio es Java puro sin dependencias de frameworks. La capa de infraestructura contiene los adaptadores concretos (R2DBC, REST, SOAP, S3). La comunicacion entre capas se realiza a traves de puertos (interfaces en `port/out`).
 
 ```
 com.example.fileprocessor/
-├── domain/                          # Capa de dominio (independiente de frameworks)
-│   ├── entity/                      # Entidades de negocio
-│   │   ├── ProductToProcess.java            # Producto en BD
-│   │   ├── ProductDocumentToProcess.java    # Documento de producto en BD
-│   │   ├── ProductInfo.java                 # Producto desde REST API
-│   │   ├── ProductDocumentInfo.java          # Documento dentro de ProductInfo
-│   │   ├── FileData.java                    # Datos de archivo para validacion
-│   │   ├── FileUploadResult.java            # Resultado de upload/procesamiento
-│   │   ├── CommunicationLog.java            # Log de comunicacion (SOAP o S3)
-│   │   ├── DocumentSendRequest.java         # Request de envio (antes SoapRequest)
-│   │   ├── SoapResponse.java                # Respuesta SOAP
-│   │   ├── ZipArchive.java                  # ZIP con documentos extraibles
-│   │   ├── AsyncOperationStatus.java        # Tracking de operacion async
-│   │   ├── DocumentStatus.java              # Estados de documento (constantes)
-│   │   └── ProductStatus.java               # Estados de producto
-│   ├── usecase/                      # Casos de uso (logica de negocio)
-│   │   ├── LoadProductsUseCase.java                # Carga productos y documentos
-│   │   ├── DocumentProcessingOrchestrator.java     # Orquestador de procesamiento (reemplaza AbstractProcessDocumentsUseCase)
-│   │   ├── DocumentProcessingPipeline.java         # Pipeline de 5 etapas: validateBusinessRules → validateFile → buildRequest → sendWithCircuitBreaker → updateStatuses
-│   │   ├── DocumentSender.java                     # Interfaz Strategy para envio de documentos
-│   │   ├── SoapDocumentSender.java                 # Implementacion envio SOAP (2 dependencias: soapGateway + logRepository)
-│   │   ├── S3DocumentSender.java                   # Implementacion envio S3 (2 dependencias: s3Gateway + logRepository)
-│   │   ├── DocumentSkipHandler.java               # Manejo de documentos saltados
-│   │   ├── DocumentValidationRules.java            # Reglas de validacion
-│   │   ├── FileValidator.java                      # Validador de archivos
-│   │   ├── DocumentResult.java                     # Resultado de envio
-│   │   ├── DocumentErrorCodes.java                 # Codigos de error
-│   │   ├── ProductStatusAggregator.java            # Agregacion de estado de producto
-│   │   └── ProductStatusSummary.java               # Resumen de estado
-│   ├── util/                        # Utilidades de dominio
-│   │   ├── Base64Utils.java                  # Encoding/decoding Base64
-│   │   └── MediaTypeConstants.java           # Constantes de tipos MIME
-│   ├── valueobject/                  # Value Objects (tipo seguro, validado)
-│   │   ├── TraceId.java                        # Validacion UUID y no-null
-│   │   └── DocumentId.java                     # Validacion no-blank
-│   ├── port/
-│   │   ├── in/
-│   │   │   └── FileValidationConfig.java
-│   │   └── out/
-│   │       ├── ProductRestGateway.java          # Puerto para API REST productos
-│   │       ├── ProductRepository.java            # Puerto para productos
-│   │       ├── ProductDocumentRepository.java    # Puerto para documentos de productos
-│   │       ├── ExternalSoapGateway.java          # Puerto para SOAP
-│   │       ├── S3Gateway.java                   # Puerto para S3
-│   │       ├── SoapCommunicationLogRepository.java
-│   │       └── AsyncOperationRepository.java     # Puerto para tracking async
-│   └── exception/                   # Excepciones de dominio
-│       ├── DomainException.java
-│       └── FileValidationException.java
+├── Application.java                              # @SpringBootApplication (excluye WebMvc)
 │
-├── application/                      # Configuracion de applicacion
-│   └── app-service/
-│       └── config/
-│           ├── DomainConfig.java             # Beans de casos de uso
-│           └── DatabaseInitializer.java       # Schema y crash recovery
+├── domain/                                       # Capa de dominio
+│   ├── entity/
+│   │   ├── DocumentHistory.java                  # Record unificado: metadatos del documento + trazabilidad de envio
+│   │   ├── DocumentStatus.java                   # Enum: SUCCESS, FAILURE
+│   │   ├── ProductDocumentFile.java              # Record: documento obtenido de REST API
+│   │   ├── ProductDocumentHistory.java           # Record: documento (21 campos, incluye productId, isZip, pais)
+│   │   ├── ProductState.java                     # Constantes de state: PENDING, IN_PROGRESS, PROCESSED, FAILED, SYNCED
+│   │   ├── FileUploadRequest.java                # Request para upload a gateway (SOAP/S3)
+│   │   ├── FileUploadResult.java                 # Resultado de upload con status, errorCode, correlationId
+│   │   ├── HomologationResult.java               # Resultado de homologacion origin/pais
+│   │   └── ExternalServiceResponse.java          # Respuesta generica de servicio externo
+│   ├── usecase/
+│   │   ├── AbstractDocumentProcessingUseCase.java  # Template Method base (procesa y descomprime ZIP en runtime)
+│   │   ├── SoapDocumentProcessingUseCase.java       # Implementacion SOAP
+│   │   ├── S3DocumentProcessingUseCase.java         # Implementacion S3
+│   │   ├── AnimalDocumentProcessingUseCase.java     # Implementacion para animales (esquema y flujos independientes)
+│   │   ├── SyncDocumentsUseCase.java                # Sincroniza productos y documentos (sin validacion)
+│   │   └── ProcessingResultCodes.java               # Constantes de codigos de error
+│   ├── service/
+│   │   └── RulesBussinesService.java              # Validacion: tamano maximo, patron filename
+│   ├── util/
+│   │   ├── ZipDecompressor.java                   # Descompresion de ZIP con inferencia de contentType
+│   │   ├── Base64Utils.java                       # Encoding/decoding seguro de Base64
+│   │   └── ExceptionMapper.java                   # Centraliza mapeo de excepciones a códigos y mensajes
+│   ├── port/out/
+│   │   ├── DocumentHistoryRepository.java        # Puerto unificado: CRUD de documentos, consulta por state, trazabilidad
+│   │   ├── ProductRestGateway.java                # Puerto: API REST externa de productos
+│   │   ├── AnimalRestGateway.java                 # Puerto: API REST externa de animales
+│   │   ├── AnimalSoapGateway.java                 # Puerto: Envio SOAP de animales
+│   │   ├── AnimalRepository.java                  # Puerto: DB de animales
+│   │   ├── RulesBussinesGateway.java              # Puerto: validacion de documentos
+│   │   ├── S3Gateway.java                         # Puerto: envio a S3
+│   │   ├── SoapGateway.java                       # Puerto: envio a SOAP
+│   │   └── HomologationRepository.java           # Puerto: homologacion de origin y pais (SOAP)
+│   └── exception/
+│       ├── DomainException.java                   # Base abstracta (RuntimeException + errorCode)
+│       ├── FileValidationException.java           # Error de validacion de archivo
+│       ├── InvalidBase64Exception.java            # Error de decodificacion Base64
+│       └── ProcessingException.java              # Error de procesamiento (traceId + documentId)
 │
-└── infrastructure/                  # Capa de infraestructura (frameworks)
-    ├── entrypoints/
-    │   └── rest/                    # Adapter REST (entrada)
-    │       ├── ProductRoutes.java             # RouterFunction para endpoints
-    │       ├── handler/
-    │       │   └── ProductHandler.java         # Logica de handlers
-    │       ├── config/
-    │       │   └── DocumentRestProperties.java
-    │       └── constants/
-    │           ├── RestApiPaths.java           # Constantes de paths
-    │           └── RestApiConstants.java       # Constantes varias
-    ├── drivenadapters/               # Adapters (implementaciones)
-    │   ├── rest-client/
-    │   │   └── ProductRestGatewayImpl.java    # Cliente REST para productos
+├── application/                                   # Capa de aplicacion
+│   └── service/config/
+│       └── DomainConfig.java                      # @Configuration: beans de casos de uso
+│
+└── infrastructure/                                # Capa de infraestructura
+    ├── config/
+    │   └── ProcessorsProperties.java              # @ConfigurationProperties("app.processors")
+    ├── drivenadapters/
+    │   ├── r2dbc/                                 # Adaptadores reactivos R2DBC
+    │   │   ├── DocumentHistoryR2dbcAdapter.java   # Implementa DocumentHistoryRepository (tabla unificada)
+    │   │   ├── AnimalPersistenceR2dbcAdapter.java  # Implementa PersistenceGateway para animales
+    │   │   ├── AnimalR2dbcAdapter.java            # Implementa AnimalRepository
+    │   │   ├── HomologationR2dbcAdapter.java      # Implementa HomologationRepository (cache en memoria)
+    │   │   ├── entity/
+    │   │   │   ├── DocumentHistoryEntity.java      # @Entity @Table("historico_documentos") — tabla unificada
+    │   │   │   ├── CategoryManualEntity.java       # @Entity @Table("categoria_manual")
+    │   │   │   ├── CountryHomologatedEntity.java  # @Entity @Table("pais_homologado")
+    │   │   │   ├── AnimalDocumentEntity.java       # @Entity @Table("esquema_animales.documentos")
+    │   │   │   ├── AnimalDocumentHistoryEntity.java # @Entity @Table("esquema_animales.historico_documentos")
+    │   │   │   └── AnimalMaestroEntity.java       # @Entity @Table("schemAnimals.animals_maestro")
+    │   │   ├── mapper/
+    │   │   │   └── DocumentHistoryMapper.java     # DocumentHistory <-> DocumentHistoryEntity
+    │   │   └── repository/
+    │   │       ├── DocumentHistoryRepository.java # R2dbcRepository<DocumentHistoryEntity, Long>
+    │   │       ├── CategoryManualRepository.java  # R2dbcRepository<CategoryManualEntity, Long>
+    │   │       ├── CountryHomologatedRepository.java # R2dbcRepository<CountryHomologatedEntity, Long>
+    │   │       ├── AnimalDocumentRepository.java  # R2dbcRepository<AnimalDocumentEntity, Long>
+    │   │       ├── AnimalDocumentHistoryRepository.java # R2dbcRepository<AnimalDocumentHistoryEntity, Long>
+    │   │       └── AnimalRepository.java          # R2dbcRepository<AnimalMaestroEntity, Long>
+    │   ├── restclient/
+    │   │   ├── ProductRestGatewayAdapter.java     # WebClient a API REST externa (isZip inferido en dominio)
+    │   │   ├── AnimalRestGatewayAdapter.java      # WebClient para directorios y árboles de animales
+    │   │   └── dto/
+    │   │       ├── ProductResponse.java            # DTO JSON de producto
+    │   │       └── ProductDocumentResponse.java    # DTO JSON de documento (Base64)
     │   ├── soap/
-    │   │   ├── ExternalSoapGatewayImpl.java    # Gateway SOAP
+    │   │   ├── SoapGatewayAdapter.java            # Envio SOAP con reintentos + backoff
+    │   │   ├── AnimalSoapGatewayAdapter.java      # Envio SOAP para animales
+    │   │   ├── SoapErrorCodes.java                # Constantes de error SOAP
     │   │   └── config/
-    │   │       └── SoapProperties.java         # Configuracion SOAP
-    │   ├── aws/
-    │   │   ├── S3GatewayImpl.java              # Adapter S3
-    │   │   └── config/
-    │   │       ├── AwsConfig.java
-    │   │       └── S3Properties.java
-    │   ├── r2dbc/
-    │   │   ├── R2dbcProductRepository.java
-    │   │   ├── R2dbcProductDocumentRepository.java
-    │   │   └── R2dbcSoapCommunicationLogRepository.java
-    │   └── async/
-    │       └── InMemoryAsyncOperationRepository.java  # Repo in-memory para tracking
-    └── helpers/
-        ├── config/
-        │   ├── FileUploadProperties.java
-        │   ├── SoapProcessorProperties.java     # Config validacion SOAP
-        │   ├── S3ProcessorProperties.java       # Config validacion S3
-        │   ├── CircuitBreakerProperties.java
-        │   └── CircuitBreakerConfiguration.java
-        └── soap/
-            ├── mapper/
-            │   ├── SoapMapper.java
-            │   ├── SoapMapperConstants.java
-            │   └── SoapResponseDefaults.java
-            ├── xml/
-            │   ├── SoapEnvelopeWrapper.java
-            │   ├── SoapEnvelopeConstants.java
-            │   ├── SoapNamespaces.java
-            │   └── model/
-            │       ├── UploadFileRequest.java
-            │       └── UploadFileResponse.java
-            └── exception/
-                └── SoapCommunicationException.java
+    │   │       └── SoapProperties.java            # @ConfigurationProperties("app.soap")
+    │   └── aws/
+    │       ├── S3GatewayAdapter.java              # Envio S3 async con reintentos
+    │       ├── S3ErrorCodes.java                  # Constantes de error S3
+    │       └── config/
+    │           ├── AwsConfig.java                 # Bean S3AsyncClient
+    │           └── S3Properties.java              # @ConfigurationProperties("app.aws.s3")
+    ├── entrypoints/rest/
+    │   ├── ProductRoutes.java                    # Router function (WebFlux funcional)
+    │   ├── handler/
+    │   │   └── ProductHandler.java                # Handler de endpoints REST
+    │   ├── config/
+    │   │   ├── DocumentRestProperties.java        # @ConfigurationProperties("app.document-rest")
+    │   │   └── AnimalRestProperties.java          # @ConfigurationProperties("app.animal-rest")
+    │   └── constants/
+    │       ├── RestApiPaths.java                  # Rutas de la API
+    │       └── ApiConstants.java                  # Constantes (headers, parametros)
+    └── helpers/soap/
+        ├── SoapConstants.java                   # Namespaces SOAP, templates XML
+        ├── mapper/
+        │   └── SoapMapper.java                   # JAXB marshalling/unmarshalling + Base64
+        └── xml/
+            ├── SoapEnvelopeWrapper.java         # Envoltorio SOAP con parseo DOM seguro
+            └── model/
+                ├── UploadFileRequest.java       # @XmlRootElement para request SOAP
+                └── UploadFileResponse.java      # @XmlRootElement para response SOAP
 ```
 
-### Reglas de Dependencia
+### Recursos
 
-- **Domain** no depende de ninguna otra capa (puro Java, sin frameworks, sin Spring)
-- **Domain** no contiene anotaciones de framework (`@Component`, `@Service`, etc.)
-- **Infrastructure** y **Application** dependen de Domain
-- **Application** expone los beans de dominio via `DomainConfig.java`
+```
+src/main/resources/
+├── application.yml              # Configuracion base
+├── application-dev.yml         # Perfil desarrollo (DEBUG, timeouts cortos)
+├── application-prod.yml         # Perfil produccion (WARN, graceful shutdown)
+├── schema.sql                   # DDL para H2 (desarrollo)
+└── schema-postgresql.sql         # DDL para PostgreSQL (produccion)
 
-## Modelo de Datos
+docs/migrations/
+└── 001_create_documento_tables.sql  # DDL para la tabla unificada historico_documentos
+```
 
-### Producto
-Un **Producto** (ej. Laptop, TV, Monitor) es la entidad raiz que contiene multiples documentos asociados.
-
-### Tablas
-
-**products_to_process**
-| Campo | Tipo | Descripcion |
-|-------|------|-------------|
-| product_id | VARCHAR(255) | PK |
-| name | VARCHAR(500) | Nombre del producto |
-| status | VARCHAR(50) | Estado del producto |
-| trace_id | VARCHAR(255) | UUID de traza |
-| created_at | TIMESTAMP | Fecha de creacion |
-| processed_at | TIMESTAMP | Fecha de procesamiento |
-
-**product_documents_to_process**
-| Campo | Tipo | Descripcion |
-|-------|------|-------------|
-| document_id | VARCHAR(255) | PK |
-| product_id | VARCHAR(255) | FK a products_to_process |
-| parent_document_id | VARCHAR(255) | PK del documento ZIP padre (si es hijo de ZIP) |
-| filename | VARCHAR(255) | Nombre del archivo |
-| content | TEXT | Contenido del archivo (Base64) |
-| content_type | VARCHAR(255) | Tipo MIME |
-| origin | VARCHAR(500) | Origen (ej. folderA/incoming) |
-| status | VARCHAR(50) | PENDING, PROCESSING, SUCCESS, FAILURE, RETRY, SKIPPED, NOT_SENT |
-| created_at | TIMESTAMP | Fecha de creacion |
-| processed_at | TIMESTAMP | Fecha de procesamiento |
-| trace_id | VARCHAR(255) | UUID de traza |
-| soap_correlation_id | VARCHAR(255) | ID de correlacion SOAP |
-| error_code | VARCHAR(100) | Codigo de error |
-
-**soap_communication_log**
-| Campo | Tipo | Descripcion |
-|-------|------|-------------|
-| trace_id | VARCHAR(255) | PK |
-| document_id | VARCHAR(255) | ID del documento (para auditoria) |
-| status | VARCHAR(50) | SUCCESS o FAILURE |
-| retry_count | INT | Numero de reintentos |
-| error_code | VARCHAR(100) | Codigo de error |
-| filename | VARCHAR(255) | Nombre del archivo |
-| created_at | TIMESTAMP | Fecha del log |
+---
 
 ## API Endpoints
 
-### RouterFunction -> Handler -> UseCase Pattern
+### GET /api/v1/products
 
-El servicio utiliza funciones reactivas de Spring WebFlux:
-- **RouterFunction**: define las rutas y delegacion al handler
-- **Handler**: contiene la logica de negocio y selecciona el use case
-- **UseCase**: ejecuta la logica de procesamiento (SoapDocumentUseCase o S3DocumentUseCase)
+Procesa documentos pendientes desde la tabla `historico_documentos` en estado PENDING. Cada documento se obtiene de la API REST externa, se descomprime si es ZIP, se valida (nombre + tamano), y se envia al gateway (SOAP o S3).
 
-### GET /api/v1/products/load
+**Headers:**
+- `message-id`: (opcional) Trace ID para correlacion. Si no se envia, se genera un UUID automatico.
 
-Carga productos y sus documentos asociados desde la API REST externa. **Los documentos ZIP son expandidos automaticamente** durante la carga, creando documentos hijos independientes por cada archivo contenido.
+**Query Parameters:**
+- `processor`: `soap` (default) | `s3` — Selecciona el gateway de salida.
 
-**Flujo de Ejecucion (Step-by-Step):**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. ProductHandler.loadProducts()                                           │
-│    - Genera traceId UUID                                                    │
-│    - Crea AsyncOperationStatus (LOADING)                                   │
-│    - Guarda estado en AsyncOperationRepository                             │
-│    - Retorna HTTP 202 ACCEPTED inmediatamente (operacion async)             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. LoadProductsUseCase.execute()                                          │
-│    - Invoca ProductRestGateway.getAllProducts(traceId)                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. ProductRestGatewayImpl.getAllProducts()                                 │
-│    - WebClient GET /api/products                                            │
-│    - Header X-Trace-Id: {traceId}                                            │
-│    - Parsea JSON response a List<Map<String, Object>>                       │
-│    - Convierte cada Map a ProductInfo via mapToProductInfo()               │
-│    - Retorna Flux<ProductInfo>                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. LoadProductsUseCase.loadProductAndDocuments(ProductInfo)                 │
-│    - Por cada ProductInfo recibido:                                          │
-│      a) Crea ProductToProcess con status=PENDING                            │
-│      b) Invoca createDocumentsFlux() para crear documentos                   │
-│         - Si doc.isZipArchive() -> expandZipDocument()                      │
-│         - Si no -> createProductDocument()                                  │
-│      c) Guarda product en ProductRepository.save()                          │
-│      d) Guarda todos los documentos en documentRepository.saveAll()         │
-│      e) Retorna LoadProductsResult                                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 5. ZIP Expansion (expandZipDocument)                                        │
-│    - ByteArrayInputStream del contenido ZIP                                  │
-│    - ZipInputStream para iterar entradas                                     │
-│    - Por cada entrada:                                                       │
-│      - Extrae nombre archivo y contenido                                      │
-│      - Crea ProductDocumentToProcess con:                                    │
-│        - documentId: "{zipDocId}_{filename}"                                 │
-│        - parentDocumentId: id del ZIP padre                                  │
-│        - content: bytes del archivo                                          │
-│        - contentType: detectado por nombre                                   │
-│        - origin: mismo origin que el ZIP                                     │
-│        - status: PENDING                                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 6. R2dbcProductRepository.save(ProductToProcess)                           │
-│    - SQL: INSERT INTO products_to_process (...) VALUES (...)                 │
-│    - Bind: productId, name, status, createdAt, traceId                      │
-│    - Ejecuta en H2 database via DatabaseClient                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 7. R2dbcProductDocumentRepository.saveAll(documents)                        │
-│    - Flux<ProductDocumentToProcess> -> flatMap -> save()                     │
-│    - Por cada documento:                                                     │
-│      - SQL: INSERT INTO product_documents_to_process (...)                   │
-│      - Bind: todos los campos incluyendo content (Base64)                   │
-│    - Content se almacena en texto (Base64 encoded)                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Response:**
+**Response:** `Content-Type: application/x-ndjson` (NDJSON stream)
 ```json
-{
-  "traceId": "550e8400-e29b-41d4-a716-446655440000",
-  "operationType": "LOAD",
-  "status": "LOADING",
-  "message": "Product loading from REST API started",
-  "success": true
-}
+{"correlationId":"corr-123","status":"SUCCESS","success":true,"processedAt":"2026-04-30T20:15:00Z","errorCode":null,"attemptCount":1}
+{"correlationId":"corr-124","status":"FAILURE","success":false,"processedAt":"2026-04-30T20:15:01Z","errorCode":"GATEWAY_TIMEOUT","attemptCount":3}
+```
+
+**Errores:**
+- `400 Bad Request` — Si `?processor=` tiene un valor no soportado.
+- `503 Service Unavailable` — Si se solicita `?processor=s3` pero el perfil S3 no esta activo.
+
+### POST /api/v1/products/sync
+
+Sincroniza productos y documentos desde la API REST externa hacia la base de datos. Por cada producto se listan sus documentos, se obtiene el contenido de cada uno desde la API REST, y se persiste en la tabla `historico_documentos` con `estado=SYNCED`.
+
+**Headers:**
+- `message-id`: (opcional) Trace ID para correlacion.
+
+**Response:** HTTP 200 (fire-and-forget — la operacion se ejecuta asincronamente)
+```json
+{"status":"OK","message":"Document sync initiated"}
+```
+
+### GET /api/v1/products/daily/animal
+
+Inicia de forma asíncrona el procesamiento diario de animales maestros registrados en la base de datos local. Por cada animal, obtiene los documentos pendientes desde la API REST externa (directorio y árbol de directorios), valida las reglas del negocio, los envía por SOAP y registra la trazabilidad en `esquema_animales.documentos` y `esquema_animales.historico_documentos`.
+
+**Headers:**
+- `message-id`: (opcional) Trace ID para correlación.
+
+**Response:** HTTP 202 (fire-and-forget)
+```json
+{"status":"OK","message":"Daily Animal processing initiated"}
+```
+
+### GET /api/v1/products/process/status/daily/animal
+
+Obtiene la respuesta del estado del procesamiento diario del canal de animales.
+
+**Response:** HTTP 200 (texto plano)
+```
+exitoso
+```
+
+### GET /actuator/health
+
+Health check. Expone health, info, metrics, loggers y prometheus.
+
+---
+
+## Flujo de Datos
+
+### Flujo de Sincronizacion (POST /api/v1/products/sync)
+
+```mermaid
+graph TD
+    A[Cliente] -->|POST /api/v1/products/sync| B(SyncDocumentsUseCase)
+    B -->|1. getAllProducts| C[REST API Externa]
+    C -->|Retorna lista de productos| B
+    
+    B --> D{Por cada documento}
+    D -->|2. getDocument| C
+    C -->|Retorna Base64| E[Base64Utils.decodeSafe]
+    E --> F[Infiere es_zip por extensión]
+    
+    F --> G[(Base de Datos: tabla documentos)]
+    G -->|INSERT estado=SYNCED| H[Fin del procesamiento asíncrono]
+    
+    B -.->|HTTP 200 Inmediato| A
+```
+
+### Flujo de Procesamiento (GET /api/v1/products)
+
+```mermaid
+graph TD
+    A[Cliente] -->|GET ?processor=soap/s3| B(AbstractDocumentProcessingUseCase)
+    B --> C[(Base de Datos)]
+    C -->|SELECT estado=PENDING| D{Flux Documentos}
+    
+    D -->|Por cada doc| E[updateState: IN_PROGRESS]
+    E --> F[REST API Externa: getDocument]
+    F --> G[Decodifica Base64]
+    
+    G --> H{es_zip?}
+    H -->|Sí| I[ZipDecompressor expande archivos]
+    H -->|No| J[RulesBussinesGateway: Validar tamaño y nombre]
+    I --> J
+    
+    J --> K{¿Pasa validación?}
+    K -->|No| L[updateState: PROCESSED / Ignorado]
+    
+    K -->|Sí| M[Subida a Gateway: SOAP o S3]
+    M -->|Intentos automáticos| N{¿Resultado?}
+    
+    N -->|SUCCESS| O[updateState: PROCESSED]
+    N -->|FAILURE| P{¿Agotó reintentos?}
+    P -->|Sí| Q[updateState: FAILED]
+    P -->|No| R[updateState: PENDING para reintento futuro]
+    
+    O --> S[(BD: INSERT en historico_documentos)]
+    Q --> S
+    R --> S
+    L -.->|No inserta en historial| T[Stream NDJSON al cliente]
+    S --> T
+```
+
+### Flujo de Procesamiento Diario de Animales (GET /api/v1/products/daily/animal)
+
+```mermaid
+graph TD
+    A[Cliente] -->|GET /api/v1/products/daily/animal| B(AnimalDocumentProcessingUseCase)
+    B -->|1. findAllAnimals| C[(Base de Datos: schemAnimals.animals_maestro)]
+    C -->|Retorna lista de animales| B
+    
+    B --> D{Por cada animal}
+    D -->|2. getPendingDocumentsForAnimal| E[AnimalRestGatewayAdapter]
+    E -->|2.1 GET /api/animals/:id/directory| F[REST API Externa]
+    F -->|Retorna directoryId| E
+    E -->|2.2 GET /api/directories/:dirId/tree| F
+    F -->|Retorna árbol DirectoryNode| E
+    E -->|Filtra y aplana nodos válidos| B
+    
+    B --> G{Por cada documento del animal}
+    G -->|3. processWithTracking| H(AbstractDocumentProcessingUseCase)
+    H -->|3.1 getDocument| F
+    F -->|Descarga archivo Base64| H
+    H -->|3.2 valida reglas de negocio| I[RulesBussinesGateway]
+    I -->|3.3 envía por SOAP| J[SoapGateway]
+    J -->|3.4 registra trazabilidad| K[(Base de Datos: esquema_animales)]
+    
+    B -.->|HTTP 202 Inmediato| A
+```
+
+**Nota:** la descompresion ZIP se aplica tanto en procesamiento como en el dominio. La validacion de nombre y tamano solo se aplica en procesamiento.
+
+---
+
+## Diagramas de Secuencia
+
+### Flujo General de Operaciones
+Este diagrama muestra la interacción de alto nivel entre los componentes principales durante el ciclo de vida de un documento.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Cliente
+    participant Service as File Processor Service
+    participant API as API REST Externa
+    participant DB as Base de Datos (R2DBC)
+    participant Gateway as Gateway (SOAP / S3)
+
+    Note over Cliente, Gateway: Proceso de Sincronización (Sync)
+    Cliente->>Service: POST /api/v1/products/sync
+    Service->>API: GET /products
+    API-->>Service: Lista de productos y documentos
+    Service->>DB: INSERT en 'documentos' (estado=SYNCED)
+    Service-->>Cliente: 200 OK (Proceso iniciado asíncronamente)
+
+    Note over Cliente, Gateway: Proceso de Envío (Processing)
+    Cliente->>Service: GET /api/v1/products?processor=soap
+    Service->>DB: SELECT documentos WHERE estado='PENDING'
+    DB-->>Service: Flux<DocumentEntity>
+    
+    loop Por cada documento
+        Service->>API: GET /documentos/{id}
+        API-->>Service: Contenido en Base64
+        Service->>Service: Decodificación y validación de reglas
+        Service->>Gateway: Enviar documento (XML SOAP o binario S3)
+        Gateway-->>Service: Respuesta del servidor externo
+        Service->>DB: UPDATE 'documentos' (estado final)
+        Service->>DB: INSERT en 'historico_documentos' (auditoría)
+    end
+    Service-->>Cliente: Stream NDJSON con resultados
+```
+
+### Detalle de Procesamiento: Caso de Éxito
+Flujo detallado de la lógica interna cuando un documento cumple todas las reglas y el servidor destino responde correctamente.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UC as DocumentProcessingUseCase
+    participant Rules as RulesBusinessService
+    participant Adapter as GatewayAdapter (SOAP/S3)
+    participant Repos as R2DBC Repositories
+
+    UC->>Repos: updateState(id, IN_PROGRESS)
+    UC->>Rules: validate(document)
+    Rules-->>UC: validationSuccess: true
+    
+    UC->>Adapter: upload(document)
+    Adapter-->>UC: FileUploadResult(SUCCESS, correlationId)
+    
+    par Auditoría y Estado
+        UC->>Repos: updateState(id, PROCESSED)
+        UC->>Repos: saveHistory(SUCCESS, gateway)
+    end
+```
+
+### Detalle de Procesamiento: Manejo de Errores y Reintentos
+Muestra el comportamiento ante fallos temporales (reintentos) y fallos definitivos.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UC as DocumentProcessingUseCase
+    participant Adapter as GatewayAdapter (SOAP/S3)
+    participant Repos as R2DBC Repositories
+
+    UC->>Adapter: upload(document)
+    Adapter-->>UC: Error (Timeout / 503 / ConnRefused)
+    
+    Note over UC: Lógica de Reintento (Exponential Backoff)
+    
+    UC->>Adapter: upload(document) [Reintento N]
+    
+    alt Error persiste (Reintentos agotados)
+        Adapter-->>UC: Error persistente
+        UC->>Repos: updateState(id, FAILED, "Reintentos agotados")
+        UC->>Repos: saveHistory(FAILURE, error_code, stack_trace)
+    else Error temporal (Aún hay intentos)
+        Adapter-->>UC: Error temporal
+        UC->>Repos: updateState(id, PENDING, "Error temporal")
+        UC->>Repos: saveHistory(FAILURE, error_code, stack_trace)
+    end
 ```
 
 ---
 
-### GET /api/v1/products?processor={soap|s3}
+## Base de Datos
 
-Procesa los documentos pendientes de todos los productos usando el procesador especificado (SOAP o S3). **El contenido ya esta en BD** (previamente cargado), no necesita llamar a API REST externa.
+El servicio utiliza **R2DBC** (Reactive Relational Database Connectivity) para acceso no bloqueante a base de datos.
 
-**Parametros:**
-- `processor` (opcional): Tipo de procesador a usar. Valores: `soap` (default), `s3`
+### Desarrollo: H2
 
-**Reglas de Negocio:**
+En desarrollo se usa H2 en memoria con `r2dbc-h2`. El esquema se crea via `schema.sql`.
 
-1. **Tamano de archivo:** Solo archivos **< 50 MB** se envian a SOAP/S3. Archivos de 50MB o mayores se marcan como `NOT_SENT` con trazabilidad del motivo.
-
-2. **Tipos de archivo permitidos:** Solo `pdf`, `txt`, `csv` se procesan. Otros tipos se marcan como `NOT_SENT` con el motivo.
-
-3. **Carpetas excluidas:** Archivos en carpetas `/tmp` o `/transient` se marcan como `SKIPPED`.
-
-4. **Patrones de origen:** Solo archivos cuyo `origin` contenga alguno de los patrones configurados en `origin-patterns-to-send` se envian a SOAP/S3. Archivos con origin que no matcheen ningun patron se marcan como `NOT_SENT`.
-
-**Flujo de Ejecucion (Step-by-Step):**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. ProductHandler.processPendingProducts()                                  │
-│    - Resuelve el UseCase segun parametro processor                           │
-│    - Genera traceId UUID                                                     │
-│    - Crea AsyncOperationStatus (PROCESSING)                                 │
-│    - Retorna HTTP 202 ACCEPTED inmediatamente                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. DocumentProcessingOrchestrator.executePendingDocuments()               │
-│    - Invoca documentRepository.findPendingDocuments()                        │
-│    - Retorna Flux<ProductDocumentToProcess> con statuses:                    │
-│      PENDING, RETRY, PROCESSING (crash recovery)                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. R2dbcProductDocumentRepository.findPendingDocuments()                     │
-│    - SQL: SELECT * FROM product_documents_to_process                        │
-│      WHERE status IN ('PENDING', 'RETRY', 'PROCESSING')                      │
-│      ORDER BY created_at ASC                                                 │
-│    - Por cada row: construye ProductDocumentToProcess                         │
-│    - Decodifica content Base64 -> byte[]                                     │
-│    - Retorna Flux<ProductDocumentToProcess>                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. processPendingDocument(ProductDocumentToProcess)                         │
-│    - Invoca documentRepository.claimDocument(documentId)                     │
-│    - Solo si claim returns TRUE continua el procesamiento                    │
-│    - Si claim returns FALSE (otro proceso o no PENDING): salta documento     │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 5. R2dbcProductDocumentRepository.claimDocument(documentId)                 │
-│    - SQL: UPDATE product_documents_to_process                               │
-│      SET status = 'PROCESSING', trace_id = $2, processed_at = $3            │
-│      WHERE document_id = $1 AND status = 'PENDING'                           │
-│    - Retorna TRUE si rowsUpdated > 0, FALSE si no hubo match                 │
-│    - Este mecanismo previene duplicacion de envio                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 6. DocumentProcessingPipeline.processDocumentClaimed(ProductDocumentToProcess)                         │
-│    - Genera traceId UUID para este documento                                 │
-│    - Evalua reglas de negocio en orden (usando DocumentValidationRules):     │
-│                                                                             │
-│    REGLA 1 - Carpeta Excluida (shouldSkipFolder):                           │
-│    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ if origin.contains("/tmp") OR origin.contains("/transient")          │  │
-│    │   -> UPDATE status = 'SKIPPED', error_code = 'SKIPPED_FOLDER'        │  │
-│    │   -> RETURN FileUploadResult con status=SKIPPED                      │  │
-│    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                        │
-│                                    ▼                                        │
-│    REGLA 2 - Patron de Origen (shouldSendByOrigin):                         │
-│    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ patterns = originPatternsToSend()  // default: ["incoming","docs"]  │  │
-│    │ if NOT origin.contains(any(patterns))                                │  │
-│    │   -> UPDATE status = 'NOT_SENT', error_code = 'NOT_SENT_ORIGIN'     │  │
-│    │   -> RETURN FileUploadResult con status=NOT_SENT                     │  │
-│    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                        │
-│                                    ▼                                        │
-│    REGLA 3 - Tamano de Archivo (shouldNotSendBySize):                       │
-│    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ maxSizeMb = 50 (configurable)                                       │  │
-│    │ if sizeBytes >= (maxSizeMb * 1MB)                                   │  │
-│    │   -> UPDATE status = 'NOT_SENT', error_code = 'SIZE_EXCEEDED'       │  │
-│    │   -> RETURN FileUploadResult con status=NOT_SENT, message con tamano │  │
-│    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                        │
-│                                    ▼                                        │
-│    SI TODAS LAS REGLAS PASAN -> continua a processFile()                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 7. processFile(ProductDocumentToProcess, traceId)                           │
-│    - Construye FileData con: content, filename, size, contentType, traceId  │
-│                                                                             │
-│    REGLA 4 - Tipo de Archivo (FileValidator.validate):                      │
-│    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │ allowedTypes = "pdf,txt,csv" (regex pattern)                         │  │
-│    │ if NOT filename matches allowedTypes                                │  │
-│    │   -> Lanza FileValidationException                                  │  │
-│    │   -> En onErrorResume: status='NOT_SENT', message=validation error │  │
-│    └─────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                        │
-│                                    ▼ (si pasa validacion)                   │
-│    - Extrae folderInfo del origin (keywords: "test", "mock")                │
-│      - parentFolder = parts[length-2]                                        │
-│      - childFolder = parts[length-1]                                        │
-│    - Construye SoapRequest via SoapRequest.fromFileData()                   │
-│      - Base64.encode(content) via Base64Utils                               │
-│      - Incluye parentFolder y childFolder                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 8. DocumentProcessingPipeline.sendWithCircuitBreaker(SoapRequest)         │
-│    - Aplica Circuit Breaker via Resilience4j                              │
-│    - Delega al DocumentSender strategy:                                    │
-│      - SoapDocumentSender → soapGateway.sendFile()                        │
-│      - S3DocumentSender → s3Gateway.upload()                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-              ┌─────────────────────┴─────────────────────┐
-              ▼                                           ▼
-┌─────────────────────────────┐         ┌─────────────────────────────┐
-│ SoapDocumentUseCase         │         │ S3DocumentUseCase             │
-│  - ExternalSoapGateway       │         │  - S3Gateway                 │
-│  - soapGateway.sendFile()   │         │  - s3Gateway.upload()        │
-└─────────────────────────────┘         └─────────────────────────────┘
-              │                                           │
-              ▼                                           ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 9. Respuesta y actualizacion de estado                                       │
-│     - Actualiza documentRepository.updateStatus():                          │
-│       UPDATE product_documents_to_process                                   │
-│       SET status = 'SUCCESS',                                               │
-│           soap_correlation_id = 'correlationId',                           │
-│           trace_id = 'traceId',                                             │
-│           processed_at = NOW()                                              │
-│       WHERE document_id = 'doc-xxx'                                        │
-│     - Guarda SoapCommunicationLog (success)                                  │
-│     - Actualiza AsyncOperationStatus (progress tracking)                    │
-│     - Retorna FileUploadResult al flux                                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 10. Manejo de Errores                                                        │
-│                                                                             │
-│  TIMEOUT / 5xx ERROR:                                                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │ - Reintenta hasta 3 veces con backoff exponencial                     │   │
-│  │ - Si todos fallan: marca status='RETRY' o 'FAILURE'                   │   │
-│  │ - Guarda SoapCommunicationLog con errorCode y retryCount              │   │
-│  │ - Lanza SoapCommunicationException                                    │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  VALIDATION ERROR:                                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │ - Capturado en onErrorResume de processFile                          │   │
-│  │ - status='NOT_SENT', message=validation error                        │   │
-│  │ - No se lanza excepcion (result es exitoso con status NOT_SENT)       │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  CRASH RECOVERY:                                                            │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │ - Si MS cae mientras documento estaba PROCESSING:                    │   │
-│  │ - Al reiniciar: DatabaseInitializer resetea PROCESSING -> PENDING   │   │
-│  │ - Solo ese documento se reprocesa (claim previene duplicados)        │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
+```yaml
+spring:
+  r2dbc:
+    url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
 ```
 
-**Response:**
-```json
-{
-  "traceId": "660e8400-e29b-41d4-a716-446655440001",
-  "operationType": "PROCESS",
-  "status": "PROCESSING",
-  "message": "Pending product documents processing started",
-  "success": true
-}
+### Produccion: PostgreSQL
+
+En produccion se usa PostgreSQL con `r2dbc-postgresql`. Para configurarlo, agregar la dependencia y ajustar la configuracion:
+
+```kotlin
+// build.gradle.kts
+runtimeOnly("org.postgresql:r2dbc-postgresql")
+runtimeOnly("org.postgresql:postgresql")
+```
+
+```yaml
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fileprocessor}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+```
+
+### Tabla: documentos
+
+Almacena los metadatos y el estado actual de cada documento obtenido desde la API REST. Esta tabla representa la fuente de verdad del documento.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id_documento` | VARCHAR(100) | ID del documento en el sistema externo |
+| `id_producto` | VARCHAR(100) | ID del producto padre |
+| `nombre` | VARCHAR(255) | Nombre del archivo |
+| `estado` | VARCHAR(100) | Estado actual: PENDING / IN_PROGRESS / PROCESSED / FAILED / SYNCED |
+| `mensaje_error` | TEXT | Mensaje de error si hubo fallo (ultimo error) |
+| `es_zip` | BOOLEAN | Si es un archivo ZIP comprimido |
+| `caso_uso` | VARCHAR(100) | Gateway objetivo: SOAP o S3 |
+| `reintentos` | INT | Contador de intentos actuales del documento |
+| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
+| `fecha_actualizacion` | TIMESTAMP | Fecha de ultima actualizacion |
+
+### Tabla: historico_documentos
+
+Almacena la auditoria y trazabilidad detallada de cada intento de envio de un documento. Tiene una relacion de clave foranea hacia `documentos`.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `documento_id` | BIGINT (FK) | Referencia al documento en la tabla `documentos` |
+| `nombre_archivo` | VARCHAR(255) | Nombre del archivo procesado (Se registra tanto para documentos individuales como para archivos internos de un `.zip`) |
+| `operacion` | VARCHAR(50) | Operacion realizada (ej. UPLOAD_SOAP, UPLOAD_S3) |
+| `resultado` | VARCHAR(50) | Resultado del intento: SUCCESS / FAILURE |
+| `codigo_error` | VARCHAR(50) | Codigo de error (si fallo) |
+| `mensaje_error` | TEXT | Detalle del error |
+| `stack_trace` | TEXT | Pila de ejecucion del error |
+| `reintentos` | INT | Numero de intento (0 = primer intento) |
+| `fecha_inicio` | TIMESTAMP | Fecha de inicio de la operacion |
+| `fecha_fin` | TIMESTAMP | Fecha de fin de la operacion |
+
+### Tabla: categoria_manual
+
+Almacena la homologacion de categorias de manuales. Se usa para resolver el `origin` de los documentos en el caso de uso SOAP usando busqueda contains.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `categoria` | VARCHAR(255) | Codigo de categoria (ej: "manual_tecnico") |
+| `descripcion_manual` | VARCHAR(500) | Descripcion legible (ej: "Manual Tecnico del Producto") |
+| `fecha_creacion` | TIMESTAMP | Fecha de creacion del registro |
+
+### Tabla: pais_homologado
+
+Almacena la homologacion de carpetas y paises mediante un Motor Reactivo Dinámico JSON.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `orden` | INT | Orden de prioridad de evaluación de la regla |
+| `condicion_jsonb` | TEXT | Regla en formato JSON (soporta $eq, $contains, $in, $containsAny, etc.) |
+| `carpeta_homologada` | VARCHAR(255) | Nombre de carpeta destino resultante |
+| `pais_homologado` | VARCHAR(100) | Nombre de pais destino resultante |
+
+### Tabla: productos
+
+Almacena los productos sincronizados desde la API REST externa.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGSERIAL (PK) | Identificador unico auto-generado |
+| `id_producto` | VARCHAR(255) | ID del producto en el sistema externo |
+| `nombre` | VARCHAR(500) | Nombre del producto |
+| `fecha_carga` | TIMESTAMP | Fecha en que se cargo el producto al sistema |
+| `estado` | VARCHAR(20) | Estado actual (ej. PENDING) |
+| `mensaje_error` | VARCHAR(2000)| Mensaje de error si la carga o sincronizacion fallo |
+
+### Tabla: schemAnimals.animals_maestro
+
+Almacena los animales maestros que se procesan en el nuevo canal.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGINT (PK) | Identificador único del animal |
+| `name` | VARCHAR(255) | Nombre del animal (ej: Cow, Dog) |
+| `category` | VARCHAR(255) | Categoría del animal (ej: Mammal) |
+
+### Tabla: esquema_animales.documentos
+
+Almacena los metadatos y el estado actual de cada documento del canal de animales.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGINT (PK) | Identificador único auto-generado |
+| `id_documento` | VARCHAR(100) | ID del documento |
+| `id_animal` | VARCHAR(100) | ID del animal padre |
+| `nombre_documento` | VARCHAR(255) | Nombre del archivo |
+| `estado_sincronizacion` | VARCHAR(50) | Estado: PENDING / IN_PROGRESS / PROCESSED / FAILED |
+| `mensaje_sincronizacion` | CLOB | Detalle o mensaje de error de sincronización |
+| `es_zip` | BOOLEAN | Si es un archivo ZIP comprimido |
+| `caso_uso` | VARCHAR(50) | Canal (siempre "Animal") |
+| `reintentos` | INT | Contador de intentos actuales |
+| `fecha_carga` | TIMESTAMP | Fecha de creación del registro |
+
+### Tabla: esquema_animales.historico_documentos
+
+Almacena la auditoría y trazabilidad detallada de cada intento de envío de un documento de animal.
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| `id` | BIGINT (PK) | Identificador único auto-generado |
+| `id_documentos` | BIGINT (FK) | Referencia al documento de animal |
+| `nombre_documento` | VARCHAR(255) | Nombre del archivo procesado |
+| `caso_uso` | VARCHAR(50) | Canal (siempre "Animal") |
+| `resultado` | VARCHAR(50) | Resultado: SUCCESS / FAILURE |
+| `estado_sincronizacion` | VARCHAR(100) | Estado detallado tras el intento |
+| `mensaje_sincronizacion` | CLOB | Mensaje de error retornado |
+| `reintentos` | INT | Número de intento |
+| `fecha_inicio_procesamiento` | TIMESTAMP | Inicio de envío |
+| `fecha_fin_procesamiento` | TIMESTAMP | Fin de envío |
+
+### Indices
+
+```sql
+-- documentos
+CREATE INDEX idx_documentos_estado ON documentos(estado);
+CREATE INDEX idx_documentos_documento_id ON documentos(id_documento);
+CREATE INDEX idx_documentos_producto_id ON documentos(id_producto);
+CREATE INDEX idx_documentos_caso_uso ON documentos(caso_uso);
+
+-- historico_documentos
+CREATE INDEX idx_historico_documento_id ON historico_documentos(documento_id);
+CREATE INDEX idx_historico_doc_operacion ON historico_documentos(documento_id, operacion, fecha_inicio DESC);
+
+-- productos
+CREATE INDEX idx_prod_estado       ON productos(estado);
+CREATE INDEX idx_prod_fecha_carga  ON productos(fecha_carga);
+CREATE INDEX idx_prod_producto_id  ON productos(id_producto);
+CREATE INDEX idx_prod_carga_estado ON productos(fecha_carga, estado);
+
+-- categoria_manual
+CREATE INDEX idx_cat_categoria_vigencia ON categoria_manual (categoria, fecha_vigencia);
+
+-- pais_homologado
+CREATE INDEX idx_pais_orden ON pais_homologado(orden);
+```
+    
+### DDL Completo
+
+```sql
+-- ============================================================================
+-- Tabla: documentos
+-- Almacena metadatos de documentos obtenidos.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS documentos (
+    id BIGSERIAL PRIMARY KEY,
+    id_documento VARCHAR(100) NOT NULL,
+    id_producto VARCHAR(100) NOT NULL,
+    nombre VARCHAR(255),
+    estado VARCHAR(100) NOT NULL,
+    mensaje_error TEXT,
+    es_zip BOOLEAN DEFAULT FALSE,
+    caso_uso VARCHAR(100),
+    reintentos INT DEFAULT 0,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_documentos_estado ON documentos(estado);
+CREATE INDEX IF NOT EXISTS idx_documentos_documento_id ON documentos(id_documento);
+CREATE INDEX IF NOT EXISTS idx_documentos_producto_id ON documentos(id_producto);
+CREATE INDEX IF NOT EXISTS idx_documentos_caso_uso ON documentos(caso_uso);
+
+-- ============================================================================
+-- Tabla: historico_documentos
+-- Almacena auditoria y trazabilidad de cada intento de envio.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS historico_documentos (
+    id BIGSERIAL PRIMARY KEY,
+    documento_id BIGINT NOT NULL,
+    nombre_archivo VARCHAR(255),
+    operacion VARCHAR(50),
+    resultado VARCHAR(50),
+    codigo_error VARCHAR(50),
+    mensaje_error TEXT,
+    stack_trace TEXT,
+    reintentos INT NOT NULL DEFAULT 0,
+    fecha_inicio TIMESTAMP,
+    fecha_fin TIMESTAMP,
+    FOREIGN KEY (documento_id) REFERENCES documentos(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_historico_documento_id ON historico_documentos(documento_id);
+CREATE INDEX IF NOT EXISTS idx_historico_doc_operacion ON historico_documentos(documento_id, operacion, fecha_inicio DESC);
+
+-- ============================================================================
+-- Tabla: productos
+-- Almacena productos sincronizados desde la API REST externa.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS productos (
+    id              BIGSERIAL       PRIMARY KEY,
+    id_producto     VARCHAR(255)    NOT NULL,
+    nombre          VARCHAR(500)    NOT NULL,
+    fecha_carga     TIMESTAMP       NOT NULL DEFAULT NOW(),
+    estado          VARCHAR(20)     NOT NULL DEFAULT 'PENDING',
+    mensaje_error   VARCHAR(2000)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prod_estado       ON productos (estado);
+CREATE INDEX IF NOT EXISTS idx_prod_fecha_carga  ON productos (fecha_carga);
+CREATE INDEX IF NOT EXISTS idx_prod_producto_id  ON productos (id_producto);
+CREATE INDEX IF NOT EXISTS idx_prod_carga_estado ON productos (fecha_carga, estado);
+
+-- ============================================================================
+-- Tabla: categoria_manual
+-- Homologacion de categorias de manuales para resolucion de origin en SOAP.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS categoria_manual (
+    id                  BIGSERIAL       PRIMARY KEY,
+    categoria           VARCHAR(255)    NOT NULL UNIQUE,
+    descripcion_manual  VARCHAR(500)    NOT NULL,
+    fecha_vigencia      DATE,
+    fecha_creacion      TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cat_categoria_vigencia ON categoria_manual(categoria, fecha_vigencia);
+
+-- ============================================================================
+-- Tabla: pais_homologado
+-- Motor reactivo dinámico para resolver carpeta y pais homologado usando JSON.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS pais_homologado (
+    id                  BIGSERIAL       PRIMARY KEY,
+    orden               INT             NOT NULL,
+    condicion_jsonb     TEXT,
+    carpeta_homologada  VARCHAR(255),
+    pais_homologado     VARCHAR(100)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pais_orden ON pais_homologado(orden);
+```
+
+
+---
+
+## Homologacion de Categoria, Origin y Pais (SOAP)
+
+El caso de uso SOAP realiza una homologacion de la `categoria` del documento, así como de la carpeta (`originFolder`) y el país (`originCountry`) antes de enviarlo.
+
+### 1. Homologacion de Categoria (Por Prefijo)
+
+La homologacion de la categoria del documento se hace buscando por prefijo sobre el ID del documento:
+1. Se itera sobre las categorias (`categoria_manual`) cargadas en cache.
+2. Si el ID del documento inicia con el prefijo (`prefijo`) de la categoria, se usa el valor de `categoria_homologado`.
+
+```
+Documento.businessDocumentId = "MAN-12345"
+        │
+        ▼
+Busca en categoria_manual por prefijo
+        │
+        ▼
+categoriaDocument = "Manual Tecnico del Producto"
+```
+
+### 2. Homologacion de Origin y Pais (Motor JSON)
+
+La homologacion de la carpeta de origen y el país se realiza utilizando un **Motor Reactivo Dinámico JSON** configurado en la tabla `pais_homologado`.
+
+```
+Documento.originFolder = "garantia"
+Documento.originCountry = "colombia"
+        │
+        ▼
+Itera sobre pais_homologado en memoria ordenados por 'orden'
+        │
+        ▼
+Evalua JSON: {"originFolder": {"$containsAny": ["garantia"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}
+        │
+        ▼
+Match!
+        │
+        ▼
+HomologationResult.carpeta = "Manuales Garantía"
+HomologationResult.pais = "Colombia"
+```
+
+El evaluador JSON interno (`JsonRuleEvaluator`) procesa el árbol de condiciones sobre los atributos del documento. Se soportan los siguientes operadores:
+
+- `$eq`: Igualdad exacta (ignorando mayúsculas/minúsculas).
+- `$contains`: Contiene el substring.
+- `$regex`: Cumple con la expresión regular.
+- `$in`: Coincide con cualquiera de los valores en la lista.
+- `$containsAny`: Contiene al menos uno de los substrings en la lista.
+
+Las reglas se evalúan de forma secuencial de acuerdo al campo `orden`. Cuando la primera regla hace *match*, se retornan los valores de `carpeta_homologada` y `pais_homologado` y se cortocircuita el proceso.
+
+### Cache en Memoria
+
+`HomologationR2dbcAdapter` carga todas las categorias y reglas JSON una sola vez en listas _thread-safe_ al primer acceso. Las consultas siguientes usan la caché en memoria sin volver a acceder a la base de datos. La caché se carga de forma _lazy_ (perezosa).
+
+### Datos de Ejemplo
+
+```sql
+-- Categoria manual (Por Prefijo de Documento)
+INSERT INTO categoria_manual (prefijo, categoria_homologado) VALUES
+('MAN', 'Manual Tecnico del Producto'),
+('USR', 'Manual de Usuario');
+
+-- Pais y Carpeta homologado (Motor JSON)
+INSERT INTO pais_homologado (orden, condicion_jsonb, carpeta_homologada, pais_homologado) VALUES 
+(10, '{"originFolder": {"$containsAny": ["garantia", "oficina"]}, "originCountry": {"$containsAny": ["colomb", "co"]}}', 'Manuales Garantía', 'Colombia'),
+(20, '{"originFolder": {"$containsAny": ["user", "usuario"]}, "originCountry": {"$containsAny": ["mex", "mx"]}}', 'Manuales de Usuario', 'México'),
+(9999, '{}', 'Otros / No Catalogado', 'Internacional / Sin Asignar');
+```
+
+### Acceso a Consola H2 (solo desarrollo)
+
+- **URL:** `http://localhost:8080/h2-console`
+- **JDBC URL:** `jdbc:h2:mem:fileprocessor`
+- **User:** `sa`
+- **Password:** (vacio)
+
+### Consultas SQL utiles
+
+```sql
+-- Ver todos los registros (metadatos y trazabilidad)
+SELECT * FROM historico_documentos ORDER BY fecha_creacion DESC;
+
+-- Ver solo metadatos de documentos (estado actual)
+SELECT * FROM historico_documentos WHERE caso_uso IS NULL;
+
+-- Ver trazabilidad de un documento especifico
+SELECT * FROM historico_documentos WHERE id_documento = 'doc-123' AND caso_uso IS NOT NULL;
+
+-- Ver solo envios por SOAP
+SELECT * FROM historico_documentos WHERE caso_uso = 'SOAP';
+
+-- Ver envios con reintentos > 0
+SELECT * FROM historico_documentos WHERE reintentos > 0 ORDER BY fecha_creacion DESC;
+
+-- Ver documentos pendientes de procesamiento
+SELECT * FROM historico_documentos WHERE estado = 'PENDING' AND caso_uso IS NULL;
+
+-- Ver documentos fallidos
+SELECT * FROM historico_documentos WHERE estado = 'FAILED' AND caso_uso IS NULL;
+
+-- Ver documentos descomprimidos de un ZIP
+SELECT * FROM historico_documentos WHERE nombre_zip_padre = 'documents.zip';
+
+-- Contar envios por caso de uso y resultado
+SELECT caso_uso, resultado, COUNT(*) FROM historico_documentos WHERE caso_uso IS NOT NULL GROUP BY caso_uso, resultado;
+
+-- Ver ultimo reintento de cada documento por caso de uso
+SELECT h.*
+FROM historico_documentos h
+JOIN (
+  SELECT id_documento, caso_uso, MAX(fecha_creacion) as max_fecha
+  FROM historico_documentos
+  WHERE caso_uso IS NOT NULL
+  GROUP BY id_documento, caso_uso
+) latest ON h.id_documento = latest.id_documento AND h.caso_uso = latest.caso_uso AND h.fecha_creacion = latest.max_fecha;
 ```
 
 ---
 
-### GET /api/v1/operations/{traceId}/status
+## Descompresion de archivos ZIP
 
-Consulta el estado de una operacion asincrona (carga o procesamiento).
+`ZipDecompressor.decompress()` expande documentos ZIP. Se aplica durante la sincronizacion (sync) y el procesamiento.
 
-**Response:**
-```json
-{
-  "traceId": "660e8400-e29b-41d4-a716-446655440001",
-  "operationType": "PROCESS",
-  "status": "PROCESSING",
-  "message": "Pending product documents processing started",
-  "totalItems": 0,
-  "processedItems": 5,
-  "successItems": 4,
-  "failedItems": 1,
-  "startedAt": "2026-04-27T12:00:00Z",
-  "completedAt": null,
-  "success": true
-}
+### Inferencia de isZip
+
+`isZip` se infiere de la extension del archivo en la capa de dominio (`ProductDocumentHistory.isZip()`).
+
+### Comportamiento durante Sync
+
+| Escenario | Resultado |
+|-----------|-----------|
+| Documento normal (`isZip=false`) | Se guarda tal cual en `historico_documentos` |
+| Documento ZIP (`isZip=true`) | Primero se guarda el ZIP con `nombre_zip_padre=NULL`, luego cada archivo expandido se guarda con `nombre_zip_padre=filename_del_zip` |
+
+### Inferencia de contentType
+
+| Extension | ContentType |
+|-----------|-------------|
+| `.pdf` | `application/pdf` |
+| `.csv` | `text/csv` |
+| `.txt` | `text/plain` |
+| `.docx` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+| `.xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| otra | `application/octet-stream` |
+
+### Ejemplo
+
+Un documento ZIP con `id_documento=doc-1` y `nombre=documents.zip` que contiene `test.pdf` y `data.csv`:
+
 ```
-
-**Estados de operacion:**
-- `LOADING`: Cargando productos desde REST API
-- `PROCESSING`: Procesando documentos
-- `COMPLETED`: Operacion finalizada
-
-**Tracking de progreso:**
-El handler actualiza el `AsyncOperationStatus` con el progreso:
-- `totalItems`: Total de items a procesar
-- `processedItems`: Items procesados hasta el momento
-- `successItems`: Items exitosos
-- `failedItems`: Items fallidos
+ZIP: doc-1/documents.zip (isZip=true)
+  ├── documents.zip  → id_documento="doc-1", nombre_zip_padre=null, isZip=true
+  ├── test.pdf       → id_documento="doc-1/test.pdf", nombre_zip_padre="documents.zip", isZip=false
+  └── data.csv       → id_documento="doc-1/data.csv", nombre_zip_padre="documents.zip", isZip=false
+```
 
 ---
 
-## Procesamiento de ZIP
-
-Los documentos ZIP son expandidos durante la carga (`/load`):
-- Cada archivo extraido se guarda como documento hijo independiente
-- El `parent_document_id` indica a que ZIP pertenece
-- Cada hijo tiene su propio estado (`PENDING/PROCESSING/SUCCESS/FAILURE`)
-- Si el sistema cae durante el envio de un hijo, solo ese hijo se reprocesa
-
-## Estados de Documento
-
-| Estado | Descripcion |
-|--------|-------------|
-| `PENDING` | Documento esperando procesamiento |
-| `PROCESSING` | Documento siendo procesado |
-| `SUCCESS` | Enviado exitosamente (SOAP o S3) |
-| `FAILURE` | Error permanente |
-| `RETRY` | Error reintentable (timeout) |
-| `SKIPPED` | Saltado por regla de carpeta |
-| `NOT_SENT` | No enviado (tamano >= 50MB, tipo no permitido, o origin no matchea patrones) |
-
-## Estados de Producto (CA-01, CA-02, CA-03)
-
-El sistema calcula automáticamente el estado del producto basado en sus documentos:
-
-| Estado | Descripcion | Condicion |
-|--------|-------------|-----------|
-| `PENDING` | Producto con documentos pendientes | Al menos 1 doc PENDING/PROCESSING/RETRY |
-| `SUCCESS` | Todos los documentos enviados | Todos los docs SUCCESS |
-| `PARTIAL_FAILURE` | Algunos documentos fallaron | Al menos 1 doc FAILURE (pero no todos) |
-| `COMPLETED_WITH_SKIPS` | Completado con documentos saltados | Todos procesados, algunos SKIPPED |
-| `COMPLETED_WITH_NOT_SENT` | Completado con documentos no enviados | Todos SUCCESS/SKIPPED/NOT_SENT |
-| `COMPLETED_WITH_FAILURES` | Todos los documentos fallaron | Todos los docs FAILURE |
-
-**Logica de Agregacion:**
+## Estados de Documentos (ProductState)
 
 ```java
-// ProductStatusAggregator.calculateStatus(documents)
-1. Si hay docs PENDING/PROCESSING/RETRY → PENDING
-2. Si hay al menos 1 FAILURE → PARTIAL_FAILURE
-3. Si todos SUCCESS → SUCCESS
-4. Si todos SUCCESS/SKIPPED (sin FAILURE) → COMPLETED_WITH_SKIPS
-5. Si todos SUCCESS/SKIPPED/NOT_SENT → COMPLETED_WITH_NOT_SENT
-6. Si todos FAILURE → COMPLETED_WITH_FAILURES
-```
-
-**Actualizacion Automatica:**
-- El estado del producto se recalcula despues de cada documento
-- Se llama a `updateProductStatusIfComplete()` cuando el documento alcanza estado terminal
-- El `SoapCommunicationLog` ahora incluye `document_id` para auditoria trazable
-
-## Patrones de Diseno
-
-### Composition over Inheritance (DocumentSender Strategy)
-
-El procesamiento de documentos ahora usa **composición** en lugar de herencia:
-
-```
-DocumentProcessingOrchestrator
-  └── DocumentProcessingPipeline (5 etapas)
-       └── DocumentSender (Strategy interface)
-            ├── SoapDocumentSender (2 deps: soapGateway + logRepository)
-            └── S3DocumentSender (2 deps: s3Gateway + logRepository)
-```
-
-**Beneficios:**
-- **S3DocumentSender y SoapDocumentSender** tienen solo 2 dependencias (antes heredaban 6)
-- El pipeline de 5 etapas se lee de arriba a abajo
-- Agregar un nuevo mecanismo de envío (FTP, REST) = nueva clase de ~30 líneas
-- Tests unitarios solo requieren 2 mocks por sender
-
-### Pipeline de Procesamiento (DocumentProcessingPipeline)
-
-El flujo se divide en 5 etapas con responsabilidades claras:
-
-```
-1. validateBusinessRules  → skip por carpeta/origin/tamano
-2. validateFile            → validacion de tipo de archivo
-3. buildRequest           → construir SoapRequest
-4. sendWithCircuitBreaker  → enviar con circuit breaker
-5. updateStatuses          → actualizar documento y producto
-```
-
-**Codigo ejemplo:**
-```java
-public Mono<FileUploadResult> process(ProductDocumentToProcess pending, String traceId) {
-    return Mono.just(pending)
-        .flatMap(doc -> validateBusinessRules(doc, traceId))
-        .flatMap(this::validateFile)
-        .flatMap(data -> buildRequest(pending, data, traceId))
-        .flatMap(this::sendWithCircuitBreaker)
-        .flatMap(result -> updateStatuses(pending, result, traceId));
+public final class ProductState {
+    public static final String PENDING     = "PENDING";     // Esperando procesamiento
+    public static final String IN_PROGRESS = "IN_PROGRESS"; // En procesamiento actual
+    public static final String PROCESSED   = "PROCESSED";   // Enviado exitosamente
+    public static final String FAILED      = "FAILED";      // Agoto reintentos o fallo permanente
+    public static final String SYNCED      = "SYNCED";      // Sincronizado desde REST API, listo para procesar
 }
 ```
 
-### Async Operation Tracking
+### Transiciones de State
 
-El servicio utiliza `AsyncOperationRepository` para tracking de operaciones asincronas:
-- `InMemoryAsyncOperationRepository`: implementacion en memoria
-- Permite consultar el estado via `/api/v1/operations/{traceId}/status`
-- Actualiza progreso en cada documento procesado
+```
+               sync
+                 │
+                 ▼
+              [SYNCED]          ← sincronizado, en tabla historico_documentos
+                 │
+                 │  (luego estado=PENDING)
+                 ▼
+             [PENDING]
+                 │
+                 │  executePendingDocuments()
+                 ▼
+          [IN_PROGRESS]
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+    [PROCESSED]        [FAILED]
+    (envio OK)     (reintentos agotados)
+```
 
-### Record Utilities
+---
 
-- **DocumentValidationRules**: encapsulate validation rules as immutable record
-- **Base64Utils**: utility class for Base64 encoding/decoding (no instance needed)
+## Validacion de Documentos (RulesBussinesService)
 
-## Configuracion
+`RulesBussinesService` implementa validacion **solo durante el procesamiento**:
 
-### Variables de Configuracion
+### Procesamiento (Processing)
+
+Se aplica durante `GET /api/v1/products`. Valida tanto el **tamano maximo** como el **patron de nombre de archivo**. Si un documento no pasa la validacion, se marca como `PROCESSED` (skip) sin enviarse al gateway.
+
+| Regla | Processing |
+|-------|------------|
+| **Tamano maximo** | Omite si `doc.size() > max` |
+| **Patron filename** | Omite si no coincide |
+
+### Configuracion por defecto
+
+```yaml
+app:
+  processors:
+    s3:
+      max-file-size-bytes: 52428800        # 50 MB
+      filename-pattern: ".*\\.(pdf|csv)$"
+    soap:
+      max-file-size-bytes: 10485760        # 10 MB
+      filename-pattern: ".*\\.(pdf|docx|txt)$"
+```
+
+### Reintentos en Gateway
+
+Ambos gateways (SOAP y S3) implementan reintentos automaticos con backoff.
+
+**SOAP Gateway:**
+- Reintentos: `app.soap.retry-attempts` (default: 3)
+- Backoff: 500ms fijo
+- Condiciones reintentables: HTTP 503, 502, 504, 429, `TimeoutException`, `ConnectException`
+
+**S3 Gateway:**
+- Reintentos: `app.aws.s3.retry-attempts` (default: 3)
+- Backoff: `app.aws.s3.retry-backoff-millis` (default: 500ms)
+- Condiciones reintentables: `TimeoutException`, `SdkException`
+
+---
+
+## Escenarios de Procesamiento
+
+### 1. Exitoso
+```
+Documento PENDING → IN_PROGRESS
+uploadDocument() → SUCCESS
+saveHistory() → INSERT en historico_documentos (resultado=SUCCESS, reintentos=0, caso_uso=SOAP/S3)
+updateState()  → Actualiza fila de metadatos: estado=PROCESSED
+Stream: {"success":true, "status":"SUCCESS"}
+```
+
+### 2. Error en Gateway (con reintentos)
+```
+uploadDocument() → exception
+handleUploadError() → getRetryCount() desde historico_documentos
+saveHistory() → INSERT en historico_documentos (resultado=FAILURE, reintentos=N, caso_uso=SOAP/S3)
+updateState():
+  - Si reintentos < 3: estado=PENDING (se reintentara)
+  - Si reintentos >= 3: estado=FAILED
+Stream: {"success":false, "status":"FAILURE", "errorCode":"GATEWAY_TIMEOUT", "retry":3}
+```
+
+### 3. Documento ZIP
+```
+Sync/Processing: isZip=true → ZipDecompressor.decompress()
+           → Cada archivo expandido se procesa independientemente
+           → Se guardan en tabla historico_documentos con estado=PENDING o se envian al gateway
+```
+
+### 4. Error en Descompresion ZIP
+```
+ZipDecompressor.decompress() → ProcessingException(INVALID_ZIP)
+saveHistory() → INSERT en historico_documentos (errorCode=INVALID_ZIP)
+documento no se guarda / no se procesa
+```
+
+### 5. Error de Base64
+```
+Base64Utils.decodeSafe() → InvalidBase64Exception(INVALID_BASE64)
+saveHistory() → INSERT en historico_documentos (errorCode=INVALID_BASE64)
+documento no se guarda / no se procesa
+```
+
+### 6. Reintento Técnico (Errores Transitorios SOAP)
+Cuando un envío a SOAP falla debido a un error transitorio (ej: Timeout de Red, HTTP 503, ConnectException, etc.), el sistema realiza reintentos automáticos a nivel de red sin abortar el procesamiento global.
+```
+Intento 1: Fallo transitorio (Timeout / 503 / 504)
+  → saveHistory() en historico_documentos con resultado=PENDING/resultado=FAILURE, marcando reintentos=1 y guardar auditoría técnica (saveAuditOnly).
+  → Espera de backoff configurada (ej. 500ms).
+Intento 2: Fallo transitorio (Timeout / 503 / 504)
+  → saveHistory() en historico_documentos con resultado=PENDING/resultado=FAILURE, marcando reintentos=2 y guardar auditoría técnica.
+  → Espera de backoff.
+Intento 3: Éxito (Respuesta 200 OK de SOAP)
+  → finalizeProcessing() consolida el éxito y actualiza el metadato del documento principal en la base de datos a estado=PROCESSED.
+  → Guarda historial en historico_documentos con resultado=PROCESSED y reintentos=3.
+```
+
+---
+
+## Visualizacion de Escenarios de Data en BD
+
+Para entender como se registran los eventos en la base de datos, a continuacion se muestran ejemplos visuales de los datos guardados bajo distintos escenarios. El diseño se compone de dos tablas separadas: `documentos` (estado actual) e `historico_documentos` (trazabilidad y auditoria).
+
+### 1. Escenario Exitoso (Primer intento)
+El documento `doc-1` se envia correctamente a SOAP en su primer intento.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 1  | doc-1        | PROCESSED | SOAP  |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 1  | 1            | UPLOAD_SOAP | SUCCESS   | *NULL*       | 0          |
+
+### 2. Escenario de Fallo Temporal (Reintento en progreso)
+El documento `doc-2` fallo por un timeout en el gateway S3. Su estado en `documentos` vuelve a `PENDING` para ser reintentado.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 2  | doc-2        | PENDING   | S3       |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 2  | 2            | UPLOAD_S3 | FAILURE   | GATEWAY_TIMEOUT | 0       |
+
+### 3. Escenario de Fallo Permanente (Reintentos agotados)
+El documento `doc-3` fallo repetidamente al enviarse por SOAP. Despues de llegar al limite de reintentos (ej. 3 intentos = reintento 0, 1 y 2), el estado final es `FAILED` permanente.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 3  | doc-3        | FAILED    | SOAP     |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 3  | 3            | UPLOAD_SOAP | FAILURE   | BAD_GATEWAY  | 0          |
+| 4  | 3            | UPLOAD_SOAP | FAILURE   | BAD_GATEWAY  | 1          |
+| 5  | 3            | UPLOAD_SOAP | FAILURE   | BAD_GATEWAY  | 2          |
+
+### 4. Escenario ZIP (Descompresion parcial)
+Un archivo ZIP `docs.zip` contiene `a.pdf` y `b.csv`. `a.pdf` se procesa correctamente, pero `b.csv` falla permanentemente.
+
+**Tabla: `documentos`**
+
+| id | id_documento | es_zip | estado | caso_uso |
+|----|--------------|--------|--------|----------|
+| 4  | docs.zip     | true   | SYNCED | *NULL*   |
+| 5  | doc-4/a.pdf  | false  | PROCESSED | SOAP |
+| 6  | doc-4/b.csv  | false  | FAILED | SOAP     |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 6  | 5            | UPLOAD_SOAP | SUCCESS   | *NULL*       | 0          |
+| 7  | 6            | UPLOAD_SOAP | FAILURE   | INVALID_FILE | 0          |
+
+### 5. Escenario de Sincronización Inicial (Recién Obtenido)
+El documento `doc-5` acaba de ser obtenido mediante el endpoint de `sync`. Se registra con estado `SYNCED` y aún no ha sido procesado por ningún gateway.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 7  | doc-5        | SYNCED    | *NULL*   |
+
+*(No hay registros en `historico_documentos` para este documento todavía)*
+
+### 6. Escenario Ignorado (Validación Fallida)
+El documento `doc-6` supera el límite de tamaño permitido. El sistema marca el metadato como `PROCESSED` (para no reprocesarlo iterativamente).
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 8  | doc-6        | PROCESSED | *NULL*   |
+
+*(No hay registros en `historico_documentos` ya que no se intentó enviar al Gateway)*
+
+### 7. Escenario de Error Crítico Interno (Ej. Base64 inválido)
+El documento `doc-7` se obtiene correctamente, pero su contenido Base64 es corrupto o no se puede decodificar. Se deja el registro de fallo en la BD.
+
+**Tabla: `documentos`**
+
+| id | id_documento | estado | caso_uso |
+|----|--------------|--------|----------|
+| 9  | doc-7        | FAILED    | SOAP     |
+
+**Tabla: `historico_documentos`**
+
+| id | documento_id | operacion | resultado | codigo_error | reintentos |
+|----|--------------|-----------|-----------|--------------|------------|
+| 8  | 9            | UPLOAD_SOAP | FAILURE   | INVALID_BASE64| 0         |
+
+### 8. Escenario de Reintento Técnico Exitoso en Animales (SOAP)
+El documento de animal `DOC-ANIMAL-300-04` falla por Timeout en sus dos primeros intentos pero se procesa exitosamente en el tercer intento.
+
+**Tabla: `esquema_animales.documentos`**
+
+| id | id_documento | id_animal | nombre_documento | estado_sincronizacion | caso_uso | reintentos | mensaje_sincronizacion |
+|----|--------------|-----------|------------------|-----------------------|----------|------------|------------------------|
+| 3  | DOC-ANIMAL-300-04 | 300       | animal_retry_timeout.pdf | PROCESSED | Animal | 0 | statusCode: OK, messageId: MOCK-1784335715, idDocumento: N/A | message: Exito tras 2 reintentos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
+
+**Tabla: `esquema_animales.historico_documentos`**
+
+| id | id_documentos | nombre_documento | caso_uso | resultado | estado_sincronizacion | reintentos | mensaje_sincronizacion |
+|----|---------------|------------------|----------|-----------|-----------------------|------------|------------------------|
+| 3  | 3             | animal_retry_timeout.pdf | Animal | PENDING | PENDING | 1 | Timeout: El servicio no respondió en 5 segundos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
+| 4  | 3             | animal_retry_timeout.pdf | Animal | PENDING | PENDING | 2 | Timeout: El servicio no respondió en 5 segundos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
+| 5  | 3             | *NULL*           | Animal | PROCESSED | PROCESSED | 3 | statusCode: OK, messageId: MOCK-1784335715, idDocumento: N/A | message: Exito tras 2 reintentos [TraceID: 0abbce4d-745b-4c92-8291-be98adb3beb3] |
+
+---
+
+## Codigos de Error
+
+### Errores de Dominio (ProcessingResultCodes)
+
+Definidos en `domain/usecase/ProcessingResultCodes.java`:
+
+| Codigo | Descripcion |
+|--------|------------|
+| `EMPTY_CONTENT` | Documento sin contenido |
+| `INVALID_BASE64` | Fallo al decodificar Base64 |
+| `INVALID_RESPONSE` | Respuesta SOAP invalida o malformada |
+| `INVALID_ZIP` | Archivo ZIP corrupto o invalido |
+| `UNKNOWN_ERROR` | Error no categorizado |
+| `SSL_ERROR` | Error de certificado SSL/TLS |
+
+### Errores de Gateway SOAP (SoapErrorCodes)
+
+Definidos en `infrastructure/drivenadapters/soap/SoapErrorCodes.java`:
+
+| Codigo | Disparador |
+|--------|-----------|
+| `GATEWAY_TIMEOUT` | `TimeoutException` en HTTP call |
+| `BAD_GATEWAY` | `WebClientResponseException` (respuesta HTTP no exitosa) |
+| `SERVICE_UNAVAILABLE` | `ConnectException` |
+| `UNKNOWN_ERROR` | `IOException` u otras excepciones no previstas |
+
+### Errores de Gateway S3 (S3ErrorCodes)
+
+Definidos en `infrastructure/drivenadapters/aws/S3ErrorCodes.java`:
+
+| Codigo | Disparador |
+|--------|-----------|
+| `GATEWAY_TIMEOUT` | `TimeoutException` en operacion S3 |
+| `BAD_GATEWAY` | Error generico de gateway |
+| `CLIENT_ERROR` | Error 4xx generico |
+| `ACCESS_DENIED` | S3Exception con status 403 |
+| `NOT_FOUND` | S3Exception con status 404 |
+| `SERVICE_UNAVAILABLE` | S3Exception 503, SdkException, throttling |
+| `UNKNOWN_ERROR` | Cualquier otra excepcion no mapeada |
+
+## Seguimiento, Estados y Reintentos (Guía Funcional)
+
+Para garantizar que no se pierda información y saber exactamente qué pasó con cada documento enviado, el sistema lleva un registro en dos niveles: un **"Expediente Principal"** (vista global) y una **"Bitácora Detallada"** (vista minuciosa). Esto es especialmente útil cuando se procesan paquetes (archivos `.zip`) que contienen múltiples documentos adentro.
+
+### 1. Expediente Principal (Tabla `documentos`)
+Esta es la vista general. Muestra cómo va el trámite completo del paquete que se subió, sin entrar a ver el historial de cada archivo pequeño. 
+
+- **¿En qué estado está el paquete? (`estado`)**
+  - **Pendiente (`PENDING`)**: El paquete está en fila esperando su turno para ser procesado, o tuvo un problema temporal (como una caída de internet) y el sistema lo volverá a intentar más tarde.
+  - **En Progreso (`IN_PROGRESS`)**: El sistema está trabajando con los archivos en este momento.
+  - **Procesado (`PROCESSED`)**: Todo fue un éxito. Todos los documentos dentro del paquete llegaron a su destino.
+  - **Fallido (`FAILED`)**: El sistema intentó enviarlo varias veces (agotó todas sus oportunidades) y no pudo por un problema de conexión recurrente.
+  - **Rechazado (`BUSINESS_REJECTION`)**: Fue rechazado porque no cumple con las reglas del negocio (por ejemplo, el documento pesa más de lo permitido o no es válido). El sistema no lo volverá a intentar porque requiere que una persona corrija el archivo.
+- **Contador de intentos generales (`reintentos`)**: Indica cuántas "oportunidades" o ciclos generales le ha dado el sistema a este paquete. Solo suma +1 cuando el paquete entero falla y pasa a estado Pendiente para intentar en el futuro.
+- **Mensaje de Error**: Un resumen fácil de leer sobre cuál fue el problema principal.
+
+### 2. Bitácora Detallada (Tabla `historico_documentos`)
+Esta es la vista con lupa. Es un diario que anota cada pequeño paso que da el sistema. **Nunca se borra nada**, y se agregan nuevas líneas para saber exactamente qué pasó, cuándo y cuántas veces para cada envío.
+
+- **Nombre exacto del archivo (`nombre_archivo`)**: Se registra tanto para los documentos individuales (no-zip) como para cada uno de los archivos internos extraídos si el original es un `.zip` (por ejemplo: `cedula.pdf` o `contrato.pdf`). Esto asegura una visibilidad total de los nombres de los archivos procesados.
+- **Resultado de cada envío**: Indica el resultado del intento en ese momento (Exitoso, Error o Rechazado).
+- **Intentos rápidos o internos (`reintentos`)**: Si el sistema nota que la red falló al intentar realizar un envío, hará intentos rápidos e inmediatos (por ejemplo, hasta 3 reintentos). En esta bitácora verás registrado **cada uno de los intentos** por separado (intento 1, 2, 3, etc.), demostrando la trazabilidad completa del procesamiento de cada archivo.
+- **Detalle del problema (`mensaje_error`)**: La respuesta o código de error exacto retornado por el destino externo para ese intento en específico.
+
+### ¿Cómo funciona en la práctica cuando procesas documentos y paquetes (.zip)?
+
+Imagina que procesas un paquete llamado `documentos_cliente.zip` que contiene dos archivos: `cedula.pdf` y `contrato.pdf`.
+
+1. **Apertura del paquete:** El sistema abre el `.zip` automáticamente en memoria y toma los archivos para enviarlos individualmente.
+2. **Intentos individuales (Registro en la Bitácora Detallada):**
+   - El sistema intenta enviar `cedula.pdf`. Falla por un pequeño corte de red (intento 1). Automáticamente insiste. El segundo intento falla (intento 2). El tercer intento tiene éxito (intento 3). La **Bitácora Detallada** registrará 3 líneas:
+     - *`cedula.pdf` | Error | Intento 1 | GATEWAY_TIMEOUT*
+     - *`cedula.pdf` | Error | Intento 2 | GATEWAY_TIMEOUT*
+     - *`cedula.pdf` | Éxito | Intento 3 | SUCCESS*
+   - Luego, intenta enviar `contrato.pdf`. Sube exitosamente a la primera. La **Bitácora** registra:
+     - *`contrato.pdf` | Éxito | Intento 1 | SUCCESS*
+3. **Decisión Final (Expediente Principal):**
+   Al terminar de intentar con todos los archivos, el sistema actualiza la vista global (tabla `documentos`). Si todos los archivos llegaron a su destino final, el paquete completo pasa a **Procesado (`PROCESSED`)**. Si algún archivo del paquete quedó en error reintentable después de todos sus reintentos automáticos, el paquete completo vuelve a **Pendiente (`PENDING`)** para una próxima vuelta del scheduler.
+4. **La segunda vuelta (El reintento):**
+   Más tarde, el sistema vuelve a tomar el expediente. Los contadores rápidos de la Bitácora Detallada inician de nuevo desde 1 para esta nueva ejecución, y cada intento fallido o exitoso se vuelve a anexar con su correspondiente fecha y hora.
+
+### Escenarios Prácticos de Ejemplo
+
+Para entender mejor cómo se actualizan el Expediente Principal y la Bitácora Detallada, veamos 4 escenarios comunes:
+
+#### Escenario 1: El escenario ideal (Éxito a la primera)
+Subes un paquete `.zip` con 2 archivos: `foto.png` y `contrato.pdf`.
+*   **Qué pasa en el sistema**: Ambos archivos se envían correctamente al primer intento.
+*   **Bitácora Detallada**: Muestra 2 líneas (una por archivo) indicando Éxito en el intento 1.
+*   **Expediente Principal**: Pasa a estado **Procesado (`PROCESSED`)** con contador general en 1.
+
+#### Escenario 2: Tropezón rápido (Falla temporal y recuperación)
+Subes el paquete, pero justo en el momento de enviarlo, hay una pequeña pérdida de conexión en la red.
+*   **Qué pasa en el sistema**: `foto.png` falla, el sistema lo reintenta rapidísimo por segunda vez, y ahí sí funciona.
+*   **Bitácora Detallada**:
+    *   Línea 1: `foto.png` / Error / Intento 1
+    *   Línea 2: `foto.png` / Éxito / Intento 2
+*   **Expediente Principal**: Como al final sí se logró enviar, el paquete pasa a estado **Procesado (`PROCESSED`)** y su contador general se queda en 1. A los ojos del negocio, todo fluyó sin requerir la intervención del ciclo largo del día siguiente.
+
+#### Escenario 3: Problemas de reglas (Rechazo Permanente)
+Subes un `.zip`, pero `contrato.pdf` está dañado o pesa demasiado (por ejemplo, 100MB).
+*   **Qué pasa en el sistema**: El sistema ni siquiera intenta enviarlo, o el servidor destino lo rechaza inmediatamente por violar una política.
+*   **Bitácora Detallada**: Muestra 1 línea para ese archivo indicando **Rechazado (`BUSINESS_REJECTION`)** en el intento 1.
+*   **Expediente Principal**: Automáticamente el paquete entero se marca como **Rechazado (`BUSINESS_REJECTION`)**. El sistema se detiene y no volverá a intentar enviar este paquete automáticamente, porque requiere que un analista humano corrija el documento.
+
+#### Escenario 4: Caída total (Requiere segunda vuelta de negocio)
+Subes el `.zip` con los 2 archivos, pero el servidor destino está completamente caído por un mantenimiento no avisado.
+*   **Qué pasa en el sistema (Hoy)**:
+    *   `foto.png` intenta subir, falla 3 veces rápidas.
+    *   `contrato.pdf` intenta subir, falla 3 veces rápidas.
+*   **Bitácora Detallada (Hoy)**: Se crean 6 líneas en total (intentos 1, 2 y 3 para cada archivo) marcando Error.
+*   **Expediente Principal (Hoy)**: El sistema se rinde por hoy. Pasa a estado **Pendiente (`PENDING`)** y su contador general sube a 2.
+*   **Qué pasa en el sistema (Mañana)**: El sistema automático toma de nuevo el expediente 2. El servidor ya fue arreglado y todo fluye.
+*   **Bitácora Detallada (Mañana)**: Se agregan 2 nuevas líneas de Éxito en el intento 1 (el contador rápido siempre inicia en 1 al empezar una nueva vuelta global).
+*   **Expediente Principal (Mañana)**: Finalmente pasa a **Procesado (`PROCESSED`)**, dejando muy claro en su historia que tomó 2 ciclos largos de negocio lograrlo.
+
+---
+
+## Template Method Pattern
+
+El patron se implementa en `AbstractDocumentProcessingUseCase`:
+
+```
+AbstractDocumentProcessingUseCase
+│
+├── executePendingDocuments()           ← FINAL (template method)
+│   ├── historyRepository.findByState("PENDING")  → BD (tabla historico_documentos)
+│   ├── historyRepository.updateState(docId, "IN_PROGRESS", null)
+│   ├── Por cada documento:
+│   │   ├── productRestGateway.getDocument(productId, docId) → REST externa
+│   │   ├── toProductDocument(file) → ProductDocumentHistory
+│   │   ├── Si isZip=true → ZipDecompressor.decompress() expande entradas
+│   │   ├── documentValidator.validate(doc, true) → validacion nombre + tamano
+│   │   ├── uploadDocument()       → ABSTRACT (SOAP o S3)
+│   │   ├── handleUploadSuccess() o handleUploadError() → INSERT trazabilidad + UPDATE metadatos
+│   │   └── historyRepository.updateState(docId, estado, mensaje_error)
+│   │
+│
+├── uploadDocument()                     ← ABSTRACT
+│   └── buildFileUploadRequest()         ← helper protegido
+│
+├── handleUploadError(Throwable)          ← helper protegido (reusable por subclases)
+│
+├── SoapDocumentProcessingUseCase
+│   └── uploadDocument() → HomologationRepository.resolve() → SoapGateway.send()
+│
+└── S3DocumentProcessingUseCase
+    └── uploadDocument() → S3Gateway.send()
+```
+
+### Subclases
+
+**SoapDocumentProcessingUseCase** — Envia documentos via SOAP con homologacion de origin y pais. Bean definido en `DomainConfig`.
+
+**S3DocumentProcessingUseCase** — Envia documentos via S3. Bean condicional (`@ConditionalOnBean(S3Gateway.class)`) definido en `DomainConfig`. Se usa `ObjectProvider` en el handler para manejar su disponibilidad opcional.
+
+---
+
+## Perfiles de Ejecucion
+
+### Perfil default (SOAP)
+
+Activo sin argumentos adicionales. Usa `SoapGatewayAdapter` para envio de documentos.
+
+```bash
+./gradlew bootRun
+```
+
+### Perfil S3
+
+Activado con `-Ps3`. Habilita `S3GatewayAdapter` y `AwsConfig`. Usa LocalStack (`localhost:4566`) con path-style access por defecto.
+
+```bash
+./gradlew bootRun -Ps3
+```
+
+Configuracion del perfil S3 en `application.yml`:
+```yaml
+spring:
+  config:
+    activate:
+      on-profile: s3
+app:
+  aws:
+    s3:
+      endpoint: http://localhost:4566
+      path-style-access: true
+```
+
+### Perfil dev
+
+Sobrescribe configuraciones para desarrollo local. Timeouts cortos y logging DEBUG.
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=dev'
+```
+
+```yaml
+# application-dev.yml
+logging:
+  level:
+    com.example.fileprocessor: DEBUG
+    org.springframework.web.reactive: DEBUG
+    reactor.netty: DEBUG
+app:
+  soap:
+    endpoint: "http://localhost:9000/soap/fileservice"
+    timeout-seconds: 5
+    retry-attempts: 1
+  document-rest:
+    endpoint: "http://localhost:3001"
+    timeout-seconds: 5
+```
+
+### Perfil prod
+
+Optimizado para produccion. Logging WARN, graceful shutdown de 30s.
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=prod'
+```
+
+```yaml
+# application-prod.yml
+logging:
+  level:
+    com.example.fileprocessor: WARN
+    org.springframework.web.reactive: WARN
+server:
+  shutdown: graceful
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+app:
+  soap:
+    timeout-seconds: 15
+    retry-attempts: 2
+```
+
+---
+
+## Variables de Entorno
 
 | Variable | Default | Descripcion |
 |----------|---------|-------------|
-| `app.file.max-file-size-mb` | 50 | Tamano maximo para enviar |
-| `app.file.allowed-types` | `pdf,txt,csv` | Tipos de archivo permitidos (regex) |
-| `app.file.folders-to-skip` | `/tmp,/transient` | Carpetas a excluir |
-| `app.file.origin-patterns-to-send` | `incoming,documents` | Patrones de origin |
-| `app.processors.soap.max-file-size-mb` | 50 | Tamano maximo para SOAP |
-| `app.processors.soap.allowed-types` | `pdf,txt,csv` | Tipos SOAP |
-| `app.processors.s3.max-file-size-mb` | 100 | Tamano maximo para S3 |
-| `app.processors.s3.allowed-types` | `pdf,txt,csv,zip` | Tipos S3 |
-
-### Perfiles Spring
-
-| Perfil | Implementacion | Uso |
-|--------|---------------|-----|
-| `soap` (default) | SoapDocumentSender | Envio via SOAP |
-| `s3` | S3DocumentSender | Upload a AWS S3 |
-| sin perfil | SoapDocumentSender | Default igual que soap |
-
-## Observabilidad
-
-### Health Checks
-
-El servicio expone endpoints de Actuator para monitoreo de salud:
-
-```bash
-# Health general
-curl -s http://localhost:8080/actuator/health | jq .
-
-# Readiness (verifica conexiones a BD, servicios externos)
-curl -s http://localhost:8080/actuator/health/readiness | jq .
-
-# Liveness (verifica que el MS responde)
-curl -s http://localhost:8080/actuator/health/liveness | jq .
-```
-
-### Metricas (Prometheus)
-
-```bash
-# Metricas en formato Prometheus
-curl -s http://localhost:8080/actuator/prometheus | jq .
-```
-
-**Metricas clave disponibles:**
-
-| Metrica | Tipo | Descripcion |
-|---------|------|-------------|
-| `documents_processed_total{status}` | Counter | Documentos procesados por estado (SUCCESS/FAILURE/NOT_SENT/SKIPPED) |
-| `documents_processing_duration_seconds` | Timer | Duracion del procesamiento de documentos |
-| `soap_retry_total` | Counter | Numero total de reintentos SOAP |
-| `s3_upload_total{status}` | Counter | Uploads a S3 por estado |
-| `product_load_total` | Counter | Productos cargados desde REST API |
-
-### Logs Estructurados
-
-El servicio utiliza MDC (Mapped Diagnostic Context) para logs correlacionados:
-
-```properties
-# Formato actual (console pattern)
-%-5level [%thread] %logger{36} - traceId=%X{traceId} - %msg%n
-```
-
-**Campos de log disponibles:**
-- `traceId`: UUID de correlacion entre operaciones
-- `documentId`: ID del documento en proceso
-- `correlationId`: ID de correlacion SOAP (cuando aplica)
-
-**Ejemplo de log:**
-```
-INFO [reactor-http-nio-2] c.e.fileprocessor.handler.ProductHandler - traceId=550e8400-e29b-41d4-a716-446655440000 - Processing 3 documents
-INFO [reactor-http-nio-2] c.e.fileprocessor.usecase.SoapDocumentUseCase - traceId=660e8400-e29b-41d4-a716-446655440001 - correlationId=abc123 - Document SUCCESS
-```
-
-### Tracing Distribuido (OpenTelemetry)
-
-Para activar tracing con Jaeger/Zipkin:
-
-```bash
-# Variables de entorno
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-export OTEL_SERVICE_NAME=ms_send_document
-export OTEL_TRACES_SAMPLER=parentbased_traceidratio
-export OTEL_METRICS_EXPORTER=none
-```
-
-**Spans generados:**
-- `LoadProductsUseCase.execute` - Carga desde REST
-- `AbstractProcessDocumentsUseCase.executePendingDocuments` - Procesamiento
-- `ExternalSoapGateway.sendFile` - Invocacion SOAP
-- `S3Gateway.upload` - Upload a S3
+| `DOCUMENT_REST_ENDPOINT` | `http://localhost:3001` | URL base de la API REST de productos |
+| `SOAP_ENDPOINT` | `http://localhost:9000/soap/fileservice` | Endpoint del servicio SOAP |
+| `AWS_BUCKET` | `documents-bucket` | Nombre del bucket S3 |
+| `AWS_REGION` | `us-east-1` | Region AWS |
+| `AWS_ACCESS_KEY` | (vacio) | AWS Access Key (opcional, usa DefaultCredentialsProvider si no se setea) |
+| `AWS_SECRET_KEY` | (vacio) | AWS Secret Key (opcional) |
+| `DB_HOST` | `localhost` | Host de PostgreSQL (solo prod) |
+| `DB_PORT` | `5432` | Puerto de PostgreSQL |
+| `DB_NAME` | `fileprocessor` | Nombre de base de datos PostgreSQL |
+| `DB_USER` | `postgres` | Usuario de PostgreSQL |
+| `DB_PASSWORD` | `postgres` | Password de PostgreSQL |
 
 ---
 
-## Requisitos del Sistema
+## Compilacion y Ejecucion
 
-| Componente | Version | Notas |
-|------------|---------|-------|
-| JDK | 21+ | Requerido para Spring WebFlux 3.x |
-| Gradle | 8.5+ | Wrapper incluido (`./gradlew`) |
-| Docker | 24+ | Solo para ejecutar mocks |
-| Base de datos | H2 (dev), PostgreSQL R2DBC (prod) | H2 en memoria para desarrollo |
+### Requisitos
 
-## Reintentos SOAP
+- Java 21+
+- Gradle 8.12+ (wrapper incluido)
 
-El servicio implementa **3 reintentos maximos** con backoff exponencial:
-- **Escenarios reintentables**: Timeout (>30s), errores 5xx
-- **Escenarios NO reintentables**: HTTP 4xx, errores de validacion
-- **Delay**: 1s, 2s, 4s entre intentos (configurable via `soap.retry-backoff-millis`)
+### Comandos
 
-### Tabla de Reintentos
+```bash
+# Compilar
+./gradlew build
 
-| Intento | Delay | Acumulado |
-|---------|-------|-----------|
-| 1 | 1s | 1s |
-| 2 | 2s | 3s |
-| 3 | 4s | 7s |
+# Solo compilar sin tests
+./gradlew assemble
 
-## Resiliencia
+# Ejecutar tests unitarios
+./gradlew test
 
-### Circuit Breaker (Resilience4j)
+# Ejecutar tests de mutacion (PiTest, umbral 60%)
+./gradlew pitest
 
-El servicio implementa Circuit Breaker con Resilience4j integrado en `DocumentProcessingPipeline`:
+# Reporte de cobertura (JaCoCo, umbral 75%)
+./gradlew jacocoTestReport
 
-```java
-private Mono<DocumentResult> sendWithCircuitBreaker(SoapRequest request) {
-    return Mono.just(request)
-        .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
-        .flatMap(documentSender::send)
-        .onErrorResume(CallNotPermittedException.class, e -> {
-            log.warn("Circuit breaker OPEN for document {}", request.getDocumentId());
-            return Mono.error(new CommunicationException(
-                "Circuit breaker is OPEN",
-                DocumentErrorCodes.CIRCUIT_BREAKER_OPEN,
-                request.getTraceId(), 0));
-        });
-}
+# Ejecutar (perfil default: SOAP)
+./gradlew bootRun
+
+# Ejecutar con perfil S3
+./gradlew bootRun -Ps3
+
+# Ejecutar con perfil dev
+./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
-**Estados del Circuit Breaker:**
-- `CLOSED`: Funcionamiento normal, solicitudes procesadas
-- `OPEN`: Demasiados errores, solicitudes rejected inmediatamente con `CIRCUIT_BREAKER_OPEN`
-- `HALF_OPEN`: Prueba con pocas solicitudes si el servicio recupero
-
-**Configuracion en `application.yml`:**
-
-```yaml
-resilience4j:
-  circuitbreaker:
-    instances:
-      SoapDocumentUseCase:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 60s
-        permittedNumberOfCallsInHalfOpenState: 3
-        slidingWindowType: COUNT_BASED
-      S3DocumentUseCase:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 60s
-```
-
-### Crash Recovery
-
-Si el servicio cae mientras un documento estaba en procesamiento (`PROCESSING`), al reiniciar:
-
-1. `DatabaseInitializer` detecta documentos con status `PROCESSING`
-2. Los resetea a `PENDING`
-3. El mecanismo de `claimDocument()` previene duplicacion
-
-```sql
--- Reset automatico al iniciar
-UPDATE product_documents_to_process
-SET status = 'PENDING'
-WHERE status = 'PROCESSING';
-```
-
-## Integracion SOAP
-
-> **Nota**: El XSD Schema no esta incluido en el proyecto. El contrato SOAP esta definido implícitamente por las clases en `infrastructure/helpers/soap/xml/model/`:
-> - `UploadFileRequest.java`
-> - `UploadFileResponse.java`
-
-### Estructura del Request SOAP
-
-Los campos del request se mapean desde `SoapRequest.java`:
-
-| Campo | Tipo | Descripcion |
-|-------|------|-------------|
-| `parentFolder` | String | Carpeta padre (ej. `incoming`) |
-| `childFolder` | String | Carpeta hijo (ej. `docs`) |
-| `filename` | String | Nombre del archivo |
-| `fileData` | String | Contenido Base64 |
-| `traceId` | String | UUID de trazabilidad |
-
-### Ejemplo de Envelope SOAP
-
-```xml
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:fil="http://fileprocessor.example.com/fileservice">
-  <soapenv:Header>
-    <fil:traceId>550e8400-e29b-41d4-a716-446655440000</fil:traceId>
-  </soapenv:Header>
-  <soapenv:Body>
-    <fil:uploadFile>
-      <fil:parentFolder>incoming</fil:parentFolder>
-      <fil:childFolder>docs</fil:childFolder>
-      <fil:filename>document.pdf</fil:filename>
-      <fil:fileData>JVBERi0xLjQK...</fil:fileData>
-    </fil:uploadFile>
-  </soapenv:Body>
-</soapenv:Envelope>
-```
-
-### Ejemplo de Response SOAP
-
-```xml
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
-  <soapenv:Body>
-    <fil:uploadFileResponse xmlns:fil="http://fileprocessor.example.com/fileservice">
-      <fil:correlationId>abc123-def456</fil:correlationId>
-      <fil:status>SUCCESS</fil:status>
-      <fil:message>File uploaded successfully</fil:message>
-    </fil:uploadFileResponse>
-  </soapenv:Body>
-</soapenv:Envelope>
-```
+---
 
 ## Ejemplos de curl
 
 ```bash
-# Cargar productos desde REST API
-curl -X GET http://localhost:8080/api/v1/products/load \
-  -H "Accept: application/json" \
-  -w "\nHTTP Status: %{http_code}\n"
+# Sincronizar productos y documentos desde API REST a BD
+curl -X POST http://localhost:8080/api/v1/products/sync \
+  -H "message-id: my-trace-123"
 
-# Procesar documentos pendientes (SOAP)
-curl -X GET "http://localhost:8080/api/v1/products?processor=soap" \
-  -H "Accept: application/json" \
-  -w "\nHTTP Status: %{http_code}\n"
+# Sincronizar productos y documentos desde API REST a BD filtrando por rango de fechas de cargue
+curl -X POST "http://localhost:8080/api/v1/products/sync?date_init=2026-05-01&date_end=2026-05-27" \
+  -H "message-id: my-trace-123"
 
-# Procesar documentos pendientes (S3)
-curl -X GET "http://localhost:8080/api/v1/products?processor=s3" \
-  -H "Accept: application/json" \
-  -w "\nHTTP Status: %{http_code}\n"
+# Procesar documentos pendientes via SOAP
+curl "http://localhost:8080/api/v1/products?processor=soap" \
+  -H "message-id: my-trace-456"
 
-# Ver estado de operacion
-curl -X GET "http://localhost:8080/api/v1/operations/{traceId}/status" \
-  -H "Accept: application/json"
+# Procesar documentos pendientes via S3
+curl "http://localhost:8080/api/v1/products?processor=s3" \
+  -H "message-id: my-trace-789"
 
-# Verificar health
+# Procesar documentos diarios de animales (Canal Animales)
+curl http://localhost:8080/api/v1/products/daily/animal \
+  -H "message-id: animal-trace-123"
+
+# Obtener estado de procesamiento diario de animales
+curl http://localhost:8080/api/v1/products/process/status/daily/animal
+
+# Health check
 curl -s http://localhost:8080/actuator/health | jq .
 
-# Ver metricas
-curl -s http://localhost:8080/actuator/metrics/documents.processed.total | jq .
+# Metricas Prometheus
+curl -s http://localhost:8080/actuator/prometheus
 ```
 
-## Compilacion y Ejecucion
+---
+
+## Excepciones
+
+### Jerarquia
+
+```
+RuntimeException
+ └── DomainException (abstract)
+      ├── errorCode: String
+      ├── FileValidationException    → error de validacion de archivo
+      ├── InvalidBase64Exception     → error de decodificacion Base64
+      └── ProcessingException        → error de procesamiento
+           ├── traceId: String
+           ├── documentId: String
+           └── metodos factory:
+               - withTraceId(message, errorCode, traceId)
+               - withTraceId(message, errorCode, traceId, cause)
+               - fromContext(ctx, message, errorCode)
+               - fromContext(ctx, message, errorCode, documentId)
+```
+
+### ProcessingException
+
+Los metodos factory extraen automaticamente el `traceId` del contexto reactivo via `ContextView`. La excepcion formatea el mensaje como:
+
+```
+{mensaje} [traceId={traceId}]
+```
+
+`HEADER_TRACE_ID = "message-id"` es la clave usada para leer/escribir el traceId en el contexto reactivo.
+
+---
+
+## Testing
+
+### Estructura de tests
+
+Los tests siguen la misma estructura de paquetes que `src/main`, bajo `src/test/java/com/example/fileprocessor/`.
+
+### Frameworks
+
+- **JUnit 5** + **Mockito** + **Reactor Test** (`StepVerifier`)
+- **MockWebServer** (OkHttp) para simular API REST externa en tests de integracion
+- **PiTest** para mutation testing (umbral de mutantes matados: 60%)
+- **JaCoCo** para cobertura de codigo (umbral: 75%)
+
+### Ejecutar tests
 
 ```bash
-# Compilar
-./gradlew clean build
-
-# Ejecutar tests
+# Unit tests
 ./gradlew test
 
-# Reporte de coverage
+# Mutation tests
+./gradlew pitest
+
+# Coverage report
 ./gradlew jacocoTestReport
 ```
 
-## Mocks Disponibles y Validacion
+### Validación E2E Local (Mocks)
 
-### Mock REST de Productos (Java)
+El proyecto incluye un script de pruebas End-to-End (`testing/mocks/e2e_validation.sh`) que automatiza el levantamiento del microservicio, simula las APIs externas y valida el procesamiento completo bajo múltiples escenarios.
+
+#### ¿Cómo funciona?
+El proceso de validación sigue estos pasos de manera secuencial y desatendida:
+
+1. **Inicia Servidores Simulados (Mocks):** Ejecuta en segundo plano `mocks.py` para levantar un servidor REST local (puerto 3001) que simula la API externa de productos, y un servidor SOAP local (puerto 9000) que simula el Gateway receptor.
+2. **Levanta el Microservicio:** Inicia el File Processor Service bajo el perfil de desarrollo (`dev`), de forma que quede conectado a los servidores locales.
+3. **Fase de Sincronización:** Se dispara una petición a `POST /api/v1/products/sync`. Esto fuerza al microservicio a consumir los más de 20 escenarios preparados en el mock (documentos exitosos, pesados, extensiones no permitidas, errores en base64, archivos ZIP, etc.).
+4. **Fase de Procesamiento Masivo:** Llama a `GET /api/v1/products?processor=soap` para que el sistema empiece a procesar la cola. El script espera pacientemente **2.5 minutos (150 segundos)** para dar tiempo a que ocurran todos los reintentos asíncronos programados por *exponential backoff* en aquellos casos donde el mock SOAP forzó fallos temporales (HTTP 500, 503, 504, 429).
+5. **Generación de Reportes Visuales:** Al culminar el tiempo de espera, se extrae el volcado completo de la base de datos H2 en memoria mediante un endpoint de debug. Luego, utiliza `format_tables.py` para formatear los resultados en tablas de consola fáciles de leer, las cuales son agregadas al final del archivo `testing/mocks/ms.log`.
+6. **Limpieza (Cleanup):** Finalmente, destruye todos los procesos locales (el microservicio y los mocks) de forma segura.
+
+#### Ejecución en Windows
+
+Dado que es un script Bash (`.sh`), Windows no puede ejecutarlo directamente desde CMD o PowerShell clásico. Debes usar:
+
+1. **Git Bash (Recomendado):** Haz clic derecho en la carpeta raíz del proyecto, selecciona "Open Git Bash here" y ejecuta: 
+   ```bash
+   ./testing/mocks/e2e_validation.sh
+   ```
+2. **WSL (Windows Subsystem for Linux):** Abre tu terminal WSL, navega a la carpeta del proyecto y ejecuta: 
+   ```bash
+   ./testing/mocks/e2e_validation.sh
+   ```
+
+*Nota:* Es requisito indispensable tener **Python 3** instalado en Windows (y agregado a las variables de entorno PATH) ya que el script utiliza `mocks.py` y `format_tables.py`. Al finalizar la prueba, puedes abrir el archivo `testing/mocks/ms.log` para ver el reporte detallado.
+
+---
+
+## Stack Tecnologico
+
+| Componente | Tecnologia |
+|-----------|------------|
+| **Framework** | Spring Boot 3.3.5 + WebFlux |
+| **Lenguaje** | Java 21 |
+| **Build** | Gradle 8.12.1 (Kotlin DSL) |
+| **Base de datos (dev)** | H2 (embebida) |
+| **Base de datos (prod)** | PostgreSQL |
+| **Acceso a datos** | R2DBC + Spring Data R2DBC |
+| **API REST externa** | WebClient (no bloqueante) |
+| **Gateway SOAP** | WebClient + JAXB + DOM |
+| **Gateway S3** | AWS SDK S3 Async (Netty) |
+| **Observabilidad** | Micrometer Tracing (Brave) + Prometheus |
+| **Validacion SOAP** | JAXB (jakarta.xml.bind) + DOM Parser seguro |
+| **Testing** | JUnit 5, Mockito, Reactor Test, MockWebServer |
+| **Calidad** | JaCoCo, PiTest (mutation testing) |
+
+---
+
+## Reportes y Consultas SQL (Guía Administrativa)
+
+Esta sección contiene consultas SQL optimizadas para la base de datos del microservicio (H2 en desarrollo, PostgreSQL en producción). Los reportes están diseñados para ser interpretados por personal administrativo, convirtiendo los códigos de error técnicos en descripciones claras en lenguaje de negocios.
+
+### 1. Reporte de Documentos Rechazados por Reglas de Negocio
+Este reporte muestra los documentos que fueron rechazados porque no cumplen con las políticas del negocio (como tamaño límite superado, extensión de archivo inválida o contenido vacío). Estos casos **requieren corrección del archivo** y no se solucionan con reintentos de red.
+
+```sql
+SELECT 
+    d.id_documento AS "Código del Documento",
+    h.nombre_archivo AS "Nombre del Archivo",
+    d.sucursal AS "Sucursal",
+    CASE h.codigo_error
+        WHEN 'PATTERN_MISMATCH' THEN 'Formato de archivo no permitido (extensión o tipo MIME incorrecto)'
+        WHEN 'SIZE_EXCEEDED' THEN 'El archivo supera el tamaño máximo permitido'
+        WHEN 'INVALID_BASE64' THEN 'El contenido del archivo está corrupto (decodificación Base64 fallida)'
+        WHEN 'EMPTY_CONTENT' THEN 'El archivo está vacío (0 bytes)'
+        WHEN 'DECOMPRESSION_ERROR' THEN 'El archivo comprimido ZIP está corrupto o protegido con contraseña'
+        ELSE 'Incumplimiento de regla de negocio general'
+    END AS "Motivo del Rechazo",
+    h.fecha_fin AS "Fecha de Rechazo"
+FROM documentos d
+JOIN historico_documentos h ON d.id = h.documento_id
+WHERE d.estado = 'BUSINESS_REJECTION' 
+   OR h.codigo_error IN ('PATTERN_MISMATCH', 'SIZE_EXCEEDED', 'INVALID_BASE64', 'EMPTY_CONTENT', 'DECOMPRESSION_ERROR')
+ORDER BY h.fecha_fin DESC;
+```
+
+---
+
+### 2. Reporte de Fallos de Envío o Conexión (Errores de API)
+Este reporte lista las transacciones que fallaron debido a problemas en los servidores externos de origen o destino (como caídas de red, indisponibilidad del servicio SOAP/S3 o timeouts).
+
+```sql
+SELECT 
+    d.id_documento AS "Código del Documento",
+    h.nombre_archivo AS "Nombre del Archivo",
+    d.caso_uso AS "Canal de Envío (SOAP/S3)",
+    d.sucursal AS "Sucursal",
+    h.reintentos AS "Intento de Envío",
+    CASE h.codigo_error
+        WHEN 'GATEWAY_TIMEOUT' THEN 'Tiempo de espera agotado (el servidor destino tardó demasiado en responder)'
+        WHEN 'BAD_GATEWAY' THEN 'Error en el servidor de destino (respondió con error técnico 5xx)'
+        WHEN 'SERVICE_UNAVAILABLE' THEN 'El servicio externo está fuera de línea temporalmente'
+        WHEN 'SOURCE_NOT_FOUND' THEN 'El documento no existe en el sistema que origina el archivo (Error 404)'
+        WHEN 'SOURCE_RATE_LIMIT' THEN 'Saturación en el origen (Límite de peticiones por minuto sumado)'
+        WHEN 'DEST_BAD_REQUEST' THEN 'Los datos del documento fueron rechazados por el destino (Error 400)'
+        WHEN 'DEST_UNAUTHORIZED' THEN 'Problema de acceso (Credenciales o permisos incorrectos en el destino)'
+        WHEN 'UNKNOWN_ERROR' THEN 'Error de sistema no clasificado'
+        ELSE 'Fallo de comunicación con la API'
+    END AS "Descripción del Problema",
+    h.mensaje_error AS "Detalle Técnico para Soporte",
+    h.fecha_fin AS "Fecha del Fallo"
+FROM documentos d
+JOIN historico_documentos h ON d.id = h.documento_id
+WHERE h.resultado = 'FAILURE'
+  AND h.codigo_error NOT IN ('PATTERN_MISMATCH', 'SIZE_EXCEEDED', 'INVALID_BASE64', 'EMPTY_CONTENT', 'DECOMPRESSION_ERROR')
+ORDER BY h.fecha_fin DESC;
+```
+
+---
+
+### 3. Panel de Control General (Resumen para Administrativos)
+Esta consulta genera un estado consolidado y limpio de todos los documentos y paquetes procesados, facilitando el seguimiento del estado del trámite de manera no técnica.
+
+```sql
+SELECT 
+    d.id_documento AS "Documento Principal",
+    COALESCE(h.nombre_archivo, d.nombre) AS "Nombre del Archivo",
+    d.sucursal AS "Sucursal",
+    CASE 
+        WHEN d.estado = 'PROCESSED' THEN 'Completado con Éxito'
+        WHEN d.estado = 'BUSINESS_REJECTION' THEN 'Rechazado (Requiere corregir archivo)'
+        WHEN d.estado = 'FAILED' THEN 'Fallido Definitivo (Error de Conexión)'
+        WHEN d.estado = 'PENDING' THEN 'En Espera (Pendiente de procesar o reintentar)'
+        WHEN d.estado = 'IN_PROGRESS' THEN 'En Proceso de Envío'
+        ELSE d.estado
+    END AS "Estado del Trámite",
+    CASE 
+        WHEN h.resultado = 'SUCCESS' THEN 'Ninguna (Trámite finalizado con éxito)'
+        WHEN h.codigo_error IN ('PATTERN_MISMATCH', 'SIZE_EXCEEDED', 'INVALID_BASE64', 'EMPTY_CONTENT', 'DECOMPRESSION_ERROR') 
+            THEN 'Revisar y corregir archivo (tamaño, nombre o formato) y volver a subir'
+        ELSE 'Esperar reintento automático de red o reportar a soporte técnico'
+    END AS "Acción Requerida",
+    d.fecha_actualizacion AS "Última Actualización"
+FROM documentos d
+LEFT JOIN (
+    SELECT documento_id, nombre_archivo, resultado, codigo_error, fecha_fin,
+           ROW_NUMBER() OVER (PARTITION BY documento_id, nombre_archivo ORDER BY fecha_fin DESC) as rn
+    FROM historico_documentos
+) h ON d.id = h.documento_id AND h.rn = 1
+ORDER BY d.fecha_actualizacion DESC;
+
+---
+
+## Guía de Ejecución E2E y Validación de Estabilidad
+
+Esta sección detalla los pasos y comandos necesarios para volver a ejecutar las pruebas End-to-End (E2E) y validar que el microservicio mantenga un comportamiento estable a nivel de persistencia de datos (H2) y logs.
+
+### 1. Ejecutar la Suite E2E Completa
+Para limpiar las tablas, levantar los mocks (REST y SOAP), procesar todos los escenarios (tanto de productos como de animales) y generar el reporte final de base de datos, ejecuta en la terminal:
 ```bash
-# Iniciar mock
-./scripts/start-product-mock.sh
-
-# Validar que esta corriendo
-curl -s http://localhost:3001/api/products | jq 'length'
-
-# Expected output: array de productos
+./testing/mocks/e2e_validation.sh
 ```
+*Nota: Este proceso toma alrededor de 2.5 minutos para dar tiempo a que ocurran todos los reintentos automáticos programados por exponential backoff.*
 
-### Mock REST de Productos (Mockoon Desktop)
-Importar `mockoon/document-rest-mock.json` en Mockoon Desktop.
+### 2. Comandos de Validación de Estabilidad
+Una vez que el script finaliza, los resultados de la base de datos y resúmenes quedan escritos en el archivo `testing/mocks/ms.log`. Utiliza los siguientes comandos para validar el estado de la información contra las reglas de transición y negocio documentadas en este README:
 
-**Validacion del contrato:**
+#### A. Verificar Ausencia de Fugas de Estado (IN_PROGRESS)
+Ningún registro debe quedar bloqueado de forma indefinida en estado `IN_PROGRESS` al finalizar el procesamiento diario. Valida esto ejecutando:
 ```bash
-# Verificar estructura del mock
-curl -s http://localhost:3001/api/products | jq '.[] | {productId, name, documentsCount: (.documents | length)}'
+grep -E "IN_PROGRESS" testing/mocks/ms.log
 ```
+* **Resultado Correcto:** La terminal no debe retornar ninguna línea. Si retorna registros, indica que hay un bloqueo o proceso inconcluso.
 
-### Mock SOAP
+#### B. Inspeccionar Tabla de Documentos de Productos
+Para comprobar el estado final de los documentos de productos procesados y verificar que solo tengan estado `PROCESSED`, `FAILED`, `PENDING` o `BUSINESS_REJECTION`:
 ```bash
-# Iniciar mock
-./scripts/start-mock.sh
-
-# Validar WSDL
-curl -s http://localhost:9000/soap/fileservice?wsdl | head -20
-
-# Testear upload
-curl -X POST http://localhost:9000/soap/fileservice \
-  -H "Content-Type: text/xml; charset=utf-8" \
-  -d '<soapenv:Envelope>...</soapenv:Envelope>'
+sed -n '/--- TABLE: PRODUCTO_DOCUMENTOS ---/,/--- TABLE: PRODUCTOS_MAESTROS ---/p' testing/mocks/ms.log | head -n 60
 ```
 
-### Mock S3 (LocalStack-like)
+#### C. Inspeccionar Tabla de Documentos de Animales
+Para verificar el correcto registro de auditoría en el esquema de animales y la correspondencia con los 50 escenarios:
 ```bash
-# Iniciar mock
-./scripts/start-s3-mock.sh
-
-# Validar que LocalStack esta corriendo
-curl -s http://localhost:4566/_localstack/health | jq .
-
-# Listar buckets
-aws --endpoint-url=http://localhost:4566 s3 ls
+sed -n '/--- TABLE: ANIMAL_DOCUMENTOS/,/--- TABLE: ANIMALES_MAESTROS/p' testing/mocks/ms.log | head -n 60
 ```
 
-## Perfiles Spring
-
-| Perfil | Implementacion | Uso |
-|--------|---------------|-----|
-| `soap` (default) | SoapDocumentUseCase | Envio via SOAP |
-| `s3` | S3DocumentUseCase | Upload a AWS S3 |
-| sin perfil | SoapDocumentUseCase | Default igual que soap |
-
-## Configuracion
-
-| Variable | Default | Descripcion |
-|----------|---------|-------------|
-| `DOCUMENT_REST_ENDPOINT` | `http://localhost:3001` | Endpoint de API REST de productos |
-| `SOAP_ENDPOINT` | `http://localhost:9000/soap/fileservice` | Endpoint del servicio SOAP |
-| `AWS_ENDPOINT` | `http://localhost:4566` | Endpoint del mock S3 (LocalStack) |
-| `AWS_BUCKET` | `documents-bucket` | Bucket S3 para uploads |
-| `AWS_REGION` | `us-east-1` | Region AWS |
-
-## Changelog
-
-### 2026-04-27 - Hito C Completado: Composition over Inheritance
-
-#### Cambios Aplicados
-
-**Nuevo: Composition over Inheritance (Strategy Pattern)**
-
-Se refactorizó la arquitectura de `AbstractProcessDocumentsUseCase` (herencia) a `DocumentProcessingOrchestrator` + `DocumentSender` (composición):
-
-| Clase Anterior | Nueva Arquitectura |
-|----------------|-------------------|
-| `AbstractProcessDocumentsUseCase` (270 líneas) | `DocumentProcessingOrchestrator` (~50 líneas) |
-| `SoapDocumentUseCase` (hereda 6 dependencias) | `SoapDocumentSender` (2 dependencias) |
-| `S3DocumentUseCase` (hereda 6 dependencias) | `S3DocumentSender` (2 dependencias) |
-
-**Nuevo: DocumentProcessingPipeline**
-
-Pipeline con 5 etapas que reemplaza la cadena de 8 métodos:
+#### D. Confirmar Resumen de Aprobación de Endpoints
+Para verificar que todas las aserciones automáticas de los endpoints de control pasaron con éxito:
+```bash
+grep -A 4 "CONTROL ENDPOINTS VALIDATION SUMMARY" testing/mocks/ms.log
 ```
-validateBusinessRules → validateFile → buildRequest → sendWithCircuitBreaker → updateStatuses
+* **Resultado Correcto:** Debe mostrar el mensaje consolidado de aprobación:
+  ```text
+  ✔ ALL CONTROL ENDPOINTS PASSED
+  ```
 ```
-
-**Archivos nuevos:**
-- `DocumentSender.java` - Interfaz Strategy funcional
-- `SoapDocumentSender.java` - Implementación SOAP
-- `S3DocumentSender.java` - Implementación S3
-- `DocumentProcessingPipeline.java` - Pipeline de 5 etapas
-- `DocumentProcessingOrchestrator.java` - Orquestador refactorizado
-- `SoapDocumentSenderTest.java` - Tests unitarios
-
-**Configuración actualizada:**
-- `DomainConfig.java` - Rewiring completo para usar la nueva arquitectura
-
-**Beneficio:** Tests unitarios de senders solo requieren 2 mocks (antes 6).
-
-- Actualizada estructura de paquetes para reflejar la organizacion real
-- Agregado endpoint `/api/v1/operations/{traceId}/status` para tracking async
-- Removida seccion de Admin endpoints (no implementados)
-- Agregadas entidades: `AsyncOperationStatus`, `DocumentStatus`, `ProductStatus`
-- Agregados use cases: `DocumentResult`, `DocumentErrorCodes`, `ProductStatusAggregator`, `ProductStatusSummary`
-- Actualizado diagrama de arquitectura con rutas correctas
-- Agregada documentacion de `AsyncOperationRepository`
-
-### 2026-04-25 - Code Review Staff Engineer - Performance & Resilience Improvements
-
-#### Antipatterns Fixed (1-9)
-
-**#1 - Subscribe() dentro del Pipeline Reactivo (CRITICO)**
-- **Ubicacion:** `SoapDocumentUseCase.java:39`
-- **Problema:** `.subscribe()` dentro del pipeline reactivo rompe backpressure y puede perder logs
-- **Solucion:** Encadenar `saveSuccessLog()` con `.thenReturn(result)` como parte del flujo reactivo
-- **Impacto:** Logs de exito ahora se guardan de forma confiable
-
-**#2 - flatMap sin Control de Concurrencia (CRITICO)**
-- **Ubicacion:** `AbstractProcessDocumentsUseCase.java:54`
-- **Problema:** 10,000 documentos = 10,000 conexiones simultaneas, saturando el pool HTTP
-- **Solucion:** `flatMap(this::processPendingDocument, 10)` limita a 10 operaciones simultaneas
-- **Impacto:** Previene saturacion de conexiones y `OutOfMemoryError`
-
-**#3 - Propagacion de TraceId via MDC (ALTO)**
-- **Ubicacion:** `AbstractProcessDocumentsUseCase.java`
-- **Problema:** TraceId como variable local, no propagable a traves de operaciones async
-- **Solucion:** Uso de MDC (`MDC.put("traceId", ...)`) antes del flujo reactivo, limpiado con `doFinally()`
-- **Impacto:** Trazabilidad completa en logs correlacionados
-
-**#4 - Circuit Breaker con Resilience4j (ALTO)**
-- **Ubicacion:** `AbstractProcessDocumentsUseCase.java`
-- **Problema:** Sin circuit breaker, un servicio caido causa cascading failures
-- **Solucion:** Integracion de Resilience4j `CircuitBreakerOperator` en `sendDocumentWithCircuitBreaker()`
-- **Impacto:** Previene cascadas de errores, documento marcado como `CIRCUIT_BREAKER_OPEN` cuando el CB esta abierto
-
-**#5 - Separacion Domain/Infraestructura - Base64 Encoding (ALTO)**
-- **Ubicacion:** `SoapRequest.java`, `SoapMapper.java`, `S3GatewayImpl.java`
-- **Problema:** Encoding Base64 ocurría en el domain (`SoapRequest.fromFileData()`)
-- **Solucion:**
-  - `SoapRequest` ahora usa `byte[] fileContent` (raw bytes, sin encoding)
-  - `SoapMapper.toSoapXml()` realiza el encoding en infraestructura
-  - `S3GatewayImpl.upload()` usa bytes directamente
-- **Impacto:** Domain puro Java, sin logica de frameworks
-
-**#6 - MapStruct Eliminado (MEDIO)**
-- **Ubicacion:** `build.gradle.kts`
-- **Problema:** MapStruct en dependencias pero no se usaba
-- **Solucion:** Eliminado de build.gradle.kts (comentado para futuro uso)
-- **Impacto:** Menos dependencias, build mas limpio
-
-**#7 - Value Objects para Campos Críticos (MEDIO)**
-- **Ubicacion:** Nuevo paquete `domain/valueobject/`
-- **Problema:** Campos como `documentId` y `traceId` eran `String` sin validacion
-- **Solucion:** Creados `TraceId.java` y `DocumentId.java` como records con validacion
-- **Impacto:** Tipo seguro y validacion centralizada
-
-**#8 - Optimizacion Build.gradle (MEDIO)**
-- **Ubicacion:** `build.gradle.kts`
-- **Problema:** Build lento sin paralelismo ni cache optimizado
-- **Solucion:** Agregada configuracion de annotation processor y JVM flags
-- **Impacto:** Build incremental mas rapido
-
-**#9 - Virtual Threads Analysis (INFO)**
-- **Analisis:** Virtual Threads no recomendados actualmente - modelo reactivo es valido
-- **Recomendacion:** Considerar Virtual Threads solo si profiling demuestra bottleneck en threads blocking
-
----
-
-### Code Review: CA-01, CA-02, CA-03 - Product Status Aggregation
-
-**CA-01 - SUCCESS cuando TODOS los documentos son SUCCESS:**
-```java
-// Despues de procesar el ultimo documento SUCCESS:
-if (allDocumentsAreSuccess) {
-    productRepository.updateStatus(productId, "SUCCESS", traceId);
-}
-```
-
-**CA-02 - PARTIAL_FAILURE si al menos 1 documento fallo:**
-```java
-// Si un documento FAILURE:
-if (hasAtLeastOneFailure && !allAreFailure) {
-    productRepository.updateStatus(productId, "PARTIAL_FAILURE", traceId);
-}
-```
-
-**CA-03 - COMPLETED_WITH_SKIPS si todos procesados pero algunos SKIPPED:**
-```java
-// Si todos SUCCESS o SKIPPED (sin FAILURE):
-if (allProcessed && hasSomeSkipped && noFailures) {
-    productRepository.updateStatus(productId, "COMPLETED_WITH_SKIPS", traceId);
-}
-```
-
-**Implementacion en AbstractProcessDocumentsUseCase:**
-```java
-private Mono<Void> updateProductStatusIfComplete(String productId, String traceId) {
-    return documentRepository.findByProductId(productId)
-        .collectList()
-        .flatMap(docs -> {
-            ProductStatus newStatus = ProductStatusAggregator.calculateStatus(docs);
-            boolean shouldUpdate = docs.stream()
-                .allMatch(doc -> isTerminalStatus(doc.getStatus()));
-            if (shouldUpdate) {
-                return productRepository.updateStatus(productId, newStatus.name(), traceId);
-            }
-            return Mono.empty();
-        });
-}
-```
-
----
-
-### Code Review: Estructura de Archivos Actualizada
-
-```
-com.example.fileprocessor/
-├── domain/
-│   ├── valueobject/              # NUEVO: Value Objects para tipo seguro
-│   │   ├── TraceId.java          # Validacion de UUID y no-null
-│   │   └── DocumentId.java       # Validacion de no-blank
-│   ├── entity/
-│   │   ├── ProductStatus.java    # NUEVO: Estados de producto
-│   │   └── SoapCommunicationLog.java  # MODIFICADO: +documentId
-│   ├── usecase/
-│   │   ├── ProductStatusAggregator.java  # NUEVO: Agregacion de estado
-│   │   └── ProductStatusSummary.java      # NUEVO: Resumen de estado
-│   └── entity/
-│       └── SoapRequest.java      # MODIFICADO: fileContent bytes (no Base64)
-...
-└── infrastructure/
-    ├── helpers/soap/
-    │   └── mapper/
-    │       └── SoapMapper.java    # MODIFICADO: Base64 encoding aqui
-    └── drivenadapters/aws/
-        └── S3GatewayImpl.java     # MODIFICADO: bytes directos
-```
-
----
-
-### Code Review: Flujo Reactivo Corregido
-
-```java
-// ANTES (ANTI-PATRON)
-.flatMap(this::processPendingDocument)  // Sin limite
-.doOnNext(result -> saveLog().subscribe())  // subscribe() rompe backpressure
-
-// DESPUES (CORRECTO)
-.flatMap(this::processPendingDocument, 10)  // maxConcurrency = 10
-.flatMap(result -> saveLog().thenReturn(result))  // Encadenado correctamente
-```
-
----
-
-### Code Review: Circuit Breaker Integration
-
-```java
-private Mono<DocumentResult> sendDocumentWithCircuitBreaker(SoapRequest request, ...) {
-    return Mono.fromCallable(() -> request)
-        .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
-        .flatMap(req -> sendDocument(req))
-        .onErrorResume(CallNotPermittedException.class, e -> {
-            log.warn("Circuit breaker OPEN for document {}", documentId);
-            return Mono.error(new SoapCommunicationException(
-                "Circuit breaker is OPEN",
-                DocumentErrorCodes.CIRCUIT_BREAKER_OPEN, traceId, 0));
-        });
-}
-```
-
----
-
-### Code Review: TraceId Propagation
-
-```java
-public Flux<FileUploadResult> executePendingDocuments() {
-    String rootTraceId = UUID.randomUUID().toString();
-    MDC.put("traceId", rootTraceId);  // Establecer al inicio
-
-    return documentRepository.findPendingDocuments()
-        .flatMap(this::processPendingDocument, DEFAULT_MAX_CONCURRENCY)
-        .doFinally(signal -> MDC.remove("traceId"));  // Limpiar al final
-}
-
-private Mono<FileUploadResult> processPendingDocument(ProductDocumentToProcess pending) {
-    String traceId = UUID.randomUUID().toString();
-    MDC.put("traceId", traceId);  // Cada documento con su trace
-    // ... procesamiento
-    .doFinally(signal -> MDC.remove("traceId"));
-}
-```
-
----
-
-### Tests de Recuperacion (Crash Recovery)
-
-```java
-@Test
-void shouldResumeFromFailedDocumentOnRestart() {
-    // GIVEN: 5 documentos, el documento #3 falla
-    when(documentRepository.findPendingDocuments())
-        .thenReturn(Flux.just(doc1, doc2, doc3, doc4, doc5));
-
-    // Doc1, Doc2 succeed, Doc3 falla con timeout
-    when(soapGateway.sendFile(any()))
-        .thenReturn(Mono.just(successResponse("corr-1")))
-        .thenReturn(Mono.just(successResponse("corr-2")))
-        .thenReturn(Mono.error(new SoapCommunicationException("Timeout")))
-        .thenReturn(Mono.just(successResponse("corr-4")))
-        .thenReturn(Mono.just(successResponse("corr-5")));
-
-    // WHEN: Primera ejecucion
-    useCase.executePendingDocuments().block();
-
-    // THEN: Doc3 quedo en RETRY
-    verify(documentRepository).updateStatus(
-        eq("doc-3"), eq("RETRY"), anyString(), isNull(), eq("GATEWAY_TIMEOUT"));
-
-    // WHEN: Simular restart (claim returns FALSE para PENDING=false)
-    when(documentRepository.claimDocument("doc-3"))
-        .thenReturn(false)  // Primero no puede (aun RETRY)
-        .thenReturn(true);  // Luego se reclama
-
-    // WHEN: Segunda ejecucion
-    useCase.executePendingDocuments().block();
-
-    // THEN: Solo se proceso doc-3
-    verify(soapGateway, times(1)).sendFile(any());
-}
-```
-
----
-
-### 2026-04-25 - Refactorizacion + S3 Support
-- **Refactor:** `ProcessProductDocumentsUseCase` eliminado, logica movida a `AbstractProcessDocumentsUseCase`
-- **Refactor:** Creado `DocumentValidationRules` para encapsular reglas de validacion
-- **Refactor:** Creado `Base64Utils` utility para encoding/decoding
-- **Nuevo:** `S3DocumentUseCase` para uploads a AWS S3
-- **Nuevo:** Perfil Spring "s3" para activar procesamiento via S3
-- **Actualizado:** `SoapDocumentUseCase` y `S3DocumentUseCase` ahora extienden `AbstractProcessDocumentsUseCase`
-
-### 2026-04-25 - Refactorizacion Product-Centric + S3 Support
-- **Nuevo:** Entidades ProductToProcess, ProductDocumentToProcess, ProductInfo, ProductDocumentInfo
-- **Nuevo:** Puertos ProductRestGateway, ProductRepository, ProductDocumentRepository
-- **Nuevo:** Use cases LoadProductsUseCase, ProcessProductDocumentsUseCase
-- **Nuevo:** Controlador ProductController con endpoints /api/v1/products/load y /api/v1/products
-- **Nuevo:** Mock ProductRestMock y script start-product-mock.sh
-- **Nuevo:** S3Gateway port y S3GatewayImpl adapter para uploads a AWS S3
-- **Nuevo:** S3Mock y script start-s3-mock.sh para testing local (simula LocalStack)
-- **Nuevo:** Perfil Spring "s3" para activar procesamiento via S3 en lugar de SOAP
-- **Eliminado:** FileController, LoadDocumentsUseCase, ProcessFileUseCase (dominio anterior)
-- **Actualizado:** DatabaseInitializer con nuevas tablas y crash recovery
-- **Actualizado:** Postman y Mockoon con nueva estructura de productos

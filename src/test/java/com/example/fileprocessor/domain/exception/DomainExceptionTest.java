@@ -7,31 +7,32 @@ import static org.junit.jupiter.api.Assertions.*;
 class DomainExceptionTest {
 
     @Test
-    void constructor_shouldSetMessageAndErrorCode() {
-        DomainException exception = new FileValidationException("File too large", "SIZE_ERROR");
+    void constructorShouldSetMessageAndErrorCode() {
+        // New order: (message, errorCode, cause)
+        DomainException exception = new ProcessingException("File too large", "SIZE_ERROR", (Throwable) null);
 
         assertEquals("File too large", exception.getMessage());
         assertEquals("SIZE_ERROR", exception.getErrorCode());
     }
 
     @Test
-    void getErrorCode_shouldReturnCorrectValue() {
-        FileValidationException exception = new FileValidationException("Invalid extension", "EXT_ERROR");
+    void getErrorCodeShouldReturnCorrectValue() {
+        ProcessingException exception = new ProcessingException("Invalid extension", "EXT_ERROR", (Throwable) null);
 
         assertEquals("EXT_ERROR", exception.getErrorCode());
     }
 
     @Test
-    void extendsRuntimeException_shouldBeUnchecked() {
-        DomainException exception = new FileValidationException("test", "TEST");
+    void extendsRuntimeExceptionShouldBeUnchecked() {
+        DomainException exception = new ProcessingException("test", "TEST", (Throwable) null);
 
         assertTrue(exception instanceof RuntimeException);
     }
 
     @Test
-    void getMessage_shouldReturnPassedMessage() {
+    void getMessageShouldReturnPassedMessage() {
         String message = "Custom validation message";
-        FileValidationException exception = new FileValidationException(message, "CODE");
+        ProcessingException exception = new ProcessingException(message, "CODE", (Throwable) null);
 
         assertEquals(message, exception.getMessage());
     }

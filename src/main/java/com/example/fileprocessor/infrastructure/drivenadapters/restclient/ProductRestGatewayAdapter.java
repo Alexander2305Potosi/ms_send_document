@@ -1,14 +1,18 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.restclient;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.INVALID_BASE64;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.UNKNOWN_ERROR;
 
-import com.example.fileprocessor.domain.entity.ProductDocumentInfo;
-import com.example.fileprocessor.domain.entity.ProductInfo;
+import com.example.fileprocessor.domain.entity.product.Document;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile;
+import com.example.fileprocessor.domain.entity.product.maestro.ProductMaestro;
+import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
+import com.example.fileprocessor.domain.util.Base64Utils;
+import com.example.fileprocessor.infrastructure.drivenadapters.AdapterErrorMapper;
+import com.example.fileprocessor.infrastructure.drivenadapters.restclient.dto.ProductDocumentResponse;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.config.DocumentRestProperties;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
-import io.micrometer.core.annotation.Timed;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.core.ParameterizedTypeReference;
+import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
@@ -18,101 +22,132 @@ import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Component
 public class ProductRestGatewayAdapter implements ProductRestGateway {
 
-    private static final Logger log = LoggerFactory.getLogger(ProductRestGatewayAdapter.class);
-    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE_REF =
-        new ParameterizedTypeReference<Map<String, Object>>() {};
+    private static final Logger LOGGER = Logger.getLogger(ProductRestGatewayAdapter.class.getName());
 
     private final WebClient webClient;
     private final DocumentRestProperties properties;
 
     public ProductRestGatewayAdapter(WebClient.Builder webClientBuilder,
-                                     DocumentRestProperties properties) {
+            DocumentRestProperties properties) {
         this.properties = properties;
         HttpClient httpClient = HttpClient.create()
-            .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
+                .responseTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
         this.webClient = webClientBuilder
-            .baseUrl(properties.endpoint())
-            .clientConnector(new ReactorClientHttpConnector(httpClient))
-            .build();
+                .baseUrl(properties.endpoint())
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(25 * 1024 * 1024))
+                .build();
     }
 
     @Override
-    @Timed("product.rest")
-    public Flux<ProductInfo> getAllProducts(String traceId) {
-        log.info("Fetching all products from REST API, traceId: {}", traceId);
+    public Flux<Document> getDocumentsByProduct(ProductMaestro product) {
+        return Flux.deferContextual(ctx -> {
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown-trace");
+            LOGGER.log(Level.INFO, "Fetching documents for product {0} from REST API, traceId: {1}",
+                    new Object[] { product.getProductId(), traceId });
 
-        return webClient.get()
-            .uri(properties.productsPath())
-            .accept(MediaType.APPLICATION_JSON)
-            .header(ApiConstants.HEADER_TRACE_ID, traceId)
-            .retrieve()
-            .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-            .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-            .map(list -> list.stream().map(this::mapToProductInfo).toList())
-            .flatMapMany(Flux::fromIterable)
-            .doOnNext(product -> log.info("Product retrieved: {}", product.getProductId()));
+            return webClient.get()
+                    .uri(properties.productDocumentsPath(), product.getProductId())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                    .retrieve()
+                    .bodyToFlux(ProductDocumentResponse.class)
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .map(doc -> mapToDocument(product.getProductId(), doc))
+                    .doOnNext(doc -> LOGGER.log(Level.INFO, "Document retrieved: productId={0}, documentId={1}",
+                            new Object[] { doc.getProductId(), doc.getDocumentId() }))
+                    .onErrorMap(error -> {
+                        LOGGER.log(Level.WARNING, "[REST] Error fetching documents for product {0}: {1}",
+                                new Object[] { product.getProductId(), error.getMessage() });
+                        return mapToProcessingException(error, traceId);
+                    });
+        });
     }
 
     @Override
-    public Mono<ProductDocumentInfo> getDocument(String productId, String documentId, String traceId) {
-        log.info("Fetching document {} for product {} from REST API, traceId: {}", documentId, productId, traceId);
+    public Mono<ProductDocumentFile> getDocument(String productId, String documentId) {
+        return Mono.deferContextual(ctx -> {
+            String traceId = ctx.getOrDefault(ApiConstants.HEADER_TRACE_ID, "unknown-trace");
+            LOGGER.log(Level.INFO, "Fetching document {0} for product {1} from REST API, traceId: {2}",
+                    new Object[] { documentId, productId, traceId });
 
-        String path = properties.productDocumentsPath().replace("{productId}", productId);
-
-        return webClient.get()
-            .uri(path + "/{documentId}", documentId)
-            .accept(MediaType.APPLICATION_JSON)
-            .header(ApiConstants.HEADER_TRACE_ID, traceId)
-            .retrieve()
-            .bodyToMono(MAP_TYPE_REF)
-            .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
-            .map(this::mapToProductDocumentInfo)
-            .doOnNext(doc -> log.info("Document {} retrieved for product {}", documentId, productId));
+            return webClient.get()
+                    .uri(properties.productDocumentsPath() + "/{documentId}", productId, documentId)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(ApiConstants.HEADER_TRACE_ID, traceId)
+                    .retrieve()
+                    .bodyToMono(ProductDocumentResponse.class)
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .map(response -> mapToProductDocumentFile(productId, response))
+                    .doOnNext(doc -> LOGGER.log(Level.INFO, "Document {0} retrieved for product {1}",
+                            new Object[] { documentId, productId }))
+                    .onErrorMap(error -> {
+                        LOGGER.log(Level.WARNING, "[REST] Error fetching document {0} for product {1}: {2}",
+                                new Object[] { documentId, productId, error.getMessage() });
+                        return mapToProcessingException(error, traceId);
+                    });
+        });
     }
 
-    private ProductInfo mapToProductInfo(Map<String, Object> json) {
-        Object docsObj = json.get("documents");
-        List<ProductDocumentInfo> documents = (docsObj instanceof List<?>)
-            ? ((List<?>) docsObj).stream()
-                .filter(m -> m instanceof Map)
-                .map(m -> mapToProductDocumentInfo((Map<String, Object>) m))
-                .toList()
-            : List.of();
+    private ProductDocumentFile mapToProductDocumentFile(String productId, ProductDocumentResponse json) {
+        byte[] content = decodeBase64(json);
+        long size = json.getSize() != null ? json.getSize() : (content != null ? content.length : 0);
 
-        return ProductInfo.builder()
-            .productId((String) json.get("productId"))
-            .name((String) json.get("name"))
-            .documents(documents)
-            .build();
+        return ProductDocumentFile.builder()
+                .productId(productId)
+                .documentId(json.getDocumentId())
+                .filename(json.getFilename())
+                .content(content)
+                .contentType(json.getContentType())
+                .size(size)
+                .isZip(json.isZip() || (json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip")))
+                .originFolder(json.getOriginFolder())
+                .originCountry(json.getOriginCountry())
+                .build();
     }
 
-    private ProductDocumentInfo mapToProductDocumentInfo(Map<String, Object> json) {
-        String contentBase64 = (String) json.get("content");
-        byte[] content = contentBase64 != null
-            ? Base64.getDecoder().decode(contentBase64)
-            : new byte[0];
+    private Document mapToDocument(String productId, ProductDocumentResponse json) {
+        return Document.builder()
+                .productId(productId)
+                .documentId(json.getDocumentId())
+                .name(json.getFilename())
+                .isZip(json.isZip() || (json.getFilename() != null && json.getFilename().toLowerCase().endsWith(".zip")))
+                .build();
+    }
 
-        Object sizeObj = json.get("size");
-        long size = sizeObj instanceof Number ? ((Number) sizeObj).longValue() : (long) content.length;
+    private byte[] decodeBase64(ProductDocumentResponse json) {
+        String contentBase64 = json.getContent();
+        if (contentBase64 == null || contentBase64.isBlank())
+            return null;
 
-        Object isZipObj = json.get("isZip");
-        boolean isZip = isZipObj instanceof Boolean ? (Boolean) isZipObj : false;
+        try {
+            return Base64Utils.decodeSafe(contentBase64, json.getFilename(), json.getDocumentId());
+        } catch (Exception e) {
+            throw new ProcessingException(
+                    "Base64 decode failed for document: " + json.getDocumentId(),
+                    INVALID_BASE64.name(), json.getDocumentId());
+        }
+    }
 
-        return new ProductDocumentInfo(
-            (String) json.get("documentId"),
-            (String) json.get("filename"),
-            content,
-            (String) json.get("contentType"),
-            size,
-            isZip,
-            (String) json.get("origin")
-        );
+    /**
+     * Translates any network/HTTP error into a {@link ProcessingException} with the
+     * appropriate domain error code, delegating the mapping logic to {@link AdapterErrorMapper}.
+     * Already-mapped {@link ProcessingException} instances are returned as-is.
+     */
+    private static ProcessingException mapToProcessingException(Throwable error, String traceId) {
+        if (error instanceof ProcessingException pe) {
+            return pe;
+        }
+        String code = AdapterErrorMapper.resolveErrorCode(error);
+        return new ProcessingException(
+                error.getMessage() != null ? error.getMessage() : UNKNOWN_ERROR.value(),
+                code,
+                traceId);
     }
 }

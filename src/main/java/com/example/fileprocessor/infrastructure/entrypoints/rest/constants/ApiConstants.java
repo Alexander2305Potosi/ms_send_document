@@ -11,55 +11,48 @@ public final class ApiConstants {
     public static final String PROCESSOR_SOAP = "soap";
     public static final String PROCESSOR_S3 = "s3";
 
-    // Implementation names
-    public static final String IMPL_NAME_SOAP = "SOAP";
-    public static final String IMPL_NAME_S3 = "S3";
+    // HTTP headers and query params
+    public static final String HEADER_TRACE_ID = "message-id";
+    public static final String HEADER_USE_CASE = "use-case";
+    public static final String HEADER_DATE_INIT = "date_init";
+    public static final String HEADER_DATE_END = "date_end";
+    public static final String HEADER_PRODUCT_STATUS = "product_status";
+    public static final String TYPE_JOB = "type_job";
 
-    // Query parameter names
-    public static final String PARAM_PROCESSOR = "processor";
+    // Respuestas de estado del proceso
+    public static final String STATUS_IN_PROGRESS = "0";
+    public static final String STATUS_COMPLETED = "exitoso";
+    public static final String STATUS_ERROR = "error";
 
-    // Error messages
-    public static final String MSG_S3_NOT_AVAILABLE = "S3 processor is not available. Please enable the 's3' profile.";
-    public static final String MSG_UNKNOWN_PROCESSOR = "Unknown processor type '{}', defaulting to SOAP";
+    // Clave para la reanudación en el contexto reactivo
+    public static final String LAST_PRODUCT_ID = "last_product_id";
 
-    // HTTP headers
-    public static final String HEADER_TRACE_ID = "X-Trace-Id";
+    // Patrones y Formateadores de fecha centralizados
+    public static final String DATE_PATTERN_YYYY_MM_DD = "yyyy-MM-dd";
+    public static final String DATE_PATTERN_YYYY_MM_DD_HH_MM_SS = "yyyy-MM-dd HH:mm:ss";
 
-    // Operation types - reference domain constants
-    public static final String OPERATION_LOAD = com.example.fileprocessor.domain.entity.AsyncOperationStatus.OPERATION_LOAD;
-    public static final String OPERATION_PROCESS = com.example.fileprocessor.domain.entity.AsyncOperationStatus.OPERATION_PROCESS;
+    public static final java.time.format.DateTimeFormatter DATE_FORMATTER_YYYY_MM_DD =
+            java.time.format.DateTimeFormatter.ofPattern(DATE_PATTERN_YYYY_MM_DD);
 
-    // Status values - reference domain constants
-    public static final String STATUS_LOADING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_LOADING;
-    public static final String STATUS_PROCESSING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_PROCESSING;
-    public static final String STATUS_COMPLETED = com.example.fileprocessor.domain.entity.AsyncOperationStatus.STATUS_COMPLETED;
-    public static final String STATUS_FAILED = "FAILED";
+    public static final java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_YYYY_MM_DD_HH_MM_SS =
+            java.time.format.DateTimeFormatter.ofPattern(DATE_PATTERN_YYYY_MM_DD_HH_MM_SS);
 
-    // REST operation messages - reference domain constants
-    public static final String MSG_LOADING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.MSG_LOADING;
-    public static final String MSG_PROCESSING = com.example.fileprocessor.domain.entity.AsyncOperationStatus.MSG_PROCESSING;
-    public static final String MSG_NOT_FOUND = "Operation not found for traceId: ";
+    // Horas límite para inicio y fin de día
+    public static final java.time.LocalTime START_OF_DAY_TIME = java.time.LocalTime.MIDNIGHT;        // 00:00:00
+    public static final java.time.LocalTime END_OF_DAY_TIME   = java.time.LocalTime.of(23, 59, 59);  // 23:59:59
 
-    // SOAP response constants
-    public static final String SOAP_STATUS_OK = "OK";
-
-    // Product document constants
-    public static final String EXTENSION_ZIP = "zip";
-    public static final String DEFAULT_FOLDER = ".";
-
-    // File path characters (for validation)
-    public static final String PATH_DOUBLE_DOT = "..";
-    public static final String PATH_SLASH = "/";
-    public static final String PATH_BACKSLASH = "\\";
-
-    // SOAP envelope constants
-    public static final String SOAP_HEADER_PREFIX = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-    public static final String SOAP_HEADER_ENVELOPE_START = "<soap:Envelope xmlns:soap=\"";
-    public static final String SOAP_HEADER_ENVELOPE_END = "\">\n  <soap:Header/>\n  <soap:Body>\n";
-    public static final String SOAP_FOOTER_ENVELOPE_END = "  </soap:Body>\n</soap:Envelope>\n";
-
-    // SOAP error messages
-    public static final String MSG_SOAP_BODY_NOT_FOUND = "SOAP Body not found";
-    public static final String MSG_RESPONSE_ELEMENT_NOT_FOUND = "Response element not found in SOAP Body";
-    public static final String MSG_PARSE_ERROR = "Failed to parse SOAP response";
+    /**
+     * Parsea una cadena de texto a LocalDate usando el formateador DATE_FORMATTER_YYYY_MM_DD.
+     * Si el valor es nulo, vacío o tiene un formato inválido, retorna LocalDate.now() como fallback.
+     */
+    public static java.time.LocalDate parseDateOrToday(String value) {
+        if (value == null || value.isBlank()) {
+            return java.time.LocalDate.now();
+        }
+        try {
+            return java.time.LocalDate.parse(value.trim(), DATE_FORMATTER_YYYY_MM_DD);
+        } catch (java.time.format.DateTimeParseException e) {
+            return java.time.LocalDate.now();
+        }
+    }
 }

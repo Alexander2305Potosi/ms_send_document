@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Base64;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -239,7 +238,7 @@ public class S3Mock {
                 }
 
                 // Generate ETag
-                String etag = String.format("%s-%d", UUID.randomUUID().toString().substring(0, 8), count);
+                String etag = String.format("%s-%d", java.util.UUID.randomUUID().toString().substring(0, 8), count);
 
                 System.out.println("  Uploaded: " + originalFilename + " (" + requestBody.length + " bytes)");
                 System.out.println("  Key: " + key);
@@ -275,12 +274,6 @@ public class S3Mock {
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(bytes);
             }
-        }
-    }
-
-    static class UUID {
-        public static String randomUUID() {
-            return java.util.UUID.randomUUID().toString();
         }
     }
 }

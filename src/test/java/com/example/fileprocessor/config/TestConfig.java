@@ -1,6 +1,6 @@
 package com.example.fileprocessor.config;
 
-import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
+import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;

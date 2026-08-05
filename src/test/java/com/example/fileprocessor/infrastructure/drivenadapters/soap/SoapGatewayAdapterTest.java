@@ -1,195 +1,207 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.soap;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.GATEWAY_TIMEOUT;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SERVICE_UNAVAILABLE;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_NOT_FOUND;
+import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SOURCE_RATE_LIMIT;
 
-import com.example.fileprocessor.domain.entity.DocumentSendRequest;
-import com.example.fileprocessor.domain.entity.FileUploadResult;
+import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.entity.ProductUploadRequest;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.infrastructure.drivenadapters.soap.config.SoapProperties;
-import com.example.fileprocessor.infrastructure.helpers.soap.exception.SoapCommunicationException;
+import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.mapper.SoapMapper;
-import com.example.fileprocessor.infrastructure.helpers.soap.xml.SoapEnvelopeWrapper;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.SocketPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.test.StepVerifier;
+import reactor.util.context.Context;
 
+import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class SoapGatewayAdapterTest {
 
     private MockWebServer mockWebServer;
-    private SoapGatewayAdapter gateway;
-    private SoapMapper soapMapper;
+
+    @Mock
+    private SoapMapper mapper;
+
+    private SoapProperties properties;
+    private SoapGatewayAdapter adapter;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() throws IOException {
         mockWebServer = new MockWebServer();
         mockWebServer.start();
 
-        SoapEnvelopeWrapper envelopeWrapper = new SoapEnvelopeWrapper();
-        soapMapper = new SoapMapper(envelopeWrapper);
-
-        SoapProperties properties = new SoapProperties(
-            mockWebServer.url("/").toString(),
-            5,
-            1,
-            100
+        properties = new SoapProperties(
+            "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+            "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
+            Map.of(), Map.of(), 10, 0 // 10 seconds timeout and NO retries
         );
-
-        gateway = new SoapGatewayAdapter(
-            WebClient.builder(),
-            properties,
-            soapMapper
-        );
+        adapter = new SoapGatewayAdapter(WebClient.builder(), properties, mapper);
     }
 
     @AfterEach
-    void tearDown() throws Exception {
+    void tearDown() throws IOException {
         mockWebServer.shutdown();
     }
 
-    private DocumentSendRequest createTestRequest() {
-        return DocumentSendRequest.builder()
-            .fileContent("base64content".getBytes())
-            .filename("test.pdf")
-            .contentType("application/pdf")
-            .fileSize(100)
-            .traceId("trace-123")
-            .build();
-    }
-
     @Test
-    void send_shouldReturnResult_whenSuccess() {
-        String responseXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
-            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
-            " xmlns:file=\"http://example.com/fileservice\">" +
-            "<soap:Header/>" +
-            "<soap:Body>" +
-            "<file:UploadFileResponse>" +
-            "<file:status>SUCCESS</file:status>" +
-            "<file:message>File uploaded</file:message>" +
-            "<file:correlationId>123-abc</file:correlationId>" +
-            "<file:processedAt>" + Instant.now().toString() + "</file:processedAt>" +
-            "<file:externalReference>ext-ref-123</file:externalReference>" +
-            "</file:UploadFileResponse>" +
-            "</soap:Body>" +
-            "</soap:Envelope>";
+    void sendWhenSuccessfulReturnsSuccessResult() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.parseResponse(anyString(), anyString())).thenReturn(
+            FileUploadResponse.builder()
+                .status("OK")
+                .success(true)
+                .correlationId("corr-123")
+                .processedAt(Instant.now())
+                .build()
+        );
 
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(200)
-            .setBody(responseXml)
+            .setBody("<soap>response</soap>")
             .addHeader("Content-Type", "text/xml"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(adapter.send(ProductUploadRequest.builder()
+                .filename("test.pdf")
+                .content(new byte[]{1})
+                .build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
             .assertNext(result -> {
                 assertTrue(result.isSuccess());
-                assertEquals("123-abc", result.getCorrelationId());
+                assertEquals("corr-123", result.getCorrelationId());
             })
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
     }
 
     @Test
-    void send_shouldReturnError_whenServerError() {
+    void sendWhenTimeoutReturnsGatewayTimeout() {
+        SoapProperties localProperties = new SoapProperties(
+            "http://127.0.0.1:" + mockWebServer.getPort() + "/soap", "SYS-01", "user", "h-ns", "b-ns", "s-ns",
+            "token", "dest-name", "dest-ns", "dest-op", "action", "CLASS-1", 
+            Map.of(), Map.of(), 1, 0 // 1 second timeout
+        );
+        SoapGatewayAdapter localAdapter = new SoapGatewayAdapter(WebClient.builder(), localProperties, mapper);
+
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        
         mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(500)
-            .setBody("<?xml version=\"1.0\"?><soap:Fault></faultstring>Server Error</faultstring></soap:Fault>"));
+            .setHeadersDelay(2, TimeUnit.SECONDS) // Delay exceeds 1 second timeout
+            .setBody("<soap>response</soap>"));
 
-        StepVerifier.create(gateway.send(createTestRequest()))
-            .expectErrorMatches(throwable -> throwable instanceof SoapCommunicationException)
-            .verify();
-    }
-
-    @Test
-    void send_shouldMapClientError_when4xx() {
-        mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(400)
-            .setBody("<soap:Fault>Bad Request</soap:Fault>"));
-
-        StepVerifier.create(gateway.send(createTestRequest()))
-            .expectErrorMatches(throwable ->
-                throwable instanceof SoapCommunicationException &&
-                ProcessingResultCodes.CLIENT_ERROR.equals(((SoapCommunicationException) throwable).getErrorCode()))
-            .verify();
-    }
-
-    @Test
-    void send_shouldIncludeErrorBodyInException() {
-        String errorBody = "<soap:Fault><faultstring>Invalid document format</faultstring></soap:Fault>";
-        mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(500)
-            .setBody(errorBody));
-
-        StepVerifier.create(gateway.send(createTestRequest()))
-            .expectErrorMatches(throwable -> {
-                if (!(throwable instanceof SoapCommunicationException)) return false;
-                String message = throwable.getMessage();
-                return message.contains("Invalid document format");
-            })
-            .verify();
-    }
-
-    @Test
-    void send_shouldReturnResult_whenBusinessFailure() {
-        String responseXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
-            "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
-            " xmlns:file=\"http://example.com/fileservice\">" +
-            "<soap:Header/>" +
-            "<soap:Body>" +
-            "<file:UploadFileResponse>" +
-            "<file:status>FAILURE</file:status>" +
-            "<file:message>Business validation failed</file:message>" +
-            "<file:correlationId>123-abc</file:correlationId>" +
-            "<file:processedAt>" + Instant.now().toString() + "</file:processedAt>" +
-            "<file:externalReference>ext-ref-123</file:externalReference>" +
-            "</file:UploadFileResponse>" +
-            "</soap:Body>" +
-            "</soap:Envelope>";
-
-        mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(200)
-            .setBody(responseXml)
-            .addHeader("Content-Type", "text/xml"));
-
-        StepVerifier.create(gateway.send(createTestRequest()))
+        StepVerifier.create(localAdapter.send(ProductUploadRequest.builder().filename("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
             .assertNext(result -> {
                 assertFalse(result.isSuccess());
-                assertEquals("Business validation failed", result.getMessage());
+                assertEquals(GATEWAY_TIMEOUT.name(), result.getSyncStatus());
+                assertTrue(result.getMessage().contains("Timeout"));
             })
-            .verifyComplete();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
     }
 
     @Test
-    void send_shouldReturnError_withTraceIdInException() {
+    void sendWhenHttp500WithSoapFaultParsesFaultFromBody() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
-            .setBody("<soap:Fault>Server Error</soap:Fault>"));
+            .setBody("<Fault>Error</Fault>")
+            .addHeader("Content-Type", "text/xml"));
+        
+        when(mapper.parseResponse(eq("<Fault>Error</Fault>"), anyString())).thenReturn(
+            FileUploadResponse.builder()
+                .status("FAILURE")
+                .success(false)
+                .message("Parsed Error")
+                .build()
+        );
 
-        StepVerifier.create(gateway.send(createTestRequest()))
-            .expectErrorMatches(throwable -> {
-                if (!(throwable instanceof SoapCommunicationException)) return false;
-                SoapCommunicationException sce = (SoapCommunicationException) throwable;
-                return "trace-123".equals(sce.getTraceId());
+        StepVerifier.create(adapter.send(ProductUploadRequest.builder().filename("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals("Parsed Error", result.getMessage());
             })
-            .verify();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
     }
 
     @Test
-    void send_shouldMap500ToBadGateway() {
-        mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(500)
-            .setBody("<soap:Fault>Internal Error</soap:Fault>"));
+    void sendWhenConnectionRefusedReturnsServiceUnavailable() throws IOException {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        
+        // Shut down the server to force an immediate Connection Refused error
+        mockWebServer.shutdown();
 
-        StepVerifier.create(gateway.send(createTestRequest()))
-            .expectErrorMatches(throwable -> {
-                if (!(throwable instanceof SoapCommunicationException)) return false;
-                return ProcessingResultCodes.BAD_GATEWAY.equals(((SoapCommunicationException) throwable).getErrorCode());
+        StepVerifier.create(adapter.send(ProductUploadRequest.builder().filename("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-1")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SERVICE_UNAVAILABLE.name(), result.getSyncStatus());
             })
-            .verify();
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void sendWhenHttp429ReturnsSourceRateLimit() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(429)
+            .setBody("<html>Rate limited</html>")
+            .addHeader("Content-Type", "text/html"));
+
+        StepVerifier.create(adapter.send(ProductUploadRequest.builder().filename("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-429")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SOURCE_RATE_LIMIT.name(), result.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void sendWhenHttp404ReturnsSourceNotFound() {
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+
+        mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(404)
+            .setBody("<html>Not found</html>")
+            .addHeader("Content-Type", "text/html"));
+
+        StepVerifier.create(adapter.send(ProductUploadRequest.builder().filename("f.pdf").build())
+                .contextWrite(Context.of(ApiConstants.HEADER_TRACE_ID, "trace-404")))
+            .thenConsumeWhile(FileUploadResponse::isTechnicalRetry)
+            .assertNext(result -> {
+                assertFalse(result.isSuccess());
+                assertEquals(SOURCE_NOT_FOUND.name(), result.getSyncStatus());
+            })
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
     }
 }

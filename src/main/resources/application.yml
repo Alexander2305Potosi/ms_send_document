@@ -5,21 +5,25 @@ server:
 spring:
   application:
     name: file-processor-service
+  webflux:
+    hiddenmethod:
+      filter:
+        enabled: false
   r2dbc:
     url: r2dbc:h2:mem:///fileprocessor;DB_CLOSE_DELAY=-1
     username: sa
     password:
+  master-r2dbc:
+    url: r2dbc:h2:mem:///masterdb;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
   h2:
     console:
-      enabled: ${H2_CONSOLE_ENABLED:false}
-  webflux:
-    multipart:
-      max-in-memory-size: 10MB
-      max-disk-usage-per-part: 10MB
-      max-parts: 10
-    hiddenmethod:
-      filter:
-        enabled: false
+      enabled: true
+      path: /h2-console
+  sql:
+    init:
+      mode: always
 
 management:
   endpoints:
@@ -38,45 +42,30 @@ logging:
     console: "%-5level [%thread] [%X{traceId}] %logger{36} - %msg%n"
 
 app:
-  processors:
-    soap:
-      max-size: 10485760
-      allowed-types: pdf,txt,csv
-      max-filename-length: 255
-      max-file-size-mb: 50
-      folders-to-skip:
-        - "/tmp"
-        - "/transient"
-      keywords:
-        - "test"
-        - "mock"
-      origin-patterns-to-send:
-        - "incoming"
-        - "documents"
-    s3:
-      max-size: 52428800
-      allowed-types: pdf,txt,csv,zip
-      max-filename-length: 255
-      max-file-size-mb: 100
-      folders-to-skip:
-        - "/tmp"
-      keywords:
-        - "test"
-        - "mock"
-        - "archive"
-      origin-patterns-to-send:
-        - "incoming"
-        - "documents"
-        - "archive"
   soap:
-    endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
-    timeout-seconds: 30
-    retry-attempts: 3
-    retry-backoff-millis: 1000
+    v2:
+      endpoint: ${SOAP_V2_ENDPOINT:http://localhost:9000/soap/adminDocs}
+      system-id: ${SOAP_V2_SYSTEM_ID:123}
+      user-name: ${SOAP_V2_USER_NAME:775757775}
+      header-namespace: ${SOAP_V2_HEADER_NS:http://prueba.com/ents/SOI/MessageFormat/V2.1}
+      body-namespace: ${SOAP_V2_BODY_NS:http://prueba.com/intf/factory/adminDocs/V1.0}
+      soap-namespace: ${SOAP_V2_NAMESPACE:http://schemas.xmlsoap.org/soap/envelope/}
+      user-token: ${SOAP_V2_USER_TOKEN:}
+      destination-name: ${SOAP_V2_DEST_NAME:bussinesdocs}
+      destination-namespace: ${SOAP_V2_DEST_NS:http://prueba.com/intf/factory/adminDocs/Enlace/V1.0}
+      destination-operation: ${SOAP_V2_DEST_OP:senddocs}
+      soap-action: ${SOAP_V2_SOAP_ACTION:}
+      classification: ${SOAP_V2_CLASSIFICATION:http://prueba.com/clas/AppsUpdated}
+      message-context:
+        key01: "value01"
+        key02: "value02"
+      meta-data:
+        xIdentificadorFisico: "65464904"
+        xFilial: "prueba"
+      timeout-seconds: 30
+      retry-attempts: 3
   document-rest:
     endpoint: ${DOCUMENT_REST_ENDPOINT:http://localhost:3001}
-    list-path: /api/documents
-    get-path: /api/document
     products-path: /api/products
     product-documents-path: /api/products/{productId}/documents
     timeout-seconds: 15
@@ -88,27 +77,27 @@ app:
       path-style-access: false
       access-key: ${AWS_ACCESS_KEY:}
       secret-key: ${AWS_SECRET_KEY:}
-  circuit-breaker:
-    failure-rate-threshold: 50
-    wait-duration-in-open-state-millis: 60000
-    permitted-number-of-calls-in-half-open-state: 10
-    sliding-window-size: 100
-    minimum-number-of-calls: 10
+      retry-attempts: 3
+      retry-backoff-millis: 500
+      timeout-seconds: 30
+      key-prefix: "documents/"
 
----
-spring:
-  config:
-    activate:
-      on-profile: soap
-
----
-spring:
-  config:
-    activate:
-      on-profile: s3
-  aws:
+  processors:
     s3:
-      bucket-name: documents-bucket
-      region: us-east-1
-      endpoint: http://localhost:4566
-      path-style-access: true
+      max-file-size-bytes: 52428800
+      filename-pattern: ".*\\.(pdf|csv)$"
+    soap:
+      max-file-size-bytes: 10485760
+      filename-pattern: ".*\\.(pdf|docx|txt)$"
+    animal:
+      max-file-size-bytes: 10485760
+      filename-pattern: ".*\\.(pdf|docx|txt)$"
+
+  animal-rest:
+    endpoint: ${ANIMAL_REST_ENDPOINT:http://localhost:3002}
+    animal-directory-path: /api/animals/{animalId}/directory
+    directory-tree-path: /api/directories/{directoryId}/tree
+    timeout-seconds: 15
+
+  sync:
+    sucursal-query: "SELECT sucursal FROM otro_esquema.tabla_maestra WHERE id_producto = :productId"
