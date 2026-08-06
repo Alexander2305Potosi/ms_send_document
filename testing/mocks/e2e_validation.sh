@@ -209,6 +209,22 @@ check_control_endpoint "process/status/animal (3rd run)" \
     "$MS_URL${BASE_PATH}/products/process/status/animal" \
     "exitoso|error"
 
+# ── 8.8 Animal Processing Fourth Run (To assert FAILED state) ───
+echo ""
+echo "8.8 Processing Animal Documents — FOURTH RUN (GET /products/animal)..."
+curl -s "$MS_URL${BASE_PATH}/products/animal" > /dev/null
+info "Waiting for fourth animal processing to complete..."
+until [ $(grep -c "Pending documents processing completed" "$SCRIPT_DIR/ms.log") -ge 6 ]; do
+    sleep 2
+done
+echo "   Animal fourth processing completed (Documents should now be FAILED)!"
+
+echo ""
+printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 4th run)${C_RESET}\n"
+check_control_endpoint "process/status/animal (4th run)" \
+    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+    "exitoso|error"
+
 # ── 9. Test Results Summary ──────────────────────────────────
 echo ""
 printf "${C_BOLD}====================================================\n"
