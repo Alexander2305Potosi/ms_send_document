@@ -145,32 +145,6 @@ public class ProductHandler {
                         .bodyValue(status));
     }
 
-    public Mono<ServerResponse> processDailyAnimalProducts(ServerRequest request) {
-        var headers = request.headers().asHttpHeaders().toSingleValueMap();
-        
-        Context context = Context.of(
-            TYPE_JOB, "daily",
-            HEADER_TRACE_ID, headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString()),
-            HEADER_USE_CASE, "animal"
-        );
-
-        return Mono.deferContextual(ctx -> {
-            String traceId = ctx.get(HEADER_TRACE_ID);
-            LOGGER.log(Level.INFO, "Starting Daily Animal Processing, traceId: {0}", traceId);
-
-            animalDocumentProcessingUseCase.executeAnimalProcessing()
-                .doOnNext(response -> LOGGER.log(Level.INFO, "Animal Document Processed: file={0}, success={1}",
-                    new Object[]{response.getFilename(), response.isSuccess()}))
-                .doOnError(error -> LOGGER.log(Level.SEVERE, "Animal Daily processing failed for traceId {0}: {1}", new Object[]{traceId, error.getMessage()}))
-                .doOnComplete(() -> LOGGER.log(Level.INFO, "Animal Daily processing completed for traceId: {0}", traceId))
-                .contextWrite(ctx)
-                .subscribe();
-
-            return ServerResponse.accepted()
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(java.util.Map.of("status", "OK", "message", "Daily Animal processing initiated"));
-        }).contextWrite(context);
-    }
 
     public Mono<ServerResponse> getAnimalProcessStatus(ServerRequest request) {
         return getStatusUseCase.getProcessStatus("Animal")
@@ -179,9 +153,10 @@ public class ProductHandler {
                         .bodyValue(status));
     }
 
-    AbstractDocumentProcessingUseCase<Document, DocumentHistoryDTO> getProcessor(String processorType) {
+    AbstractDocumentProcessingUseCase<?, ?> getProcessor(String processorType) {
         return switch (processorType) {
             case ApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
+            case ApiConstants.PROCESSOR_ANIMAL -> animalDocumentProcessingUseCase;
             case ApiConstants.PROCESSOR_S3 -> {
                 S3DocumentProcessingUseCase s3UseCase = s3DocumentUseCaseProvider.getIfAvailable();
                 if (s3UseCase == null) {
@@ -191,7 +166,7 @@ public class ProductHandler {
                 yield s3UseCase;
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                 "Unknown processor type: '" + processorType + "'. Valid values: soap, s3");
+                 "Unknown processor type: '" + processorType + "'. Valid values: soap, s3, animal");
         };
     }
 }

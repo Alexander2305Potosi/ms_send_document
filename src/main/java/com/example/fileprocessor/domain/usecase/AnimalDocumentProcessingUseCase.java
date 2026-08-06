@@ -111,6 +111,15 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     }
 
     /**
+     * Unifica la interfaz con los demás casos de uso delegando al flujo propio de Animal.
+     * Permite que ProductHandler use executePendingDocuments() de forma genérica.
+     */
+    @Override
+    public Flux<FileUploadResponse> executePendingDocuments() {
+        return executeAnimalProcessing();
+    }
+
+    /**
      * Orquesta el flujo diario de Animales de forma limpia y secuencial.
      * Toda la complejidad de aplanar y filtrar el árbol reside en el Adapter del Gateway.
      */

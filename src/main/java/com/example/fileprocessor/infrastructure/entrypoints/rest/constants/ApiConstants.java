@@ -10,6 +10,7 @@ public final class ApiConstants {
     // Processor types
     public static final String PROCESSOR_SOAP = "soap";
     public static final String PROCESSOR_S3 = "s3";
+    public static final String PROCESSOR_ANIMAL = "animal";
 
     // HTTP headers and query params
     public static final String HEADER_TRACE_ID = "message-id";

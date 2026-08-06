@@ -2,6 +2,7 @@ package com.example.fileprocessor.infrastructure.entrypoints.rest.handler;
 import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.SUCCESS;
 
 import com.example.fileprocessor.domain.entity.FileUploadResponse;
+import com.example.fileprocessor.domain.usecase.AnimalDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
@@ -44,11 +45,14 @@ class ProductHandlerTest {
     @Mock
     private SyncDocumentsUseCase syncDocumentsUseCase;
 
+    @Mock
+    private AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase;
+
     private ProductHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new ProductHandler(soapDocumentUseCase, s3DocumentUseCaseProvider, syncDocumentsUseCase, null, null);
+        handler = new ProductHandler(soapDocumentUseCase, s3DocumentUseCaseProvider, syncDocumentsUseCase, null, animalDocumentProcessingUseCase);
     }
 
     private static ServerRequest mockRequestForProcessing(String processorParam, String traceIdHeader) {
@@ -112,6 +116,11 @@ class ProductHandlerTest {
     }
 
     @Test
+    void getProcessorWithAnimalReturnsAnimalUseCase() {
+        assertSame(animalDocumentProcessingUseCase, handler.getProcessor("animal"));
+    }
+
+    @Test
     void getProcessorWithS3AvailableReturnsS3UseCase() {
         when(s3DocumentUseCaseProvider.getIfAvailable()).thenReturn(s3DocumentUseCase);
         assertSame(s3DocumentUseCase, handler.getProcessor("s3"));
@@ -141,6 +150,21 @@ class ProductHandlerTest {
     void processPendingProductsDefaultsToSoapReturnsAccepted() {
         ServerRequest request = mockRequestForProcessing(null, "trace-1");
         when(soapDocumentUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
+
+        Mono<ServerResponse> responseMono = handler.processPendingProducts(request);
+
+        StepVerifier.create(responseMono)
+            .assertNext(response -> {
+                assertEquals(HttpStatus.ACCEPTED, response.statusCode());
+                assertEquals(MediaType.APPLICATION_JSON, response.headers().getContentType());
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void processPendingProductsWithAnimalParamReturnsAccepted() {
+        ServerRequest request = mockRequestForProcessing("animal", "trace-1");
+        when(animalDocumentProcessingUseCase.executePendingDocuments()).thenReturn(Flux.just(successResult()));
 
         Mono<ServerResponse> responseMono = handler.processPendingProducts(request);
 

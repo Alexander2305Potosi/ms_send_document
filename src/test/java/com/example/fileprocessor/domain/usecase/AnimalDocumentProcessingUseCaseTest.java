@@ -116,4 +116,56 @@ class AnimalDocumentProcessingUseCaseTest {
             
         verify(animalRestGateway, times(1)).getPendingDocumentsForAnimal(100L);
     }
+
+    @Test
+    void executePendingDocumentsDelegatesToExecuteAnimalProcessing() {
+        AnimalMaestro animal = AnimalMaestro.builder().id(200L).name("Horse").build();
+        AnimalDocument doc = AnimalDocument.builder()
+                .id(2L)
+                .documentId("doc-2")
+                .animalId("prod-2")
+                .name("horse.pdf")
+                .retryCount(0)
+                .isZip(false)
+                .build();
+
+        com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile file =
+            com.example.fileprocessor.domain.entity.product.maestro.ProductDocumentFile.builder()
+                .productId("prod-2")
+                .documentId("doc-2")
+                .filename("horse.pdf")
+                .content(new byte[]{1})
+                .originFolder("origin")
+                .originCountry("AR")
+                .isZip(false)
+                .build();
+
+        when(animalRepository.findAllAnimals()).thenReturn(Flux.just(animal));
+        when(animalRestGateway.getPendingDocumentsForAnimal(200L)).thenReturn(Flux.just(doc));
+        when(persistencePort.lockDocumentForProcessing(any(AnimalDocument.class), anyInt())).thenReturn(Mono.just(1L));
+        when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
+        when(documentValidator.validate(any(AnimalDocumentHistoryDTO.class), anyBoolean()))
+            .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(homologationRepository.resolve(any()))
+            .thenReturn(Mono.just(HomologationResult.builder()
+                .categoriaDocument("cat")
+                .homologationCountry(com.example.fileprocessor.domain.entity.homologation.HomologationCountry.builder()
+                    .homologationFolder("folder")
+                    .homologationCountry("country")
+                    .build())
+                .build()));
+        when(soapGateway.send(any(FileUploadRequest.class))).thenReturn(Flux.just(FileUploadResponse.builder()
+            .success(true)
+            .correlationId("corr-200")
+            .build()));
+        when(persistencePort.finalizeProcessingAtomically(any())).thenReturn(Mono.empty());
+
+        // executePendingDocuments() debe delegar a executeAnimalProcessing() y producir el mismo resultado
+        StepVerifier.create(useCase.executePendingDocuments())
+            .expectNextMatches(FileUploadResponse::isSuccess)
+            .expectComplete()
+            .verify(Duration.ofSeconds(10));
+
+        verify(animalRestGateway, times(1)).getPendingDocumentsForAnimal(200L);
+    }
 }

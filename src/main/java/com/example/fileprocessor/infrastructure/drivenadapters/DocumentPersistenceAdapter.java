@@ -38,10 +38,57 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     public Mono<Long> lockDocumentForProcessing(Document doc, int currentRetry) {
         doc.setState(IN_PROGRESS.name());
         doc.setRetryCount(currentRetry);
-        
-        return documentRepository.updateStateAndRetry(doc, 
-                PENDING.name(), 
-                IN_PROGRESS.name());
+    
+        // Camino rápido: doc viene de BD → ya tiene id → update directo
+        if (doc.getId() != null) {
+            return documentRepository.updateStateAndRetry(doc,
+                    PENDING.name(),
+                    IN_PROGRESS.name());
+        }
+    
+        // Camino upsert: doc viene de REST API → sin id de BD todavía.
+        return documentRepository.existsByProductIdAndDocumentId(
+                        doc.getProductId(), doc.getDocumentId())
+                .flatMap(exists -> {
+                    if (Boolean.TRUE.equals(exists)) {
+                        // Existe → busca el Document de dominio (ya mapeado por el adapter)
+                        return documentRepository
+                                .findByStatesAndUseCaseToday(
+                                        new String[]{ PENDING.name(), IN_PROGRESS.name() },
+                                        doc.getUseCase(),
+                                        LocalDateTime.now().minusDays(30))
+                                .filter(found -> found.getDocumentId().equals(doc.getDocumentId()))
+                                .next()
+                                .flatMap(found -> {
+                                    int realRetry = found.getRetryCount() != null ? found.getRetryCount() : 0;
+                                    // Actualiza usando el objeto de dominio encontrado
+                                    found.setState(IN_PROGRESS.name());
+                                    found.setRetryCount(realRetry);
+                                    return documentRepository.updateStateAndRetry(found,
+                                                    PENDING.name(), IN_PROGRESS.name())
+                                            .doOnNext(rows -> {
+                                                doc.setId(found.getId());
+                                                doc.setRetryCount(realRetry);
+                                            });
+                                })
+                                .switchIfEmpty(Mono.just(0L));
+                    } else {
+                        // No existe → inserta como nuevo Document de dominio
+                        Document newDoc = Document.builder()
+                                .documentId(doc.getDocumentId())
+                                .productId(doc.getProductId())
+                                .name(doc.getName())
+                                .state(IN_PROGRESS.name())
+                                .isZip(doc.getIsZip())
+                                .useCase(doc.getUseCase())
+                                .retryCount(currentRetry)
+                                .createdAt(LocalDateTime.now())
+                                .build();
+                        return documentRepository.save(newDoc)
+                                .doOnNext(saved -> doc.setId(saved.getId()))
+                                .thenReturn(1L);
+                    }
+                });
     }
 
     @Override
