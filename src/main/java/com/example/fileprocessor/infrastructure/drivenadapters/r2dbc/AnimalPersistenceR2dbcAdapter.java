@@ -45,11 +45,15 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<AnimalD
                                 .filter(entity -> entity.getDocumentId().equals(doc.getDocumentId()))
                                 .next()
                                 .flatMap(entity -> {
+                                    int realRetry = entity.getRetryCount() != null ? entity.getRetryCount() : 0;
                                     entity.setState(IN_PROGRESS.name());
-                                    entity.setRetryCount(currentRetry);
+                                    entity.setRetryCount(realRetry);
                                     entity.setUpdatedAt(LocalDateTime.now());
                                     return documentRepository.save(entity)
-                                            .doOnNext(saved -> doc.setId(saved.getId()))
+                                            .doOnNext(saved -> {
+                                                doc.setId(saved.getId());
+                                                doc.setRetryCount(realRetry);
+                                            })
                                             .thenReturn(1L);
                                 })
                                 .switchIfEmpty(Mono.just(0L));

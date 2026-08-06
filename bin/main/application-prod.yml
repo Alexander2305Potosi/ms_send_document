@@ -1,0 +1,18 @@
+logging:
+  level:
+    com.example.fileprocessor: WARN
+    org.springframework.web.reactive: WARN
+
+server:
+  shutdown: graceful
+  timeout: 30s
+
+app:
+  soap:
+    endpoint: ${SOAP_ENDPOINT:http://localhost:9000/soap/fileservice}
+    timeout-seconds: 15
+    retry-attempts: 2
+    v2:
+      endpoint: ${SOAP_V2_ENDPOINT:http://localhost:9000/soap/adminDocs}
+      timeout-seconds: 15
+      retry-attempts: 2

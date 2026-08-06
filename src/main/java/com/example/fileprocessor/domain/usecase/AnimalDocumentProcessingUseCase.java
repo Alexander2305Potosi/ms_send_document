@@ -114,7 +114,8 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
      * Orquesta el flujo diario de Animales de forma limpia y secuencial.
      * Toda la complejidad de aplanar y filtrar el árbol reside en el Adapter del Gateway.
      */
-    public Flux<FileUploadResponse> executeAnimalProcessing() {
+    @Override
+    public Flux<FileUploadResponse> executePendingDocuments() {
         LOGGER.info("Iniciando procesamiento diario Animal...");
         return animalRepository.findAllAnimals()
                 .concatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId())

@@ -42,6 +42,10 @@ public abstract class AbstractReactiveAdapterOperation<E, D, I, R extends Reacti
         return repository.save(toData(entity)).map(this::toEntity);
     }
 
+    public Mono<D> findById(I id) {
+        return repository.findById(id).map(this::toEntity);
+    }
+
 
 
     public Flux<D> findAll() {
