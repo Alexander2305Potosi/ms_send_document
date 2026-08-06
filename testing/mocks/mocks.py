@@ -31,7 +31,8 @@ FILENAME_MAP = {
     "DOC-TE-15": "malformed_xml.pdf", "DOC-TE-16": "soap_timeout_persistent.pdf",
     "DOC-ANIMAL-100-01": "animal_100_health.pdf", "DOC-ANIMAL-200-01": "animal_200_health.pdf",
     "DOC-ANIMAL-300-02": "bird_unsupported.exe", "DOC-ANIMAL-300-03": "bird_oversized.pdf",
-    "DOC-ANIMAL-300-04": "animal_retry_timeout.pdf"
+    "DOC-ANIMAL-300-04": "animal_retry_timeout.pdf",
+    "DOC-ANIMAL-400-01": "persistent_500.pdf", "DOC-ANIMAL-400-02": "soap_timeout_persistent.pdf"
 }
 
 FILENAME_MAP_CLEAN = {k.replace("-", "").upper(): v for k, v in FILENAME_MAP.items()}
@@ -288,7 +289,8 @@ class ProductRestHandler(http.server.BaseHTTPRequestHandler):
                 "DOC-TE-15": "malformed_xml.pdf", "DOC-TE-16": "soap_timeout_persistent.pdf",
                 "DOC-ANIMAL-100-01": "animal_100_health.pdf", "DOC-ANIMAL-200-01": "animal_200_health.pdf",
                 "DOC-ANIMAL-300-02": "bird_unsupported.exe", "DOC-ANIMAL-300-03": "bird_oversized.pdf",
-                "DOC-ANIMAL-300-04": "animal_retry_timeout.pdf"
+                "DOC-ANIMAL-300-04": "animal_retry_timeout.pdf",
+                "DOC-ANIMAL-400-01": "persistent_500.pdf", "DOC-ANIMAL-400-02": "soap_timeout_persistent.pdf"
             }
             
             filename = get_filename_for_doc(doc_id)

@@ -163,19 +163,51 @@ check_control_endpoint "sync/status/soap (final)" \
 
 # ── 8. Animal Processing ──────────────────────────────────────
 echo ""
-echo "8. Processing Animal Documents (GET /products/daily/animal)..."
-curl -s "$MS_URL${BASE_PATH}/products/daily/animal" > /dev/null
+echo "8. Processing Animal Documents — FIRST RUN (GET /products/animal)..."
+curl -s "$MS_URL${BASE_PATH}/products/animal" > /dev/null
 info "Waiting for animal processing to complete..."
-until grep -q "Animal Daily processing completed" "$SCRIPT_DIR/ms.log"; do
+until [ $(grep -c "Pending documents processing completed" "$SCRIPT_DIR/ms.log") -ge 3 ]; do
     sleep 2
 done
 echo "   Animal processing completed!"
 
 echo ""
-printf "${C_BOLD}[CONTROL] Animal Process Status — daily${C_RESET}\n"
-check_control_endpoint "process/status/daily/animal" \
-    "$MS_URL${BASE_PATH}/products/process/status/daily/animal" \
-    "exitoso"
+printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 1st run)${C_RESET}\n"
+check_control_endpoint "process/status/animal" \
+    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+    "exitoso|0|error"
+
+# ── 8.5 Animal Processing Second Run ──────────────────────────
+echo ""
+echo "8.5 Processing Animal Documents — SECOND RUN (GET /products/animal)..."
+curl -s "$MS_URL${BASE_PATH}/products/animal" > /dev/null
+info "Waiting for second animal processing to complete..."
+until [ $(grep -c "Pending documents processing completed" "$SCRIPT_DIR/ms.log") -ge 4 ]; do
+    sleep 2
+done
+echo "   Animal second processing completed!"
+
+echo ""
+printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 2nd run)${C_RESET}\n"
+check_control_endpoint "process/status/animal (2nd run)" \
+    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+    "exitoso|error"
+
+# ── 8.7 Animal Processing Third Run (To trigger MAX_RETRIES) ───
+echo ""
+echo "8.7 Processing Animal Documents — THIRD RUN (GET /products/animal)..."
+curl -s "$MS_URL${BASE_PATH}/products/animal" > /dev/null
+info "Waiting for third animal processing to complete..."
+until [ $(grep -c "Pending documents processing completed" "$SCRIPT_DIR/ms.log") -ge 5 ]; do
+    sleep 2
+done
+echo "   Animal third processing completed!"
+
+echo ""
+printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 3rd run)${C_RESET}\n"
+check_control_endpoint "process/status/animal (3rd run)" \
+    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+    "exitoso|error"
 
 # ── 9. Test Results Summary ──────────────────────────────────
 echo ""
