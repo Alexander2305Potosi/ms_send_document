@@ -94,10 +94,10 @@ public class SoapMapper {
                 String carpHom = request.getHomologationFolder() != null ? request.getHomologationFolder() : "";
 
                 // Retrieve use case directly from Reactor context
-                String useCase = ctx.getOrDefault(ApiConstants.TYPE_JOB, "product").toLowerCase();
+                String useCase = ctx.getOrDefault(ApiConstants.TYPE_JOB, "product");
                 String metadataBlock;
 
-                if ("animal".equals(useCase)) {
+                if (com.example.fileprocessor.domain.entity.animal.AnimalDocument.USE_CASE_NAME.equalsIgnoreCase(useCase)) {
                     String fecha = java.time.LocalDate.now().toString();
                     metadataBlock = """
                             <dato>

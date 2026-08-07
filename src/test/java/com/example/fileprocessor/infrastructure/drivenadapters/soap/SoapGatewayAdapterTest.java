@@ -64,7 +64,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void sendWhenSuccessfulReturnsSuccessResult() {
-        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn(reactor.core.publisher.Mono.just("<soap>request</soap>"));
         when(mapper.parseResponse(anyString(), anyString())).thenReturn(
             FileUploadResponse.builder()
                 .status("OK")
@@ -101,7 +101,7 @@ class SoapGatewayAdapterTest {
         );
         SoapGatewayAdapter localAdapter = new SoapGatewayAdapter(WebClient.builder(), localProperties, mapper);
 
-        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn(reactor.core.publisher.Mono.just("<soap>request</soap>"));
         
         mockWebServer.enqueue(new MockResponse()
             .setHeadersDelay(2, TimeUnit.SECONDS) // Delay exceeds 1 second timeout
@@ -121,7 +121,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void sendWhenHttp500WithSoapFaultParsesFaultFromBody() {
-        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn(reactor.core.publisher.Mono.just("<soap>request</soap>"));
         
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(500)
@@ -149,7 +149,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void sendWhenConnectionRefusedReturnsServiceUnavailable() throws IOException {
-        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn(reactor.core.publisher.Mono.just("<soap>request</soap>"));
         
         // Shut down the server to force an immediate Connection Refused error
         mockWebServer.shutdown();
@@ -167,7 +167,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void sendWhenHttp429ReturnsSourceRateLimit() {
-        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn(reactor.core.publisher.Mono.just("<soap>request</soap>"));
 
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(429)
@@ -187,7 +187,7 @@ class SoapGatewayAdapterTest {
 
     @Test
     void sendWhenHttp404ReturnsSourceNotFound() {
-        when(mapper.buildEnvelope(any(), anyString())).thenReturn("<soap>request</soap>");
+        when(mapper.buildEnvelope(any(), anyString())).thenReturn(reactor.core.publisher.Mono.just("<soap>request</soap>"));
 
         mockWebServer.enqueue(new MockResponse()
             .setResponseCode(404)

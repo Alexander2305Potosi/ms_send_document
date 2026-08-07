@@ -120,6 +120,8 @@ pitest {
     mutators.set(listOf("DEFAULTS", "REMOVE_CONDITIONALS_EQUAL_IF", "REMOVE_CONDITIONALS_ORDER_IF", "REMOVE_INCREMENTS", "INVERT_NEGS", "MATH", "NEGATE_CONDITIONALS", "VOID_METHOD_CALLS", "NON_VOID_METHOD_CALLS"))
     excludedClasses.set(listOf("com.example.fileprocessor.Application", "com.example.fileprocessor.config.*", "com.example.fileprocessor.infrastructure.config.*", "com.example.fileprocessor.mock.*"))
     excludedMethods.set(listOf("log.*", "toString", "hashCode", "equals"))
+    timeoutConstInMillis.set(10000)
+    timeoutFactor.set(BigDecimal("2.0"))
 }
 
 jacoco {

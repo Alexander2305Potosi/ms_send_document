@@ -109,7 +109,7 @@ class AnimalDocumentProcessingUseCaseTest {
 
         when(persistencePort.finalizeProcessingAtomically(any())).thenReturn(Mono.empty());
 
-        StepVerifier.create(useCase.executeAnimalProcessing())
+        StepVerifier.create(useCase.executePendingDocuments())
             .expectNextMatches(FileUploadResponse::isSuccess)
             .expectComplete()
             .verify(Duration.ofSeconds(10));

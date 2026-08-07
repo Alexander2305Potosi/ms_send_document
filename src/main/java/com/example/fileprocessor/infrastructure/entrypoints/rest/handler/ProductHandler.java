@@ -8,6 +8,7 @@ import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.GetStatusUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
 import com.example.fileprocessor.domain.usecase.AnimalDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
@@ -146,7 +147,7 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> getAnimalProcessStatus(ServerRequest request) {
-        return getStatusUseCase.getProcessStatus("Animal")
+        return getStatusUseCase.getProcessStatus(AnimalDocument.USE_CASE_NAME)
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status));
@@ -155,7 +156,7 @@ public class ProductHandler {
     AbstractDocumentProcessingUseCase<?, ?> getProcessor(String processorType) {
         return switch (processorType) {
             case ApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
-            case "animal" -> animalDocumentProcessingUseCase;
+            case AnimalDocument.USE_CASE_NAME -> animalDocumentProcessingUseCase;
             case ApiConstants.PROCESSOR_S3 -> {
                 S3DocumentProcessingUseCase s3UseCase = s3DocumentUseCaseProvider.getIfAvailable();
                 if (s3UseCase == null) {
@@ -165,7 +166,7 @@ public class ProductHandler {
                 yield s3UseCase;
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                 "Unknown processor type: '" + processorType + "'. Valid values: soap, s3, animal");
+                 "Unknown processor type: '" + processorType + "'. Valid values: soap, s3, " + AnimalDocument.USE_CASE_NAME);
         };
     }
 }

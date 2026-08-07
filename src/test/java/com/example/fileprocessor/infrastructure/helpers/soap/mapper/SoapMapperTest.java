@@ -58,7 +58,7 @@ class SoapMapperTest {
             .originFolder("PORTAL")
             .build();
 
-        String xml = soapMapper.buildEnvelope(request, "trace-123");
+        String xml = soapMapper.buildEnvelope(request, "trace-123").contextWrite(reactor.util.context.Context.of(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.TYPE_JOB, "product")).block();
 
         assertNotNull(xml);
         assertTrue(xml.contains("trace-123"), "Debe contener el traceId");
@@ -75,7 +75,7 @@ class SoapMapperTest {
             .originFolder("OR'IGIN")
             .build();
 
-        String xml = soapMapper.buildEnvelope(request, "trace-123");
+        String xml = soapMapper.buildEnvelope(request, "trace-123").contextWrite(reactor.util.context.Context.of(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.TYPE_JOB, "product")).block();
 
         assertTrue(xml.contains("test &amp; demo &lt; &gt;.pdf"), "Debe escapar caracteres especiales en el nombre");
         assertTrue(xml.contains("OR&apos;IGIN"), "Debe escapar comillas");
@@ -202,7 +202,7 @@ class SoapMapperTest {
     void buildEnvelopeWithMetadataGeneratesFixedMetadataBlock() {
         FileUploadRequest request = FileUploadRequest.builder().filename("test.pdf").content("".getBytes()).build();
 
-        String xml = soapMapper.buildEnvelope(request, "trace-meta");
+        String xml = soapMapper.buildEnvelope(request, "trace-meta").contextWrite(reactor.util.context.Context.of(com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants.TYPE_JOB, "product")).block();
 
         assertTrue(xml.contains("Bfecha"), "Debe contener la constante Bfecha para la metadata de la fecha");
         assertTrue(xml.contains("Bcomentario"), "Debe contener la constante Bcomentario");

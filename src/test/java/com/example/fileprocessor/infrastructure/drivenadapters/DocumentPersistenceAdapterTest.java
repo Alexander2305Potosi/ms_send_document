@@ -56,6 +56,7 @@ class DocumentPersistenceAdapterTest {
     @Test
     void testLockDocumentForProcessing() {
         Document doc = Document.builder().id(1L).build();
+        when(documentRepository.findById(1L)).thenReturn(Mono.just(doc));
         when(documentRepository.updateStateAndRetry(any(), eq("PENDING"), eq("IN_PROGRESS")))
                 .thenReturn(Mono.just(1L));
 
