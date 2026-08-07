@@ -58,10 +58,11 @@ public class SoapGatewayAdapter implements SoapGateway {
     }
 
     private Flux<FileUploadResponse> sendWithRetry(FileUploadRequest request, String traceId, int attempt) {
-        return soapWebClient.post()
-                .contentType(MediaType.TEXT_XML)
-                .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
-                .bodyValue(mapper.buildEnvelope(request, traceId))
+        return mapper.buildEnvelope(request, traceId)
+                .flatMapMany(envelope -> soapWebClient.post()
+                        .contentType(MediaType.TEXT_XML)
+                        .header("SOAPAction", properties.soapAction() != null ? properties.soapAction() : "")
+                        .bodyValue(envelope)
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
@@ -88,7 +89,8 @@ public class SoapGatewayAdapter implements SoapGateway {
                                         .flatMapMany(unused -> sendWithRetry(request, traceId, attempt + 1)));
                     }
                     return Flux.just(response.toBuilder().technicalRetry(false).build());
-                });
+                })
+        );
     }
 
 

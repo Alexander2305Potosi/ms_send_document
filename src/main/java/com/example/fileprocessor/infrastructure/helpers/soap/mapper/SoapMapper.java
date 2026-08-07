@@ -9,11 +9,11 @@ import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.FileUploadRequest;
 import com.example.fileprocessor.domain.exception.ProcessingException;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
-import com.example.fileprocessor.infrastructure.helpers.soap.metadata.MetadataStrategy;
-import java.util.Map;
 import com.example.fileprocessor.infrastructure.helpers.soap.config.SoapProperties;
 import com.example.fileprocessor.infrastructure.helpers.soap.constants.SoapConstants;
+import com.example.fileprocessor.infrastructure.entrypoints.rest.constants.ApiConstants;
 import jakarta.annotation.PostConstruct;
+import reactor.core.publisher.Mono;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -46,14 +46,11 @@ public class SoapMapper {
 
     private final SoapProperties props;
     private final ResourceLoader resourceLoader;
-    private final Map<String, MetadataStrategy> metadataStrategies;
     private String xmlTemplate;
 
-    public SoapMapper(SoapProperties props, ResourceLoader resourceLoader,
-                      Map<String, MetadataStrategy> metadataStrategies) {
+    public SoapMapper(SoapProperties props, ResourceLoader resourceLoader) {
         this.props = props;
         this.resourceLoader = resourceLoader;
-        this.metadataStrategies = metadataStrategies;
     }
 
     @PostConstruct
@@ -81,42 +78,76 @@ public class SoapMapper {
         }
     }
 
-    public String buildEnvelope(FileUploadRequest request, String traceId) {
-        try {
-            String base64Content = request.getContent() != null
-                    ? Base64.getEncoder().encodeToString(request.getContent())
-                    : "";
-            String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
-            String subTipo = request.getHomologationFolder() != null ? request.getHomologationFolder()
-                    : request.getOriginFolder();
-            String safeSubtype = escapeXml(subTipo);
+    public Mono<String> buildEnvelope(FileUploadRequest request, String traceId) {
+        return Mono.deferContextual(ctx -> {
+            try {
+                String base64Content = request.getContent() != null
+                        ? Base64.getEncoder().encodeToString(request.getContent())
+                        : "";
+                String safeFilename = escapeXml(Objects.requireNonNullElse(request.getFilename(), "unknown"));
+                String subTipo = request.getHomologationFolder() != null ? request.getHomologationFolder()
+                        : request.getOriginFolder();
+                String safeSubtype = escapeXml(subTipo);
 
-            String catHom = request.getCategoriaDocument() != null ? request.getCategoriaDocument() : "";
-            String paisHom = request.getHomologationCountry() != null ? request.getHomologationCountry() : "";
-            String carpHom = request.getHomologationFolder() != null ? request.getHomologationFolder() : "";
+                String catHom = request.getCategoriaDocument() != null ? request.getCategoriaDocument() : "";
+                String paisHom = request.getHomologationCountry() != null ? request.getHomologationCountry() : "";
+                String carpHom = request.getHomologationFolder() != null ? request.getHomologationFolder() : "";
 
-            // Delegate metadata block to the strategy (use request's strategy or default)
-            String useCase = request.getUseCase() != null ? request.getUseCase().toLowerCase() : "product";
-            String strategyKey = useCase + "MetadataStrategy";
-            MetadataStrategy strategy = metadataStrategies.getOrDefault(strategyKey, metadataStrategies.get("productMetadataStrategy"));
-            
-            String metadataBlock = strategy.buildMetadataBlock(request);
+                // Retrieve use case directly from Reactor context
+                String useCase = ctx.getOrDefault(ApiConstants.TYPE_JOB, "product").toLowerCase();
+                String metadataBlock;
 
-            return this.xmlTemplate
-                    .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
-                    .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
-                    .replace(SoapConstants.T_SUBTYPE, safeSubtype)
-                    .replace(SoapConstants.T_FILENAME, safeFilename)
-                    .replace(SoapConstants.T_CAT_HOM, escapeXml(catHom))
-                    .replace(SoapConstants.T_PAIS_HOM, escapeXml(paisHom))
-                    .replace(SoapConstants.T_CARP_HOM, escapeXml(carpHom))
-                    .replace(SoapConstants.T_METADATA_BLOCK, metadataBlock)
-                    .replace(SoapConstants.T_CONTENT, base64Content);
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error building SOAP envelope", e);
-            throw ProcessingException.withTraceId("Build failed", UNKNOWN_ERROR.name(), traceId,
-                    e);
-        }
+                if ("animal".equals(useCase)) {
+                    String fecha = java.time.LocalDate.now().toString();
+                    metadataBlock = """
+                            <dato>
+                                <nombre>Bfecha</nombre>
+                                <valor>%s</valor>
+                            </dato>
+                            <dato>
+                                <nombre>BanimalId</nombre>
+                                <valor>%s</valor>
+                            </dato>
+                            <dato>
+                                <nombre>Braza</nombre>
+                                <valor>%s</valor>
+                            </dato>
+                            <dato>
+                                <nombre>Btipo</nombre>
+                                <valor>%s</valor>
+                            </dato>""".formatted(
+                            escapeXml(fecha),
+                            escapeXml(request.getAnimalId()),
+                            escapeXml(request.getRaza()),
+                            escapeXml(request.getTipo()));
+                } else {
+                    String fecha = java.time.LocalDate.now().toString();
+                    metadataBlock = """
+                            <dato>
+                                <nombre>Bfecha</nombre>
+                                <valor>%s</valor>
+                            </dato>
+                            <dato>
+                                <nombre>Bcomentario</nombre>
+                                <valor>Procesamiento automatico</valor>
+                            </dato>""".formatted(escapeXml(fecha));
+                }
+
+                return Mono.just(this.xmlTemplate
+                        .replace(SoapConstants.T_TRACE_ID, escapeXml(traceId))
+                        .replace(SoapConstants.T_TIMESTAMP, Instant.now().toString())
+                        .replace(SoapConstants.T_SUBTYPE, safeSubtype)
+                        .replace(SoapConstants.T_FILENAME, safeFilename)
+                        .replace(SoapConstants.T_CAT_HOM, escapeXml(catHom))
+                        .replace(SoapConstants.T_PAIS_HOM, escapeXml(paisHom))
+                        .replace(SoapConstants.T_CARP_HOM, escapeXml(carpHom))
+                        .replace(SoapConstants.T_METADATA_BLOCK, metadataBlock)
+                        .replace(SoapConstants.T_CONTENT, base64Content));
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Error building SOAP envelope", e);
+                return Mono.error(ProcessingException.withTraceId("Build failed", UNKNOWN_ERROR.name(), traceId, e));
+            }
+        });
     }
 
     private String escapeXml(String value) {

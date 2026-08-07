@@ -12,7 +12,6 @@ import com.example.fileprocessor.domain.port.out.ProductLocalRepository;
 import com.example.fileprocessor.domain.port.out.ProductMasterRepository;
 import com.example.fileprocessor.domain.port.out.S3Gateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.port.out.AnimalSoapGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.service.RulesBussinesService;
 import com.example.fileprocessor.domain.usecase.S3DocumentProcessingUseCase;
@@ -93,7 +92,7 @@ public class DomainConfig {
             ProductRestGateway productRestGateway,
             AnimalRepository animalRepository,
             AnimalRestGateway animalRestGateway,
-            AnimalSoapGateway soapGateway,
+            SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             ProcessorsProperties properties) {
         return new AnimalDocumentProcessingUseCase(

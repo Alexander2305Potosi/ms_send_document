@@ -25,7 +25,7 @@ public class FileUploadRequest {
     private String homologationFolder;
     private String homologationCountry;
     private Long docId;
-    private String useCase;
+
 
     // Optional fields per use case (Animal)
     private String animalId;
@@ -44,7 +44,7 @@ public class FileUploadRequest {
             .homologationFolder(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationFolder() : history.getOriginFolder())
             .homologationCountry(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationCountry() : history.getOriginCountry())
             .docId(docId)
-            .useCase(history.getUseCase())
+
             .build();
     }
 
@@ -64,7 +64,7 @@ public class FileUploadRequest {
             .homologationFolder(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationFolder() : history.getOriginFolder())
             .homologationCountry(h != null && h.homologationCountry() != null ? h.homologationCountry().homologationCountry() : history.getOriginCountry())
             .docId(docId)
-            .useCase(history.getUseCase())
+
             .animalId(history.getAnimalId())
             .raza(history.getRaza())
             .tipo(history.getTipo())

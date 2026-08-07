@@ -12,7 +12,7 @@ import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.port.out.AnimalSoapGateway;
+import com.example.fileprocessor.domain.port.out.SoapGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,7 +37,7 @@ class AnimalDocumentProcessingUseCaseTest {
     @Mock
     private ProductRestGateway productRestGateway;
     @Mock
-    private AnimalSoapGateway soapGateway;
+    private SoapGateway soapGateway;
     @Mock
     private RulesBussinesGateway<AnimalDocumentHistoryDTO> documentValidator;
     @Mock

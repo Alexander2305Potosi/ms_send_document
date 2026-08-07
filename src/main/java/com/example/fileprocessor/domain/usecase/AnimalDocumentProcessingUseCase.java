@@ -9,7 +9,7 @@ import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
-import com.example.fileprocessor.domain.port.out.AnimalSoapGateway;
+import com.example.fileprocessor.domain.port.out.SoapGateway;
 import com.example.fileprocessor.domain.port.out.AnimalRepository;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import reactor.core.publisher.Flux;
@@ -26,7 +26,7 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     private final AnimalRepository animalRepository;
     private final AnimalRestGateway animalRestGateway;
     private final ProductRestGateway productRestGateway;
-    private final AnimalSoapGateway soapGateway;
+    private final SoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
 
     public AnimalDocumentProcessingUseCase(
@@ -36,7 +36,7 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
             String tempDirPath,
             AnimalRepository animalRepository,
             AnimalRestGateway animalRestGateway,
-            AnimalSoapGateway soapGateway,
+            SoapGateway soapGateway,
             HomologationRepository homologationRepository) {
         super(persistencePort, documentValidator, tempDirPath);
         this.animalRepository = animalRepository;
