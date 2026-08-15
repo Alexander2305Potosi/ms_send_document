@@ -46,6 +46,7 @@ class AnimalPersistenceR2dbcAdapterTest {
         AnimalDocumentEntity entity = AnimalDocumentEntity.builder()
                 .id(1L)
                 .documentId("doc-1")
+                .createdAt(now)
                 .build();
         when(documentRepository.findByStatesAndUseCaseToday(any(), eq("Animal"), eq(now)))
                 .thenReturn(Flux.just(entity));
@@ -64,11 +65,15 @@ class AnimalPersistenceR2dbcAdapterTest {
     @Test
     void testLockDocumentForProcessingWhenExists() {
         AnimalDocument doc = AnimalDocument.builder().animalId("animal-1").documentId("doc-1").isZip(false).build();
-        AnimalDocumentEntity entity = AnimalDocumentEntity.builder().id(10L).documentId("doc-1").state("PENDING").build();
+        AnimalDocumentEntity entity = AnimalDocumentEntity.builder()
+                .id(10L)
+                .documentId("doc-1")
+                .state("PENDING")
+                .createdAt(LocalDateTime.now())
+                .build();
 
-        when(documentRepository.existsByProductIdAndDocumentId("animal-1", "doc-1")).thenReturn(Mono.just(true));
-        when(documentRepository.findByStatesAndUseCaseToday(any(), eq("Animal"), any()))
-                .thenReturn(Flux.just(entity));
+        when(documentRepository.findByProductIdAndDocumentId("animal-1", "doc-1"))
+                .thenReturn(Mono.just(entity));
         when(documentRepository.save(any(AnimalDocumentEntity.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
         StepVerifier.create(adapter.lockDocumentForProcessing(doc, 2))
@@ -83,9 +88,12 @@ class AnimalPersistenceR2dbcAdapterTest {
     @Test
     void testLockDocumentForProcessingWhenDoesNotExist() {
         AnimalDocument doc = AnimalDocument.builder().animalId("animal-1").documentId("doc-1").isZip(false).build();
-        AnimalDocumentEntity savedEntity = AnimalDocumentEntity.builder().id(20L).build();
+        AnimalDocumentEntity savedEntity = AnimalDocumentEntity.builder()
+                .id(20L)
+                .createdAt(LocalDateTime.now())
+                .build();
 
-        when(documentRepository.existsByProductIdAndDocumentId("animal-1", "doc-1")).thenReturn(Mono.just(false));
+        when(documentRepository.findByProductIdAndDocumentId("animal-1", "doc-1")).thenReturn(Mono.empty());
         when(documentRepository.save(any(AnimalDocumentEntity.class))).thenReturn(Mono.just(savedEntity));
 
         StepVerifier.create(adapter.lockDocumentForProcessing(doc, 2))

@@ -15,6 +15,9 @@ import reactor.test.StepVerifier;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
+import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
+import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 
 @ExtendWith(MockitoExtension.class)
 class GetStatusUseCaseTest {
@@ -25,11 +28,17 @@ class GetStatusUseCaseTest {
     @Mock
     private DocumentRepository documentRepository;
 
+    @Mock
+    private PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> animalPersistenceGateway;
+
+    @Mock
+    private AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase;
+
     private GetStatusUseCase useCase;
 
     @BeforeEach
     void setUp() {
-        useCase = new GetStatusUseCase(productMasterRepository, documentRepository);
+        useCase = new GetStatusUseCase(productMasterRepository, documentRepository, animalPersistenceGateway, animalDocumentProcessingUseCase);
     }
 
     // --- Tests for getSyncStatus ---
@@ -71,7 +80,7 @@ class GetStatusUseCaseTest {
         when(documentRepository.countDocumentsGroupedByStateToday(any(), any()))
                 .thenReturn(Flux.empty());
 
-        StepVerifier.create(useCase.getProcessStatus("retention"))
+        StepVerifier.create(useCase.getProcessStatus("retention", false))
                 .expectNext(ApiConstants.STATUS_COMPLETED)
                 .verifyComplete();
     }
@@ -84,7 +93,7 @@ class GetStatusUseCaseTest {
                         new StateCount("PROCESSED", 3L)
                 ));
 
-        StepVerifier.create(useCase.getProcessStatus("retention"))
+        StepVerifier.create(useCase.getProcessStatus("retention", false))
                 .expectNext(ApiConstants.STATUS_IN_PROGRESS)
                 .verifyComplete();
     }
@@ -97,7 +106,7 @@ class GetStatusUseCaseTest {
                         new StateCount("PROCESSED", 3L)
                 ));
 
-        StepVerifier.create(useCase.getProcessStatus("retention"))
+        StepVerifier.create(useCase.getProcessStatus("retention", false))
                 .expectNext(ApiConstants.STATUS_IN_PROGRESS)
                 .verifyComplete();
     }
@@ -110,7 +119,7 @@ class GetStatusUseCaseTest {
                         new StateCount("PROCESSED", 3L)
                 ));
 
-        StepVerifier.create(useCase.getProcessStatus("retention"))
+        StepVerifier.create(useCase.getProcessStatus("retention", false))
                 .expectNext(ApiConstants.STATUS_ERROR)
                 .verifyComplete();
     }
@@ -122,7 +131,7 @@ class GetStatusUseCaseTest {
                         new StateCount("PROCESSED", 5L)
                 ));
 
-        StepVerifier.create(useCase.getProcessStatus("retention"))
+        StepVerifier.create(useCase.getProcessStatus("retention", false))
                 .expectNext(ApiConstants.STATUS_COMPLETED)
                 .verifyComplete();
     }
@@ -136,7 +145,7 @@ class GetStatusUseCaseTest {
                         new StateCount("ERR_DUPLICATED_DOC", 2L) // business rule
                 ));
 
-        StepVerifier.create(useCase.getProcessStatus("retention"))
+        StepVerifier.create(useCase.getProcessStatus("retention", false))
                 .expectNext(ApiConstants.STATUS_COMPLETED) // Since all rows are ignored, totalApplicable = 0
                 .verifyComplete();
     }

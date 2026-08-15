@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -51,9 +52,8 @@ class ProductHandlerStatusTest {
 
     @Test
     void getProcessStatusReturnsHttp200() {
-        mockRequestHeaders();
         Mockito.lenient().when(serverRequest.pathVariable(ApiConstants.TYPE_JOB)).thenReturn("retention");
-        when(getStatusUseCase.getProcessStatus(anyString()))
+        when(getStatusUseCase.getProcessStatus(anyString(), anyBoolean()))
                 .thenReturn(Mono.just(ApiConstants.STATUS_ERROR));
 
         StepVerifier.create(handler.getProcessStatus(serverRequest))
