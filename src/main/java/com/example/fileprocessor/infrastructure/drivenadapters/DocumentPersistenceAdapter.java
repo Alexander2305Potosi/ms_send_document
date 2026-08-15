@@ -4,6 +4,7 @@ import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PEN
 
 import com.example.fileprocessor.domain.entity.product.Document;
 import com.example.fileprocessor.domain.entity.product.DocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.StateCount;
 import com.example.fileprocessor.domain.port.out.DocumentPersistenceGateway;
 import com.example.fileprocessor.domain.usecase.ProcessingResultCodes;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.DocumentHistoryR2dbcAdapter;
@@ -82,7 +83,7 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     }
 
     @Override
-    public Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay) {
+    public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay) {
         return documentRepository.countDocumentsGroupedByStateToday(startOfDay, "SOAP");
     }
 }

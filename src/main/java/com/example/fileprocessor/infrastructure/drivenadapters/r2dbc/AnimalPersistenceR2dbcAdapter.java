@@ -5,6 +5,7 @@ import static com.example.fileprocessor.domain.usecase.ProcessingResultCodes.PEN
 
 import com.example.fileprocessor.domain.entity.animal.AnimalDocument;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.StateCount;
 import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalDocumentEntity;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalDocumentHistoryEntity;
@@ -159,7 +160,7 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<AnimalD
     }
 
     @Override
-    public Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay) {
+    public Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay) {
         return documentRepository.countDocumentsGroupedByStateToday(startOfDay, "Animal");
     }
 }

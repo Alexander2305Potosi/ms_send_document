@@ -2,6 +2,7 @@ package com.example.fileprocessor.domain.port.out;
 
 import com.example.fileprocessor.domain.entity.product.BaseDocument;
 import com.example.fileprocessor.domain.entity.product.BaseDocumentHistoryDTO;
+import com.example.fileprocessor.domain.entity.product.StateCount;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -18,5 +19,5 @@ public interface PersistenceGateway<T extends BaseDocument, H extends BaseDocume
     Mono<Void> finalizeProcessingAtomically(H history);
     Mono<Void> saveHistory(H history);
 
-    Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay);
+    Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay);
 }

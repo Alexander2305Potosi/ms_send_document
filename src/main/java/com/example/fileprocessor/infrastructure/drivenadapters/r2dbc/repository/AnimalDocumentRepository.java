@@ -1,5 +1,6 @@
 package com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.repository;
 
+import com.example.fileprocessor.domain.entity.product.StateCount;
 import com.example.fileprocessor.infrastructure.drivenadapters.r2dbc.entity.AnimalDocumentEntity;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
@@ -24,5 +25,5 @@ public interface AnimalDocumentRepository extends R2dbcRepository<AnimalDocument
     Mono<AnimalDocumentEntity> findByProductIdAndDocumentId(String productId, String documentId);
     
     @Query("SELECT estado_sincronizacion AS state, COUNT(*) AS total FROM esquema_animales.documentos WHERE fecha_carga >= $1 AND caso_uso = $2 GROUP BY estado_sincronizacion")
-    Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
+    Flux<StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
 }
