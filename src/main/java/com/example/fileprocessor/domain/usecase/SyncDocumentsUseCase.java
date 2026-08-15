@@ -36,6 +36,18 @@ public class SyncDocumentsUseCase {
         this.productLocalRepository = productLocalRepository;
     }
 
+    /**
+     * Executes the document synchronization process for all products.
+     * 
+     * Secuencia:
+     * 1. Registra el inicio de la sincronización.
+     * 2. Obtiene todos los productos desde el repositorio maestro.
+     * 3. Para cada producto, llama a la sincronización de sus documentos.
+     * 4. Finaliza emitiendo un mensaje de completado.
+     *
+     * @param useCase the use case identifier
+     * @return a Mono emitting a completion message
+     */
     public Mono<String> execute(String useCase) {
         LOGGER.info("[SYNC] Iniciando sincronización de documentos.");
         return productMasterRepository.getAllProducts()
@@ -43,6 +55,22 @@ public class SyncDocumentsUseCase {
                 .then(Mono.just("Document sync completed"));
     }
 
+    /**
+     * Synchronizes documents for a specific product by fetching them from the external API and saving them to the local database.
+     *
+     * Secuencia:
+     * 1. Busca la sucursal del producto en la base de datos local.
+     * 2. Si no se encuentra la sucursal, crea un documento de error indicando la falta de sucursal y lo guarda, terminando el flujo.
+     * 3. Si se encuentra la sucursal, obtiene los documentos del producto desde la API externa.
+     * 4. Para cada documento, verifica si ya existe en la base de datos local.
+     * 5. Construye el documento a guardar, asignando el estado de error por duplicado si ya existe, o pendiente si es nuevo.
+     * 6. Guarda el documento en la base de datos.
+     * 7. En caso de error, registra el error y retorna un flujo vacío.
+     *
+     * @param product the product maestro entity
+     * @param useCase the use case identifier
+     * @return a Flux of saved Documents
+     */
     private Flux<Document> syncDocumentsForProduct(ProductMaestro product, String useCase) {
         return productLocalRepository.findBranchByProductId(product.getProductId())
                 .switchIfEmpty(Mono.defer(() -> {
