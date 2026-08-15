@@ -180,18 +180,17 @@ public class GetStatusUseCase {
             }
         }
 
-        // Si aún no se han guardado todos los documentos en BD, sigue en progreso
-        if (totalInDb < expectedTotal) {
-            return ApiConstants.STATUS_IN_PROGRESS;
+        var totalApplicable = processed + pending + technicalFailures;
+        String finalStatus;
+
+        if (totalInDb < expectedTotal || pending > 0) {
+            finalStatus = ApiConstants.STATUS_IN_PROGRESS;
+        } else if (totalApplicable == 0) {
+            finalStatus = ApiConstants.STATUS_COMPLETED;
+        } else {
+            finalStatus = (technicalFailures > 0) ? ApiConstants.STATUS_ERROR : ApiConstants.STATUS_COMPLETED;
         }
 
-        var totalApplicable = processed + pending + technicalFailures;
-        if (totalApplicable == 0) {
-            return ApiConstants.STATUS_COMPLETED;
-        }
-        if (pending > 0) {
-            return ApiConstants.STATUS_IN_PROGRESS;
-        }
-        return (technicalFailures > 0) ? ApiConstants.STATUS_ERROR : ApiConstants.STATUS_COMPLETED;
+        return finalStatus;
     }
 }
