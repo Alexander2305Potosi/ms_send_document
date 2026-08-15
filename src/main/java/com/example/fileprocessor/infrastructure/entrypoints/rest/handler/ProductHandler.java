@@ -136,27 +136,29 @@ public class ProductHandler {
     }
 
     public Mono<ServerResponse> getProcessStatus(ServerRequest request) {
-        var headers = request.headers().asHttpHeaders().toSingleValueMap();
-        String traceId = headers.getOrDefault(HEADER_TRACE_ID, UUID.randomUUID().toString());
-        String useCase = request.pathVariable(TYPE_JOB);
+        var useCase = request.pathVariable(TYPE_JOB);
+        var forceRefresh = Boolean.parseBoolean(request.queryParam("refresh").orElse("false"));
 
-        return getStatusUseCase.getProcessStatus(useCase)
+        return getStatusUseCase.getProcessStatus(useCase, forceRefresh)
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status));
     }
 
     public Mono<ServerResponse> getAnimalProcessStatus(ServerRequest request) {
-        return getStatusUseCase.getProcessStatus(AnimalDocument.USE_CASE_NAME)
+        var forceRefresh = Boolean.parseBoolean(request.queryParam("refresh").orElse("false"));
+
+        return getStatusUseCase.getProcessStatus(AnimalDocument.USE_CASE_NAME, forceRefresh)
                 .flatMap(status -> ServerResponse.ok()
                         .contentType(MediaType.TEXT_PLAIN)
                         .bodyValue(status));
     }
 
     AbstractDocumentProcessingUseCase<?, ?> getProcessor(String processorType) {
-        return switch (processorType) {
+        String normalizedType = processorType != null ? processorType.toLowerCase() : "";
+        return switch (normalizedType) {
             case ApiConstants.PROCESSOR_SOAP -> soapDocumentUseCase;
-            case AnimalDocument.USE_CASE_NAME -> animalDocumentProcessingUseCase;
+            case "animal" -> animalDocumentProcessingUseCase;
             case ApiConstants.PROCESSOR_S3 -> {
                 S3DocumentProcessingUseCase s3UseCase = s3DocumentUseCaseProvider.getIfAvailable();
                 if (s3UseCase == null) {

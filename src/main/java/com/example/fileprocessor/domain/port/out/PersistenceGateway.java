@@ -16,6 +16,7 @@ public interface PersistenceGateway<T extends BaseDocument, H extends BaseDocume
     Mono<Long> lockDocumentForProcessing(T doc, int currentRetryCount);
 
     Mono<Void> finalizeProcessingAtomically(H history);
-    
     Mono<Void> saveHistory(H history);
+
+    Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay);
 }

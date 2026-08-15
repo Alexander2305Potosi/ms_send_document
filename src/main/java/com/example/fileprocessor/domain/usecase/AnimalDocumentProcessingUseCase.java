@@ -99,6 +99,12 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
         AnimalDocumentHistoryDTO history = context.getHistory();
         return homologationRepository.resolve(history)
                 .flatMapMany(homologation -> {
+                    if (homologation.homologationCountry() != null) {
+                        history.setHomologationFolder(homologation.homologationCountry().homologationFolder());
+                        history.setHomologationCountry(homologation.homologationCountry().homologationCountry());
+                    }
+                    history.setCategoriaHomologada(homologation.categoriaDocument());
+
                     FileUploadRequest uploadReq = FileUploadRequest.fromAnimal(
                             history, context.getFileContent(), docId, homologation);
                     return soapGateway.send(uploadReq);
@@ -111,18 +117,35 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     }
 
     /**
+     * Obtiene todos los documentos pendientes de todos los animales desde la API externa.
+     * Este método es la fuente única de verdad para descubrir documentos,
+     * reutilizado tanto por el procesamiento diario como por el endpoint de control.
+     */
+    public Flux<AnimalDocument> getAllPendingAnimalDocuments() {
+        return animalRepository.findAllAnimals()
+                .concatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId()))
+                .distinct(doc -> doc.getAnimalId() + "-" + doc.getDocumentId());
+    }
+
+    /**
+     * Cuenta el total de documentos pendientes de todos los animales desde la API externa.
+     * Utilizado por GetStatusUseCase para comparar contra lo guardado en BD.
+     */
+    public Mono<Long> countTotalPendingDocuments() {
+        return getAllPendingAnimalDocuments().count();
+    }
+
+    /**
      * Orquesta el flujo diario de Animales de forma limpia y secuencial.
      * Toda la complejidad de aplanar y filtrar el árbol reside en el Adapter del Gateway.
      */
     @Override
     public Flux<FileUploadResponse> executePendingDocuments() {
         LOGGER.info("Iniciando procesamiento diario Animal...");
-        return animalRepository.findAllAnimals()
-                .concatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId())
-                        .concatMap(doc -> {
-                            String traceId = "Animal-" + animal.getId() + "-" + doc.getDocumentId();
-                            return processWithTracking(doc, traceId);
-                        })
-                );
+        return getAllPendingAnimalDocuments()
+                .concatMap(doc -> {
+                    var traceId = "Animal-" + doc.getAnimalId() + "-" + doc.getDocumentId();
+                    return processWithTracking(doc, traceId);
+                });
     }
 }

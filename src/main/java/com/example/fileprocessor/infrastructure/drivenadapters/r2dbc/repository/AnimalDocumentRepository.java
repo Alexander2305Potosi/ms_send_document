@@ -20,4 +20,9 @@ public interface AnimalDocumentRepository extends R2dbcRepository<AnimalDocument
 
     @Query("SELECT COUNT(*) > 0 FROM esquema_animales.documentos WHERE id_animal = $1 AND id_documento = $2")
     Mono<Boolean> existsByProductIdAndDocumentId(String productId, String documentId);
+
+    Mono<AnimalDocumentEntity> findByProductIdAndDocumentId(String productId, String documentId);
+    
+    @Query("SELECT estado_sincronizacion AS state, COUNT(*) AS total FROM esquema_animales.documentos WHERE fecha_carga >= $1 AND caso_uso = $2 GROUP BY estado_sincronizacion")
+    Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay, String useCase);
 }

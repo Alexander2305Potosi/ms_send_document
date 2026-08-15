@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 /**
  * Adapter implementation for persisting animal documents and history under the 'esquema_animales' schema.
@@ -38,48 +38,68 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<AnimalD
 
     @Override
     public Mono<Long> lockDocumentForProcessing(AnimalDocument doc, int currentRetry) {
-        return documentRepository.existsByProductIdAndDocumentId(doc.getProductId(), doc.getDocumentId())
-                .flatMap(exists -> {
-                    if (exists) {
-                        return documentRepository.findByStatesAndUseCaseToday(new String[]{PENDING.name(), IN_PROGRESS.name()}, "Animal", LocalDateTime.now().minusDays(30))
-                                .filter(entity -> entity.getDocumentId().equals(doc.getDocumentId()))
-                                .next()
-                                .flatMap(entity -> {
-                                    int realRetry = entity.getRetryCount() != null ? entity.getRetryCount() : 0;
-                                    entity.setState(IN_PROGRESS.name());
-                                    entity.setRetryCount(realRetry);
-                                    entity.setUpdatedAt(LocalDateTime.now());
-                                    return documentRepository.save(entity)
-                                            .doOnNext(saved -> {
-                                                doc.setId(saved.getId());
-                                                doc.setRetryCount(realRetry);
-                                            })
-                                            .thenReturn(1L);
-                                })
-                                .switchIfEmpty(Mono.just(0L));
-                    } else {
-                        AnimalDocumentEntity newEntity = AnimalDocumentEntity.builder()
-                                .documentId(doc.getDocumentId())
-                                .productId(doc.getAnimalId())
-                                .name(doc.getName())
-                                .state(IN_PROGRESS.name())
-                                .isZip(doc.getIsZip())
-                                .useCase("Animal")
-                                .retryCount(currentRetry)
-                                .createdAt(LocalDateTime.now())
-                                .build();
-                        return documentRepository.save(newEntity)
-                                .doOnNext(saved -> doc.setId(saved.getId()))
-                                .thenReturn(1L);
-                    }
-                });
+        // 1. Buscamos el registro ÚNICO directamente por sus IDs
+        return documentRepository.findByProductIdAndDocumentId(doc.getAnimalId(), doc.getDocumentId())
+                .flatMap(entity -> resumeExistingDocument(entity, doc))
+                // 2. SI NO LO ENCUENTRA (Mono vacío): Es un documento nuevo, lo insertamos
+                .switchIfEmpty(Mono.defer(() -> insertNewDocument(doc, currentRetry)));
+    }
+
+    private Mono<Long> resumeExistingDocument(AnimalDocumentEntity entity, AnimalDocument doc) {
+        var isPendingOrInProgress = entity.getState().equals(PENDING.name()) || entity.getState().equals(IN_PROGRESS.name());
+        var isFromToday = entity.getCreatedAt().toLocalDate().isEqual(LocalDate.now());
+
+        if (isPendingOrInProgress && isFromToday) {
+            var realRetry = entity.getRetryCount() != null ? entity.getRetryCount() : 0;
+            entity.setState(IN_PROGRESS.name());
+            entity.setRetryCount(realRetry);
+            entity.setUpdatedAt(LocalDateTime.now());
+
+            return documentRepository.save(entity)
+                    .doOnNext(saved -> {
+                        doc.setId(saved.getId());
+                        doc.setRetryCount(realRetry);
+                    })
+                    .thenReturn(1L);
+        }
+        // Si existe pero es de otro día o ya terminó (PROCESSED/FAILED), no lo tocamos
+        return Mono.just(0L);
+    }
+
+    private Mono<Long> insertNewDocument(AnimalDocument doc, int currentRetry) {
+        var newEntity = AnimalDocumentEntity.builder()
+                .documentId(doc.getDocumentId())
+                .productId(doc.getAnimalId())
+                .name(doc.getName())
+                .state(IN_PROGRESS.name())
+                .isZip(doc.getIsZip())
+                .useCase("Animal")
+                .retryCount(currentRetry)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        return documentRepository.save(newEntity)
+                .doOnNext(saved -> doc.setId(saved.getId()))
+                .thenReturn(1L);
     }
 
     @Override
     public Mono<Void> finalizeProcessingAtomically(AnimalDocumentHistoryDTO history) {
-        String initialState = IN_PROGRESS.name();
+        var updateDb = updateDocumentState(history);
 
-        Mono<Void> updateDb = documentRepository.findById(history.getDocumentId())
+        if (Boolean.TRUE.equals(history.getIsZip())) {
+            return updateDb.as(transactionalOperator::transactional).then();
+        }
+
+        var historyEntity = buildHistoryEntity(history);
+        return updateDb.then(historyRepository.save(historyEntity)).then()
+                .as(transactionalOperator::transactional)
+                .then();
+    }
+
+    private Mono<Void> updateDocumentState(AnimalDocumentHistoryDTO history) {
+        var initialState = IN_PROGRESS.name();
+        return documentRepository.findById(history.getDocumentId())
                 .flatMap(entity -> {
                     if (!initialState.equals(entity.getState())) {
                         return Mono.error(new com.example.fileprocessor.domain.exception.ProcessingException(
@@ -95,31 +115,16 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<AnimalD
                     entity.setCategoriaHomologada(history.getCategoriaHomologada());
                     return documentRepository.save(entity);
                 }).then();
-
-        if (Boolean.TRUE.equals(history.getIsZip())) {
-            return updateDb.as(transactionalOperator::transactional).then();
-        }
-
-        AnimalDocumentHistoryEntity historyEntity = AnimalDocumentHistoryEntity.builder()
-                .documentId(history.getDocumentId())
-                .filename(history.getFilename())
-                .useCase(history.getUseCase())
-                .result(history.getState())
-                .syncStatus(history.getSyncStatus())
-                .syncMessage(history.getSyncMessage())
-                .retry(history.getRetryCount())
-                .startedAt(history.getStartedAt())
-                .completedAt(history.getCompletedAt())
-                .build();
-
-        return updateDb.then(historyRepository.save(historyEntity)).then()
-                .as(transactionalOperator::transactional)
-                .then();
     }
 
     @Override
     public Mono<Void> saveHistory(AnimalDocumentHistoryDTO history) {
-        AnimalDocumentHistoryEntity historyEntity = AnimalDocumentHistoryEntity.builder()
+        var historyEntity = buildHistoryEntity(history);
+        return historyRepository.save(historyEntity).then();
+    }
+
+    private AnimalDocumentHistoryEntity buildHistoryEntity(AnimalDocumentHistoryDTO history) {
+        return AnimalDocumentHistoryEntity.builder()
                 .documentId(history.getDocumentId())
                 .filename(history.getFilename())
                 .useCase(history.getUseCase())
@@ -130,7 +135,6 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<AnimalD
                 .startedAt(history.getStartedAt())
                 .completedAt(history.getCompletedAt())
                 .build();
-        return historyRepository.save(historyEntity).then();
     }
 
     private AnimalDocument toDomainDocument(AnimalDocumentEntity entity) {
@@ -152,5 +156,10 @@ public class AnimalPersistenceR2dbcAdapter implements PersistenceGateway<AnimalD
                 .retryCount(entity.getRetryCount())
                 .createdAt(entity.getCreatedAt())
                 .build();
+    }
+
+    @Override
+    public Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay) {
+        return documentRepository.countDocumentsGroupedByStateToday(startOfDay, "Animal");
     }
 }

@@ -1677,4 +1677,22 @@ grep -A 4 "CONTROL ENDPOINTS VALIDATION SUMMARY" testing/mocks/ms.log
   ```text
   ✔ ALL CONTROL ENDPOINTS PASSED
   ```
-```
+
+---
+
+## Reglas de Sonar (Clean Code)
+
+Al momento de crear o modificar el código fuente de este microservicio, se deben tener en cuenta de forma estricta las siguientes reglas de SonarQube para mantener la calidad y legibilidad del código:
+
+1. **Tamaño de Métodos:** `this method has 32 lines, which is greater than the 30 lines authorized into smaller methods`
+   - Ningún método debe exceder las 30 líneas de código. Si sobrepasa este límite, debe extraerse la lógica en submétodos más pequeños y descriptivos.
+2. **Invocación Condicional:** `invoke methods only conditionally`
+   - Evitar llamadas a métodos costosos si su resultado no se va a utilizar. Por ejemplo, concatenaciones de logs pesados deben evaluarse condicionalmente.
+3. **Complejidad Cognitiva:** `refactor this method to reduce its cognitive complexity from 18 to the 15 allowed`
+   - La complejidad cognitiva de un solo método no debe superar el valor de 15. Evita el uso excesivo de estructuras anidadas (`if`, `for`, `switch`). Utiliza cláusulas de salida temprana (early returns).
+4. **Tipos Genéricos Parametrizados:** `provide the parametrized type for this generic`
+   - No utilizar "raw types". Todo uso de genéricos (`List`, `Mono`, `Flux`, etc.) debe llevar explícitamente su tipo definido (e.g. `Mono<String>`).
+5. **Cantidad de Retornos:** `this method has 5 returns, which is more than the 3 allowed`
+   - Un método no debe tener más de 3 sentencias `return`. Si la lógica lo requiere, considera rediseñar el flujo de control o agrupar el resultado.
+6. **Declaración con var:** `declare var as type var`
+   - Se debe utilizar la palabra clave `var` para la inferencia de tipos en variables locales siempre que el tipo de dato sea evidente desde el lado derecho de la asignación.```

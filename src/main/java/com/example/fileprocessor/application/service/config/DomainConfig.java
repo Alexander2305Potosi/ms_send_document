@@ -82,8 +82,10 @@ public class DomainConfig {
     @Bean
     public GetStatusUseCase getStatusUseCase(
             ProductMasterRepository productMasterRepository,
-            DocumentRepository documentRepository) {
-        return new GetStatusUseCase(productMasterRepository, documentRepository);
+            DocumentRepository documentRepository,
+            PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> animalPersistenceGateway,
+            AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase) {
+        return new GetStatusUseCase(productMasterRepository, documentRepository, animalPersistenceGateway, animalDocumentProcessingUseCase);
     }
 
     @Bean

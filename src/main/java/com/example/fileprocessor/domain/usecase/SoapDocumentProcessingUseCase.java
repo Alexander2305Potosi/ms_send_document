@@ -84,6 +84,12 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
         DocumentHistoryDTO history = context.getHistory();
         return homologationRepository.resolve(history)
                 .flatMapMany(h -> {
+                    if (h.homologationCountry() != null) {
+                        history.setHomologationFolder(h.homologationCountry().homologationFolder());
+                        history.setHomologationCountry(h.homologationCountry().homologationCountry());
+                    }
+                    history.setCategoriaHomologada(h.categoriaDocument());
+
                     FileUploadRequest request = FileUploadRequest.from(history, context.getFileContent(), docId, h);
                     return soapGateway.send(request)
                             .map(resp -> resp.toBuilder()

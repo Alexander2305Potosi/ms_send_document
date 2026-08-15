@@ -164,6 +164,14 @@ check_control_endpoint "sync/status/soap (final)" \
 # ── 8. Animal Processing ──────────────────────────────────────
 echo ""
 echo "8. Processing Animal Documents — FIRST RUN (GET /products/animal)..."
+
+# 8.0 Validar endpoint de control ANTES de ejecutar (debe ser "exitoso" o "0")
+printf "\n${C_BOLD}[CONTROL] Animal Daily Status — BEFORE processing (baseline con refresh)${C_RESET}\n"
+info "Se fuerza refresh=true para obtener el total real de documentos desde la API externa"
+check_control_endpoint "daily/animal (baseline refresh)" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal?refresh=true" \
+    "exitoso|0"
+
 curl -s "$MS_URL${BASE_PATH}/products/animal" > /dev/null
 info "Waiting for animal processing to complete..."
 until [ $(grep -c "Pending documents processing completed" "$SCRIPT_DIR/ms.log") -ge 3 ]; do
@@ -172,9 +180,15 @@ done
 echo "   Animal processing completed!"
 
 echo ""
-printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 1st run)${C_RESET}\n"
-check_control_endpoint "process/status/animal" \
-    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+printf "${C_BOLD}[CONTROL] Animal Daily Status — after 1st run (sin refresh, usa caché)${C_RESET}\n"
+check_control_endpoint "daily/animal (1st run cached)" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal" \
+    "exitoso|0|error"
+
+echo ""
+printf "${C_BOLD}[CONTROL] Animal Daily Status — after 1st run (con refresh=true)${C_RESET}\n"
+check_control_endpoint "daily/animal (1st run refresh)" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal?refresh=true" \
     "exitoso|0|error"
 
 # ── 8.5 Animal Processing Second Run ──────────────────────────
@@ -188,9 +202,9 @@ done
 echo "   Animal second processing completed!"
 
 echo ""
-printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 2nd run)${C_RESET}\n"
-check_control_endpoint "process/status/animal (2nd run)" \
-    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+printf "${C_BOLD}[CONTROL] Animal Daily Status — after 2nd run${C_RESET}\n"
+check_control_endpoint "daily/animal (2nd run)" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal" \
     "exitoso|error"
 
 # ── 8.7 Animal Processing Third Run (To trigger MAX_RETRIES) ───
@@ -204,9 +218,9 @@ done
 echo "   Animal third processing completed!"
 
 echo ""
-printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 3rd run)${C_RESET}\n"
-check_control_endpoint "process/status/animal (3rd run)" \
-    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+printf "${C_BOLD}[CONTROL] Animal Daily Status — after 3rd run${C_RESET}\n"
+check_control_endpoint "daily/animal (3rd run)" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal" \
     "exitoso|error"
 
 # ── 8.8 Animal Processing Fourth Run (To assert FAILED state) ───
@@ -220,9 +234,16 @@ done
 echo "   Animal fourth processing completed (Documents should now be FAILED)!"
 
 echo ""
-printf "${C_BOLD}[CONTROL] Animal Process Status — daily (after 4th run)${C_RESET}\n"
-check_control_endpoint "process/status/animal (4th run)" \
-    "$MS_URL${BASE_PATH}/products/process/status/animal" \
+printf "${C_BOLD}[CONTROL] Animal Daily Status — after 4th run (estado final)${C_RESET}\n"
+check_control_endpoint "daily/animal (4th run final)" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal" \
+    "exitoso|error"
+
+echo ""
+printf "${C_BOLD}[CONTROL] Animal Daily Status — refresh final (validación con recarga)${C_RESET}\n"
+info "Se fuerza refresh=true para confirmar consistencia del total vs BD"
+check_control_endpoint "daily/animal (final refresh)" \
+    "$MS_URL${BASE_PATH}/products/process/status/daily/animal?refresh=true" \
     "exitoso|error"
 
 # ── 9. Test Results Summary ──────────────────────────────────
@@ -263,9 +284,10 @@ echo "           VISUAL DATABASE REPORT                   " >> "$SCRIPT_DIR/ms.l
 echo "====================================================" >> "$SCRIPT_DIR/ms.log"
 
 curl -s "$MS_URL/api/v1/debug/db/dump" > "$SCRIPT_DIR/db_dump.json"
-cleanup
 cat "$SCRIPT_DIR/db_dump.json" | python3 "$SCRIPT_DIR/format_tables.py" >> "$SCRIPT_DIR/ms.log"
 rm -f "$SCRIPT_DIR/db_dump.json"
+
+cleanup
 
 info "Detailed tables written to: testing/mocks/ms.log"
 

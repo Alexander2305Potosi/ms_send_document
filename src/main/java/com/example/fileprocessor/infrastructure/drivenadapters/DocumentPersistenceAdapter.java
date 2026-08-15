@@ -80,4 +80,9 @@ public class DocumentPersistenceAdapter implements DocumentPersistenceGateway {
     public Mono<Void> saveHistory(DocumentHistoryDTO history) {
         return historyRepository.saveHistory(history).then();
     }
+
+    @Override
+    public Flux<com.example.fileprocessor.domain.entity.product.StateCount> countDocumentsGroupedByStateToday(LocalDateTime startOfDay) {
+        return documentRepository.countDocumentsGroupedByStateToday(startOfDay, "SOAP");
+    }
 }
