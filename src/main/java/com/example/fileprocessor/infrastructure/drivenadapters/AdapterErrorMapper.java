@@ -54,6 +54,14 @@ public final class AdapterErrorMapper {
      * <p>If the error is already a {@link ProcessingException} with a non-blank error code,
      * its code is preserved so no domain semantics are overwritten.</p>
      *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Recibe un error y un identificador de traza.</li>
+     * <li>Delega la construcción de la respuesta a {@code buildErrorResponse}.</li>
+     * <li>Envuelve la respuesta generada en un {@link Mono#just}.</li>
+     * </ol>
+     * </p>
+     *
      * @param error   the exception thrown by the adapter
      * @param traceId the current request trace identifier (may be null)
      * @return a {@link Mono} that emits a failure {@link FileUploadResponse}
@@ -64,6 +72,14 @@ public final class AdapterErrorMapper {
 
     /**
      * Synchronous variant — builds the {@link FileUploadResponse} directly without wrapping in Mono.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Desempaqueta la excepción usando {@code unwrap} para obtener la causa raíz.</li>
+     * <li>Determina el código de estado y el mensaje basado en el tipo de la excepción (e.g., ProcessingException, WebClientResponseException, TimeoutException, etc.).</li>
+     * <li>Construye y devuelve un objeto {@link FileUploadResponse} con el estado de fallo y los detalles del error.</li>
+     * </ol>
+     * </p>
      *
      * @param error   the exception thrown by the adapter
      * @param traceId the current request trace identifier (may be null)
@@ -106,6 +122,14 @@ public final class AdapterErrorMapper {
      * Resolves only the {@link ProcessingResultCodes} name for the given error.
      * Useful when the caller needs to build its own response object.
      *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Obtiene la causa raíz del error usando {@code unwrap}.</li>
+     * <li>Verifica el tipo de excepción para devolver el nombre de código de error correspondiente.</li>
+     * <li>Si no coincide con ninguna excepción conocida, devuelve {@code UNKNOWN_ERROR}.</li>
+     * </ol>
+     * </p>
+     *
      * @param error the exception thrown by the adapter
      * @return the matching {@link ProcessingResultCodes} name
      */
@@ -135,6 +159,17 @@ public final class AdapterErrorMapper {
      * Unwraps the cause chain until reaching a well-known exception type or the root.
      * Stops early at {@link ProcessingException} and {@link WebClientResponseException}
      * to avoid masking already-enriched errors.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Itera a través de la cadena de causas de la excepción.</li>
+     * <li>Se detiene si encuentra una instancia de {@link ProcessingException} o {@link WebClientResponseException}.</li>
+     * <li>Devuelve la excepción encontrada o la causa raíz si se recorrió toda la cadena.</li>
+     * </ol>
+     * </p>
+     * 
+     * @param error the original error
+     * @return the unwrapped error
      */
     private static Throwable unwrap(Throwable error) {
         Throwable current = error;
@@ -147,6 +182,21 @@ public final class AdapterErrorMapper {
         return current;
     }
 
+    /**
+     * Maps an HTTP status code to a domain error code.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Extrae el código de estado HTTP de la excepción.</li>
+     * <li>Devuelve {@code SOURCE_NOT_FOUND} para 404, y {@code SOURCE_RATE_LIMIT} para 429.</li>
+     * <li>Devuelve {@code BAD_GATEWAY} para errores 5xx.</li>
+     * <li>Para otros códigos, devuelve {@code UNKNOWN_ERROR}.</li>
+     * </ol>
+     * </p>
+     *
+     * @param wce the WebClient response exception
+     * @return the corresponding domain error code name
+     */
     private static String mapHttpStatus(WebClientResponseException wce) {
         int status = wce.getStatusCode().value();
         if (status == 404) return SOURCE_NOT_FOUND.name();
@@ -155,6 +205,20 @@ public final class AdapterErrorMapper {
         return UNKNOWN_ERROR.name();
     }
 
+    /**
+     * Checks if the given exception is a timeout.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Verifica si la excepción es instancia de {@link TimeoutException}.</li>
+     * <li>Si no lo es, verifica si el mensaje de la excepción contiene la palabra "timeout" en minúsculas.</li>
+     * <li>Devuelve true si cumple alguna de las condiciones, false de lo contrario.</li>
+     * </ol>
+     * </p>
+     *
+     * @param t the exception to check
+     * @return true if it's a timeout error, false otherwise
+     */
     private static boolean isTimeout(Throwable t) {
         return t instanceof TimeoutException
                 || (t.getMessage() != null && t.getMessage().toLowerCase().contains("timeout"));

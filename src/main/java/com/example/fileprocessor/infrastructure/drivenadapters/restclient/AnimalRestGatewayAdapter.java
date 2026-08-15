@@ -27,6 +27,20 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
     private final WebClient webClient;
     private final AnimalRestProperties properties;
 
+    /**
+     * Constructs the REST adapter for Animals.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Configura un cliente HTTP de Reactor con el timeout definido.</li>
+     * <li>Construye el {@link WebClient} utilizando la URL base de las propiedades.</li>
+     * <li>Almacena la instancia para las consultas de la API.</li>
+     * </ol>
+     * </p>
+     *
+     * @param webClientBuilder the builder
+     * @param properties the properties
+     */
     public AnimalRestGatewayAdapter(WebClient.Builder webClientBuilder, AnimalRestProperties properties) {
         this.properties = properties;
         HttpClient httpClient = HttpClient.create()
@@ -37,6 +51,22 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
                 .build();
     }
 
+    /**
+     * Retrieves pending documents for a specific animal.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Obtiene el directoryId usando el animalId.</li>
+     * <li>Recupera el árbol de directorios a partir del directoryId.</li>
+     * <li>Aplana y filtra los nodos del árbol buscando documentos válidos.</li>
+     * <li>Mapea cada nodo filtrado a un objeto {@link AnimalDocument}.</li>
+     * <li>Si ocurre un error en cualquier paso, lo atrapa y devuelve un Flux vacío para continuar procesando.</li>
+     * </ol>
+     * </p>
+     *
+     * @param animalId the animal ID
+     * @return a Flux of documents
+     */
     @Override
     public Flux<AnimalDocument> getPendingDocumentsForAnimal(Long animalId) {
         return getDirectoryIdByAnimalId(animalId)
@@ -57,6 +87,20 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
                 });
     }
 
+    /**
+     * Calls the REST API to fetch a directory ID for the given animal ID.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Ejecuta una petición GET al path configurado usando el ID del animal.</li>
+     * <li>Deserializa la respuesta como {@link DirectoryResponse}.</li>
+     * <li>Extrae el ID del directorio y devuelve un error si está nulo.</li>
+     * </ol>
+     * </p>
+     *
+     * @param animalId the animal ID
+     * @return a Mono emitting the directory ID
+     */
     private Mono<String> getDirectoryIdByAnimalId(Long animalId) {
         return webClient.get()
                 .uri(properties.animalDirectoryPath(), animalId)
@@ -70,6 +114,20 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
                         new Object[]{animalId, e.getMessage()}));
     }
 
+    /**
+     * Calls the REST API to fetch a directory tree given a directory ID.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Realiza una petición GET al endpoint de árbol de directorio.</li>
+     * <li>Deserializa la respuesta en un objeto {@link DirectoryNode} (nodo raíz).</li>
+     * <li>Controla errores y timeouts registrándolos en los logs.</li>
+     * </ol>
+     * </p>
+     *
+     * @param directoryId the directory ID
+     * @return a Mono emitting the root directory node
+     */
     private Mono<DirectoryNode> getDirectoryTree(String directoryId) {
         return webClient.get()
                 .uri(properties.directoryTreePath(), directoryId)
@@ -80,12 +138,41 @@ public class AnimalRestGatewayAdapter implements AnimalRestGateway {
                         new Object[]{directoryId, e.getMessage()}));
     }
 
+    /**
+     * Flattens and filters a directory tree structure into a list.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Crea una lista vacía para almacenar el resultado.</li>
+     * <li>Inicia el recorrido recursivo llamando a {@code traverse}.</li>
+     * <li>Retorna la lista plana.</li>
+     * </ol>
+     * </p>
+     *
+     * @param root the root node
+     * @return a list of filtered nodes
+     */
     private List<DirectoryNode> flattenAndFilter(DirectoryNode root) {
         List<DirectoryNode> result = new ArrayList<>();
         traverse(root, result);
         return result;
     }
 
+    /**
+     * Recursively traverses nodes, collecting valid document nodes.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Retorna de inmediato si el nodo actual es nulo.</li>
+     * <li>Verifica si el nodo tiene una fuente válida y contiene identificadores de negocio requeridos.</li>
+     * <li>Agrega el nodo a la lista de resultado si pasa las validaciones.</li>
+     * <li>Llama recursivamente a este método para todos sus hijos, si tiene.</li>
+     * </ol>
+     * </p>
+     *
+     * @param node the current node
+     * @param result the list to collect valid nodes into
+     */
     private void traverse(DirectoryNode node, List<DirectoryNode> result) {
         if (node == null) return;
         if (node.getSource() != null && VALID_SOURCES.contains(node.getSource())

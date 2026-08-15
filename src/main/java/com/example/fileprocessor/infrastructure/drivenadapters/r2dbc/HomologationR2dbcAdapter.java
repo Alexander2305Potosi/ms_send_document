@@ -37,6 +37,17 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
     private final List<PaisHomologado> paisCache = new CopyOnWriteArrayList<>();
     private boolean cacheLoaded = false;
 
+    /**
+     * Resuelve la homologación de un documento basándose en su historial.
+     * <p>
+     * Secuencia:
+     * 1. Verifica si la caché de homologación ya está cargada.
+     * 2. Si no lo está, carga la caché desde la base de datos y luego resuelve utilizando la caché.
+     * 3. Si ya está cargada, resuelve directamente desde la caché.
+     *
+     * @param history el historial base del documento
+     * @return un Mono con el resultado de la homologación
+     */
     @Override
     public Mono<HomologationResult> resolve(BaseDocumentHistoryDTO history) {
         if (!cacheLoaded) {
@@ -45,6 +56,19 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
         return resolveFromCache(history);
     }
 
+    /**
+     * Resuelve la homologación de un documento utilizando la caché en memoria.
+     * <p>
+     * Secuencia:
+     * 1. Extrae el ID del documento, usando un string vacío si es null.
+     * 2. Recorre la caché de categorías buscando un prefijo que coincida con el ID del documento para asignar la categoría.
+     * 3. Extrae la carpeta y el país de origen del historial.
+     * 4. Evalúa las reglas dinámicas JSON de la caché de países contra el historial para determinar el país y carpeta homologados.
+     * 5. Construye y retorna el resultado de la homologación con los datos encontrados.
+     *
+     * @param history el historial base del documento
+     * @return un Mono con el resultado de la homologación
+     */
     private Mono<HomologationResult> resolveFromCache(BaseDocumentHistoryDTO history) {
         String documentId = history.getBusinessDocumentId() != null ? history.getBusinessDocumentId() : "";
 
@@ -80,6 +104,18 @@ public class HomologationR2dbcAdapter implements HomologationRepository {
                 .build());
     }
 
+    /**
+     * Carga la caché de homologación desde la base de datos a memoria.
+     * <p>
+     * Secuencia:
+     * 1. Registra el inicio de la carga en los logs.
+     * 2. Obtiene todas las categorías del repositorio, las mapea al objeto de dominio y actualiza la lista en memoria.
+     * 3. Obtiene todos los países homologados, evaluando sus reglas JSON, y actualiza la lista correspondiente en memoria.
+     * 4. Ejecuta ambas cargas de manera concurrente (Mono.when).
+     * 5. Tras finalizar ambas, marca la caché como cargada y lo registra en el log.
+     *
+     * @return un Mono vacío al completarse la carga
+     */
     private Mono<Void> loadCache() {
         log.log(Level.INFO, "Loading homologation cache from database");
 

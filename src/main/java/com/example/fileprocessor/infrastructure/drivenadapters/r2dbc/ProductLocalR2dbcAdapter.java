@@ -22,6 +22,18 @@ public class ProductLocalR2dbcAdapter implements ProductLocalRepository {
         this.query = query;
     }
 
+    /**
+     * Finds the branch associated with a given product ID.
+     * <p>
+     * Secuencia:
+     * 1. Ejecuta la consulta SQL inyectada usando el DatabaseClient.
+     * 2. Vincula el parámetro productId a la consulta.
+     * 3. Mapea la primera columna de la respuesta a un String.
+     * 4. En caso de error, registra un warning y retorna un Mono vacío.
+     *
+     * @param productId the ID of the product
+     * @return a Mono emitting the branch name, or empty if not found
+     */
     @Override
     public Mono<String> findBranchByProductId(String productId) {
         return databaseClient.sql(query)

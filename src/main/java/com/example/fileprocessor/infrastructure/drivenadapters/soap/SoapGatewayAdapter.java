@@ -39,6 +39,20 @@ public class SoapGatewayAdapter implements SoapGateway {
     private final SoapProperties properties;
     private final SoapMapper mapper;
 
+    /**
+     * Constructs a new {@link SoapGatewayAdapter}.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Inicializa el {@link WebClient} con la URL base proporcionada en las propiedades.</li>
+     * <li>Asigna las propiedades de configuración y el mapeador SOAP.</li>
+     * </ol>
+     * </p>
+     *
+     * @param webClientBuilder the WebClient builder
+     * @param properties the SOAP properties
+     * @param mapper the SOAP mapper
+     */
     public SoapGatewayAdapter(WebClient.Builder webClientBuilder, SoapProperties properties, SoapMapper mapper) {
         this.soapWebClient = webClientBuilder
                 .baseUrl(properties.endpoint())
@@ -47,6 +61,20 @@ public class SoapGatewayAdapter implements SoapGateway {
         this.mapper = mapper;
     }
 
+    /**
+     * Sends a file upload request via SOAP.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Obtiene el traceId del contexto reactivo o genera uno nuevo si no existe.</li>
+     * <li>Registra el inicio de la operación de envío.</li>
+     * <li>Delega el envío al método {@code sendWithRetry} iniciando en el intento 1.</li>
+     * </ol>
+     * </p>
+     *
+     * @param request the file upload request
+     * @return a Flux emitting the response
+     */
     @Override
     public Flux<FileUploadResponse> send(FileUploadRequest request) {
         return Flux.deferContextual(ctx -> {
@@ -57,6 +85,24 @@ public class SoapGatewayAdapter implements SoapGateway {
         });
     }
 
+    /**
+     * Sends the SOAP request with retry logic.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Construye el sobre SOAP usando el mapeador.</li>
+     * <li>Envía la petición POST al endpoint SOAP.</li>
+     * <li>Espera la respuesta XML y la procesa en un objeto de dominio.</li>
+     * <li>Si ocurre un error, maneja el fallo a través de {@code handleFinalError}.</li>
+     * <li>Si la respuesta indica un fallo transitorio y se tienen intentos restantes, reintenta con un retraso.</li>
+     * </ol>
+     * </p>
+     *
+     * @param request the original request
+     * @param traceId the trace identifier
+     * @param attempt the current retry attempt
+     * @return a Flux of file upload responses
+     */
     private Flux<FileUploadResponse> sendWithRetry(FileUploadRequest request, String traceId, int attempt) {
         return mapper.buildEnvelope(request, traceId)
                 .flatMapMany(envelope -> soapWebClient.post()
@@ -94,6 +140,22 @@ public class SoapGatewayAdapter implements SoapGateway {
     }
 
 
+    /**
+     * Handles final errors thrown during the SOAP request execution.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Si es un error HTTP, intenta parsear el cuerpo XML para extraer un posible SOAP Fault.</li>
+     * <li>Resuelve el código de error de dominio delegando en {@link AdapterErrorMapper}.</li>
+     * <li>Navega por la causa raíz para extraer el mensaje de error más específico.</li>
+     * <li>Construye y devuelve un objeto de respuesta fallida con el estado y mensaje apropiados.</li>
+     * </ol>
+     * </p>
+     *
+     * @param error the exception thrown
+     * @param traceId the trace identifier
+     * @return a Mono emitting a failure response
+     */
     private Mono<FileUploadResponse> handleFinalError(Throwable error, String traceId) {
         if (error instanceof WebClientResponseException wce) {
             String rawBody = wce.getResponseBodyAsString();
@@ -142,6 +204,20 @@ public class SoapGatewayAdapter implements SoapGateway {
                 .build());
     }
 
+    /**
+     * Checks whether a given string is considered XML.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Verifica si el texto no es nulo y comienza con el carácter de etiqueta '&lt;'.</li>
+     * <li>Asegura que el contenido no contenga una etiqueta de HTML, evitando que se detecten páginas de error HTML.</li>
+     * <li>Devuelve el resultado de la evaluación.</li>
+     * </ol>
+     * </p>
+     *
+     * @param body the string to check
+     * @return true if XML, false otherwise
+     */
     private boolean isXml(String body) {
         return body != null && body.trim().startsWith("<") && !body.toLowerCase().contains("<html");
     }

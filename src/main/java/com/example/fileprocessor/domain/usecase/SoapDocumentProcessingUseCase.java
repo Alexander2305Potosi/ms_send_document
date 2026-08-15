@@ -29,6 +29,16 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
     private final SoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
 
+    /**
+     * Constructor para inicializar las dependencias del caso de uso.
+     * <p>
+     * Secuencia:
+     * 1. Llama al constructor de la clase base.
+     * 2. Asigna el gateway de persistencia.
+     * 3. Asigna el gateway REST del producto.
+     * 4. Asigna el gateway SOAP.
+     * 5. Asigna el repositorio de homologación.
+     */
     public SoapDocumentProcessingUseCase(
             DocumentPersistenceGateway persistencePort,
             ProductRestGateway productRestGateway,
@@ -43,16 +53,37 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
         this.homologationRepository = homologationRepository;
     }
 
+    /**
+     * Obtiene los documentos pendientes para procesar.
+     * <p>
+     * Secuencia:
+     * 1. Consulta el persistencePort buscando documentos pendientes del día actual.
+     * 2. Utiliza el nombre de implementación para el filtro en base de datos.
+     */
     @Override
     protected Flux<Document> getPendingDocuments(LocalDateTime startOfDay) {
         return persistencePort.findPendingDocumentsToday(implementationName(), startOfDay);
     }
 
+    /**
+     * Construye el historial inicial a partir del documento.
+     * <p>
+     * Secuencia:
+     * 1. Convierte el documento proporcionado a un DocumentHistoryDTO inicial.
+     */
     @Override
     protected DocumentHistoryDTO buildInitialHistory(Document doc) {
         return DocumentHistoryDTO.fromDocument(doc);
     }
 
+    /**
+     * Descarga el contenido del documento desde el servicio REST.
+     * <p>
+     * Secuencia:
+     * 1. Consume el servicio REST con el productId y el businessDocumentId.
+     * 2. Mapea la respuesta, enriqueciendo el historial base con los metadatos descargados.
+     * 3. Retorna un ProcessingContext con el historial actualizado y el array de bytes descargado.
+     */
     @Override
     protected Mono<ProcessingContext<DocumentHistoryDTO>> downloadDocumentContent(DocumentHistoryDTO baseHistory) {
         return productRestGateway.getDocument(baseHistory.getProductId(), baseHistory.getBusinessDocumentId())
@@ -69,6 +100,14 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                 });
     }
 
+    /**
+     * Construye un historial para un archivo extraído de un ZIP.
+     * <p>
+     * Secuencia:
+     * 1. A partir del historial del ZIP, crea uno nuevo.
+     * 2. Cambia el businessDocumentId agregando el nombre de entrada.
+     * 3. Obtiene y asigna el MimeType de la entrada y marca la bandera isZip en false.
+     */
     @Override
     protected DocumentHistoryDTO buildDecompressedEntryHistory(DocumentHistoryDTO zipHistory, String entryName) {
         return zipHistory.toBuilder()
@@ -79,6 +118,17 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                 .build();
     }
 
+    /**
+     * Sube el documento por medio de SOAP.
+     * <p>
+     * Secuencia:
+     * 1. Resuelve la homologación correspondiente para el documento.
+     * 2. Si hay datos de país, actualiza carpeta y país en el historial.
+     * 3. Actualiza la categoría homologada.
+     * 4. Crea el requerimiento a partir del historial y el contenido, y lo envía al gateway SOAP.
+     * 5. Mapea la respuesta agregando detalles de la homologación.
+     * 6. En caso de error, captura la excepción y retorna un objeto de respuesta con estado de FALLO.
+     */
     @Override
     protected Flux<FileUploadResponse> uploadDocument(ProcessingContext<DocumentHistoryDTO> context, Long docId) {
         DocumentHistoryDTO history = context.getHistory();
@@ -113,6 +163,12 @@ public class SoapDocumentProcessingUseCase extends AbstractDocumentProcessingUse
                 });
     }
 
+    /**
+     * Retorna el nombre de la implementación.
+     * <p>
+     * Secuencia:
+     * 1. Retorna la constante o cadena de texto "SOAP".
+     */
     @Override
     protected String implementationName() {
         return "SOAP";

@@ -21,6 +21,19 @@ public class DocumentHistoryR2dbcAdapter {
 
     private final DocumentHistoryRepository springDataRepository;
 
+    /**
+     * Saves the document processing history based on the provided DTO.
+     * <p>
+     * Secuencia:
+     * 1. Evalúa el estado proporcionado en el DTO para determinar el estado final (resultStatus).
+     * 2. Mapea los estados conocidos a sus equivalentes de éxito, salto, rechazo o error.
+     * 3. Construye una entidad {@link DocumentHistoryEntity} usando los datos del DTO y el estado calculado.
+     * 4. Guarda la entidad en la base de datos usando el repositorio de Spring Data.
+     * 5. Retorna un Mono con la entidad guardada.
+     *
+     * @param historyDTO the data transfer object containing history details
+     * @return a Mono emitting the saved {@link DocumentHistoryEntity}
+     */
     public Mono<DocumentHistoryEntity> saveHistory(DocumentHistoryDTO historyDTO) {
         String resultStatus;
         

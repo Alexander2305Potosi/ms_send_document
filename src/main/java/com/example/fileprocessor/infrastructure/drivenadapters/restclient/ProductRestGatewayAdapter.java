@@ -33,6 +33,20 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
     private final WebClient webClient;
     private final DocumentRestProperties properties;
 
+    /**
+     * Constructs a new ProductRestGatewayAdapter.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Configura un HttpClient con el tiempo de espera definido.</li>
+     * <li>Construye el WebClient usando el builder inyectado, estableciendo la URL base, conectores y límites en memoria.</li>
+     * <li>Almacena la referencia a las propiedades y el cliente creado.</li>
+     * </ol>
+     * </p>
+     *
+     * @param webClientBuilder the builder
+     * @param properties the document REST properties
+     */
     public ProductRestGatewayAdapter(WebClient.Builder webClientBuilder,
             DocumentRestProperties properties) {
         this.properties = properties;
@@ -45,6 +59,21 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .build();
     }
 
+    /**
+     * Retrieves a list of documents for a given product.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Obtiene el trace ID del contexto.</li>
+     * <li>Realiza una solicitud GET hacia el API de documentos usando el ID del producto.</li>
+     * <li>Mapea la respuesta JSON hacia un flujo de objetos de la clase de dominio {@link Document}.</li>
+     * <li>Maneja los errores convirtiéndolos en {@link ProcessingException}.</li>
+     * </ol>
+     * </p>
+     *
+     * @param product the product maestro
+     * @return a Flux of documents
+     */
     @Override
     public Flux<Document> getDocumentsByProduct(ProductMaestro product) {
         return Flux.deferContextual(ctx -> {
@@ -70,6 +99,23 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         });
     }
 
+    /**
+     * Retrieves the file content and metadata for a specific document of a product.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Recupera el trace ID desde el contexto.</li>
+     * <li>Ejecuta un request GET al endpoint usando el ID del producto y el ID del documento.</li>
+     * <li>Parsea la respuesta JSON al tipo {@link ProductDocumentResponse}.</li>
+     * <li>Mapea el DTO devuelto a una entidad de dominio {@link ProductDocumentFile}, incluyendo la decodificación de Base64.</li>
+     * <li>Captura errores de red y los mapea a dominios de error correspondientes.</li>
+     * </ol>
+     * </p>
+     *
+     * @param productId the product ID
+     * @param documentId the document ID
+     * @return a Mono emitting the document file data
+     */
     @Override
     public Mono<ProductDocumentFile> getDocument(String productId, String documentId) {
         return Mono.deferContextual(ctx -> {
@@ -95,6 +141,22 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
         });
     }
 
+    /**
+     * Maps a DTO to a {@link ProductDocumentFile}.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Llama a la función que decodifica el string base64 a arreglo de bytes.</li>
+     * <li>Calcula o asigna el tamaño real del contenido.</li>
+     * <li>Construye un nuevo objeto {@link ProductDocumentFile} copiando los atributos relevantes.</li>
+     * <li>Establece la propiedad isZip verificando la extensión del nombre de archivo.</li>
+     * </ol>
+     * </p>
+     *
+     * @param productId the product ID
+     * @param json the JSON response DTO
+     * @return the mapped file entity
+     */
     private ProductDocumentFile mapToProductDocumentFile(String productId, ProductDocumentResponse json) {
         byte[] content = decodeBase64(json);
         long size = json.getSize() != null ? json.getSize() : (content != null ? content.length : 0);
@@ -112,6 +174,22 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .build();
     }
 
+    /**
+     * Maps a DTO to a basic {@link Document}.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Construye un objeto {@link Document} usando el patrón Builder.</li>
+     * <li>Asigna el ID de producto y el ID de documento desde los parámetros.</li>
+     * <li>Determina si es ZIP en base a las propiedades o nombre de archivo.</li>
+     * <li>Devuelve la entidad construida.</li>
+     * </ol>
+     * </p>
+     *
+     * @param productId the product ID
+     * @param json the response payload
+     * @return the mapped basic document
+     */
     private Document mapToDocument(String productId, ProductDocumentResponse json) {
         return Document.builder()
                 .productId(productId)
@@ -121,6 +199,20 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
                 .build();
     }
 
+    /**
+     * Decodes the Base64 content of a document payload.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Comprueba si el string codificado en base64 es nulo o está vacío, devolviendo nulo en ese caso.</li>
+     * <li>Intenta decodificar el string base64 utilizando utilidades seguras.</li>
+     * <li>Si falla la decodificación, lanza una excepción de dominio {@link ProcessingException} con el código de error correspondiente.</li>
+     * </ol>
+     * </p>
+     *
+     * @param json the DTO containing the content
+     * @return the decoded byte array, or null if empty
+     */
     private byte[] decodeBase64(ProductDocumentResponse json) {
         String contentBase64 = json.getContent();
         if (contentBase64 == null || contentBase64.isBlank())
@@ -139,6 +231,18 @@ public class ProductRestGatewayAdapter implements ProductRestGateway {
      * Translates any network/HTTP error into a {@link ProcessingException} with the
      * appropriate domain error code, delegating the mapping logic to {@link AdapterErrorMapper}.
      * Already-mapped {@link ProcessingException} instances are returned as-is.
+     *
+     * <p><b>Secuencia:</b>
+     * <ol>
+     * <li>Si el error ya es una {@link ProcessingException}, la retorna directamente.</li>
+     * <li>Resuelve el código de error correspondiente llamando a {@link AdapterErrorMapper#resolveErrorCode}.</li>
+     * <li>Crea y devuelve una nueva instancia de {@link ProcessingException} combinando el mensaje original y el código determinado.</li>
+     * </ol>
+     * </p>
+     *
+     * @param error the root error
+     * @param traceId the trace ID
+     * @return the mapped exception
      */
     private static ProcessingException mapToProcessingException(Throwable error, String traceId) {
         if (error instanceof ProcessingException pe) {

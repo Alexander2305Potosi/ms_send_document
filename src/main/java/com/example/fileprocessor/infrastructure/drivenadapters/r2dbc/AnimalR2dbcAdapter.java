@@ -15,6 +15,16 @@ public class AnimalR2dbcAdapter implements AnimalRepository {
 
     private final AnimalMaestroRepository maestroRepository;
 
+    /**
+     * Retrieves all animal records from the maestro repository and maps them to domain entities.
+     * <p>
+     * Secuencia:
+     * 1. Llama al repositorio para obtener todos los registros de animales.
+     * 2. Mapea cada entidad obtenida a un objeto de dominio {@link AnimalMaestro}.
+     * 3. Devuelve un flujo reactivo (Flux) con todos los animales mapeados.
+     *
+     * @return a reactive Flux emitting {@link AnimalMaestro} instances
+     */
     @Override
     public Flux<AnimalMaestro> findAllAnimals() {
         return maestroRepository.findAll()

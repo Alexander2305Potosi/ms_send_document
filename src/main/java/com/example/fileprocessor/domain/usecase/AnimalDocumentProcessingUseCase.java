@@ -26,6 +26,16 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
     private final SoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
 
+    /**
+     * Constructor para inicializar las dependencias del caso de uso.
+     * <p>
+     * Secuencia:
+     * 1. Llama al constructor de la clase base.
+     * 2. Asigna el proveedor de documentos de animales.
+     * 3. Asigna el gateway REST de producto.
+     * 4. Asigna el gateway SOAP.
+     * 5. Asigna el repositorio de homologación.
+     */
     public AnimalDocumentProcessingUseCase(
             PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> persistencePort,
             ProductRestGateway productRestGateway,
@@ -41,11 +51,25 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
         this.homologationRepository = homologationRepository;
     }
 
+    /**
+     * Obtiene los documentos pendientes para ser procesados. En este caso retorna un Flux vacío, ya que se rige por un flujo dinámico.
+     * <p>
+     * Secuencia:
+     * 1. Retorna un Flux vacío, indicando que no se buscan documentos pendientes de forma tradicional.
+     */
     @Override
     protected Flux<AnimalDocument> getPendingDocuments(LocalDateTime startOfDay) {
         return Flux.empty(); // Fiel al flujo dinámico REST de animales
     }
 
+    /**
+     * Construye el historial inicial a partir del documento del animal.
+     * <p>
+     * Secuencia:
+     * 1. Extrae los datos básicos del AnimalDocument.
+     * 2. Asigna los atributos específicos como animalId, raza y tipo.
+     * 3. Retorna un nuevo objeto AnimalDocumentHistoryDTO construido con esos valores.
+     */
     @Override
     protected AnimalDocumentHistoryDTO buildInitialHistory(AnimalDocument doc) {
         return AnimalDocumentHistoryDTO.builder()
@@ -63,6 +87,14 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
                 .build();
     }
 
+    /**
+     * Descarga el contenido del documento del animal desde el servicio REST.
+     * <p>
+     * Secuencia:
+     * 1. Solicita el documento al gateway REST usando productId y businessDocumentId.
+     * 2. Actualiza el historial base con el tamaño, tipo, nombre de archivo y otros metadatos recibidos.
+     * 3. Retorna el ProcessingContext con el historial y el arreglo de bytes del contenido.
+     */
     @Override
     protected Mono<ProcessingContext<AnimalDocumentHistoryDTO>> downloadDocumentContent(AnimalDocumentHistoryDTO baseHistory) {
         return productRestGateway.getDocument(baseHistory.getProductId(), baseHistory.getBusinessDocumentId())
@@ -79,6 +111,13 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
                 });
     }
 
+    /**
+     * Construye el historial para una entrada extraída de un archivo ZIP.
+     * <p>
+     * Secuencia:
+     * 1. Modifica el identificador del documento adjuntando el nombre de la entrada.
+     * 2. Asigna el nombre, determina el Content-Type adecuado y establece que no es un archivo comprimido.
+     */
     @Override
     protected AnimalDocumentHistoryDTO buildDecompressedEntryHistory(AnimalDocumentHistoryDTO zipHistory, String entryName) {
         return zipHistory.toBuilder()
@@ -89,6 +128,16 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
                 .build();
     }
 
+    /**
+     * Sube el documento del animal enviándolo a través del gateway SOAP previa homologación.
+     * <p>
+     * Secuencia:
+     * 1. Consulta el repositorio de homologación para obtener los valores equivalentes de categoría, país y carpeta.
+     * 2. Si hay valores de homologación para el país, actualiza el historial.
+     * 3. Actualiza el historial con la categoría homologada.
+     * 4. Crea la petición de carga (FileUploadRequest) específica para animales.
+     * 5. Envía la solicitud al servicio SOAP.
+     */
     @Override
     protected Flux<FileUploadResponse> uploadDocument(ProcessingContext<AnimalDocumentHistoryDTO> context, Long docId) {
         AnimalDocumentHistoryDTO history = context.getHistory();
@@ -106,11 +155,25 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
                 });
     }
 
+    /**
+     * Retorna el nombre de la implementación.
+     * <p>
+     * Secuencia:
+     * 1. Retorna la constante USE_CASE_NAME definida en la entidad AnimalDocument.
+     */
     @Override
     protected String implementationName() {
         return AnimalDocument.USE_CASE_NAME;
     }
 
+    /**
+     * Ejecuta el procesamiento de los documentos pendientes consultando el proveedor externo.
+     * <p>
+     * Secuencia:
+     * 1. Registra un mensaje en el log indicando el inicio del proceso.
+     * 2. Obtiene los documentos pendientes desde el AnimalDocumentProvider.
+     * 3. Para cada documento, genera un traceId y procesa el documento con trazabilidad.
+     */
     public Flux<FileUploadResponse> executePendingDocuments() {
         LOGGER.info("Iniciando procesamiento diario Animal...");
         return animalDocumentProvider.getAllPendingAnimalDocuments()
