@@ -32,13 +32,13 @@ class GetStatusUseCaseTest {
     private PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> animalPersistenceGateway;
 
     @Mock
-    private AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase;
+    private AnimalDocumentProvider animalDocumentProvider;
 
     private GetStatusUseCase useCase;
 
     @BeforeEach
     void setUp() {
-        useCase = new GetStatusUseCase(productMasterRepository, documentRepository, animalPersistenceGateway, animalDocumentProcessingUseCase);
+        useCase = new GetStatusUseCase(productMasterRepository, documentRepository, animalPersistenceGateway, animalDocumentProvider);
     }
 
     // --- Tests for getSyncStatus ---

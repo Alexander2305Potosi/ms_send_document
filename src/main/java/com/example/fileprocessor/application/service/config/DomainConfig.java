@@ -19,6 +19,7 @@ import com.example.fileprocessor.domain.usecase.SoapDocumentProcessingUseCase;
 import com.example.fileprocessor.domain.usecase.SyncDocumentsUseCase;
 import com.example.fileprocessor.domain.usecase.GetStatusUseCase;
 import com.example.fileprocessor.domain.usecase.AnimalDocumentProcessingUseCase;
+import com.example.fileprocessor.domain.usecase.AnimalDocumentProvider;
 import com.example.fileprocessor.domain.port.out.AnimalRepository;
 import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import com.example.fileprocessor.infrastructure.config.ProcessorsProperties;
@@ -80,20 +81,26 @@ public class DomainConfig {
     }
 
     @Bean
+    public AnimalDocumentProvider animalDocumentProvider(
+            AnimalRepository animalRepository,
+            AnimalRestGateway animalRestGateway) {
+        return new AnimalDocumentProvider(animalRepository, animalRestGateway);
+    }
+
+    @Bean
     public GetStatusUseCase getStatusUseCase(
             ProductMasterRepository productMasterRepository,
             DocumentRepository documentRepository,
             PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> animalPersistenceGateway,
-            AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase) {
-        return new GetStatusUseCase(productMasterRepository, documentRepository, animalPersistenceGateway, animalDocumentProcessingUseCase);
+            AnimalDocumentProvider animalDocumentProvider) {
+        return new GetStatusUseCase(productMasterRepository, documentRepository, animalPersistenceGateway, animalDocumentProvider);
     }
 
     @Bean
     public AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase(
             PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> animalPersistencePort,
             ProductRestGateway productRestGateway,
-            AnimalRepository animalRepository,
-            AnimalRestGateway animalRestGateway,
+            AnimalDocumentProvider animalDocumentProvider,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository,
             ProcessorsProperties properties) {
@@ -102,8 +109,7 @@ public class DomainConfig {
             productRestGateway,
             new RulesBussinesService<>(properties.animal()),
             properties.zipTempDir(),
-            animalRepository,
-            animalRestGateway,
+            animalDocumentProvider,
             soapGateway,
             homologationRepository
         );

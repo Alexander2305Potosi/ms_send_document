@@ -34,7 +34,7 @@ public class GetStatusUseCase {
     private final ProductMasterRepository productMasterRepository;
     private final DocumentRepository documentRepository;
     private final PersistenceGateway<AnimalDocument, AnimalDocumentHistoryDTO> animalPersistenceGateway;
-    private final AnimalDocumentProcessingUseCase animalDocumentProcessingUseCase;
+    private final AnimalDocumentProvider animalDocumentProvider;
 
     // Caché diario: total de documentos esperados para Animal
     private final AtomicLong cachedAnimalTotal = new AtomicLong(0);
@@ -138,8 +138,8 @@ public class GetStatusUseCase {
             return Mono.just(cachedAnimalTotal.get());
         }
 
-        // Delegamos al UseCase de Animal (fuente única de verdad para descubrir documentos)
-        return animalDocumentProcessingUseCase.countTotalPendingDocuments()
+        // Delegamos al Provider de Animal (fuente única de verdad para descubrir documentos)
+        return animalDocumentProvider.countTotalPendingDocuments()
                 .doOnNext(total -> {
                     cachedAnimalTotal.set(total);
                     cachedDate.set(today);

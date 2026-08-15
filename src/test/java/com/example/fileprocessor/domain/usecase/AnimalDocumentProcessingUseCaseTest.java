@@ -6,8 +6,6 @@ import com.example.fileprocessor.domain.entity.FileUploadResponse;
 import com.example.fileprocessor.domain.entity.animal.AnimalMaestro;
 import com.example.fileprocessor.domain.entity.animal.AnimalDocumentHistoryDTO;
 import com.example.fileprocessor.domain.entity.homologation.HomologationResult;
-import com.example.fileprocessor.domain.port.out.AnimalRepository;
-import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import com.example.fileprocessor.domain.port.out.PersistenceGateway;
 import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
@@ -43,9 +41,7 @@ class AnimalDocumentProcessingUseCaseTest {
     @Mock
     private HomologationRepository homologationRepository;
     @Mock
-    private AnimalRepository animalRepository;
-    @Mock
-    private AnimalRestGateway animalRestGateway;
+    private AnimalDocumentProvider animalDocumentProvider;
 
     private AnimalDocumentProcessingUseCase useCase;
 
@@ -56,8 +52,7 @@ class AnimalDocumentProcessingUseCaseTest {
                 productRestGateway, 
                 documentValidator, 
                 "/tmp/test-zip-dir",
-                animalRepository,
-                animalRestGateway,
+                animalDocumentProvider,
                 soapGateway,
                 homologationRepository);
     }
@@ -85,8 +80,7 @@ class AnimalDocumentProcessingUseCaseTest {
                 .isZip(false)
                 .build();
 
-        when(animalRepository.findAllAnimals()).thenReturn(Flux.just(animal));
-        when(animalRestGateway.getPendingDocumentsForAnimal(100L)).thenReturn(Flux.just(doc));
+        when(animalDocumentProvider.getAllPendingAnimalDocuments()).thenReturn(Flux.just(doc));
         
         when(persistencePort.lockDocumentForProcessing(any(AnimalDocument.class), anyInt())).thenReturn(Mono.just(1L));
         when(productRestGateway.getDocument(anyString(), anyString())).thenReturn(Mono.just(file));
@@ -114,6 +108,6 @@ class AnimalDocumentProcessingUseCaseTest {
             .expectComplete()
             .verify(Duration.ofSeconds(10));
             
-        verify(animalRestGateway, times(1)).getPendingDocumentsForAnimal(100L);
+        verify(animalDocumentProvider, times(1)).getAllPendingAnimalDocuments();
     }
 }

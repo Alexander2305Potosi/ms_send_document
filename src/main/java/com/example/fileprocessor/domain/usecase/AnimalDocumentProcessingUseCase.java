@@ -10,8 +10,6 @@ import com.example.fileprocessor.domain.port.out.HomologationRepository;
 import com.example.fileprocessor.domain.port.out.ProductRestGateway;
 import com.example.fileprocessor.domain.port.out.RulesBussinesGateway;
 import com.example.fileprocessor.domain.port.out.SoapGateway;
-import com.example.fileprocessor.domain.port.out.AnimalRepository;
-import com.example.fileprocessor.domain.port.out.AnimalRestGateway;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -23,8 +21,7 @@ import java.time.LocalDateTime;
  */
 public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingUseCase<AnimalDocument, AnimalDocumentHistoryDTO> {
 
-    private final AnimalRepository animalRepository;
-    private final AnimalRestGateway animalRestGateway;
+    private final AnimalDocumentProvider animalDocumentProvider;
     private final ProductRestGateway productRestGateway;
     private final SoapGateway soapGateway;
     private final HomologationRepository homologationRepository;
@@ -34,13 +31,11 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
             ProductRestGateway productRestGateway,
             RulesBussinesGateway<AnimalDocumentHistoryDTO> documentValidator,
             String tempDirPath,
-            AnimalRepository animalRepository,
-            AnimalRestGateway animalRestGateway,
+            AnimalDocumentProvider animalDocumentProvider,
             SoapGateway soapGateway,
             HomologationRepository homologationRepository) {
         super(persistencePort, documentValidator, tempDirPath);
-        this.animalRepository = animalRepository;
-        this.animalRestGateway = animalRestGateway;
+        this.animalDocumentProvider = animalDocumentProvider;
         this.productRestGateway = productRestGateway;
         this.soapGateway = soapGateway;
         this.homologationRepository = homologationRepository;
@@ -116,33 +111,9 @@ public class AnimalDocumentProcessingUseCase extends AbstractDocumentProcessingU
         return AnimalDocument.USE_CASE_NAME;
     }
 
-    /**
-     * Obtiene todos los documentos pendientes de todos los animales desde la API externa.
-     * Este método es la fuente única de verdad para descubrir documentos,
-     * reutilizado tanto por el procesamiento diario como por el endpoint de control.
-     */
-    public Flux<AnimalDocument> getAllPendingAnimalDocuments() {
-        return animalRepository.findAllAnimals()
-                .concatMap(animal -> animalRestGateway.getPendingDocumentsForAnimal(animal.getId()))
-                .distinct(doc -> doc.getAnimalId() + "-" + doc.getDocumentId());
-    }
-
-    /**
-     * Cuenta el total de documentos pendientes de todos los animales desde la API externa.
-     * Utilizado por GetStatusUseCase para comparar contra lo guardado en BD.
-     */
-    public Mono<Long> countTotalPendingDocuments() {
-        return getAllPendingAnimalDocuments().count();
-    }
-
-    /**
-     * Orquesta el flujo diario de Animales de forma limpia y secuencial.
-     * Toda la complejidad de aplanar y filtrar el árbol reside en el Adapter del Gateway.
-     */
-    @Override
     public Flux<FileUploadResponse> executePendingDocuments() {
         LOGGER.info("Iniciando procesamiento diario Animal...");
-        return getAllPendingAnimalDocuments()
+        return animalDocumentProvider.getAllPendingAnimalDocuments()
                 .concatMap(doc -> {
                     var traceId = "Animal-" + doc.getAnimalId() + "-" + doc.getDocumentId();
                     return processWithTracking(doc, traceId);
