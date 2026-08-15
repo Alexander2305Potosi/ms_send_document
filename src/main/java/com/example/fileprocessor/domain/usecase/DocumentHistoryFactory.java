@@ -23,6 +23,16 @@ public final class DocumentHistoryFactory {
 
     public record ProcessingConclusion(String nextState, int nextRetryCount) {}
 
+    /**
+     * Calcula el estado final del procesamiento y la cantidad de reintentos acumulados.
+     * 
+     * Secuencia de decisión:
+     * 1. Sin respuestas: Devuelve estado FAILED.
+     * 2. Todo exitoso: Devuelve estado PROCESSED.
+     * 3. Reglas de negocio: Si hay un error de negocio (ej. archivo inválido), devuelve BUSINESS_REJECTION.
+     * 4. Errores transitorios (Retry): Si hubo timeout/caída y no se superó MAX_RETRIES, devuelve PENDING sumando +1 al reintento.
+     * 5. Cualquier otro caso o fin de reintentos: Devuelve FAILED.
+     */
     public static ProcessingConclusion calculateNextState(int currentRetry, List<FileUploadResponse> responses) {
         ProcessingConclusion conclusion;
         if (responses.isEmpty()) {
@@ -39,6 +49,15 @@ public final class DocumentHistoryFactory {
         return conclusion;
     }
 
+    /**
+     * Sincroniza y crea un DTO de historial para el resultado individual de la subida de un documento o archivo.
+     * 
+     * Secuencia:
+     * 1. Clona el historial base.
+     * 2. Obtiene el TraceID y lo añade al mensaje si está presente.
+     * 3. Asigna ID, estado, intentos y fecha actualizadas al historial clonado.
+     * 4. Si el documento original es un ZIP, conserva el nombre particular del archivo extraído.
+     */
     public static <H extends BaseDocumentHistoryDTO> H syncHistoryDTO(BaseDocument doc, H fileHistory, FileUploadResponse response) {
         @SuppressWarnings("unchecked")
         H clonedHistory = (H) fileHistory.clone();
@@ -64,6 +83,16 @@ public final class DocumentHistoryFactory {
         return clonedHistory;
     }
 
+    /**
+     * Sincroniza el historial a nivel "Global" o "Master" que impactará el documento principal.
+     * 
+     * Secuencia:
+     * 1. Obtiene el estado de red representativo de las respuestas.
+     * 2. Extrae un TraceID dominante de las respuestas.
+     * 3. Agrupa o resuelve el mensaje final de sincronización dependiendo de si es un ZIP (múltiples) o no.
+     * 4. Obtiene el mayor número de intentos utilizado entre todas las respuestas.
+     * 5. Actualiza el objeto histórico padre con el estado global concluido y las estadísticas.
+     */
     public static <H extends BaseDocumentHistoryDTO> H syncGlobalHistory(
             BaseDocument doc,
             H history,

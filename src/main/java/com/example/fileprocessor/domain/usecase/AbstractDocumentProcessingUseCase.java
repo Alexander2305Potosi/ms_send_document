@@ -72,6 +72,19 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
 
     protected abstract String implementationName();
 
+    /**
+     * Flujo central para el procesamiento de un único documento.
+     * 
+     * Secuencia:
+     * 1. Construye el historial inicial y solicita bloqueo (Lock) transaccional en la DB para prevenir carrera.
+     * 2. Descarga el contenido desde el origen (ej. S3 o Sistema Local).
+     * 3. Descomprime y valida las reglas (de ser ZIP, se obtienen múltiples archivos. Si no, solo el original).
+     * 4. Sube cada archivo validado a su destino usando la concurrencia definida en uploadDocument.
+     * 5. Asegura que el nombre del archivo no quede huérfano.
+     * 6. Registra un intento de historial en la DB (para cada elemento del ZIP o si hubo error técnico).
+     * 7. Concluye globalmente y define el futuro del registro en BD (processWithTracking -> concludeProcessing).
+     * 8. Si durante la cadena salta una excepción general, se atrapa en handleGlobalErrorAndConclude para marcar error global.
+     */
     protected Mono<FileUploadResponse> processWithTracking(T doc, String traceId) {
         H baseHistory = buildInitialHistory(doc);
         return persistencePort.lockDocumentForProcessing(doc, doc.getRetryCountSafe())
@@ -149,6 +162,16 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         return new java.util.ArrayList<>(finalMap.values());
     }
 
+    /**
+     * Define qué acción tomar tras recibir la lista de respuestas finalizadas.
+     * 
+     * Secuencia:
+     * 1. Si está vacía (ej. archivo en blanco o corrompido), lanza error global.
+     * 2. Reúne las respuestas de cada archivo evitando repetidos (getFinalResponses).
+     * 3. Analiza si existió algún reintento técnico obligatorio (ej. timeout de red en algún pedazo del ZIP).
+     * 4. Si hay "Technical Retry", solicita guardar el intento técnico en base de datos.
+     * 5. Si no, consolida el estado final en base de datos (éxito, rechazo de negocio o fracaso total).
+     */
     private Mono<FileUploadResponse> concludeProcessing(BaseDocument doc, H masterHistory, List<FileUploadResponse> responses, String traceId) {
         if (responses.isEmpty()) {
             return handleGlobalErrorAndConclude(
@@ -167,6 +190,16 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         }
     }
 
+    /**
+     * Captura y unifica todas las fallas que no hayan sido manejadas individualmente o que rompan todo el proceso.
+     * (e.g. timeout en la descarga original del archivo desde S3).
+     * 
+     * Secuencia:
+     * 1. Loggea el error y extrae el status sincrónico de la excepción (con handleGlobalError).
+     * 2. Construye una respuesta (FileUploadResponse) de falla.
+     * 3. Guarda el historial específico del error si era un archivo ZIP.
+     * 4. Invoca 'finalizeProcessing' (o saveAuditOnly) para guardar este error permanentemente en el estado global del documento.
+     */
     private Mono<FileUploadResponse> handleGlobalErrorAndConclude(Throwable error, BaseDocument doc, H masterHistory, String traceId) {
         LOGGER.log(Level.SEVERE, String.format("[TraceID: %s] Error processing document %s: %s", traceId, doc.getDocumentId(), error.getMessage()), error);
         FileUploadResponse response = DocumentHistoryFactory.handleGlobalError(error);
@@ -199,6 +232,15 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         return saveErrorHistory.then(finalizeMono).thenReturn(finalResponse);
     }
 
+    /**
+     * Efectúa la escritura atómica final en Base de Datos para el procesamiento regular (no technical retry).
+     * 
+     * Secuencia:
+     * 1. Usa 'calculateNextState' para juzgar la Conclusión global del negocio.
+     * 2. Define un prefijo para el log según si fue éxito o falla.
+     * 3. Sincroniza el Historial Global llamando a DocumentHistoryFactory.
+     * 4. Llama al adaptador de base de datos 'finalizeProcessingAtomically' para consolidar la transacción.
+     */
     private Mono<Void> finalizeProcessing(BaseDocument doc, H history,
             List<FileUploadResponse> responses, String traceId) {
         int currentRetryCount = doc.getRetryCountSafe();
@@ -224,6 +266,14 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
                 .then();
     }
 
+    /**
+     * Registra en base de datos cuando se debe forzar un reintento técnico (e.g., Timeout).
+     * 
+     * Secuencia:
+     * 1. Fuerza la conclusión al estado PENDING, agregando 1 al conteo de intentos.
+     * 2. Sincroniza el historial global con este nuevo intento.
+     * 3. Persiste de manera atómica para asegurar que el job de cron lo retome en el siguiente pase.
+     */
     private Mono<Void> saveAuditOnly(BaseDocument doc, H history, List<FileUploadResponse> responses,
             String traceId) {
         int currentRetryCount = doc.getRetryCountSafe();
