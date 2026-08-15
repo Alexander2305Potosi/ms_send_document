@@ -46,6 +46,15 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         this.tempDirPath = tempDirPath;
     }
 
+    /**
+     * Método principal que desencadena el ciclo de procesamiento.
+     * 
+     * Secuencia:
+     * 1. Establece la marca de tiempo (inicio del día).
+     * 2. Extrae el TraceID del contexto reactivo.
+     * 3. Obtiene la lista de documentos pendientes consultando el método abstracto 'getPendingDocuments'.
+     * 4. Encola el procesamiento de cada documento individual a través de 'processWithTracking' de manera secuencial.
+     */
     public Flux<FileUploadResponse> executePendingDocuments() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
@@ -60,16 +69,34 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
                 .concatMap(doc -> processWithTracking(doc, traceId)));
     }
 
+    /**
+     * Obtiene los documentos pendientes a procesar desde la base de datos o API externa.
+     */
     protected abstract Flux<T> getPendingDocuments(LocalDateTime startOfDay);
 
+    /**
+     * Construye el DTO inicial del historial para un documento recién capturado.
+     */
     protected abstract H buildInitialHistory(T doc);
 
+    /**
+     * Descarga el contenido binario del documento para incorporarlo al contexto de procesamiento.
+     */
     protected abstract Mono<ProcessingContext<H>> downloadDocumentContent(H baseHistory);
 
+    /**
+     * Realiza el envío o carga (upload) del contexto procesado hacia su destino final.
+     */
     protected abstract Flux<FileUploadResponse> uploadDocument(ProcessingContext<H> context, Long docId);
 
+    /**
+     * Construye el DTO de historial para cada entrada individual extraída dentro de un archivo ZIP.
+     */
     protected abstract H buildDecompressedEntryHistory(H zipHistory, String entryName);
 
+    /**
+     * Devuelve el nombre identificador de la implementación (útil para logs).
+     */
     protected abstract String implementationName();
 
     /**
@@ -109,10 +136,22 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
                 .onErrorResume(error -> handleGlobalErrorAndConclude(error, doc, baseHistory, traceId));
     }
 
+    /**
+     * Envoltura para invocar la descarga del contenido del documento delegando a la implementación concreta.
+     */
     private Mono<ProcessingContext<H>> downloadDocument(H baseHistory) {
         return downloadDocumentContent(baseHistory);
     }
 
+    /**
+     * Se encarga de descomprimir (si aplica) y validar las reglas de negocio de los archivos.
+     * 
+     * Secuencia:
+     * 1. Llama al método 'decompress' para extraer los archivos del ZIP (o devolver el mismo si es individual).
+     * 2. Para cada archivo resultante, pasa por el validador (documentValidator).
+     * 3. Mapea posibles errores de validación mediante DocumentHistoryFactory.
+     * 4. Si el ZIP resulta vacío, emite un error de negocio específico (EMPTY_CONTENT).
+     */
     private Flux<ProcessingContext<H>> decompressAndValidate(ProcessingContext<H> masterContext) {
         H masterHistory = masterContext.getHistory();
         return decompress(masterContext)
@@ -138,6 +177,9 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
                 });
     }
 
+    /**
+     * Garantiza que la respuesta contenga el nombre del archivo procesado, recurriendo al historial si falta.
+     */
     private FileUploadResponse ensureFilename(FileUploadResponse resp, H innerHistory, Boolean isZip) {
         if (resp.getFilename() == null) {
             return resp.toBuilder().filename(innerHistory.getFilename()).build();
@@ -145,6 +187,10 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         return resp;
     }
 
+    /**
+     * Guarda el historial de un intento individual en la base de datos.
+     * Solo guarda si es un intento técnico fallido o si es parte del procesamiento de un archivo interno de un ZIP.
+     */
     private Mono<FileUploadResponse> saveAttemptHistory(BaseDocument doc, H fileHistory, FileUploadResponse resp) {
         boolean shouldSave = Boolean.TRUE.equals(doc.getIsZip()) || resp.isTechnicalRetry();
         if (shouldSave) {
@@ -153,6 +199,10 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         return Mono.just(resp);
     }
 
+    /**
+     * Agrupa y filtra la lista de respuestas, dejando solo la respuesta más reciente por nombre de archivo,
+     * para evitar duplicidades lógicas.
+     */
     private List<FileUploadResponse> getFinalResponses(List<FileUploadResponse> responses) {
         java.util.Map<String, FileUploadResponse> finalMap = new java.util.LinkedHashMap<>();
         for (FileUploadResponse resp : responses) {
@@ -288,6 +338,10 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         return persistencePort.finalizeProcessingAtomically(globalHistory).then();
     }
 
+    /**
+     * Revisa el archivo original para decidir si necesita descompresión en base al flag 'isZip'.
+     * Si no es ZIP, devuelve el mismo contexto intacto. Si es ZIP, delega a ZipDecompressor.
+     */
     private Flux<ProcessingContext<H>> decompress(ProcessingContext<H> context) {
         H history = context.getHistory();
         if (!Boolean.TRUE.equals(history.getIsZip()) || history.getFilename() == null
@@ -297,6 +351,9 @@ public abstract class AbstractDocumentProcessingUseCase<T extends BaseDocument, 
         return ZipDecompressor.decompress(context, tempDirPath, this::buildDecompressedEntryHistory);
     }
 
+    /**
+     * Extrae el TraceID del contexto reactivo o devuelve un valor por defecto.
+     */
     private String extractTraceId(ContextView ctx) {
         return ctx.getOrDefault(TRACE_KEY, DEFAULT_TRACE);
     }

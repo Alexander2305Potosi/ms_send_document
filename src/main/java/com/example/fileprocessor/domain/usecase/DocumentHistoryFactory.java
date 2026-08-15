@@ -144,6 +144,14 @@ public final class DocumentHistoryFactory {
         return history;
     }
 
+    /**
+     * Calcula el estado final del archivo en base al éxito o rechazo de negocio de la respuesta.
+     * 
+     * Secuencia:
+     * 1. Si la respuesta es exitosa (success=true), devuelve PROCESSED.
+     * 2. Si el código de estado indica un rechazo de negocio, devuelve BUSINESS_REJECTION.
+     * 3. De lo contrario, devuelve PENDING (estado por defecto para errores técnicos).
+     */
     public static String calculateFileState(FileUploadResponse response) {
         if (response.isSuccess()) {
             return PROCESSED.name();
@@ -154,6 +162,15 @@ public final class DocumentHistoryFactory {
         return PENDING.name();
     }
 
+    /**
+     * Une y formatea los mensajes individuales de múltiples respuestas en un solo bloque de texto.
+     * (Especialmente útil para reportar el resultado de múltiples archivos dentro de un ZIP).
+     * 
+     * Secuencia:
+     * 1. Itera sobre cada FileUploadResponse.
+     * 2. Extrae el nombre del archivo, TraceID y detalle (o "SUCCESS" si no hay mensaje).
+     * 3. Combina todo en un string unificado separado por " || ".
+     */
     public static String aggregateMessages(List<FileUploadResponse> responses) {
         return responses.stream()
                 .map(r -> {
@@ -165,6 +182,14 @@ public final class DocumentHistoryFactory {
                 .collect(Collectors.joining(" || "));
     }
 
+    /**
+     * Procesa un error inesperado global y lo convierte en una respuesta de falla estandarizada.
+     * 
+     * Secuencia:
+     * 1. Recorre la cadena de causas de la excepción buscando un ProcessingException original.
+     * 2. Extrae el código de error (o UNKNOWN_ERROR si no lo tiene), el mensaje y el nombre de archivo afectado.
+     * 3. Construye y retorna un FileUploadResponse marcado como fallido (success=false).
+     */
     public static FileUploadResponse handleGlobalError(Throwable error) {
         Throwable root = error;
         while (root.getCause() != null && root != root.getCause()) {
@@ -198,6 +223,14 @@ public final class DocumentHistoryFactory {
                 .build();
     }
 
+    /**
+     * Convierte una excepción genérica en un ProcessingException enfocado en validación.
+     * 
+     * Secuencia:
+     * 1. Verifica si la excepción ya es de tipo ProcessingException; si no, la envuelve.
+     * 2. Asegura que tenga un código de error definido (fallback: UNKNOWN_ERROR).
+     * 3. Si el documento original era un ZIP, asocia el nombre del archivo específico dentro del ZIP al error.
+     */
     public static ProcessingException mapValidationError(Throwable e, BaseDocumentHistoryDTO masterHistory, BaseDocumentHistoryDTO innerHistory) {
         ProcessingException pe;
         if (e instanceof ProcessingException existingPe) {
